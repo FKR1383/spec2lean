@@ -38,3 +38,6 @@ Thumbs.db
 tmp/
 *.tmp
 *.log
+
+# Locally cached official specifications
+documents/sources/nvidia/ptx/9.3/raw/
