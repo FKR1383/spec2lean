@@ -1,0 +1,40 @@
+# Lean / Lake generated artifacts
+.lake/
+*.olean
+*.ilean
+
+# Python generated artifacts
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node / TypeScript generated artifacts
+node_modules/
+dist/
+coverage/
+
+# Environment files and credentials
+.env
+.env.*
+!.env.example
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Operating systems
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+*.tmp
+*.log
