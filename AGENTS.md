@@ -24,8 +24,8 @@ Do not invent specification evidence or placeholder semantics.
 Until the first successful end-to-end formalization unit is complete,
 all agents must use:
 
-- model: `openai/gpt-5.6-sol`
-- reasoning effort: `high`
+- model: `opencode/deepseek-v4-flash-free`
+- variant: use the provider default
 
 Do not guess or silently replace the model ID.
 
