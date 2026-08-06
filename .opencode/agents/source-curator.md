@@ -5,6 +5,7 @@ model: opencode/deepseek-v4-flash-free
 steps: 18
 permission:
   read: allow
+  spec_read_span: allow
   glob: allow
   grep: allow
   list: allow
