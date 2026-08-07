@@ -6,6 +6,7 @@ export type AgentResult = {
   outcome:
     | "SUCCESS"
     | "REVISE"
+    | "RETRY"
     | "BLOCKED"
 
   nextStage: FormalizationStage
@@ -14,29 +15,64 @@ export type AgentResult = {
 }
 
 const PREFIX =
-  "SPEC2LEAN_RESULT "
+  "SPEC2LEAN_RESULT"
+
+function extractPayload(
+  response: string,
+): string {
+  const lines =
+    response
+      .trim()
+      .split(/\r?\n/)
+      .reverse()
+
+  for (const rawLine of lines) {
+    const index =
+      rawLine.indexOf(PREFIX)
+
+    if (index === -1) {
+      continue
+    }
+
+    let payload =
+      rawLine
+        .slice(index + PREFIX.length)
+        .trim()
+
+    // Tolerate accidental Markdown backticks/fences.
+    payload =
+      payload
+        .replace(/^`+/, "")
+        .replace(/`+$/, "")
+        .trim()
+
+    const firstBrace =
+      payload.indexOf("{")
+
+    const lastBrace =
+      payload.lastIndexOf("}")
+
+    if (
+      firstBrace !== -1 &&
+      lastBrace > firstBrace
+    ) {
+      return payload.slice(
+        firstBrace,
+        lastBrace + 1,
+      )
+    }
+  }
+
+  throw new Error(
+    "Agent response has no parseable SPEC2LEAN_RESULT payload",
+  )
+}
 
 export function parseAgentResult(
   response: string,
 ): AgentResult {
-  const lines =
-    response.trim().split(/\r?\n/)
-
-  const line =
-    [...lines]
-      .reverse()
-      .find((item) =>
-        item.startsWith(PREFIX),
-      )
-
-  if (!line) {
-    throw new Error(
-      "Agent response has no SPEC2LEAN_RESULT line",
-    )
-  }
-
   const payload =
-    line.slice(PREFIX.length)
+    extractPayload(response)
 
   let parsed: unknown
 
@@ -44,7 +80,7 @@ export function parseAgentResult(
     parsed = JSON.parse(payload)
   } catch {
     throw new Error(
-      "SPEC2LEAN_RESULT contains invalid JSON",
+      `SPEC2LEAN_RESULT contains invalid JSON: ${payload}`,
     )
   }
 
@@ -53,7 +89,7 @@ export function parseAgentResult(
     parsed === null
   ) {
     throw new Error(
-      "SPEC2LEAN_RESULT must be an object",
+      "SPEC2LEAN_RESULT must contain a JSON object",
     )
   }
 
@@ -63,6 +99,7 @@ export function parseAgentResult(
   if (
     result.outcome !== "SUCCESS" &&
     result.outcome !== "REVISE" &&
+    result.outcome !== "RETRY" &&
     result.outcome !== "BLOCKED"
   ) {
     throw new Error(

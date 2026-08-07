@@ -64,6 +64,14 @@ export type AgentExecution = {
   response: string
 }
 
+export type ActiveExecution = {
+  startedAt: string
+  stage: FormalizationStage
+  agent: string
+  sessionId: string
+  expectedArtifact: string
+}
+
 export type RunState = {
   schemaVersion: 1
 
@@ -73,6 +81,11 @@ export type RunState = {
   language: string
   specVersion: string
   unit: string
+
+  unitSlug: string
+  leanModuleName: string
+  sourceManifest: string
+  artifactRoot: string
 
   stage: FormalizationStage
 
@@ -86,6 +99,7 @@ export type RunState = {
   history: RunEvent[]
 
   executions?: AgentExecution[]
+  activeExecution?: ActiveExecution
 }
 
 const transitions:
@@ -141,6 +155,7 @@ const transitions:
   WAITING_GATE_B: [
     "LEAN_FORMALIZATION",
     "SEMANTIC_EXTRACTION",
+    "SOURCE_CURATION",
     "BLOCKED",
     "FAILED",
   ],
@@ -252,6 +267,28 @@ export function transitionRun(
         at: now,
         from: run.stage,
         to,
+        reason,
+      },
+    ],
+  }
+}
+
+export function retryRun(
+  run: RunState,
+  reason: string,
+): RunState {
+  const now = new Date().toISOString()
+
+  return {
+    ...run,
+    updatedAt: now,
+    revision: run.revision + 1,
+    history: [
+      ...run.history,
+      {
+        at: now,
+        from: run.stage,
+        to: run.stage,
         reason,
       },
     ],

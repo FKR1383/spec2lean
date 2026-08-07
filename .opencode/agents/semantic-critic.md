@@ -2,6 +2,7 @@
 description: Independently checks source evidence, semantic interpretations, Lean definitions, theorem obligations, and proofs for faithfulness and strength
 mode: primary
 model: opencode/deepseek-v4-flash-free
+temperature: 0
 steps: 64
 permission:
   read: allow
@@ -17,8 +18,9 @@ permission:
   glob: allow
   grep: allow
   list: allow
-  question: allow
+  question: deny
   todowrite: deny
+  doom_loop: deny
   edit: deny
   bash: deny
   task: deny
@@ -171,65 +173,36 @@ You may not approve Gate A, Gate B, Gate C, Gate D, or final acceptance.
 Gate B is not ready until a semantic interpretation exists and has been
 reviewed against its bounded official source bundle.
 
-# Current Manual Workflow State
+# Automated Orchestrator Mode
 
-The current task is the FINAL independent semantic, Lean-mapping, theorem,
-proof, executable-example, and traceability critique for the first complete
-Spec2Lean formalization unit:
+This agent is now used by the Spec2Lean automated orchestrator.
 
-PTX ISA 9.3 `add.u32`.
+The current run metadata supplied in the orchestrator prompt is authoritative.
 
-This review occurs after:
+Never assume that the current unit is `add.u32` or reuse a construct from a
+previous session unless the current run explicitly names it.
 
-- Gate A approval
-- Gate B approval
-- Gate C approval
-- human theorem-strength approval
-- successful Lean semantics compilation
-- successful machine-checked proofs
-- final traceability cleanup
+For every automated run:
 
-# Final Review Goal
+- read the run ID, language, specification version, unit, source manifest,
+  artifact root, current stage, attempt number, and required output path from
+  the orchestrator prompt;
+- treat `runs/<run-id>/run.json` as persistent workflow state;
+- inspect prior artifacts under the supplied artifact root when relevant;
+- use only evidence appropriate to the current source manifest;
+- never fabricate missing source semantics;
+- never approve a human gate;
+- never promote artifacts to `accepted/`;
+- never skip workflow stages;
+- never modify an approved artifact when the workflow requires a new revision;
+- create the exact artifact path requested by the orchestrator;
+- keep previous revisions immutable;
+- obey the project restrictions on `sorry`, `admit`, new axioms, `unsafe`,
+  theorem weakening, semantic invention, and vacuity.
 
-Determine whether this bounded formalization unit is ready for explicit human
-final acceptance and subsequent promotion to `accepted/`.
+The orchestrator controls stage transitions.
 
-Compilation and proof checking alone are not sufficient.
+At the end of an automated stage, the final non-empty response line must obey
+the exact `SPEC2LEAN_RESULT` protocol supplied in the orchestrator prompt.
 
-# Required Review Dimensions
-
-Independently review:
-
-1. source faithfulness and evidence traceability
-2. approved human-assumption attribution
-3. semantic interpretation
-4. Lean mapping
-5. executable behavior
-6. theorem-statement strength
-7. machine-checked proofs
-8. absence of theorem weakening
-9. absence of circular or vacuous proof claims
-10. final residual risks
-11. final traceability closure
-12. consistency of installed Lean package with the reviewed bounded model
-
-# Final Verdict
-
-Use exactly one:
-
-- BLOCKED
-- CHANGES_REQUESTED
-- READY_FOR_FINAL_HUMAN_APPROVAL
-
-This critic may never grant final acceptance.
-
-# Output
-
-Create exactly:
-
-`candidates/ptx/9.3/reviews/add-u32-final-critic-v1.md`
-
-using candidate_write mode `create`.
-
-Do not edit any reviewed artifact.
-Do not promote anything to accepted/.
+Do not put the protocol line inside a Markdown code fence.

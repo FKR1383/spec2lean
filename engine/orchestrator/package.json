@@ -7,7 +7,17 @@
     "typecheck": "tsc --noEmit",
     "smoke": "tsx src/smoke.ts",
     "run": "tsx src/run.ts",
-    "tick": "tsx src/runner.ts"
+    "tick": "tsx src/runner.ts",
+    "loop": "tsx src/run-loop.ts",
+    "async-smoke": "tsx src/async-smoke.ts",
+    "approve": "tsx src/approve.ts",
+    "reject": "tsx src/reject.ts",
+    "formalize": "tsx src/formalize.ts",
+    "finalize": "tsx src/finalize.ts",
+    "inspect-session": "tsx src/inspect-session.ts",
+    "brief": "tsx src/gate-brief.ts",
+    "self-test": "tsx src/self-test.ts",
+    "doctor": "tsx src/doctor.ts"
   },
   "dependencies": {
     "@opencode-ai/sdk": "^1.18.14"

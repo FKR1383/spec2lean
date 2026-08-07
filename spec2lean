@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ORCH="$ROOT/engine/orchestrator"
+
+usage() {
+  cat <<'TXT'
+Spec2Lean CLI
+
+Usage:
+  ./spec2lean formalize --language ptx --version 9.3 --unit mov.b32
+  ./spec2lean status --run <run-id>
+  ./spec2lean brief --run <run-id> --gate A|B|C|THEOREM_STRENGTH|FINAL
+  ./spec2lean approve --run <run-id> --gate <gate> [--no-resume]
+  ./spec2lean reject --run <run-id> --gate <gate> --to <stage> --reason <text> [--no-resume]
+  ./spec2lean resume --run <run-id> [--max-ticks N]
+  ./spec2lean doctor --run <run-id>
+  ./spec2lean finalize --run <run-id> [--push]
+  ./spec2lean self-test
+  ./spec2lean typecheck
+TXT
+}
+
+find_arg() {
+  local wanted="$1"
+  shift
+  while (($#)); do
+    if [[ "$1" == "$wanted" ]]; then
+      shift
+      (($#)) || return 1
+      printf '%s\n' "$1"
+      return 0
+    fi
+    shift
+  done
+  return 1
+}
+
+has_arg() {
+  local wanted="$1"
+  shift
+  for arg in "$@"; do
+    [[ "$arg" == "$wanted" ]] && return 0
+  done
+  return 1
+}
+
+cmd="${1:-}"
+[[ -n "$cmd" ]] || { usage; exit 2; }
+shift || true
+
+case "$cmd" in
+  formalize)
+    exec npm --prefix "$ORCH" run formalize -- "$@"
+    ;;
+
+  status)
+    run_id="$(find_arg --run "$@")" || { echo "missing --run" >&2; exit 2; }
+    exec npm --prefix "$ORCH" run run -- show --run "$run_id"
+    ;;
+
+  brief)
+    exec npm --prefix "$ORCH" run brief -- "$@"
+    ;;
+
+  approve)
+    run_id="$(find_arg --run "$@")" || { echo "missing --run" >&2; exit 2; }
+    npm --prefix "$ORCH" run approve -- "$@"
+    if has_arg --no-resume "$@"; then
+      exit 0
+    fi
+    exec npm --prefix "$ORCH" run loop -- --run "$run_id" --max-ticks 50 --max-stage-retries 4
+    ;;
+
+  reject)
+    run_id="$(find_arg --run "$@")" || { echo "missing --run" >&2; exit 2; }
+    npm --prefix "$ORCH" run reject -- "$@"
+    if has_arg --no-resume "$@"; then
+      exit 0
+    fi
+    exec npm --prefix "$ORCH" run loop -- --run "$run_id" --max-ticks 50 --max-stage-retries 4
+    ;;
+
+  resume)
+    exec npm --prefix "$ORCH" run loop -- "$@"
+    ;;
+
+  doctor)
+    exec npm --prefix "$ORCH" run doctor -- "$@"
+    ;;
+
+  finalize)
+    exec npm --prefix "$ORCH" run finalize -- "$@"
+    ;;
+
+  self-test)
+    exec npm --prefix "$ORCH" run self-test -- "$@"
+    ;;
+
+  typecheck)
+    exec npm --prefix "$ORCH" run typecheck -- "$@"
+    ;;
+
+  *)
+    usage
+    exit 2
+    ;;
+esac

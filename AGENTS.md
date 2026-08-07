@@ -11,23 +11,26 @@ PTX is only the first case study.
 
 ## Current State
 
-This repository is being built from scratch.
+The first end-to-end PTX unit (`add.u32`) has completed the manual reference
+workflow, including source curation, semantic review, Lean mapping, theorem
+review, machine-checked proofs, final critique, and human acceptance.
 
-Do not assume that any document pipeline, Semantic IR, PTX semantics,
-fixture, orchestrator, custom tool, accepted formalization, or theorem
-library already exists.
+The repository now contains a persistent automated orchestrator. New bounded
+units are expected to run through the orchestrator and stop at explicit human
+gates. `mov.b32` is the first hardening/validation run for this automated path.
 
-Do not invent specification evidence or placeholder semantics.
+Do not invent specification evidence or placeholder semantics. Existing
+accepted artifacts are reference material, not authority for a new unit unless
+the current run explicitly depends on them.
 
 ## Model Policy
 
-Until the first successful end-to-end formalization unit is complete,
-all agents must use:
+The project model is configured in `opencode.json`. Automated agents currently
+use `opencode/deepseek-v4-flash-free` unless the project configuration and
+agent definition are explicitly changed.
 
-- model: `opencode/deepseek-v4-flash-free`
-- variant: use the provider default
-
-Do not guess or silently replace the model ID.
+Do not guess or silently replace a model ID. The orchestrator must read the
+project model configuration rather than hard-code a different model.
 
 ## Authority Order
 
@@ -46,13 +49,15 @@ It does not establish faithfulness to specification prose.
 
 No agent may skip or self-approve a human gate.
 
-Human approval is required for:
+Human approval is required for the formalization workflow at:
 
-- language architecture
-- semantic interpretation
-- Lean mapping
-- translation theorem design
+- Gate A: language architecture
+- Gate B: semantic interpretation
+- Gate C: Lean mapping
+- theorem-strength approval before proof generation
 - final acceptance
+
+Translation mode may introduce additional translation-specific gates later.
 
 Nothing may be promoted to `accepted/` without explicit human approval.
 
@@ -76,26 +81,26 @@ Agents must not modify `accepted/`.
 
 ## Workflow Rules
 
-Work sequentially during the initial manual workflow.
+The automated orchestrator is the default execution path for new bounded
+formalization units. A run is persistent and resumable under `runs/<run-id>`.
 
-Do not parallelize agents.
+Within one run, stages are sequential and guarded by the workflow state
+machine. Do not parallelize dependent agents or skip human gates.
 
 Keep every task bounded to one small unit, such as:
 
 - one construct or instruction
-- one source bundle
-- one semantic interpretation
-- one Lean file
+- one source-bundle revision
+- one semantic-interpretation revision
+- one Lean mapping
 - a small theorem set
-- one technical error class per repair step
+- one proof subtask or one concrete technical error class
 
 Do not start a dependent step before the preceding artifact and required
 human decision are complete.
 
-The first end-to-end case study is only PTX `add.u32`.
-
-Do not add another instruction until `add.u32` passes all semantic,
-Lean, proof, critic, and human-review stages.
+`add.u32` is the completed reference unit. New units must not assume its
+semantics; they may reuse only explicitly approved shared infrastructure.
 
 ## Formalization Restrictions
 
