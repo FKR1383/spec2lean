@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "recordType": "human_gate_decision",
+  "reviewId": "ptx-mov-b32-final-approval-v1",
+  "unitId": "ptx-mov-b32",
+  "gate": "FINAL",
+  "decision": "approved",
+  "reviewer": "Human reviewer",
+  "rationale": "The human operator explicitly approved Gate FINAL for run ptx-9.3-mov.b32-f910feea after the automated workflow reached its human-review boundary. This authorizes only the next workflow stage and is not final acceptance unless gate=FINAL.",
+  "submittedAtUtc": "2026-08-07T16:03:37.111Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ptx/9.3/units/mov-b32/lean/MovB32Proofs-v1.lean",
+      "sha256": "654f8b1753f69114d3f1899edff9dcddfaba6ee50a17fac09331b755aaf9d288",
+      "sizeBytes": 8757
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/mov-b32/lean/MovB32-v1.lean",
+      "sha256": "c1ddad160a64c52e9f0ec8781d11236ed23f9dfd4e45595d287db9d74c7b8876",
+      "sizeBytes": 17206
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/mov-b32/reviews/final-critic-v1.md",
+      "sha256": "1c4f6c61bd9370a3ab0cf10ea35c154383489e9d37fc0fe0508cb2437e51d036",
+      "sizeBytes": 17728
+    }
+  ],
+  "humanConfirmationRecorded": true,
+  "gateApprovalPerformed": true,
+  "promotionPerformed": false,
+  "provenance": {
+    "agent": "spec-manager",
+    "sessionID": "ses_023096046ffecCxJhbnDr3n6CO",
+    "messageID": "msg_fdcf71184001P86rg3PpVnmdZU"
+  }
+}

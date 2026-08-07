@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "acceptance_id": "ptx-9.3-mov-b32-accepted",
+  "status": "HUMAN_ACCEPTED",
+  "run_id": "ptx-9.3-mov.b32-f910feea",
+  "language": "ptx",
+  "specification_version": "9.3",
+  "unit": "mov.b32",
+  "accepted_at_utc": "2026-08-07T16:04:29.920Z",
+  "artifacts": [
+    {
+      "source": "candidates/ptx/9.3/units/mov-b32/architecture/foundation-v1.md",
+      "path": "accepted/ptx/9.3/mov-b32/architecture/foundation-v1.md",
+      "sha256": "17b562fd4c3688a2e8b61620071e9a988d0c269b421e82796058918371cca4f1",
+      "sizeBytes": 52410
+    },
+    {
+      "source": "candidates/ptx/9.3/units/mov-b32/source-bundles/source-bundle-v2.json",
+      "path": "accepted/ptx/9.3/mov-b32/source-bundles/source-bundle-v2.json",
+      "sha256": "69b4560df180a5629e73fa4ff93ec175cd935acd9fa3ae381ef4dc2af5abcaeb",
+      "sizeBytes": 78383
+    },
+    {
+      "source": "candidates/ptx/9.3/units/mov-b32/semantics/semantics-v2.json",
+      "path": "accepted/ptx/9.3/mov-b32/semantics/semantics-v2.json",
+      "sha256": "904e10e14e06547c90e1efab4d84401c87fdbd9640c758c60bf17efb2a0bbcb8",
+      "sizeBytes": 86566
+    },
+    {
+      "source": "candidates/ptx/9.3/units/mov-b32/theorems/obligations-v1.json",
+      "path": "accepted/ptx/9.3/mov-b32/theorems/obligations-v1.json",
+      "sha256": "23611715deb741594e625e9b98f06968ebe6ec3ac396cede7452528105b8a480",
+      "sizeBytes": 63097
+    },
+    {
+      "source": "candidates/ptx/9.3/units/mov-b32/lean/MovB32-v1.lean",
+      "path": "accepted/ptx/9.3/mov-b32/lean/MovB32-v1.lean",
+      "sha256": "c1ddad160a64c52e9f0ec8781d11236ed23f9dfd4e45595d287db9d74c7b8876",
+      "sizeBytes": 17206
+    },
+    {
+      "source": "candidates/ptx/9.3/units/mov-b32/lean/MovB32Proofs-v1.lean",
+      "path": "accepted/ptx/9.3/mov-b32/lean/MovB32Proofs-v1.lean",
+      "sha256": "654f8b1753f69114d3f1899edff9dcddfaba6ee50a17fac09331b755aaf9d288",
+      "sizeBytes": 8757
+    },
+    {
+      "source": "candidates/ptx/9.3/units/mov-b32/reviews/final-critic-v1.md",
+      "path": "accepted/ptx/9.3/mov-b32/reviews/final-critic-v1.md",
+      "sha256": "1c4f6c61bd9370a3ab0cf10ea35c154383489e9d37fc0fe0508cb2437e51d036",
+      "sizeBytes": 17728
+    }
+  ]
+}

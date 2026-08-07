@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "recordType": "human_gate_decision",
+  "reviewId": "ptx-mov-b32-b-rejection-v1",
+  "unitId": "ptx-mov-b32",
+  "gate": "B",
+  "decision": "rejected",
+  "reviewer": "Human reviewer",
+  "rationale": "Do not accept guard-false unchanged-state behavior as a human assumption yet. Search the official PTX ISA 9.3 general predication/control-flow sections for explicit false-guard no-op evidence, add any applicable official evidence to a new source-bundle revision, then regenerate and re-critique the semantics. PTX-MOV-SEM1-034 and PTX-MOV-SEM1-038 are blocking-if-wrong and should be source-resolved before human assumption approval if possible.",
+  "submittedAtUtc": "2026-08-07T11:45:19.034Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ptx/9.3/units/mov-b32/semantics/semantics-v1.json",
+      "sha256": "5c340ddfc543505b2201bfb73bbd49f3e0e7625828c6f413debc507b584008c7",
+      "sizeBytes": 76033
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/mov-b32/reviews/semantics-critic-v1.md",
+      "sha256": "dd9b4d18474cde8afed703e8e85142b12309051a476721bade7fdeb95e05d617",
+      "sizeBytes": 20730
+    }
+  ],
+  "humanConfirmationRecorded": true,
+  "gateApprovalPerformed": false,
+  "promotionPerformed": false,
+  "provenance": {
+    "agent": "spec-manager",
+    "sessionID": "ses_023f5a989ffeiQ3AEw6exH3BYQ",
+    "messageID": "msg_fdc0a9f57001z8uYK8r8j1ugCD"
+  }
+}
