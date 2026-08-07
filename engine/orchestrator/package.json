@@ -6,7 +6,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "smoke": "tsx src/smoke.ts",
-    "run": "tsx src/run.ts"
+    "run": "tsx src/run.ts",
+    "tick": "tsx src/runner.ts"
   },
   "dependencies": {
     "@opencode-ai/sdk": "^1.18.14"

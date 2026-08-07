@@ -54,6 +54,16 @@ export type RunEvent = {
   reason: string
 }
 
+export type AgentExecution = {
+  at: string
+  stage: FormalizationStage
+  agent: string
+  sessionId: string
+  outcome: string
+  nextStage: FormalizationStage
+  response: string
+}
+
 export type RunState = {
   schemaVersion: 1
 
@@ -74,6 +84,8 @@ export type RunState = {
   gates: Record<GateName, GateStatus>
 
   history: RunEvent[]
+
+  executions?: AgentExecution[]
 }
 
 const transitions:
