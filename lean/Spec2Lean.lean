@@ -1,3 +1,3 @@
--- This module serves as the root of the `Spec2Lean` library.
--- Import modules here that should be built as part of the library.
 import Spec2Lean.Basic
+import Spec2Lean.PTX.AddU32
+import Spec2Lean.PTX.AddU32Proofs

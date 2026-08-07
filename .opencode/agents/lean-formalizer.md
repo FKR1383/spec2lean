@@ -5,6 +5,13 @@ model: opencode/deepseek-v4-flash-free
 steps: 24
 permission:
   read: allow
+  lean_check_file: allow
+  lean_get_diagnostics: allow
+  lean_get_goals: allow
+  lean_run_eval: allow
+  candidate_read: allow
+  candidate_write: allow
+  candidate_diff: allow
   glob: allow
   grep: allow
   list: allow
@@ -171,40 +178,188 @@ Gate C is not ready until:
 - the Lean candidate successfully compiles
 - Semantic Critic review material exists
 
-# Current Bootstrap State
+# Current Manual Workflow State
 
-The project is currently in Phase 1.
+The current task is theorem-obligation generation for the already compiled
+PTX ISA 9.3 `add.u32` Lean mapping.
 
-Official NVIDIA PTX ISA 9.3 documents have been acquired and pinned.
+Before doing anything, verify that Human Gate C is explicitly approved at:
 
-No bounded add.u32 source bundle exists.
+`reviews/ptx-add-u32/gate-c/ptx-add-u32-gate-c-v1.json`
 
-No Gate A-approved PTX architecture exists.
+If that record is missing or is not approved, stop and report exactly:
 
-No Gate B-approved semantic interpretation exists.
+`GATE_C_REQUIRED`
 
-The Lean project currently contains only its minimal bootstrap library.
+Do not create an artifact in that case.
 
-During this bootstrap test you are read-only.
+# Inputs
 
-Do not create or edit Lean files.
+Use:
 
-# Phase 1 Bootstrap Order
+- `reviews/ptx-add-u32/gate-c/ptx-add-u32-gate-c-v1.json`
+- `reviews/ptx-add-u32/gate-b/ptx-add-u32-gate-b-v2.json`
+- `reviews/ptx-add-u32/assumptions/ptx-add-u32-overflow-assumption-v1.json`
+- `candidates/ptx/9.3/semantics/add-u32-v2.json`
+- `candidates/ptx/9.3/lean/AddU32.lean`
+- `candidates/ptx/9.3/reviews/add-u32-lean-mapping-v1-critic.md`
 
-After this Lean Formalizer agent is defined and bootstrap-tested, the next
-single Phase 1 infrastructure action is to define and bootstrap-test the
-Proof Engineer agent.
+# Goal
 
-Do not begin actual Lean formalization during this bootstrap test.
+Create a bounded theorem-obligation specification before proof generation.
 
-# Bootstrap Response Format
+Create exactly:
 
-For bootstrap tests, report:
+`candidates/ptx/9.3/theorems/add-u32-obligations-v1.json`
 
-1. your exact role
-2. which required inputs currently exist
-3. which required inputs are missing
-4. whether Lean formalization may begin
-5. prohibited semantic and Lean changes
-6. whether Gate C is ready
-7. the next Phase 1 infrastructure action
+Do not edit the Lean semantics.
+
+Do not write proofs.
+
+Do not write a theorem Lean file yet.
+
+# Obligation Design Rules
+
+Separate:
+
+- validation obligations
+- theorem/proof obligations
+- deferred properties
+
+Use at most 8 theorem/proof obligations.
+
+Every theorem obligation must contain:
+
+- obligation_id
+- proposed_name
+- category
+- intent
+- precise_statement_in_words
+- lean_statement_sketch
+- hypotheses
+- conclusion
+- semantic_claim_ids
+- lean_declarations_used
+- source_or_assumption_basis
+- human_assumption_dependencies
+- non_vacuity_argument
+- strength_risks
+- proof_strategy_hint
+
+IDs must be:
+
+`PTX-ADD-THM-001`
+`PTX-ADD-THM-002`
+...
+
+# Required Property Coverage
+
+The obligation set must consider:
+
+1. modulo-2^32 result conformance
+2. guard-false state preservation
+3. predicate-register preservation
+4. unrelated value-register preservation
+5. destination-only update / frame property
+6. bit-bucket state preservation
+7. totality on the approved well-formed lookup domain
+8. read-before-write / destination-source aliasing behavior
+
+Do not create all eight blindly. Merge overlapping properties when that makes
+a stronger theorem.
+
+# Important Strength Rules
+
+Do not create vacuous theorems.
+
+Do not put the conclusion directly into a hypothesis.
+
+Do not add unapproved semantic preconditions.
+
+For partial semantics, hypotheses may establish that required guard/source
+lookups succeed. Such hypotheses must correspond to the approved well-formed
+execution domain.
+
+Do not interpret `Option.none` as an error.
+
+Do not state destination-frame theorems as explicit NVIDIA claims. Preserve
+the documented negative-evidence caveat.
+
+Modulo-2^32 properties must explicitly depend on the human-approved
+formalization assumption and must never be attributed to NVIDIA.
+
+Do not propose functional determinism merely because `execAddU32` is a
+function. If determinism over a relation is not currently meaningful, defer
+it and explain why.
+
+# Validation Obligations
+
+Represent definitional/static checks as validation obligations rather than
+pretending they are deep theorems when appropriate.
+
+Examples include:
+
+- only `.u32` is representable in this bounded instruction
+- U32 values are within the 32-bit domain by representation
+- no prohibited proof bypass exists in the candidate
+- Lean candidate compiles
+
+# Deferred Properties
+
+Explicitly defer properties that cannot yet be stated faithfully, including
+anything requiring semantics outside this bounded unit.
+
+# Status
+
+Use exactly:
+
+`READY_FOR_STRENGTH_REVIEW`
+
+unless a semantic conflict is discovered.
+
+If a proposed meaningful theorem would require changing the approved
+semantics, use:
+
+`SEMANTIC_CONFLICT`
+
+and do not silently repair semantics.
+
+# Tool Policy
+
+Use only:
+
+- candidate_read
+- candidate_write
+- lean_check_file
+- lean_get_diagnostics
+
+Use candidate_write mode `create`.
+
+Do not modify AddU32.lean.
+
+# Output Structure
+
+The JSON must contain:
+
+- schema_version
+- obligation_set_id
+- status
+- unit
+- gate_c_reference
+- semantics_reference
+- lean_mapping_reference
+- human_assumption_references
+- validation_obligations
+- theorem_obligations
+- deferred_properties
+- known_risks
+- traceability_summary
+
+Use:
+
+obligation_set_id:
+`ptx-9.3-add-u32-obligations-v1`
+
+After writing, verify the artifact with candidate_read.
+
+The next stage is independent theorem-strength review, not proof generation.

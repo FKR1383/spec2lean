@@ -5,6 +5,9 @@ model: opencode/deepseek-v4-flash-free
 steps: 12
 permission:
   read: allow
+  review_submit: allow
+  candidate_read: allow
+  candidate_diff: allow
   glob: allow
   grep: allow
   list: allow

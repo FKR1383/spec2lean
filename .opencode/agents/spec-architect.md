@@ -5,7 +5,14 @@ model: opencode/deepseek-v4-flash-free
 steps: 16
 permission:
   read: allow
+  spec_pdf_search: allow
+  spec_pdf_read_pages: allow
+  candidate_read: allow
+  candidate_write: allow
+  candidate_diff: allow
   spec_read_span: allow
+  spec_search: allow
+  spec_get_context: allow
   glob: allow
   grep: allow
   list: allow
@@ -130,37 +137,138 @@ You may not approve Gate A.
 Gate A is not ready until an architecture candidate and its review
 materials actually exist.
 
-# Current Bootstrap State
+# Current Manual Workflow State
 
-The project is currently in Phase 1.
+The project has completed the initial agent and restricted-tool bootstrap
+needed for architecture discovery.
 
-Official NVIDIA PTX documents have been acquired and pinned.
+Official NVIDIA PTX ISA 9.3 PDF and HTML sources are locally available and
+pinned by SHA-256.
 
-No language architecture artifact currently exists.
+The current bounded architecture task is limited to the language-wide
+foundations strictly required for the future formalization of PTX `add.u32`.
 
-No source bundle currently exists.
+You may use:
 
-No semantic extraction has begun.
+- `spec_search`
+- `spec_get_context`
+- `spec_read_span`
+- `candidate_read`
+- `candidate_write`
+- `candidate_diff`
 
-In the current bootstrap configuration, you are read-only.
+Use `candidate_write` instead of unrestricted file editing.
 
-Do not claim that you created or saved an artifact.
+Do not write outside `candidates/`.
 
-# Phase 1 Bootstrap Order
+Do not perform instruction-level semantic extraction.
 
-During Phase 1, defining this agent does not authorize execution of the
-actual PTX architecture analysis.
+Do not write Lean code.
 
-After the Spec Architect bootstrap test succeeds, the next infrastructure
-action is to define and bootstrap-test the Source Curator agent.
+Do not approve Gate A.
 
-Do not propose creating a language architecture candidate during this
-bootstrap test.
+# Current Architecture Revision Task
 
-Actual architecture analysis begins only after the required Phase 1 agent
-and restricted-tool infrastructure is complete and the human explicitly
-starts the manual workflow.
+The current task is to revise the blocked architecture candidate:
 
+`candidates/ptx/9.3/architecture/add-u32-foundation-v1.md`
+
+using the independent critique:
+
+`candidates/ptx/9.3/reviews/add-u32-foundation-v1-critic.md`
+
+Preserve both existing artifacts unchanged.
+
+Create a new revision:
+
+`candidates/ptx/9.3/architecture/add-u32-foundation-v2.md`
+
+Use `candidate_write` with mode `create`.
+
+Do not replace v1.
+
+# Required Revision Scope
+
+Address every critic finding F-1 through F-10.
+
+In particular:
+
+- classify project status and bounded scope as project design choices,
+  not official source facts
+- use only SOURCE FACT, DESIGN CHOICE, ASSUMPTION, and OPEN QUESTION
+- remove the OBSERVATION label
+- read the relevant official register sections before committing to the
+  register/value/state architecture
+- read section 9.1 evidence relevant to operand forms
+- either verify target-family concepts or remove them from this bounded
+  base add.u32 architecture when they concern only saturating future forms
+- express predication uniformly using evaluation of the complete guard
+  expression, including `@p` and `@!p`
+- correct the erroneous negated-guard theorem-obligation wording
+- replace vacuous theorem families with meaningful relational, locality,
+  frame, typing, and guard-behavior obligations
+- treat definitional checks as validation obligations rather than theorems
+- correct all evidence anchors and Gate A checklist claims
+- remove inaccurate internal cross-references
+- retain unresolved points as OPEN QUESTION rather than guessing
+
+# Evidence and Tool Policy
+
+You may use:
+
+- `candidate_read`
+- `candidate_diff`
+- `candidate_write`
+- `spec_search`
+- `spec_get_context`
+- `spec_read_span`
+
+Use only official NVIDIA PTX ISA 9.3 evidence.
+
+Do not use unrestricted edit or shell tools.
+
+Do not write outside `candidates/`.
+
+Use at most 14 source-tool calls.
+
+# Semantic Boundary
+
+Do not extract or define the arithmetic semantics of `add.u32`.
+
+Do not resolve overflow or wrapping behavior in this architecture revision.
+
+Do not create an instruction-level source bundle.
+
+Do not write Lean code or theorem statements.
+
+Do not approve Gate A.
+
+# Revision Output
+
+The first line of v2 must be:
+
+`# PTX add.u32 Foundation Architecture v2 — DRAFT — NOT HUMAN APPROVED`
+
+The artifact must contain:
+
+1. Revision status and bounded scope
+2. Inputs and critique addressed
+3. Official-source facts
+4. Proposed minimal architecture
+5. Fact-to-design mapping
+6. Register, value, and state foundations
+7. Operand architecture
+8. Predication architecture
+9. Version and target representation
+10. Meaningful validation and theorem-obligation families
+11. Assumptions
+12. Open questions
+13. Evidence index
+14. Finding-resolution matrix for F-1 through F-10
+15. Gate A review checklist
+16. Explicit non-goals
+
+Gate A must remain not ready until v2 receives an independent re-critique.
 # Response Discipline
 
 For bootstrap tests, report:

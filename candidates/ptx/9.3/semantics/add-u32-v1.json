@@ -1,0 +1,756 @@
+{
+  "schema_version": 1,
+  "interpretation_id": "ptx-9.3-add-u32-semantics-v1",
+  "status": "BLOCKED",
+  "language": "PTX",
+  "specification_version": "9.3",
+  "construct": "add.u32",
+  "instruction_family": "add",
+  "architecture_reference": {
+    "path": "candidates/ptx/9.3/architecture/add-u32-foundation-v2.md",
+    "sha256": "3857b9cb512cc77981365228b454f34153d2ccd5308ac5499194b30ec003e9d7",
+    "gate_a_decision": {
+      "record_path": "reviews/ptx-add-u32/gate-a/ptx-add-u32-gate-a-v2.json",
+      "review_id": "ptx-add-u32-gate-a-v2",
+      "gate": "A",
+      "decision": "approved",
+      "human_confirmation_recorded": true
+    }
+  },
+  "source_bundle_reference": {
+    "path": "candidates/ptx/9.3/source-bundles/add-u32-v1.json",
+    "bundle_id": "ptx-9.3-add-u32-source-bundle-v1",
+    "note": "The source bundle is the only specification-evidence interface for this interpretation. Raw PTX HTML and PDF documents were not read in this stage."
+  },
+  "syntax": {
+    "base_scalar_form": "add.u32 d, a, b;",
+    "guarded_form": "@p add.u32 d, a, b;  (equivalently @!p add.u32 d, a, b;)",
+    "source_syntax_quote": "add.type1        d, a, b;\nadd{.sat}.type2  d, a, b;\n\n.type1 = { .u16, .u64,\n           .s16, .s64 };\n\n.type2 = { .u32, .u16x2, .u8x4,\n           .s32, .s16x2, .s8x4 };",
+    "syntax_notes": [
+      ".u32 is listed in .type2, the operand set of the add{.sat}.type2 syntax line; the base add.u32 form is the .sat-absent instantiation of that line.",
+      "The optional guard predicate is omitted from instruction-description syntax (section 9.7) but may prefix any PTX instruction as @{!}p (section 9.3).",
+      "Only the base scalar form add.u32 is the semantic unit of this interpretation. add.sat.u32 and the packed forms (add.u16x2, add.s16x2, add.u8x4, add.s8x4 and their sat forms) are recorded only as out-of-scope context, never as semantic units."
+    ]
+  },
+  "operands": {
+    "order": "d, a, b (destination first, then two sources)",
+    "roles": {
+      "d": "destination operand. The source states that for instructions that create a result value, d is the destination operand, and that add performs addition and writes the resulting value into a destination register. The destination is a register variable of the instruction type in the .reg state space, or, per the general section 9.2 bit-bucket rule, the underscore bit bucket '_'.",
+      "a": "source operand. A register variable of compatible type or a constant immediate.",
+      "b": "source operand. A register variable of compatible type or a constant immediate."
+    },
+    "operand_forms_supported_by_evidence": [
+      "destination register of type .u32 (PTX-9.3-ADD-025, PTX-9.3-ADD-026)",
+      "source register of type .u32 (PTX-9.3-ADD-026)",
+      "source constant immediate (PTX-9.3-ADD-012; PTX-9.3-ADD-025 shows immediate 4)",
+      "destination bit bucket '_' per the general section 9.2 rule (PTX-9.3-ADD-015); add-specific demonstration absent, see AMB-1"
+    ],
+    "operand_form_evidence_notes": [
+      "PTX-9.3-ADD-004: 'writes the resulting value into a destination register' establishes a register destination.",
+      "PTX-9.3-ADD-012: integer arithmetic instructions (family including add) operate on the integer types in register and constant immediate forms.",
+      "PTX-9.3-ADD-025: official example add.u32 %r, %r, 4 with .reg .u32 declarations and constant immediate source.",
+      "PTX-9.3-ADD-026: official example add.u32 %res, %ptr, %inc with all three operands .reg .u32 registers."
+    ]
+  },
+  "types": {
+    "instruction_type": ".u32",
+    "basic_type": "unsigned integer",
+    "width_bits": 32,
+    "evidence": {
+      "u32_fundamental_type": ["PTX-9.3-ADD-019", "PTX-9.3-ADD-020"],
+      "register_width": ["PTX-9.3-ADD-022"]
+    },
+    "operand_typing_rule": "For the scalar instruction type .u32, operands d, a and b have the same type as the instruction type. The .b32 exception is stated by the source only for the enumerated packed types .u16x2, .s16x2, .u8x4, .s8x4.",
+    "operand_typing_evidence": ["PTX-9.3-ADD-005"],
+    "compatibility_rules": "Operand types and sizes are checked against instruction types for compatibility. Two fundamental types are compatible if they have the same basic type and are the same size; signed and unsigned integer types are compatible if they have the same size; the bit-size type is compatible with any fundamental type of the same size.",
+    "compatibility_evidence": ["PTX-9.3-ADD-021"]
+  },
+  "preconditions": {
+    "static_preconditions": [
+      {
+        "id": "PRE-1",
+        "description": "Operands d, a, b have the same type as the instruction type .u32, or a type compatible with .u32 under the section 5.2.1 compatibility rules (same basic type and same size; or signed/unsigned same size; or bit-size of same size).",
+        "classification": "SOURCE_FACT",
+        "evidence_fragment_ids": ["PTX-9.3-ADD-005", "PTX-9.3-ADD-021"]
+      },
+      {
+        "id": "PRE-2",
+        "description": "The destination operand d denotes a register variable (of the instruction type in the .reg state space) or, per the general section 9.2 rule, the bit bucket '_'.",
+        "classification": "DERIVED_INTERPRETATION",
+        "evidence_fragment_ids": ["PTX-9.3-ADD-004", "PTX-9.3-ADD-015", "PTX-9.3-ADD-022"]
+      },
+      {
+        "id": "PRE-3",
+        "description": "Source operands a and b are register variables of compatible type or constant immediates (integer arithmetic instructions operate in register and constant immediate forms).",
+        "classification": "SOURCE_FACT",
+        "evidence_fragment_ids": ["PTX-9.3-ADD-012", "PTX-9.3-ADD-025", "PTX-9.3-ADD-026"]
+      },
+      {
+        "id": "PRE-4",
+        "description": "If a guard is present, it is a predicate register variable of type .pred in the register state space, optionally negated.",
+        "classification": "SOURCE_FACT",
+        "evidence_fragment_ids": ["PTX-9.3-ADD-016", "PTX-9.3-ADD-017", "PTX-9.3-ADD-023"]
+      },
+      {
+        "id": "PRE-5",
+        "description": "Version gating: base add (and therefore base add.u32) is introduced in PTX ISA version 1.0.",
+        "classification": "DERIVED_INTERPRETATION",
+        "evidence_fragment_ids": ["PTX-9.3-ADD-003", "PTX-9.3-ADD-008"]
+      },
+      {
+        "id": "PRE-6",
+        "description": "Target gating: base add is supported on all target architectures.",
+        "classification": "SOURCE_FACT",
+        "evidence_fragment_ids": ["PTX-9.3-ADD-009"]
+      }
+    ],
+    "dynamic_preconditions": [
+      {
+        "id": "PRE-7",
+        "description": "No dynamic precondition is stated in the evidence for add.u32 (for example, no requirement on the values held by source operands, and no carry-flag or status-register requirement). None is asserted.",
+        "classification": "OPEN_QUESTION",
+        "evidence_fragment_ids": ["PTX-9.3-ADD-004", "PTX-9.3-ADD-006"]
+      }
+    ]
+  },
+  "state_reads": [
+    {
+      "component": "source operand a",
+      "description": "When a is a register, its current value is read from the value-register file; when a is a constant immediate, the immediate value is used.",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-004", "PTX-9.3-ADD-006", "PTX-9.3-ADD-012"]
+    },
+    {
+      "component": "source operand b",
+      "description": "When b is a register, its current value is read from the value-register file; when b is a constant immediate, the immediate value is used.",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-004", "PTX-9.3-ADD-006", "PTX-9.3-ADD-012"]
+    },
+    {
+      "component": "guard predicate register p (when a guard is present)",
+      "description": "The value of the predicate register referenced by the guard is read to evaluate the complete guard expression.",
+      "classification": "SOURCE_FACT",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-016", "PTX-9.3-ADD-017"]
+    }
+  ],
+  "state_writes": [
+    {
+      "component": "destination register d (on execution)",
+      "description": "When the instruction executes, the destination register d is updated with the resulting value. No other value register or predicate register is stated to be written by base add.u32.",
+      "classification": "SOURCE_FACT",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-004", "PTX-9.3-ADD-006"]
+    },
+    {
+      "component": "no register (bit bucket destination)",
+      "description": "When the destination is the bit bucket '_', the general section 9.2 rule indicates the destination register is replaced by the bit bucket; the intended consequence that no register is written is a derived interpretation and is not add-specific explicit source text.",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-015"]
+    },
+    {
+      "component": "state when the guard prevents execution",
+      "description": "NOT ESTABLISHED. The source states only that the guard predicate 'controls conditional execution of the instruction'. No explicit clause stating the machine state is unchanged when the guard evaluates false was found in the evidence. This is blocking issue BLOCK-2.",
+      "classification": "OPEN_QUESTION",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-016", "PTX-9.3-ADD-018"]
+    }
+  ],
+  "guard_semantics": {
+    "guard_expression_representation": "An optional guard prefix @{!}p appears after an @ symbol to the left of the opcode, where p is a predicate register variable of type .pred. The guard may be negated with '!'. No guard is present in the syntax-description form (the optional guard predicate is omitted from the syntax), but all PTX instructions may be predicated.",
+    "guard_expression_evaluation": {
+      "no_guard": "The complete guard expression is true; the instruction is executed unconditionally.",
+      "at_p": "@p: the complete guard expression is the value of predicate register p; the instruction executes when p is true.",
+      "at_bang_p": "@!p: the complete guard expression is the negation of the value of predicate register p; the instruction executes when p is false. The official example '@!p bra L1; // if False, branch over' shows the negated guard executing when the underlying predicate is false.",
+      "execution_condition": "The instruction executes if and only if the complete guard expression evaluates true."
+    },
+    "guard_false_consequence": "The source states the guard 'controls conditional execution of the instruction' and the guarded add example comments 'if i < n, add 1 to j'. The exact machine-state effect when the complete guard expression evaluates false (candidate reading: no state update) is not explicitly stated in the evidence. This is blocking issue BLOCK-2; the 'no state update' reading is an interpretation pending human approval, recorded as SEM-038.",
+    "predication_exception": "st.param and ld.param instructions used for argument passing cannot be predicated; this exception does not mention add and therefore does not restrict add.u32 predication.",
+    "evidence_fragment_ids": ["PTX-9.3-ADD-010", "PTX-9.3-ADD-011", "PTX-9.3-ADD-014", "PTX-9.3-ADD-016", "PTX-9.3-ADD-017", "PTX-9.3-ADD-018", "PTX-9.3-ADD-027"]
+  },
+  "behavior": {
+    "arithmetic_semantic_rule": "For the scalar instruction types, including .u32, the add Semantics block gives the rule 'd = a + b;' (the final else branch; the first two branches handle only the packed .u16x2/.s16x2 and .u8x4/.s8x4 types). The prose meaning statements are 'Add two values.' and 'Performs addition and writes the resulting value into a destination register.'",
+    "arithmetic_semantic_rule_source": ["PTX-9.3-ADD-002", "PTX-9.3-ADD-004", "PTX-9.3-ADD-006"],
+    "result_width_behavior": "The destination is a .u32 register (unsigned integer fundamental type, size 32), so any written value lies in the 32-bit unsigned value domain (domain membership is established). What happens when the mathematical sum of the two 32-bit source values is at least 2^32 is NOT established: no wraparound, truncation, carry-discard, trap, or other overflow treatment is stated in the evidence. The resulting 32-bit value cannot therefore be determined from source evidence for all operand values. This is blocking issue BLOCK-1.",
+    "guard_or_predication_behavior": "The instruction executes if and only if its complete guard expression evaluates true (no guard: unconditional; @p: p true; @!p: p false). The machine-state effect when the guard prevents execution is not established (BLOCK-2).",
+    "determinism_note": "Determinism is not explicitly stated in the evidence; see determinism section and SEM-043."
+  },
+  "exceptional_behavior": {
+    "statement": "No explicit error, trap, or exceptional-behavior clause for add (or add.u32) was found in the evidence (bundle coverage area 17 status NOT_FOUND; GAP-4). This absence is not asserted as a positive source fact that no exceptional behavior exists; it is recorded as an open question (SEM-046). The architecture's outcome model with no error constructor is an assumption (SEM-039).",
+    "evidence_fragment_ids": ["PTX-9.3-ADD-004", "PTX-9.3-ADD-006"]
+  },
+  "undefined_behavior": {
+    "statement": "No explicit undefined-behavior clause for add (or add.u32) was found in the evidence (GAP-4). No undefined-behavior claim is made.",
+    "evidence_fragment_ids": ["PTX-9.3-ADD-004", "PTX-9.3-ADD-006"]
+  },
+  "implementation_defined_behavior": {
+    "statement": "No explicit implementation-defined-behavior clause for add (or add.u32) was found in the evidence. No implementation-defined-behavior claim is made.",
+    "evidence_fragment_ids": ["PTX-9.3-ADD-004"]
+  },
+  "determinism": {
+    "statement": "Determinism of add.u32 is not explicitly stated in the evidence (bundle gap GAP-3). No determinism source-fact claim is made. Any future determinism statement would be a derived or design-level claim, not a source fact.",
+    "classification": "OPEN_QUESTION",
+    "evidence_fragment_ids": ["PTX-9.3-ADD-004", "PTX-9.3-ADD-006"]
+  },
+  "version_and_target": {
+    "specification_version_formalized": "9.3",
+    "version_restrictions": {
+      "base_add_u32_introduced_in": "PTX ISA version 1.0 (derived: base add introduced in 1.0 and add.u32 is a base, non-saturating form of add; add.sat.u32 is separately introduced in 9.2 and is out of scope).",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-003", "PTX-9.3-ADD-008"]
+    },
+    "target_restrictions": {
+      "base_add_supported_on": "all target architectures",
+      "note": "The sm_90 note (add.u16x2/add.s16x2) and the family-specific sm_120f note (add.sat.u32 and other sat/packed forms) concern only future saturating/packed forms outside the bounded base unit; the formal meaning of 'same family' is not defined in the evidence (SEM-047).",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-009"]
+    }
+  },
+  "semantic_claims": [
+    {
+      "claim_id": "PTX-ADD-SEM-001",
+      "classification": "SOURCE_FACT",
+      "statement": "The construct identity is the add instruction family: PTX ISA 9.3 section 9.7.1.1 'Integer Arithmetic Instructions: add', HTML anchor integer-arithmetic-instructions-add (HTML lines 8757-8760).",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-001"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-002",
+      "classification": "SOURCE_FACT",
+      "statement": "Section 9.1 states that each PTX instruction is described by its name, format, semantics, and examples; this frames the add Syntax/Semantics/Examples blocks as normative source content.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-013"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-003",
+      "classification": "SOURCE_FACT",
+      "statement": "The exact add syntax variants are 'add.type1 d, a, b;' and 'add{.sat}.type2 d, a, b;' with .type1 = { .u16, .u64, .s16, .s64 } and .type2 = { .u32, .u16x2, .u8x4, .s32, .s16x2, .s8x4 }; .u32 is listed in .type2.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-003"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-004",
+      "classification": "SOURCE_FACT",
+      "statement": "The add meaning statement is 'Add two values.'",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-002"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-005",
+      "classification": "SOURCE_FACT",
+      "statement": "The add execution description is 'Performs addition and writes the resulting value into a destination register.'",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-004"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-006",
+      "classification": "SOURCE_FACT",
+      "statement": "Operand order is d, a, b: the add syntax shows the three-operand form d, a, b, and section 9.2 states that for instructions that create a result value, the d operand is the destination operand while a, b, and c are source operands.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-003", "PTX-9.3-ADD-014"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-007",
+      "classification": "SOURCE_FACT",
+      "statement": "Operand typing: 'Operands d, a and b have the same type as the instruction type.' The source states the .b32 exception only for the enumerated packed instruction types .u16x2, .s16x2, .u8x4, .s8x4.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-005"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-008",
+      "classification": "SOURCE_FACT",
+      "statement": ".u32 is an unsigned integer fundamental type specifier; a fundamental type specifies both a basic type and a size; register variables are always of a fundamental type and instructions operate on these types; the same type-size specifiers are used for variable definitions and instruction typing.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-019", "PTX-9.3-ADD-020"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-009",
+      "classification": "SOURCE_FACT",
+      "statement": "Registers (.reg state space) are fast storage locations; aside from 1-bit predicate registers, scalar registers have a width of 8-, 16-, 32-, 64-, or 128-bits (32-bit width is therefore possible for .u32 registers); registers are not fully addressable.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-022"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-010",
+      "classification": "SOURCE_FACT",
+      "statement": "Type compatibility: operand types and sizes are checked against instruction types for compatibility; two fundamental types are compatible if they have the same basic type and are the same size; signed and unsigned integer types are compatible if they have the same size; the bit-size type is compatible with any fundamental type having the same size.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-021"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-011",
+      "classification": "SOURCE_FACT",
+      "statement": "Integer arithmetic instructions (the family that includes add) operate on the integer types in register and constant immediate forms.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-012"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-012",
+      "classification": "SOURCE_FACT",
+      "statement": "Variable declarations: every variable must reside in a state space; a variable declaration names the space, the type and size, and the name; predicate variables may only be declared in the register state space.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-023"],
+      "confidence": "high",
+      "blocking_if_wrong": false
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-013",
+      "classification": "SOURCE_FACT",
+      "statement": "PTX supports virtual registers and parameterized variable names (e.g., .reg .b32 %r<100> declares %r0..%r99) with any of the fundamental types and with any state space.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-024"],
+      "confidence": "high",
+      "blocking_if_wrong": false
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-014",
+      "classification": "SOURCE_FACT",
+      "statement": "For some instructions the destination operand is optional; a bit bucket operand denoted with an underscore (_) may be used in place of a destination register.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-015"],
+      "confidence": "high",
+      "blocking_if_wrong": false
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-015",
+      "classification": "SOURCE_FACT",
+      "statement": "All PTX instructions may be predicated; in the instruction descriptions the optional guard predicate is omitted from the syntax.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-011"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-016",
+      "classification": "SOURCE_FACT",
+      "statement": "All instructions have an optional guard predicate which controls conditional execution of the instruction; the syntax is to prefix an instruction with @{!}p, where p is a predicate variable, optionally negated; instructions without a guard predicate are executed unconditionally.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-016"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-017",
+      "classification": "SOURCE_FACT",
+      "statement": "The official add Examples block includes the predicated form '@p add.u32 x,y,z;'.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-010"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-018",
+      "classification": "SOURCE_FACT",
+      "statement": "Official guard examples: '@p add.s32 j, j, 1; // if i < n, add 1 to j' and '@!p bra L1; // if False, branch over'; the @p example uses an add instruction and the @!p example shows the negated guard executing when the underlying predicate is false.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-018"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-019",
+      "classification": "SOURCE_FACT",
+      "statement": "Predicate registers are virtual and have .pred as the type specifier and may be declared as '.reg .pred p, q, r;'.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-017"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-020",
+      "classification": "SOURCE_FACT",
+      "statement": "The add Semantics block (lines 8785-8811) contains, verbatim, three branches: a packed half-word branch (.u16x2/.s16x2), a packed quarter-word branch (.u8x4/.s8x4), and a final else branch whose statement is 'd = a + b;'.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-006"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-021",
+      "classification": "SOURCE_FACT",
+      "statement": "PTX ISA Notes: 'Introduced in PTX ISA version 1.0.' for base add; add.u16x2 and add.s16x2 introduced in version 8.0; add{.sat}.u8x4, add{.sat}.s8x4, add.sat.u16x2, add.sat.s16x2 and add.sat.u32 introduced in version 9.2.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-008"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-022",
+      "classification": "SOURCE_FACT",
+      "statement": "Target ISA Notes: 'Supported on all target architectures.' for base add; the sm_90 note (add.u16x2/add.s16x2) and the family-specific sm_120f note (add.sat.u32 and other sat/packed forms) concern forms outside the bounded base unit.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-009"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-023",
+      "classification": "SOURCE_FACT",
+      "statement": "The .sat modifier 'limits result to MININT..MAXINT (no overflow) for the size and signedness of the operation' and applies to .u32 among other types; this concerns the separate saturating form add.sat.u32 and is not part of the base add.u32 unit.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-007"],
+      "confidence": "high",
+      "blocking_if_wrong": false
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-024",
+      "classification": "SOURCE_FACT",
+      "statement": "st.param and ld.param instructions used for argument passing cannot be predicated; this exception does not mention add and therefore does not restrict add.u32 predication.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-027"],
+      "confidence": "high",
+      "blocking_if_wrong": false
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-025",
+      "classification": "SOURCE_FACT",
+      "statement": "Official example: 'add.u32 %r, %r, 4;' appears inside a function body with '.reg .u32' declarations and a predicate register declaration, demonstrating a register destination, a register source, and a constant immediate source (4).",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-025"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-026",
+      "classification": "SOURCE_FACT",
+      "statement": "Official example: 'add.u32 %res, %ptr, %inc;' appears inside a .func body with all three operands as .reg .u32 register variables.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-026"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-027",
+      "classification": "DERIVED_INTERPRETATION",
+      "statement": "For this unit, add.u32 denotes the scalar, non-saturating, unsigned 32-bit form of add: it is the .u32 entry of the base syntax without the .sat modifier; because .u32 is not among the packed types enumerated in the first two semantics branches, the applicable semantics branch is the final else clause 'd = a + b;'; and because the .b32 exception is enumerated only for packed types, operands d, a, b all have type .u32 (unsigned integer, size 32).",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-003", "PTX-9.3-ADD-005", "PTX-9.3-ADD-006", "PTX-9.3-ADD-019", "PTX-9.3-ADD-020"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-028",
+      "classification": "DERIVED_INTERPRETATION",
+      "statement": "Operand forms: the destination d is a register variable of the instruction type in the .reg state space (or, by the general section 9.2 rule, the bit bucket '_'); the sources a and b may each be a register variable of compatible type or a constant immediate; official examples demonstrate the register destination, register source, and immediate source forms.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-004", "PTX-9.3-ADD-012", "PTX-9.3-ADD-015", "PTX-9.3-ADD-025", "PTX-9.3-ADD-026"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-029",
+      "classification": "DERIVED_INTERPRETATION",
+      "statement": "Guard-expression evaluation: the complete guard expression is true when no guard is present (unconditional execution); for @p it is the value of predicate register p; for @!p it is the negation of the value of p; the instruction executes if and only if the complete guard expression evaluates true.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-011", "PTX-9.3-ADD-014", "PTX-9.3-ADD-016", "PTX-9.3-ADD-018"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-030",
+      "classification": "DERIVED_INTERPRETATION",
+      "statement": "State reads and writes on execution: execution reads the current values of source operands a and b (from registers or constant immediates) and, if a guard is present, the value of the guard predicate p; on execution the destination register d is updated with the resulting value. No other state component is stated to be read or written by base add.u32.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-004", "PTX-9.3-ADD-006", "PTX-9.3-ADD-016"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-031",
+      "classification": "DERIVED_INTERPRETATION",
+      "statement": "Result-domain membership: because the destination d has the .u32 type (unsigned integer, size 32) and is a scalar register of width 32 bits, any value written to d lies in the 32-bit unsigned value domain. This establishes only the domain of the result; it does not establish which 32-bit value is written when the mathematical sum of a and b is at least 2^32 (see SEM-041, BLOCK-1).",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-004", "PTX-9.3-ADD-005", "PTX-9.3-ADD-019", "PTX-9.3-ADD-020", "PTX-9.3-ADD-022"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-032",
+      "classification": "DERIVED_INTERPRETATION",
+      "statement": "Version and target derivation: because .u32 without .sat is one of the base add forms in the Syntax block and the PTX ISA Notes assign version 1.0 to base add while assigning version 9.2 only to add.sat.u32 and other sat/packed forms, the base add.u32 form is introduced in PTX ISA version 1.0; the Target ISA Notes state that base add is supported on all target architectures.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-003", "PTX-9.3-ADD-008", "PTX-9.3-ADD-009"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-033",
+      "classification": "DESIGN_DEPENDENCY",
+      "statement": "Instruction representation design (architecture D-1, D-2, D-16): an add.u32 instruction is represented as an optional guard (@{!}p), mnemonic add, type specifier .u32, empty modifier set for the base form, destination operand, and source operands a, b in that order.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-003", "PTX-9.3-ADD-014", "PTX-9.3-ADD-016"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-034",
+      "classification": "DESIGN_DEPENDENCY",
+      "statement": "Minimal machine state design (architecture D-5, D-14): the state for base add.u32 is the pair (value-register file, predicate-register file); no memory, shared, special-register, or concurrency state is required by the add.u32 syntax and description.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-003", "PTX-9.3-ADD-004", "PTX-9.3-ADD-022"],
+      "confidence": "medium",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-035",
+      "classification": "DESIGN_DEPENDENCY",
+      "statement": "Execution-result representation design (architecture D-8): an instruction-local outcome has at least two cases, executed (with updated destination) and guard-false (no state change); no error constructor is proposed because the source defines no exceptional behavior for base add (see SEM-039).",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-004", "PTX-9.3-ADD-016"],
+      "confidence": "medium",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-036",
+      "classification": "DESIGN_DEPENDENCY",
+      "statement": "Version and target representation design (architecture D-9, D-22, D-23): base add.u32 is represented with an introduced-in bound of PTX ISA 1.0 and a target requirement of all target architectures; family-specific target machinery is explicitly out of scope for the base unit.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-008", "PTX-9.3-ADD-009"],
+      "confidence": "high",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-037",
+      "classification": "DESIGN_DEPENDENCY",
+      "statement": "Execution-semantics representation design (architecture D-25): the future execution semantics for add.u32 is designed to be represented as an execution relation between (state, instruction) and state, not merely as a function, so that determinism and frame/locality obligations are non-vacuous.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-004"],
+      "confidence": "medium",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-038",
+      "classification": "ASSUMPTION",
+      "statement": "The intended guard-false consequence 'no state update' is an interpretation of the wording that the guard predicate 'controls conditional execution of the instruction' and of the guarded add example; it is not a source fact (GAP-2) and is pending human approval (architecture A-4/OQ-3). It must not be used to resolve BLOCK-2.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-016", "PTX-9.3-ADD-018"],
+      "confidence": "medium",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-039",
+      "classification": "ASSUMPTION",
+      "statement": "No explicit error, trap, or exceptional-behavior clause for base add was found in the evidence (bundle coverage area 17 NOT_FOUND; GAP-4); the absence is not asserted as a positive source fact, and the architecture assumes no error constructor for this unit (architecture A-6).",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-004"],
+      "confidence": "medium",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-040",
+      "classification": "ASSUMPTION",
+      "statement": "The HTML document (SHA-256 e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856) is authoritative for this unit; the PDF artifact was not read in the curation pass and no PDF page numbers exist for any fragment (GAP-7; architecture A-1).",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-001"],
+      "confidence": "high",
+      "blocking_if_wrong": false
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-041",
+      "classification": "OPEN_QUESTION",
+      "statement": "Overflow/result-width behavior of base add.u32 is not established by the evidence: the Semantics block states 'd = a + b;' for scalar types without defining the result width or overflow treatment when the mathematical sum a + b is at least 2^32 (bundle gap GAP-1). The resulting 32-bit value cannot be determined from source evidence for all operand values. This is blocking issue BLOCK-1.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-006"],
+      "confidence": "n/a",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-042",
+      "classification": "OPEN_QUESTION",
+      "statement": "The machine-state effect when a guard prevents execution is not explicitly stated beyond 'controls conditional execution of the instruction'; no explicit 'no state update' clause exists in the evidence (bundle gap GAP-2). This is blocking issue BLOCK-2 for guarded semantics.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-016", "PTX-9.3-ADD-018"],
+      "confidence": "n/a",
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-043",
+      "classification": "OPEN_QUESTION",
+      "statement": "Determinism of add.u32 is not explicitly stated in the source (bundle gap GAP-3); no determinism claim is made as a source fact.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-004", "PTX-9.3-ADD-006"],
+      "confidence": "n/a",
+      "blocking_if_wrong": false
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-044",
+      "classification": "OPEN_QUESTION",
+      "statement": "The allowed range and encoding of constant immediate source operands for add are not stated in the evidence; only the rule that integer arithmetic instructions operate in register and constant immediate forms and the example immediate 4 were found (bundle gap GAP-5).",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-012", "PTX-9.3-ADD-025"],
+      "confidence": "n/a",
+      "blocking_if_wrong": false
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-045",
+      "classification": "OPEN_QUESTION",
+      "statement": "Add-specific bit-bucket destination behavior is not explicitly stated; the general section 9.2 rule supports the '_' destination form, but the add section does not demonstrate it (bundle gap GAP-6).",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-015"],
+      "confidence": "n/a",
+      "blocking_if_wrong": false
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-046",
+      "classification": "OPEN_QUESTION",
+      "statement": "Whether the absence of an explicit error, trap, or undefined-behavior clause (bundle gap GAP-4) means base add has no such behaviors, or whether such behaviors exist but are not stated in the read sections, is unresolved.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-004"],
+      "confidence": "n/a",
+      "blocking_if_wrong": false
+    },
+    {
+      "claim_id": "PTX-ADD-SEM-047",
+      "classification": "OPEN_QUESTION",
+      "statement": "The formal meaning of 'sm_120f or higher in the same family' is not defined in the evidence; this concerns only future saturating/packed forms outside the bounded base unit (bundle gap GAP-8).",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-009"],
+      "confidence": "n/a",
+      "blocking_if_wrong": false
+    }
+  ],
+  "assumptions": [
+    {
+      "assumption_id": "PTX-ADD-SEM-038",
+      "summary": "Guard-false 'no state update' is an interpretation pending human approval, not a source fact; must not be used to resolve BLOCK-2.",
+      "classification": "ASSUMPTION",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-016", "PTX-9.3-ADD-018"]
+    },
+    {
+      "assumption_id": "PTX-ADD-SEM-039",
+      "summary": "No error/trap/undefined clause found for base add; absence is not asserted as a positive fact; outcome model assumes no error constructor.",
+      "classification": "ASSUMPTION",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-004"]
+    },
+    {
+      "assumption_id": "PTX-ADD-SEM-040",
+      "summary": "HTML document authoritative; PDF not read; PDF page numbers null for all fragments.",
+      "classification": "ASSUMPTION",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-001"]
+    }
+  ],
+  "ambiguities": [
+    {
+      "ambiguity_id": "AMB-1",
+      "description": "The general section 9.2 bit-bucket rule says '_' may be used in place of a destination register 'for some instructions'; whether add.u32 is one of those instructions is not demonstrated in the add section. The architecture treats the bit bucket as a supported destination form by design (D-18), grounded only in the general rule.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-015"],
+      "impact": "Non-blocking for the base register-destination semantics; affects the exact set of well-formed destination forms.",
+      "related_open_question": "PTX-ADD-SEM-045"
+    },
+    {
+      "ambiguity_id": "AMB-2",
+      "description": "The '+' operator in the semantics block 'd = a + b;' is not defined by the source with respect to overflow: no statement whether the addition is modular (wrapping) on the 32-bit type, truncated, unspecified, or otherwise when the mathematical sum exceeds 2^32-1.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-006"],
+      "impact": "Blocking (BLOCK-1): the resulting 32-bit value is not determined for all operand values.",
+      "related_open_question": "PTX-ADD-SEM-041"
+    },
+    {
+      "ambiguity_id": "AMB-3",
+      "description": "The exact machine-state consequence of a false guard predicate is not stated; 'controls conditional execution' admits the natural reading 'instruction does not execute and the state is unchanged', but the source does not spell out the state effect.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-016", "PTX-9.3-ADD-018"],
+      "impact": "Blocking for guarded semantics (BLOCK-2).",
+      "related_open_question": "PTX-ADD-SEM-042"
+    },
+    {
+      "ambiguity_id": "AMB-4",
+      "description": "The allowed range and encoding of constant immediate source operands for add are not stated; the only evidence is the family rule and an example with immediate 4.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-012", "PTX-9.3-ADD-025"],
+      "impact": "Non-blocking for the arithmetic result of a given legal immediate; affects static well-formedness of programs.",
+      "related_open_question": "PTX-ADD-SEM-044"
+    },
+    {
+      "ambiguity_id": "AMB-5",
+      "description": "Whether the absence of an explicit error/undefined-behavior clause for add means such behaviors do not exist, or exist but are unstated in the read sections, is unresolved.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-004"],
+      "impact": "Non-blocking as an absence record; would become blocking if positive error behavior is later evidenced.",
+      "related_open_question": "PTX-ADD-SEM-046"
+    }
+  ],
+  "open_questions": [
+    {
+      "open_question_id": "PTX-ADD-SEM-041",
+      "summary": "Overflow/result-width behavior of base add.u32 not established (GAP-1). BLOCKING (BLOCK-1).",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-006"]
+    },
+    {
+      "open_question_id": "PTX-ADD-SEM-042",
+      "summary": "Machine-state effect when a guard prevents execution not established (GAP-2). BLOCKING for guarded semantics (BLOCK-2).",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-016", "PTX-9.3-ADD-018"]
+    },
+    {
+      "open_question_id": "PTX-ADD-SEM-043",
+      "summary": "Determinism of add.u32 not explicitly stated (GAP-3).",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-004", "PTX-9.3-ADD-006"]
+    },
+    {
+      "open_question_id": "PTX-ADD-SEM-044",
+      "summary": "Constant immediate source range/encoding for add not stated (GAP-5).",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-012", "PTX-9.3-ADD-025"]
+    },
+    {
+      "open_question_id": "PTX-ADD-SEM-045",
+      "summary": "Add-specific bit-bucket destination behavior not stated (GAP-6).",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-015"]
+    },
+    {
+      "open_question_id": "PTX-ADD-SEM-046",
+      "summary": "Whether absence of explicit error/trap/undefined-behavior clauses means none exist (GAP-4).",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-004"]
+    },
+    {
+      "open_question_id": "PTX-ADD-SEM-047",
+      "summary": "Formal meaning of 'sm_120f or higher in the same family' not defined (GAP-8); future saturating/packed forms only.",
+      "evidence_fragment_ids": ["PTX-9.3-ADD-009"]
+    }
+  ],
+  "blocking_issues": [
+    {
+      "blocking_issue_id": "BLOCK-1",
+      "description": "Overflow/result-width behavior of base add.u32 is not established by the evidence. The Semantics block gives 'd = a + b;' for the scalar branch (which includes .u32) without defining the result width or overflow treatment when a + b is at least 2^32. The resulting 32-bit value therefore cannot be determined from source evidence for all operand values, which is required for a faithful semantic definition.",
+      "bundle_gap_id": "GAP-1",
+      "related_fragment_ids": ["PTX-9.3-ADD-006"],
+      "related_semantic_claims": ["PTX-ADD-SEM-020", "PTX-ADD-SEM-027", "PTX-ADD-SEM-031", "PTX-ADD-SEM-041"],
+      "resolution_required": "Official evidence establishing the overflow/result-width rule for the scalar .u32 branch of add (e.g., explicit wraparound/truncation statement), or a human-approved interpretation made on an explicitly justified basis; must not be resolved by assumption in this stage."
+    },
+    {
+      "blocking_issue_id": "BLOCK-2",
+      "description": "The machine-state effect when a guard prevents execution of add.u32 is not established by the evidence. The source states only that the guard predicate 'controls conditional execution of the instruction' and provides guarded examples; no explicit clause states that the machine state is unchanged when the complete guard expression evaluates false. Because guarded execution of add.u32 is in scope (official example '@p add.u32 x,y,z;'), the resulting machine state of a guarded add.u32 with a false guard is undetermined.",
+      "bundle_gap_id": "GAP-2",
+      "related_fragment_ids": ["PTX-9.3-ADD-010", "PTX-9.3-ADD-016", "PTX-9.3-ADD-018"],
+      "related_semantic_claims": ["PTX-ADD-SEM-016", "PTX-ADD-SEM-029", "PTX-ADD-SEM-038", "PTX-ADD-SEM-042"],
+      "resolution_required": "A human-approved semantic interpretation of the guard-false machine-state effect (candidate: no state update) or additional official evidence; must not be resolved by assumption in this stage."
+    }
+  ],
+  "future_theorem_obligation_topics": [
+    {
+      "topic_id": "PRF-1",
+      "description": "Determinism of the execution relation for add.u32: at most one resulting state for any well-formed state and well-typed instruction. Depends on the unresolved determinism question (SEM-043).",
+      "blocked_by": null
+    },
+    {
+      "topic_id": "PRF-2",
+      "description": "Destination-only update / frame: when add.u32 executes with a register destination, only the destination register may change; every other value register and predicate register is unchanged.",
+      "blocked_by": null
+    },
+    {
+      "topic_id": "PRF-3",
+      "description": "Bit-bucket discard: when the destination is '_', execution changes no value register. Depends on the bit-bucket interpretation for add (AMB-1, SEM-045).",
+      "blocked_by": null
+    },
+    {
+      "topic_id": "PRF-4",
+      "description": "Guard-false frame: when the complete guard expression evaluates false, the entire state is unchanged. BLOCKED by BLOCK-2 until the guard-false state effect is established by approved evidence/interpretation.",
+      "blocked_by": "BLOCK-2"
+    },
+    {
+      "topic_id": "PRF-5",
+      "description": "Guard-behavior: the instruction executes if and only if the complete guard expression evaluates true, covering no-guard, @p, and @!p cases uniformly. The execution side is established (SEM-029); the false side is BLOCKED by BLOCK-2.",
+      "blocked_by": "BLOCK-2"
+    },
+    {
+      "topic_id": "PRF-6",
+      "description": "Result-domain membership: when add.u32 executes, the value written to the destination lies in the 32-bit unsigned value domain. Domain membership is established (SEM-031); the exact value on overflow is BLOCKED by BLOCK-1.",
+      "blocked_by": "BLOCK-1"
+    },
+    {
+      "topic_id": "PRF-7",
+      "description": "Arithmetic result correctness: the value written to the destination equals the sum of the source values under the not-yet-established result-width/overflow rule. BLOCKED by BLOCK-1.",
+      "blocked_by": "BLOCK-1"
+    }
+  ],
+  "traceability_summary": {
+    "interpretation_id": "ptx-9.3-add-u32-semantics-v1",
+    "status": "BLOCKED",
+    "source_bundle": {
+      "bundle_id": "ptx-9.3-add-u32-source-bundle-v1",
+      "path": "candidates/ptx/9.3/source-bundles/add-u32-v1.json",
+      "html_source_sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856"
+    },
+    "fragment_ids_used": [
+      "PTX-9.3-ADD-001", "PTX-9.3-ADD-002", "PTX-9.3-ADD-003", "PTX-9.3-ADD-004", "PTX-9.3-ADD-005", "PTX-9.3-ADD-006", "PTX-9.3-ADD-007", "PTX-9.3-ADD-008", "PTX-9.3-ADD-009", "PTX-9.3-ADD-010", "PTX-9.3-ADD-011", "PTX-9.3-ADD-012", "PTX-9.3-ADD-013", "PTX-9.3-ADD-014", "PTX-9.3-ADD-015", "PTX-9.3-ADD-016", "PTX-9.3-ADD-017", "PTX-9.3-ADD-018", "PTX-9.3-ADD-019", "PTX-9.3-ADD-020", "PTX-9.3-ADD-021", "PTX-9.3-ADD-022", "PTX-9.3-ADD-023", "PTX-9.3-ADD-024", "PTX-9.3-ADD-025", "PTX-9.3-ADD-026", "PTX-9.3-ADD-027"
+    ],
+    "claim_counts": {
+      "total": 47,
+      "SOURCE_FACT": 26,
+      "DERIVED_INTERPRETATION": 6,
+      "DESIGN_DEPENDENCY": 5,
+      "ASSUMPTION": 3,
+      "OPEN_QUESTION": 7
+    },
+    "blocking_issue_count": 2,
+    "blocking_issue_ids": ["BLOCK-1", "BLOCK-2"],
+    "evidence_interface_note": "No raw PTX HTML or PDF was read in this semantic stage; all semantic claims reference source-bundle fragment IDs only.",
+    "no_lean_note": "No Lean code, Lean data structures, or Lean theorem statements were produced in this stage.",
+    "gate_b_status": "NOT READY"
+  }
+}

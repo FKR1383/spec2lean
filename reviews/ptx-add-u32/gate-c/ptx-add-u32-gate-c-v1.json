@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "recordType": "human_gate_decision",
+  "reviewId": "ptx-add-u32-gate-c-v1",
+  "unitId": "ptx-add-u32",
+  "gate": "C",
+  "decision": "approved",
+  "reviewer": "Human reviewer",
+  "rationale": "I reviewed the Gate-B-approved PTX add.u32 semantic interpretation, the compiled Lean mapping candidate, and the independent pre-Gate-C mapping critique. I approve the Lean mapping for theorem-obligation generation and proof development. The known MINOR negative-evidence comment issue and traceability residuals remain requirements for final acceptance.",
+  "submittedAtUtc": "2026-08-07T02:14:13.159Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ptx/9.3/semantics/add-u32-v2.json",
+      "sha256": "76499344dc8767c7acca596a8b8bcb8aad671779b581e74bf94d57dd52f9bbb6",
+      "sizeBytes": 70076
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/lean/AddU32.lean",
+      "sha256": "4fa14a35f4d127b4df6cd10eb541bf6a4503042c6dc306290e4258f90c691b7b",
+      "sizeBytes": 14090
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/reviews/add-u32-lean-mapping-v1-critic.md",
+      "sha256": "11c0e04176e32beaa93d2ed144622f1af3dd6d0439a17b5eb442646885f9a4d1",
+      "sizeBytes": 24034
+    }
+  ],
+  "humanConfirmationRecorded": true,
+  "gateApprovalPerformed": true,
+  "promotionPerformed": false,
+  "provenance": {
+    "agent": "spec-manager",
+    "sessionID": "ses_026005fe9ffe8s3SE6hg9nC2j5",
+    "messageID": "msg_fd9ffccaa001BCiCP9SKgqgoZZ"
+  }
+}

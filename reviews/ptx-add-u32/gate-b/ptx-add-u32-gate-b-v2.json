@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "recordType": "human_gate_decision",
+  "reviewId": "ptx-add-u32-gate-b-v2",
+  "unitId": "ptx-add-u32",
+  "gate": "B",
+  "decision": "approved",
+  "reviewer": "Human reviewer",
+  "rationale": "I reviewed PTX add.u32 semantic interpretation v2 together with the independent pre-Gate-B semantic critique and the explicit human-approved overflow formalization assumption.\n\nI approve the bounded semantic interpretation for Lean formalization.\n\nI explicitly accept that:\n- modulo-2^32 behavior is a project-level human-approved formalization assumption and must never be attributed to NVIDIA as an explicit source fact;\n- false complete guard behavior is grounded in official PTX evidence;\n- destination-only state behavior carries the documented negative-evidence caveat;\n- the remaining open questions are non-blocking for this bounded unit;\n- the two MINOR critic findings must remain traceable and be addressed before final acceptance.\n\nThis approval authorizes proceeding to Lean formalization but does not constitute Gate C or final acceptance.\n\nNote: the human-approved overflow assumption record (reviews/ptx-add-u32/assumptions/ptx-add-u32-overflow-assumption-v1.json) is not listed in artifactPaths because the review_submit tool only accepts paths under candidates/ or accepted/; its canonical decision_path is referenced from the approved semantics artifact and remains traceable.",
+  "submittedAtUtc": "2026-08-07T01:57:48.248Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ptx/9.3/semantics/add-u32-v2.json",
+      "sha256": "76499344dc8767c7acca596a8b8bcb8aad671779b581e74bf94d57dd52f9bbb6",
+      "sizeBytes": 70076
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/reviews/add-u32-semantics-v2-critic.md",
+      "sha256": "b43a44473ae4964e3b1fc159eda1dec17f8b73dec9054b12f4929ba6c18dc009",
+      "sizeBytes": 25029
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/source-bundles/add-u32-v1.json",
+      "sha256": "c137078da5e8e0a475a090ae16409cd89d6ee7b93911f0b78a9a36f94d2a4924",
+      "sizeBytes": 47631
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/source-bundles/add-u32-blockers-supplement-v2.json",
+      "sha256": "a74ab1167e4a20d5aa37360713aec8a28ee219763c93f28e3a47c57ae81c1fec",
+      "sizeBytes": 29377
+    }
+  ],
+  "humanConfirmationRecorded": true,
+  "gateApprovalPerformed": true,
+  "promotionPerformed": false,
+  "provenance": {
+    "agent": "spec-manager",
+    "sessionID": "ses_026131c91ffeEhmI8SL6XZyXY5",
+    "messageID": "msg_fd9f0acf30012s3WPxfhpRAxJF"
+  }
+}

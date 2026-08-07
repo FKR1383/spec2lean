@@ -54,6 +54,18 @@
       "pkill": "deny",
       "pkill *": "deny"
     },
-    "spec_read_span": "deny"
+    "spec_read_span": "deny",
+    "spec_search": "deny",
+    "spec_get_context": "deny",
+    "candidate_read": "deny",
+    "candidate_write": "deny",
+    "candidate_diff": "deny",
+    "lean_check_file": "deny",
+    "lean_get_diagnostics": "deny",
+    "lean_get_goals": "deny",
+    "lean_run_eval": "deny",
+    "review_submit": "deny",
+    "spec_pdf_search": "deny",
+    "spec_pdf_read_pages": "deny"
   }
 }

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "recordType": "human_gate_decision",
+  "reviewId": "ptx-add-u32-gate-a-v2",
+  "unitId": "ptx-add-u32",
+  "gate": "A",
+  "decision": "approved",
+  "reviewer": "Human reviewer",
+  "rationale": "I reviewed the PTX add.u32 foundation architecture v2 together with the independent v2 critique. I approve the language-architecture foundation for proceeding to bounded source curation and semantic extraction. Remaining explicitly documented semantic questions must stay unresolved until their designated later stage.",
+  "submittedAtUtc": "2026-08-07T00:37:52.546Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ptx/9.3/architecture/add-u32-foundation-v2.md",
+      "sha256": "3857b9cb512cc77981365228b454f34153d2ccd5308ac5499194b30ec003e9d7",
+      "sizeBytes": 42518
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/reviews/add-u32-foundation-v2-critic.md",
+      "sha256": "30df9032859c6d88f0e00d9fb414ab4dbaf3f3e6423b4e29b615a34fa2c5270b",
+      "sizeBytes": 19145
+    }
+  ],
+  "humanConfirmationRecorded": true,
+  "promotionPerformed": false,
+  "provenance": {
+    "agent": "spec-manager",
+    "sessionID": "ses_0275362efffeaX1vPkOKN2ghXN",
+    "messageID": "msg_fd9a79563001bA9heqaKgzyoCu"
+  }
+}

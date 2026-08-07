@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "recordType": "human_theorem_strength_decision",
+  "reviewId": "ptx-add-u32-theorem-strength-v1",
+  "unitId": "ptx-add-u32",
+  "gate": "C",
+  "decision": "approved",
+  "reviewer": "Human reviewer",
+  "rationale": "I reviewed the PTX add.u32 theorem-obligation set and the independent theorem-strength critique. I approve the six theorem obligations for machine-checked proof generation and additionally approve one explicit read-before-write aliasing corollary as recommended by the critic. No semantic change, theorem weakening, or new precondition is authorized.",
+  "submittedAtUtc": "2026-08-07T02:31:47.600Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ptx/9.3/theorems/add-u32-obligations-v1.json",
+      "sha256": "411cdd55fcd2551a4850a31987d52453b4d5f4f92457d22b115a39040b143a70",
+      "sizeBytes": 47667
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/reviews/add-u32-obligations-v1-strength-critic.md",
+      "sha256": "af195c7d0beffcb0aa71f7e14a37843a62d915c4071d9e89dc156322062ca12b",
+      "sizeBytes": 31039
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/lean/AddU32.lean",
+      "sha256": "4fa14a35f4d127b4df6cd10eb541bf6a4503042c6dc306290e4258f90c691b7b",
+      "sizeBytes": 14090
+    }
+  ],
+  "humanConfirmationRecorded": true,
+  "gateApprovalPerformed": false,
+  "promotionPerformed": false,
+  "provenance": {
+    "agent": "spec-manager",
+    "sessionID": "ses_025f035c1ffeaot32OI75hlHPq",
+    "messageID": "msg_fda0fe8760017tk1UBbNTkNyLh"
+  }
+}

@@ -5,6 +5,11 @@ model: opencode/deepseek-v4-flash-free
 steps: 24
 permission:
   read: allow
+  lean_check_file: allow
+  lean_get_diagnostics: allow
+  lean_get_goals: allow
+  candidate_read: allow
+  candidate_diff: allow
   glob: allow
   grep: allow
   list: allow

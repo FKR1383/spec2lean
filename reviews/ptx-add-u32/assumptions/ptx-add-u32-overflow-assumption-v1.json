@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "recordType": "human_assumption_decision",
+  "reviewId": "ptx-add-u32-overflow-assumption-v1",
+  "unitId": "ptx-add-u32",
+  "gate": "B",
+  "decision": "approved",
+  "reviewer": "Human reviewer",
+  "rationale": "After the official NVIDIA PTX ISA 9.3 HTML and PDF were searched, no explicit normative evidence was found that determines the exact base add.u32 result when mathematical addition exceeds the unsigned 32-bit range. I explicitly approve the following project-level formalization assumption for this bounded unit: the resulting add.u32 destination value is the mathematical sum reduced modulo 2^32, equivalently the low 32 bits of the sum. This assumption is not an NVIDIA SOURCE FACT and must never be presented as explicitly specified by NVIDIA. The semantic interpretation, Lean definitions, executable semantics, bit-width theorems, examples, and final traceability must explicitly reference this human-approved assumption.",
+  "submittedAtUtc": "2026-08-07T01:31:48.683Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ptx/9.3/semantics/add-u32-v1.json",
+      "sha256": "b56831645736479b5e204500087c6cbb6615055a8af9f4307c98774dca9b4165",
+      "sizeBytes": 48082
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/source-bundles/add-u32-blockers-supplement-v2.json",
+      "sha256": "a74ab1167e4a20d5aa37360713aec8a28ee219763c93f28e3a47c57ae81c1fec",
+      "sizeBytes": 29377
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/reviews/add-u32-semantic-blockers-v1-critic.md",
+      "sha256": "0cca5cee320a3fd33c14ae283f40be07cd0ef554186f9edca4010b40d781262b",
+      "sizeBytes": 29210
+    }
+  ],
+  "humanConfirmationRecorded": true,
+  "gateApprovalPerformed": false,
+  "promotionPerformed": false,
+  "provenance": {
+    "agent": "spec-manager",
+    "sessionID": "ses_026271026ffeWil7Q29xNA6BH2",
+    "messageID": "msg_fd9d8f01d001euUUSfu26sZAWH"
+  }
+}

@@ -1,0 +1,307 @@
+{
+  "schema_version": 1,
+  "supplement_id": "ptx-9.3-add-u32-blockers-supplement-v1",
+  "status": "DRAFT_SUPPLEMENTARY_SOURCE_EVIDENCE",
+  "language": "PTX",
+  "specification_version": "9.3",
+  "construct": "add.u32",
+  "instruction_family": "add",
+  "primary_section": "9.7.1.1",
+  "html_anchor": "integer-arithmetic-instructions-add",
+  "parent_bundle": {
+    "bundle_id": "ptx-9.3-add-u32-source-bundle-v1",
+    "path": "candidates/ptx/9.3/source-bundles/add-u32-v1.json",
+    "sha256": "c137078da5e8e0a475a090ae16409cd89d6ee7b93911f0b78a9a36f94d2a4924",
+    "not_modified": true
+  },
+  "blocked_semantic_interpretation": {
+    "interpretation_id": "ptx-9.3-add-u32-semantics-v1",
+    "path": "candidates/ptx/9.3/semantics/add-u32-v1.json",
+    "sha256": "b56831645736479b5e204500087c6cbb6615055a8af9f4307c98774dca9b4165",
+    "status": "BLOCKED",
+    "blocking_issue_ids": ["BLOCK-1", "BLOCK-2"],
+    "not_modified": true
+  },
+  "source_document": {
+    "document_id": "ptx-isa-9.3-html",
+    "publisher": "NVIDIA Corporation",
+    "document_title": "Parallel Thread Execution ISA",
+    "specification_version": "9.3",
+    "source_kind": "HTML",
+    "local_path": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+    "sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+    "total_lines": 47743
+  },
+  "blocker_results": [
+    {
+      "blocker_id": "BLOCK-1",
+      "question": "What official normative evidence determines the resulting .u32 value of base scalar add.u32 when the mathematical sum is outside the unsigned 32-bit range?",
+      "classification": "NOT_FOUND",
+      "fragment_ids": ["PTX-9.3-ADD-SUP-001", "PTX-9.3-ADD-SUP-002"],
+      "rationale": "Searches of the official PTX ISA 9.3 HTML found no explicit normative rule (and no combination of explicit normative fragments without an unsupported assumption) that determines the resulting .u32 value when the mathematical sum of the two .u32 source values is outside the unsigned 32-bit range. Terms such as 'wraparound' (0 matches) and 'modulo' (0 matches) do not occur. The 'truncated' matches found are scoped to other instructions (redux.sync .add reduction operation; ld/st/cvt operand-size rules in section 9.4.1), the 'overflow' matches are saturating-modifier notes for saturating forms and bfe/shlf-internal variables, and the 'carry' matches concern only the extended-precision instructions of section 9.7.2. Section 9.6 states that instruction semantics are described using C, which frames how the add Semantics block 'd = a + b;' is written but does not import an explicit overflow/result-width rule into the PTX normative text. The two fragments above are the closest searched official context and are recorded for traceability; they do not resolve the blocker.",
+      "resolution_status": "REMAINS_OPEN_AFTER_SUPPLEMENT"
+    },
+    {
+      "blocker_id": "BLOCK-2",
+      "question": "What official normative evidence determines the machine-state effect when an instruction's complete optional guard expression evaluates false?",
+      "classification": "PARTIALLY_SUPPORTED",
+      "fragment_ids": ["PTX-9.3-ADD-SUP-003", "PTX-9.3-ADD-SUP-004", "PTX-9.3-ADD-SUP-005", "PTX-9.3-ADD-SUP-006"],
+      "rationale": "Explicit normative fragments establish that the guard predicate 'controls conditional execution of the instruction' (sections 9.3 and 4.3.2), that instructions without a guard are 'executed unconditionally' (section 9.3), and the official examples show a guarded add executes the add when the guard is true and show a false @!p guard prevents a branch instruction's branch action ('if False, branch over'). These fragments partially support the proposition that a false complete guard expression prevents instruction execution. No explicit clause was found stating the resulting machine-state effect (for example, that the entire state is unchanged) when a value-writing instruction such as add.u32 has a false guard. The blocker is therefore only partially supported.",
+      "resolution_status": "PARTIALLY_RESOLVED_AFTER_SUPPLEMENT"
+    }
+  ],
+  "fragments": [
+    {
+      "fragment_id": "PTX-9.3-ADD-SUP-001",
+      "blocker_ids": ["BLOCK-1"],
+      "document_id": "ptx-isa-9.3-html",
+      "publisher": "NVIDIA Corporation",
+      "specification_version": "9.3",
+      "source_kind": "HTML",
+      "section_number": "9.6",
+      "section_heading": "Semantics",
+      "html_anchor": "semantics",
+      "html_line_start": 8690,
+      "html_line_end": 8693,
+      "pdf_page": null,
+      "exact_quote": "The goal of the semantic description of an instruction is to describe the results in all cases in as simple language as possible. The semantics are described using C, until C is not expressive enough.",
+      "context_before": "8690-8691: section heading 9.6. Semantics",
+      "context_after": "8694-8696: section heading 9.6.1. Machine-Specific Semantics of 16-bit Code",
+      "local_source_path": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+      "source_sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+      "fragment_sha256": "ef041b079c786175f2774a953f5a8967958fe212e4d6f20766d25ea7622c7537",
+      "reason_for_inclusion": "Shared normative context for BLOCK-1: states that the semantics of every instruction are described using C-like pseudocode. This frames how the add Semantics block 'd = a + b;' is to be read, but it does not state any overflow, truncation, or result-width rule for base add.u32; recorded so the searched context is traceable."
+    },
+    {
+      "fragment_id": "PTX-9.3-ADD-SUP-002",
+      "blocker_ids": ["BLOCK-1"],
+      "document_id": "ptx-isa-9.3-html",
+      "publisher": "NVIDIA Corporation",
+      "specification_version": "9.3",
+      "source_kind": "HTML",
+      "section_number": "9.7.2",
+      "section_heading": "Extended-Precision Integer Arithmetic Instructions",
+      "html_anchor": "extended-precision-integer-arithmetic-instructions",
+      "html_line_start": 10054,
+      "html_line_end": 10060,
+      "pdf_page": null,
+      "exact_quote": "Instructions add.cc, addc, sub.cc, subc, mad.cc and madc reference an implicitly specified condition code register (CC) having a single carry flag bit (CC.CF) holding carry-in/carry-out or borrow-in/borrow-out. These instructions support extended-precision integer addition, subtraction, and multiplication. No other instructions access the condition code, and there is no support for setting, clearing, or testing the condition code. The condition code register is not preserved across calls and is mainly intended for use in straight-line code sequences for computing extended-precision integer addition, subtraction, and multiplication.",
+      "context_before": "10050-10053: section heading 9.7.2. Extended-Precision Integer Arithmetic Instructions",
+      "context_after": "10061-10066: 'The extended-precision arithmetic instructions are:' followed by list items add.cc/addc, sub.cc/subc, mad.cc/madc",
+      "local_source_path": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+      "source_sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+      "fragment_sha256": "909a025272d09660a6bed4b29edd0e18a6d511507f337f81a548da49fd3f78fb",
+      "reason_for_inclusion": "Neighboring normative context for BLOCK-1: enumerates the only instructions that access the condition code carry flag and states that no other instructions access it, so base add is not among the instructions that record carry-out; the section does not state how base add computes its result when the mathematical sum exceeds the 32-bit range. Recorded so the searched carry/overflow context is traceable."
+    },
+    {
+      "fragment_id": "PTX-9.3-ADD-SUP-003",
+      "blocker_ids": ["BLOCK-2"],
+      "document_id": "ptx-isa-9.3-html",
+      "publisher": "NVIDIA Corporation",
+      "specification_version": "9.3",
+      "source_kind": "HTML",
+      "section_number": "9.3",
+      "section_heading": "Predicated Execution",
+      "html_anchor": "predicated-execution",
+      "html_line_start": 7547,
+      "html_line_end": 7550,
+      "pdf_page": null,
+      "exact_quote": "All instructions have an optional guard predicate which controls conditional execution of the instruction. The syntax to specify conditional execution is to prefix an instruction with @{!}p, where p is a predicate variable, optionally negated. Instructions without a guard predicate are executed unconditionally.",
+      "context_before": "7541-7546: predicate registers are virtual and have .pred as the type specifier; declaration .reg .pred p, q, r;",
+      "context_after": "7551-7552: Predicates are most commonly set as the result of a comparison performed by the setp instruction.",
+      "local_source_path": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+      "source_sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+      "fragment_sha256": "2a2397e3f08a1e1ea080f7cd1c041ff0946413c9b7d7865f8792f29dca0e4aaf",
+      "reason_for_inclusion": "Primary normative guard rule for BLOCK-2: the guard predicate 'controls conditional execution of the instruction' and instructions without a guard are 'executed unconditionally'. This is the closest official statement connecting the complete guard expression to whether execution occurs; it does not explicitly state the machine-state effect when the guard evaluates false."
+    },
+    {
+      "fragment_id": "PTX-9.3-ADD-SUP-004",
+      "blocker_ids": ["BLOCK-2"],
+      "document_id": "ptx-isa-9.3-html",
+      "publisher": "NVIDIA Corporation",
+      "specification_version": "9.3",
+      "source_kind": "HTML",
+      "section_number": "4.3.2",
+      "section_heading": "Instruction Statements",
+      "html_anchor": "instruction-statements",
+      "html_line_start": 1749,
+      "html_line_end": 1754,
+      "pdf_page": null,
+      "exact_quote": "Instructions are formed from an instruction opcode followed by a comma-separated list of zero or more operands, and terminated with a semicolon. Operands may be register variables, constant expressions, address expressions, or label names. Instructions have an optional guard predicate which controls conditional execution. The guard predicate follows the optional label and precedes the opcode, and is written as @p, where p is a predicate register. The guard predicate may be optionally negated, written as @!p.",
+      "context_before": "1745-1748: section heading 4.3.2. Instruction Statements",
+      "context_after": "1755-1758: 'The destination operand is first, followed by source operands.' followed by the reserved instruction keywords table",
+      "local_source_path": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+      "source_sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+      "fragment_sha256": "3d82177027df87c2b9ae6bbf57c238f1212601044ea0bb78dbb1fcdd6683a865",
+      "reason_for_inclusion": "Shared guard-syntax rule for BLOCK-2: corroborates section 9.3 by stating that instructions have an optional guard predicate which 'controls conditional execution', written @p or @!p. It does not state the machine-state effect when the complete guard expression evaluates false."
+    },
+    {
+      "fragment_id": "PTX-9.3-ADD-SUP-005",
+      "blocker_ids": ["BLOCK-2"],
+      "document_id": "ptx-isa-9.3-html",
+      "publisher": "NVIDIA Corporation",
+      "specification_version": "9.3",
+      "source_kind": "HTML",
+      "section_number": "9.3",
+      "section_heading": "Predicated Execution",
+      "html_anchor": "predicated-execution",
+      "html_line_start": 7561,
+      "html_line_end": 7562,
+      "pdf_page": null,
+      "exact_quote": "      setp.lt.s32  p, i, n;    // p = (i < n)\n@p    add.s32      j, j, 1;    // if i < n, add 1 to j",
+      "context_before": "7553-7560: As an example, consider the high-level code if (i < n) j = j + 1; This can be written in PTX as",
+      "context_after": "7565-7567: To get a conditional branch or conditional function call, use a predicate to control the execution of the branch or call instructions.",
+      "local_source_path": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+      "source_sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+      "fragment_sha256": "81a8a61207144b59582827f7e90be4f9289c34fd04adf8f1069fa95a31682c0b",
+      "reason_for_inclusion": "Official guarded-add example for BLOCK-2: shows @p add.s32 with the comment 'if i < n, add 1 to j', i.e., the guarded instruction executes the add only when the guard is true; it does not demonstrate or state the machine-state effect when the guard is false."
+    },
+    {
+      "fragment_id": "PTX-9.3-ADD-SUP-006",
+      "blocker_ids": ["BLOCK-2"],
+      "document_id": "ptx-isa-9.3-html",
+      "publisher": "NVIDIA Corporation",
+      "specification_version": "9.3",
+      "source_kind": "HTML",
+      "section_number": "9.3",
+      "section_heading": "Predicated Execution",
+      "html_anchor": "predicated-execution",
+      "html_line_start": 7569,
+      "html_line_end": 7572,
+      "pdf_page": null,
+      "exact_quote": "      setp.lt.s32  p, i, n;    // compare i to n\n@!p   bra  L1;                 // if False, branch over\n      add.s32      j, j, 1;\nL1:     ...",
+      "context_before": "7565-7568: To get a conditional branch or conditional function call, use a predicate to control the execution of the branch or call instructions. The following PTX instruction sequence might be used:",
+      "context_after": "7575-7577: section heading 9.3.1. Comparisons",
+      "local_source_path": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+      "source_sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+      "fragment_sha256": "9605264ba8e11577b896aaad78f9448af2228137e36d17fa8f7f45b5ebbca7a2",
+      "reason_for_inclusion": "Official @!p example for BLOCK-2: the comment 'if False, branch over' shows that when the complete negated guard expression evaluates false the branch instruction is not taken (control falls through); this demonstrates a false-guard effect for a control-flow instruction only and does not state the machine-state effect of a false guard on a value-writing instruction such as add.u32."
+    }
+  ],
+  "search_audit": [
+    {
+      "blocker_id": "BLOCK-1",
+      "query": "wraparound",
+      "total_matches": 0,
+      "inspected_ranges": "none (no matches)",
+      "relevance_result": "No official rule using the term 'wraparound' exists in the searched HTML."
+    },
+    {
+      "blocker_id": "BLOCK-1",
+      "query": "modulo",
+      "total_matches": 0,
+      "inspected_ranges": "none (no matches)",
+      "relevance_result": "No official rule using the term 'modulo' exists in the searched HTML."
+    },
+    {
+      "blocker_id": "BLOCK-1",
+      "query": "low-order",
+      "total_matches": 6,
+      "inspected_ranges": "match lines 5397, 20904, 21196, 21487, 21586, 21667 (snippets)",
+      "relevance_result": "All matches concern address-alignment masking ('masking off low-order address bits') for memory/tex instructions; not relevant to add.u32 result width."
+    },
+    {
+      "blocker_id": "BLOCK-1",
+      "query": "least-significant",
+      "total_matches": 5,
+      "inspected_ranges": "match lines 11715, 14639, 14657, 14662, 14663 (snippets)",
+      "relevance_result": "Only line 14639 (shf.r: 'the least-significant 32-bits of the result are written into d') concerns a result-width statement, and it is specific to the shf instruction, not a shared add rule."
+    },
+    {
+      "blocker_id": "BLOCK-1",
+      "query": "truncated",
+      "total_matches": 8,
+      "inspected_ranges": "lines 23690-23750 (redux.sync section); lines 7895-7915 and 8255-8290 (section 9.4.1 Operand Size Exceeding Instruction-Type Size); other match snippets 5400, 11107, 17564",
+      "relevance_result": "Line 23730 'For the .add operation result is truncated to 32 bits.' belongs to redux.sync (section 9.7.14.13), a reduction operation, not the add instruction; section 9.4.1 rules apply only to ld/st/cvt; remaining matches are floating-point mantissa/exponent notes. No shared rule applies to base add.u32."
+    },
+    {
+      "blocker_id": "BLOCK-1",
+      "query": "overflow",
+      "total_matches": 29,
+      "inspected_ranges": "match line 8817 (add.sat note) plus snippet lines 8890, 8992, 9149, 9919-9933; 12 of 29 matches returned",
+      "relevance_result": "Matches are saturating-modifier notes ('limits result to MININT..MAXINT (no overflow)') for add.sat.u32 and other saturating forms, mad24.hi/mul.hi notes, and bfe/shlf-internal local 'overflow' variables; none state the base add.u32 result when the sum exceeds 2^32-1."
+    },
+    {
+      "blocker_id": "BLOCK-1",
+      "query": "carry",
+      "total_matches": 41,
+      "inspected_ranges": "lines 10040-10105 (section 9.7.2 Extended-Precision Integer Arithmetic Instructions, incl. add.cc/addc); snippet line 6010 (rounding modifier), 9012-9067 (clmad), 10055-10056 (CC register note)",
+      "relevance_result": "The CC carry flag is accessed only by add.cc/addc/sub.cc/subc/mad.cc/madc; base add is not among them. add.cc has its own semantics 'd = a + b;' with 'carry-out written to CC.CF' and notes 'No saturation'/'Behavior is the same for unsigned and signed integers'. This is a different instruction family and does not state base add result-width behavior."
+    },
+    {
+      "blocker_id": "BLOCK-1",
+      "query": "low bits",
+      "total_matches": 2,
+      "inspected_ranges": "match lines 5956 (cvt conversion table note 'chop = keep only low bits that fit'), 8270 (section 9.4.1 source-operand table)",
+      "relevance_result": "Both matches are scoped to conversion (cvt) and ld/st source-operand truncation; not applicable to add.u32 result width."
+    },
+    {
+      "blocker_id": "BLOCK-1",
+      "query": "context read of section 9.6 Semantics",
+      "total_matches": "n/a (span read)",
+      "inspected_ranges": "lines 8690-8730",
+      "relevance_result": "Section 9.6 states semantics are described using C until C is not expressive enough; it frames the Semantics block but contains no overflow/result-width rule. Section 9.7.1 intro (lines 8724-8729) states only that integer arithmetic instructions operate on integer types in register and constant immediate forms."
+    },
+    {
+      "blocker_id": "BLOCK-2",
+      "query": "no-op",
+      "total_matches": 0,
+      "inspected_ranges": "none (no matches)",
+      "relevance_result": "No official rule describing false-guard behavior as a no-op exists in the searched HTML."
+    },
+    {
+      "blocker_id": "BLOCK-2",
+      "query": "not executed",
+      "total_matches": 1,
+      "inspected_ranges": "match line 42205 (setmaxnreg warpgroup note)",
+      "relevance_result": "The single match concerns setmaxnreg synchronization; not relevant to guard/predication semantics."
+    },
+    {
+      "blocker_id": "BLOCK-2",
+      "query": "suppress",
+      "total_matches": 1,
+      "inspected_ranges": "match line 8708 (section 9.6.1 Machine-Specific Semantics of 16-bit Code)",
+      "relevance_result": "The single match concerns masking extra precision bits on 16-bit code; not relevant to guard suppression or non-execution state effects."
+    },
+    {
+      "blocker_id": "BLOCK-2",
+      "query": "conditional execution",
+      "total_matches": 4,
+      "inspected_ranges": "lines 1745-1765 (section 4.3.2 Instruction Statements); lines 5335-5355 (section 6.x operand discussion); lines 7537-7582 (full section 9.3 Predicated Execution via spec_get_context)",
+      "relevance_result": "All statements connect the guard predicate to 'conditional execution' of the instruction; none states the machine-state effect when the complete guard expression evaluates false."
+    },
+    {
+      "blocker_id": "BLOCK-2",
+      "query": "full section 9.3 read",
+      "total_matches": "n/a (span read)",
+      "inspected_ranges": "lines 7534-7582",
+      "relevance_result": "Section 9.3 contains the guard rule, the @p add.s32 example ('if i < n, add 1 to j'), and the @!p bra example ('if False, branch over'). No explicit clause about machine-state effect of a false guard on a value-writing instruction was found."
+    }
+  ],
+  "remaining_evidence_gaps": [
+    {
+      "gap_id": "GAP-1",
+      "blocker_id": "BLOCK-1",
+      "description": "No official PTX ISA 9.3 normative rule was found that determines the resulting .u32 value of base scalar add.u32 when the mathematical sum is outside the unsigned 32-bit range (overflow/result-width treatment).",
+      "status": "OPEN_AFTER_SUPPLEMENT"
+    },
+    {
+      "gap_id": "GAP-2",
+      "blocker_id": "BLOCK-2",
+      "description": "No explicit official clause states the machine-state effect when an instruction's complete guard expression evaluates false; existing evidence partially supports that a false guard prevents instruction execution but does not state the resulting state (e.g., that all state is unchanged).",
+      "status": "PARTIALLY_SUPPORTED_AFTER_SUPPLEMENT"
+    }
+  ],
+  "curation_notes": [
+    "This supplementary evidence artifact is evidence-only and covers exactly the two blocking issues BLOCK-1 and BLOCK-2 of the blocked semantic interpretation ptx-9.3-add-u32-semantics-v1. It does not replace the primary source bundle ptx-9.3-add-u32-source-bundle-v1.",
+    "Only the official NVIDIA PTX ISA 9.3 HTML (documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html, SHA-256 e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856) was searched, using the restricted specification tools (spec_search, spec_get_context, spec_read_span). Exactly 20 specification-source tool calls were used; no more searches were performed.",
+    "No CUDA C, compiler behavior, another ISA, or unofficial sources were used as evidence. In particular, section 9.6's statement that semantics are 'described using C' is recorded as context only; no C-language overflow semantics were imported as evidence.",
+    "exact_quote fields are rendered plain-text quotations of the official source lines (HTML markup removed; code block text preserved verbatim). context_before and context_after are bounded rendered snippets with line references.",
+    "pdf_page is null for every fragment because the PDF artifact was not read in this pass; no PDF page numbers were fabricated.",
+    "fragment_sha256 values are the SHA-256 of the UTF-8 bytes of the helper files candidates/ptx/9.3/source-bundles/.hash-material/PTX-9.3-ADD-SUP-NNN.json, whose content is the canonical compact-JSON serialization of that fragment's fields (all fields except fragment_sha256, in the order listed in the fragment schema). This follows the same convention as the primary bundle.",
+    "BLOCK-1 classification NOT_FOUND: the searched official HTML contains no explicit overflow/result-width rule for base add.u32 and no combination of the found fragments establishes the result without an unsupported assumption. This is not a semantic interpretation; it is a statement about the absence of resolving evidence.",
+    "BLOCK-2 classification PARTIALLY_SUPPORTED: fragments PTX-9.3-ADD-SUP-003 through PTX-9.3-ADD-SUP-006 provide explicit official evidence that the guard controls conditional execution and that a false @!p guard prevents a branch instruction's action, but no explicit clause states the machine-state effect of a false guard on a value-writing instruction such as add.u32.",
+    "No semantic interpretation was performed in this pass. No Lean code, theorem statements, or proofs were produced. The original source bundle and the semantic interpretation v1 were not modified.",
+    "Gate B status: NOT READY. This supplement is a source-curation artifact only; Gate B additionally requires a completed semantic interpretation, a Semantic Critic review, and human review material."
+  ]
+}

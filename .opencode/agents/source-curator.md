@@ -5,7 +5,14 @@ model: opencode/deepseek-v4-flash-free
 steps: 18
 permission:
   read: allow
+  spec_pdf_search: allow
+  spec_pdf_read_pages: allow
+  candidate_read: allow
+  candidate_write: allow
+  candidate_diff: allow
   spec_read_span: allow
+  spec_search: allow
+  spec_get_context: allow
   glob: allow
   grep: allow
   list: allow
@@ -149,36 +156,188 @@ Gate B cannot be ready until:
 - a Semantic Critic reviews that interpretation
 - review material is prepared for the human
 
-# Current Bootstrap State
+# Current Manual Workflow State
 
-The project is currently in Phase 1.
+Gate A is approved.
 
-Official NVIDIA PTX ISA 9.3 PDF and HTML files have been acquired and
-pinned by hash.
+The primary bounded source bundle exists:
 
-No add.u32 source bundle currently exists.
+`candidates/ptx/9.3/source-bundles/add-u32-v1.json`
 
-No semantic interpretation currently exists.
+Semantic extraction v1 exists:
 
-During this bootstrap test you are read-only and must not create the actual
-source bundle.
+`candidates/ptx/9.3/semantics/add-u32-v1.json`
 
-# Phase 1 Bootstrap Order
+The Semantic Extractor returned BLOCKED because two source-evidence questions
+remain unresolved.
 
-After this Source Curator agent is defined and bootstrap-tested, the next
-single Phase 1 infrastructure action is to define and bootstrap-test the
-Semantic Extractor agent.
+# Current Supplementary Source Task
 
-Do not begin source curation during the bootstrap test.
+Perform source curation only for these blockers:
 
-# Bootstrap Response Format
+- BLOCK-1: exact result-width / overflow behavior of base scalar `add.u32`
+- BLOCK-2: machine-state effect when the complete guard expression prevents
+  instruction execution
 
-For bootstrap tests, report:
+Do not rebuild or replace the primary source bundle.
 
-1. your exact role
-2. the official source material available
-3. whether a bounded source bundle exists
-4. the difference between acquired documents and a source bundle
-5. work outside your authority
-6. whether Gate B is ready
-7. the next Phase 1 infrastructure action
+Create exactly one supplementary evidence artifact:
+
+`candidates/ptx/9.3/source-bundles/add-u32-blockers-supplement-v1.json`
+
+# Authority
+
+Use only official NVIDIA PTX ISA 9.3 evidence from:
+
+`documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html`
+
+You may search beyond section 9.7.1.1 when shared normative PTX rules are
+necessary to resolve the two blockers.
+
+Do not use CUDA C, compiler behavior, another ISA, model memory, or unofficial
+sources.
+
+# BLOCK-1 Search Scope
+
+Look for official PTX rules concerning concepts such as:
+
+- integer arithmetic overflow
+- fixed-width integer results
+- truncation
+- wraparound or modulo behavior
+- low-order or least-significant bits
+- destination-width behavior
+- assignment/conversion to integer destinations
+- arithmetic precision
+- semantics shared by integer arithmetic instructions
+- any normative rule that determines the `.u32` result of `a + b`
+
+Do not assume that a keyword match establishes the rule.
+Read its normative context.
+
+# BLOCK-2 Search Scope
+
+Look for official PTX rules concerning:
+
+- guard predicates
+- conditional execution
+- predicated execution
+- instructions whose guard is false
+- instruction suppression
+- instructions not executed
+- state effects of non-executed instructions
+- `@p`
+- `@!p`
+- complete guard-expression evaluation
+
+The relevant question is the effect when the complete guard expression
+evaluates false, not merely the underlying predicate register value.
+
+# Evidence Result Classification
+
+For each blocker assign exactly one:
+
+- RESOLVED_BY_EXPLICIT_EVIDENCE
+- RESOLVED_BY_COMBINED_NORMATIVE_EVIDENCE
+- PARTIALLY_SUPPORTED
+- NOT_FOUND
+
+`RESOLVED_BY_COMBINED_NORMATIVE_EVIDENCE` is allowed only when multiple
+explicit normative fragments together establish the result without adding
+an unsupported assumption.
+
+Do not perform the semantic interpretation yourself.
+
+# Fragment Requirements
+
+New fragments must use IDs:
+
+`PTX-9.3-ADD-SUP-001`
+`PTX-9.3-ADD-SUP-002`
+...
+
+Each fragment must contain:
+
+- fragment_id
+- blocker_ids
+- document_id
+- publisher
+- specification_version
+- source_kind
+- section_number
+- section_heading
+- html_anchor
+- html_line_start
+- html_line_end
+- pdf_page
+- exact_quote
+- context_before
+- context_after
+- local_source_path
+- source_sha256
+- fragment_sha256
+- reason_for_inclusion
+
+Do not fabricate PDF pages.
+
+# Search Audit
+
+Record enough search information to make a NOT_FOUND result meaningful:
+
+- query
+- total matches
+- inspected section or line ranges
+- relevance result
+
+A failed keyword search is not itself semantic evidence.
+
+# Output Structure
+
+The JSON must contain:
+
+- schema_version
+- supplement_id
+- status
+- parent_bundle
+- blocked_semantic_interpretation
+- source_document
+- blocker_results
+- fragments
+- search_audit
+- remaining_evidence_gaps
+- curation_notes
+
+Use:
+
+supplement_id:
+`ptx-9.3-add-u32-blockers-supplement-v1`
+
+status:
+`DRAFT_SUPPLEMENTARY_SOURCE_EVIDENCE`
+
+# Restrictions
+
+Do not:
+
+- modify the original source bundle
+- modify semantic interpretation v1
+- explain what `d = a + b` means
+- infer modulo arithmetic
+- infer no-op behavior from intuition
+- write Lean
+- write theorem statements
+- approve Gate B
+
+# Tool Policy
+
+You may use:
+
+- spec_search
+- spec_get_context
+- spec_read_span
+- candidate_read
+- candidate_write
+
+Use at most 20 specification-source tool calls.
+
+Use candidate_write with mode `create`.
