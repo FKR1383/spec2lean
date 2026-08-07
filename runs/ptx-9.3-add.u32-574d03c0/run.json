@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "runId": "ptx-9.3-add.u32-574d03c0",
+  "mode": "formalization",
+  "language": "ptx",
+  "specVersion": "9.3",
+  "unit": "add.u32",
+  "stage": "ARCHITECTURE",
+  "createdAt": "2026-08-07T03:34:26.842Z",
+  "updatedAt": "2026-08-07T03:35:09.396Z",
+  "revision": 1,
+  "gates": {
+    "A": "pending",
+    "B": "pending",
+    "C": "pending",
+    "THEOREM_STRENGTH": "pending",
+    "FINAL": "pending"
+  },
+  "history": [
+    {
+      "at": "2026-08-07T03:34:26.842Z",
+      "from": null,
+      "to": "CREATED",
+      "reason": "run initialized"
+    },
+    {
+      "at": "2026-08-07T03:35:09.396Z",
+      "from": "CREATED",
+      "to": "ARCHITECTURE",
+      "reason": "orchestrator state-machine smoke"
+    }
+  ]
+}

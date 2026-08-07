@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "smoke": "tsx src/smoke.ts"
+    "smoke": "tsx src/smoke.ts",
+    "run": "tsx src/run.ts"
   },
   "dependencies": {
     "@opencode-ai/sdk": "^1.18.14"

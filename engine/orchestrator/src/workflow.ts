@@ -1,0 +1,247 @@
+export const FORMALIZATION_STAGES = [
+  "CREATED",
+
+  "ARCHITECTURE",
+  "ARCHITECTURE_CRITIQUE",
+  "WAITING_GATE_A",
+
+  "SOURCE_CURATION",
+  "SEMANTIC_EXTRACTION",
+  "SEMANTIC_CRITIQUE",
+  "WAITING_GATE_B",
+
+  "LEAN_FORMALIZATION",
+  "LEAN_MAPPING_CRITIQUE",
+  "WAITING_GATE_C",
+
+  "THEOREM_GENERATION",
+  "THEOREM_STRENGTH_CRITIQUE",
+  "WAITING_THEOREM_STRENGTH_APPROVAL",
+
+  "PROOF_GENERATION",
+
+  "FINAL_CRITIQUE",
+  "WAITING_FINAL_APPROVAL",
+
+  "ACCEPTED",
+  "BLOCKED",
+  "FAILED",
+] as const
+
+export type FormalizationStage =
+  (typeof FORMALIZATION_STAGES)[number]
+
+export type WorkflowMode =
+  | "formalization"
+  | "translation"
+
+export type GateName =
+  | "A"
+  | "B"
+  | "C"
+  | "THEOREM_STRENGTH"
+  | "FINAL"
+
+export type GateStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+
+export type RunEvent = {
+  at: string
+  from: FormalizationStage | null
+  to: FormalizationStage
+  reason: string
+}
+
+export type RunState = {
+  schemaVersion: 1
+
+  runId: string
+  mode: WorkflowMode
+
+  language: string
+  specVersion: string
+  unit: string
+
+  stage: FormalizationStage
+
+  createdAt: string
+  updatedAt: string
+
+  revision: number
+
+  gates: Record<GateName, GateStatus>
+
+  history: RunEvent[]
+}
+
+const transitions:
+  Record<FormalizationStage, readonly FormalizationStage[]> = {
+
+  CREATED: [
+    "ARCHITECTURE",
+    "BLOCKED",
+    "FAILED",
+  ],
+
+  ARCHITECTURE: [
+    "ARCHITECTURE_CRITIQUE",
+    "BLOCKED",
+    "FAILED",
+  ],
+
+  ARCHITECTURE_CRITIQUE: [
+    "ARCHITECTURE",
+    "WAITING_GATE_A",
+    "BLOCKED",
+    "FAILED",
+  ],
+
+  WAITING_GATE_A: [
+    "SOURCE_CURATION",
+    "ARCHITECTURE",
+    "BLOCKED",
+    "FAILED",
+  ],
+
+  SOURCE_CURATION: [
+    "SEMANTIC_EXTRACTION",
+    "BLOCKED",
+    "FAILED",
+  ],
+
+  SEMANTIC_EXTRACTION: [
+    "SEMANTIC_CRITIQUE",
+    "SOURCE_CURATION",
+    "BLOCKED",
+    "FAILED",
+  ],
+
+  SEMANTIC_CRITIQUE: [
+    "SEMANTIC_EXTRACTION",
+    "SOURCE_CURATION",
+    "WAITING_GATE_B",
+    "BLOCKED",
+    "FAILED",
+  ],
+
+  WAITING_GATE_B: [
+    "LEAN_FORMALIZATION",
+    "SEMANTIC_EXTRACTION",
+    "BLOCKED",
+    "FAILED",
+  ],
+
+  LEAN_FORMALIZATION: [
+    "LEAN_MAPPING_CRITIQUE",
+    "BLOCKED",
+    "FAILED",
+  ],
+
+  LEAN_MAPPING_CRITIQUE: [
+    "LEAN_FORMALIZATION",
+    "WAITING_GATE_C",
+    "BLOCKED",
+    "FAILED",
+  ],
+
+  WAITING_GATE_C: [
+    "THEOREM_GENERATION",
+    "LEAN_FORMALIZATION",
+    "BLOCKED",
+    "FAILED",
+  ],
+
+  THEOREM_GENERATION: [
+    "THEOREM_STRENGTH_CRITIQUE",
+    "BLOCKED",
+    "FAILED",
+  ],
+
+  THEOREM_STRENGTH_CRITIQUE: [
+    "THEOREM_GENERATION",
+    "WAITING_THEOREM_STRENGTH_APPROVAL",
+    "BLOCKED",
+    "FAILED",
+  ],
+
+  WAITING_THEOREM_STRENGTH_APPROVAL: [
+    "PROOF_GENERATION",
+    "THEOREM_GENERATION",
+    "BLOCKED",
+    "FAILED",
+  ],
+
+  PROOF_GENERATION: [
+    "PROOF_GENERATION",
+    "FINAL_CRITIQUE",
+    "BLOCKED",
+    "FAILED",
+  ],
+
+  FINAL_CRITIQUE: [
+    "FINAL_CRITIQUE",
+    "WAITING_FINAL_APPROVAL",
+    "BLOCKED",
+    "FAILED",
+  ],
+
+  WAITING_FINAL_APPROVAL: [
+    "ACCEPTED",
+    "BLOCKED",
+    "FAILED",
+  ],
+
+  ACCEPTED: [],
+
+  BLOCKED: [
+    "ARCHITECTURE",
+    "SOURCE_CURATION",
+    "SEMANTIC_EXTRACTION",
+    "LEAN_FORMALIZATION",
+    "THEOREM_GENERATION",
+    "PROOF_GENERATION",
+    "FINAL_CRITIQUE",
+    "FAILED",
+  ],
+
+  FAILED: [],
+}
+
+export function canTransition(
+  from: FormalizationStage,
+  to: FormalizationStage,
+): boolean {
+  return transitions[from].includes(to)
+}
+
+export function transitionRun(
+  run: RunState,
+  to: FormalizationStage,
+  reason: string,
+): RunState {
+  if (!canTransition(run.stage, to)) {
+    throw new Error(
+      `Illegal workflow transition: ${run.stage} -> ${to}`,
+    )
+  }
+
+  const now = new Date().toISOString()
+
+  return {
+    ...run,
+    stage: to,
+    updatedAt: now,
+    revision: run.revision + 1,
+    history: [
+      ...run.history,
+      {
+        at: now,
+        from: run.stage,
+        to,
+        reason,
+      },
+    ],
+  }
+}
