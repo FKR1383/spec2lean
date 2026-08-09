@@ -7,3 +7,5 @@ import Spec2Lean.PTX.NotB32
 import Spec2Lean.PTX.NotB32Proofs
 import Spec2Lean.PTX.XorB32
 import Spec2Lean.PTX.XorB32Proofs
+import Spec2Lean.PTX.AndB32
+import Spec2Lean.PTX.AndB32Proofs

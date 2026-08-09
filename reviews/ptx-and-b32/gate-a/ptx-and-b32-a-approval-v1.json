@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "recordType": "human_gate_decision",
+  "reviewId": "ptx-and-b32-a-approval-v1",
+  "unitId": "ptx-and-b32",
+  "gate": "A",
+  "decision": "approved",
+  "reviewer": "Human reviewer",
+  "rationale": "The human operator explicitly approved Gate A for run ptx-9.3-and.b32-d33dfec2 after the automated workflow reached its human-review boundary. This authorizes only the next workflow stage and is not final acceptance unless gate=FINAL.",
+  "submittedAtUtc": "2026-08-09T17:45:04.222Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ptx/9.3/units/and-b32/architecture/foundation-v1.md",
+      "sha256": "9798324a87bbb883a64f879e96d63e3f5cd9253c1b8b63547812c36254918187",
+      "sizeBytes": 55309
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/and-b32/reviews/architecture-critic-v1.md",
+      "sha256": "0b1066e4b15bb1f2cd241f7d6469b115f7516448b5817227d9a229975e3d155f",
+      "sizeBytes": 22871
+    }
+  ],
+  "humanConfirmationRecorded": true,
+  "gateApprovalPerformed": true,
+  "promotionPerformed": false,
+  "provenance": {
+    "agent": "spec-manager",
+    "sessionID": "ses_0185f6e6cffePKzr3vPJXtZ7p0",
+    "messageID": "msg_fe7a0b198001AXSdNQEMgmNuUL"
+  }
+}

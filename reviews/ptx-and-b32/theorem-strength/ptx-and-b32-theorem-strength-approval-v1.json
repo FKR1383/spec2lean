@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "recordType": "human_theorem_strength_decision",
+  "reviewId": "ptx-and-b32-theorem-strength-approval-v1",
+  "unitId": "ptx-and-b32",
+  "gate": "C",
+  "decision": "approved",
+  "reviewer": "Human reviewer",
+  "rationale": "The human operator explicitly approved Gate THEOREM_STRENGTH for run ptx-9.3-and.b32-d33dfec2 after the automated workflow reached its human-review boundary. This authorizes only the next workflow stage and is not final acceptance unless gate=FINAL.",
+  "submittedAtUtc": "2026-08-09T19:03:20.789Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ptx/9.3/units/and-b32/theorems/obligations-v1.json",
+      "sha256": "30f4f93bd9b31bec3ef3880663cc8ee43cf1c117ef68c6e3bd2758b6d70f35b1",
+      "sizeBytes": 71731
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/and-b32/reviews/theorem-strength-critic-v1.md",
+      "sha256": "0a50cd2368d8af5cf6ef6ed42f684195e49878101552f65cba1271ac5afcd278",
+      "sizeBytes": 27295
+    }
+  ],
+  "humanConfirmationRecorded": true,
+  "gateApprovalPerformed": false,
+  "promotionPerformed": false,
+  "provenance": {
+    "agent": "spec-manager",
+    "sessionID": "ses_01817c790ffeK2x07t3PYVDKo0",
+    "messageID": "msg_fe7e86066001mfOaTc4ONvR5bO"
+  }
+}

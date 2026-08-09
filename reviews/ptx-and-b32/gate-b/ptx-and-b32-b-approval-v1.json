@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "recordType": "human_gate_decision",
+  "reviewId": "ptx-and-b32-b-approval-v1",
+  "unitId": "ptx-and-b32",
+  "gate": "B",
+  "decision": "approved",
+  "reviewer": "Human reviewer",
+  "rationale": "The human operator explicitly approved Gate B for run ptx-9.3-and.b32-d33dfec2 after the automated workflow reached its human-review boundary. This authorizes only the next workflow stage and is not final acceptance unless gate=FINAL. The workflow was confirmed at stage WAITING_GATE_B with Gate A approved and Gate B pending; the latest relevant candidate artifact is the semantic interpretation candidates/ptx/9.3/units/and-b32/semantics/semantics-v2.json (74 evidence-bound claims: 23 SOURCE_FACT, 32 DERIVED_INTERPRETATION, 7 DESIGN_DEPENDENCY, 0 ASSUMPTION, 12 OPEN_QUESTION; guard-false consequence source-resolved via section 9.7.13.2 per the mov.b32 Gate B lesson; BLK-1 closed), and the independent critique candidates/ptx/9.3/units/and-b32/reviews/semantics-critic-v1.md independently verified all source evidence and returned verdict READY FOR PRESENTATION TO HUMAN GATE B with only MINOR/NOTE findings and no blocking issues.",
+  "submittedAtUtc": "2026-08-09T18:44:55.281Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ptx/9.3/units/and-b32/semantics/semantics-v2.json",
+      "sha256": "45e0fe93f02a3261976962026eb7b5b2e1a5343c10d4a388f500f6f30a24ca0e",
+      "sizeBytes": 110734
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/and-b32/reviews/semantics-critic-v1.md",
+      "sha256": "9c4598b9fb19c5860dea90a7d3bebac3b4195e3472f95ec90bd24e5a019339b2",
+      "sizeBytes": 26767
+    }
+  ],
+  "humanConfirmationRecorded": true,
+  "gateApprovalPerformed": true,
+  "promotionPerformed": false,
+  "provenance": {
+    "agent": "spec-manager",
+    "sessionID": "ses_01828b544ffe02rp8Bn5n6RIQ8",
+    "messageID": "msg_fe7d76f9e001UDHUUjTrCWgntt"
+  }
+}

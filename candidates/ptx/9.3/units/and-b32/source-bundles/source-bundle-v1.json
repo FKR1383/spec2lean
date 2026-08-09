@@ -1,0 +1,238 @@
+{
+  "schema_version": 1,
+  "bundle_id": "source-bundle-v1",
+  "run_id": "ptx-9.3-and.b32-d33dfec2",
+  "stage": "SOURCE_CURATION",
+  "stage_attempt": 1,
+  "run_revision": 4,
+  "unit": "and.b32",
+  "unit_slug": "and-b32",
+  "language": "ptx",
+  "specification_version": "9.3",
+  "created_at": "2026-08-09",
+  "created_by": "fast-path PTX Source Curator (opencode/deepseek-v4-flash-free)",
+  "policy": {
+    "interpretation_performed": false,
+    "source_modified": false,
+    "source_hash_verified": true,
+    "retrieval_tool": "spec_fast_context v1"
+  },
+  "source_documents": [
+    {
+      "kind": "html",
+      "url": "https://docs.nvidia.com/cuda/parallel-thread-execution/index.html",
+      "local_path": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+      "sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+      "size_bytes": 3577575,
+      "source_manifest": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+      "source_classification": "official"
+    },
+    {
+      "kind": "pdf",
+      "url": "https://docs.nvidia.com/cuda/pdf/ptx_isa_9.3.pdf",
+      "local_path": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+      "sha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+      "size_bytes": 20296990,
+      "source_manifest": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+      "source_classification": "official"
+    }
+  ],
+  "target_section": {
+    "anchor": "logic-and-shift-instructions-and",
+    "section_number": "9.7.8.1",
+    "heading": "Logic and Shift Instructions: and  \uF0C1 and Bitwise AND. Syntax and.type d, a, b; .type = { .pred, .b16, .b32, .b64 };",
+    "source_file": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+    "source_sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+    "start_line": 14256,
+    "end_line": 14289,
+    "section_end_line": 14289,
+    "truncated": false,
+    "quotation_raw_line_numbered_html": "14256: <section id=\"logic-and-shift-instructions-and\">\n14257: <span id=\"id243\"></span><h4>\n14258: <span class=\"section-number\">9.7.8.1. </span><a class=\"reference internal\" href=\"#logic-and-shift-instructions-and\">Logic and Shift Instructions: <code class=\"docutils literal notranslate\"><span class=\"pre\">and</span></code></a><a class=\"headerlink\" href=\"#logic-and-shift-instructions-and\" title=\"Permalink to this headline\">\uF0C1</a>\n14259: </h4>\n14260: <p class=\"rubric\"><code class=\"docutils literal notranslate\"><span class=\"pre\">and</span></code></p>\n14261: <p>Bitwise AND.</p>\n14262: <p class=\"rubric\">Syntax</p>\n14263: <div class=\"highlight-text notranslate\">\n14264: <div class=\"highlight\"><pre><span></span>and.type d, a, b;\n14265: \n14266: .type = { .pred, .b16, .b32, .b64 };\n14267: </pre></div>\n14268: </div>\n14269: <p class=\"rubric\">Description</p>\n14270: <p>Compute the bit-wise and operation for the bits in <code class=\"docutils literal notranslate\"><span class=\"pre\">a</span></code> and <code class=\"docutils literal notranslate\"><span class=\"pre\">b</span></code>.</p>\n14271: <p class=\"rubric\">Semantics</p>\n14272: <div class=\"highlight-text notranslate\">\n14273: <div class=\"highlight\"><pre><span></span>d = a &amp; b;\n14274: </pre></div>\n14275: </div>\n14276: <p class=\"rubric\">Notes</p>\n14277: <p>The size of the operands must match, but not necessarily the type.</p>\n14278: <p>Allowed types include predicate registers.</p>\n14279: <p class=\"rubric\">PTX ISA Notes</p>\n14280: <p>Introduced in PTX ISA version 1.0.</p>\n14281: <p class=\"rubric\">Target ISA Notes</p>\n14282: <p>Supported on all target architectures.</p>\n14283: <p class=\"rubric\">Examples</p>\n14284: <div class=\"highlight-text notranslate\">\n14285: <div class=\"highlight\"><pre><span></span>and.b32  x,q,r;\n14286: and.b32  sign,fpvalue,0x80000000;\n14287: </pre></div>\n14288: </div>\n14289: </section>",
+    "quotation_rendered_text": "9.7.8.1. Logic and Shift Instructions: and \uF0C1 and Bitwise AND. Syntax and.type d, a, b; .type = { .pred, .b16, .b32, .b64 }; Description Compute the bit-wise and operation for the bits in a and b . Semantics d = a & b; Notes The size of the operands must match, but not necessarily the type. Allowed types include predicate registers. PTX ISA Notes Introduced in PTX ISA version 1.0. Target ISA Notes Supported on all target architectures. Examples and.b32 x,q,r; and.b32 sign,fpvalue,0x80000000;"
+  },
+  "coverage": [
+    {
+      "fact_id": "AND_SYNTAX_FORM",
+      "kind": "quotation",
+      "quote": "and.type d, a, b;",
+      "lines": [14264],
+      "note": "Instruction form for the and family; unit and.b32 instantiates .type = .b32."
+    },
+    {
+      "fact_id": "AND_TYPE_SPECIFIERS",
+      "kind": "quotation",
+      "quote": ".type = { .pred, .b16, .b32, .b64 };",
+      "lines": [14266],
+      "note": "Allowed type specifiers include .b32, the type used by this unit."
+    },
+    {
+      "fact_id": "AND_DESCRIPTION",
+      "kind": "quotation",
+      "quote": "Compute the bit-wise and operation for the bits in a and b.",
+      "lines": [14270],
+      "note": "Description of the operation performed by and."
+    },
+    {
+      "fact_id": "AND_SEMANTICS",
+      "kind": "quotation",
+      "quote": "d = a & b;",
+      "lines": [14273],
+      "note": "Semantics formula; in the HTML source the ampersand is encoded as &amp;."
+    },
+    {
+      "fact_id": "AND_OPERAND_SIZE_NOTE",
+      "kind": "quotation",
+      "quote": "The size of the operands must match, but not necessarily the type.",
+      "lines": [14277],
+      "note": "Operand-size constraint for the and instruction."
+    },
+    {
+      "fact_id": "AND_PREDICATE_NOTE",
+      "kind": "quotation",
+      "quote": "Allowed types include predicate registers.",
+      "lines": [14278],
+      "note": "Confirms predicate register operands are permitted by the and syntax."
+    },
+    {
+      "fact_id": "AND_PTX_ISA_VERSION",
+      "kind": "quotation",
+      "quote": "Introduced in PTX ISA version 1.0.",
+      "lines": [14280],
+      "note": "Version in which and was introduced."
+    },
+    {
+      "fact_id": "AND_TARGET_ISA",
+      "kind": "quotation",
+      "quote": "Supported on all target architectures.",
+      "lines": [14282],
+      "note": "Target architecture support statement."
+    },
+    {
+      "fact_id": "AND_B32_EXAMPLE_1",
+      "kind": "quotation",
+      "quote": "and.b32  x,q,r;",
+      "lines": [14285],
+      "note": "Example with three register operands."
+    },
+    {
+      "fact_id": "AND_B32_EXAMPLE_2",
+      "kind": "quotation",
+      "quote": "and.b32  sign,fpvalue,0x80000000;",
+      "lines": [14286],
+      "note": "Example with an immediate (hexadecimal) operand."
+    }
+  ],
+  "shared_contexts": [
+    {
+      "anchor": "format-and-semantics-of-instruction-descriptions",
+      "section_number": "9.1",
+      "heading": "Format and Semantics of Instruction Descriptions",
+      "source_file": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+      "source_sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+      "start_line": 7505,
+      "end_line": 7512,
+      "truncated": false,
+      "quotation_rendered_text": "This section describes each PTX instruction. In addition to the name and the format of the instruction, the semantics are described, followed by some examples that attempt to show several possible instantiations of the instruction.",
+      "role": "Documents the fixed layout of instruction descriptions (format, semantics, examples) that the target section 9.7.8.1 follows."
+    },
+    {
+      "anchor": "predicated-execution",
+      "section_number": "9.3",
+      "heading": "Predicated Execution",
+      "source_file": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+      "source_sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+      "start_line": 7537,
+      "end_line": 7584,
+      "section_end_line": 7791,
+      "truncated": true,
+      "quotation_rendered_text": "In PTX, predicate registers are virtual and have .pred as the type specifier. So, predicate registers can be declared as .reg .pred p, q, r; All instructions have an optional guard predicate which controls conditional execution of the instruction. The syntax to specify conditional execution is to prefix an instruction with @{!}p , where p is a predicate variable, optionally negated. Instructions without a guard predicate are executed unconditionally.",
+      "role": "Context: instructions such as and.b32 may carry an optional guard predicate @{!}p controlling conditional execution."
+    },
+    {
+      "anchor": "register-state-space",
+      "section_number": "5.1.1",
+      "heading": "Register State Space",
+      "source_file": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+      "source_sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+      "start_line": 2613,
+      "end_line": 2632,
+      "truncated": false,
+      "quotation_rendered_text": "Registers ( .reg state space) are fast storage locations. The number of registers is limited, and will vary from platform to platform. When the limit is exceeded, register variables will be spilled to memory, causing changes in performance. For each architecture, there is a recommended maximum number of registers to use (see the CUDA Programming Guide for details). Registers may be typed (signed integer, unsigned integer, floating point, predicate) or untyped. Register size is restricted; aside from predicate registers which are 1-bit, scalar registers have a width of 8-, 16-, 32-, 64-, or 128-bits, and vector registers have a width of 16-, 32-, 64-, or 128-bits. The most common use of 8-bit registers is with ld , st , and cvt instructions, or as elements of vector tuples.",
+      "role": "Context: .b32 operands of and.b32 correspond to 32-bit register-sized values; predicate registers are 1-bit."
+    },
+    {
+      "anchor": "fundamental-types",
+      "section_number": "5.2.1",
+      "heading": "Fundamental Types",
+      "source_file": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+      "source_sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+      "start_line": 3015,
+      "end_line": 3062,
+      "section_end_line": 3069,
+      "truncated": true,
+      "quotation_rendered_text": "In PTX, the fundamental types reflect the native data types supported by the target architectures. A fundamental type specifies both a basic type and a size. Register variables are always of a fundamental type, and instructions operate on these types. The same type-size specifiers are used for both variable definitions and for typing instructions, so their names are intentionally short. Table 8 lists the fundamental type specifiers for each basic type: Table 8 Fundamental Type Specifiers Basic Type Fundamental Type Specifiers Signed integer .s8 , .s16 , .s32 , .s64 Unsigned integer .u8 , .u16 , .u32 , .u64 Floating-point .f16 , .f16x2 , .f32 , .f64 Bits (untyped) .b8 , .b16 , .b32 , .b64 , .b128 Predicate .pred",
+      "role": "Context: .b32 is a fundamental 'bits (untyped)' type specifier of size 32 bits; .pred is the predicate type specifier."
+    },
+    {
+      "anchor": "variables",
+      "section_number": "5.4",
+      "heading": "Variables",
+      "source_file": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+      "source_sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+      "start_line": 3741,
+      "end_line": 3788,
+      "section_end_line": 4009,
+      "truncated": true,
+      "quotation_rendered_text": "In PTX, a variable declaration describes both the variable\u2019s type and its state space. In addition to fundamental types, PTX supports types for simple aggregate objects such as vectors and arrays. A variable declaration names the space in which the variable resides, its type and size, its name, an optional array size, an optional initializer, and an optional fixed address for the variable. Predicate variables may only be declared in the register state space.",
+      "role": "Context: operands of and.b32 are register variables declared with fundamental types; predicate variables must reside in the register state space."
+    },
+    {
+      "anchor": "restricted-use-of-sub-word-sizes",
+      "section_number": "5.2.2",
+      "heading": "Restricted Use of Sub-Word Sizes",
+      "source_file": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+      "source_sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+      "start_line": 3070,
+      "end_line": 3084,
+      "truncated": false,
+      "quotation_rendered_text": "The .u8 , .s8 , and .b8 instruction types are restricted to ld , st , add , sub , min , max , neg and cvt instructions. The .f16 floating-point type is allowed in half precision floating point instructions and texture fetch instructions. The .f16x2 floating point type is allowed only in half precision floating point arithmetic instructions and texture fetch instructions.",
+      "role": "Context: the restriction list mentions .b8/.u8/.s8 and .f16/.f16x2 only; it does not restrict .b32. This is provided as background and is not interpreted here."
+    }
+  ],
+  "pdf_corroboration": {
+    "source_file": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+    "source_sha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+    "page": 254,
+    "query_used": "and.type d, a, b;",
+    "snippet": "define a union to access the bits. Instructions and, or, xor,\nand not also operate on predicates.\nThe logical shift instructions are:\n \u25B6 and\n \u25B6 or\n \u25B6 xor\n \u25B6 not\n \u25B6 cnot\n \u25B6 lop3\n \u25B6 shf\n \u25B6 shl\n \u25B6 shr\n\n\n9.7.8.1 Logic and Shift Instructions: and\n\nand\n\nBitwise AND.\n\n\nSyntax\n\nand.type d, a, b;\n\n.type = { .pred, .b16, .b32, .b64 };\n\n\n\n\n242 Chapter 9. Instruction Set",
+    "note": "PDF page 254 contains the same section 9.7.8.1 text for and (syntax and.type d, a, b; and .type = { .pred, .b16, .b32, .b64 };). The printed footer reads '242 Chapter 9. Instruction Set'; the tool reports PDF page 254. No textual discrepancy observed with the HTML target section."
+  },
+  "gaps": [
+    {
+      "gap_id": "GAP_PDF_LINE_ANCHORS",
+      "severity": "low",
+      "description": "The PDF artifact has no stable line anchors, only page-level corroboration (page 254). Line-anchored quotations are taken from the HTML source only."
+    },
+    {
+      "gap_id": "GAP_AND_PRED_SEMANTICS_DETAIL",
+      "severity": "low",
+      "description": "The target section permits predicate register types for and but provides no prose defining bitwise AND over 1-bit predicate values beyond the general semantics formula 'd = a & b;'. The current unit is and.b32 only, so .pred behavior is out of scope but is recorded as a non-elaborated point."
+    },
+    {
+      "gap_id": "GAP_SHARED_CONTEXT_TRUNCATION",
+      "severity": "informational",
+      "description": "Shared contexts for predicated-execution (9.3), fundamental-types (5.2.1), and variables (5.4) were returned truncated by the fast-context tool; only the returned line spans are quoted here. None of the truncated remainder is load-bearing for the and.b32 target section."
+    },
+    {
+      "gap_id": "GAP_NO_EXPLICIT_RESULT_WIDTH_PROSE",
+      "severity": "informational",
+      "description": "The section does not contain prose explicitly stating that the result width of and.b32 equals 32 bits; the only evidence is the type specifier .b32 in the syntax and the examples. No inference is made here; this is left to semantic extraction."
+    }
+  ],
+  "curation_notes": [
+    "All quotations are exact text from the official NVIDIA PTX ISA 9.3 HTML source (sha256 e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856) and are reproduced with stable line anchors.",
+    "Source hash verification was performed by spec_fast_context; the HTML sha256 matches the value recorded in documents/sources/nvidia/ptx/9.3/source-manifest.json.",
+    "The single permitted PDF search was used only for page corroboration of the target section.",
+    "No semantic interpretation was performed in this stage; kind 'quotation' entries are verbatim source text, and kind 'summary' is not used in this bundle."
+  ]
+}
