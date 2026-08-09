@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "recordType": "human_gate_decision",
+  "reviewId": "ptx-xor-b32-c-approval-v1",
+  "unitId": "ptx-xor-b32",
+  "gate": "C",
+  "decision": "approved",
+  "reviewer": "Human reviewer",
+  "rationale": "The human operator explicitly approved Gate C for run ptx-9.3-xor.b32-23b2e519 after the automated workflow reached its human-review boundary. This authorizes only the next workflow stage and is not final acceptance unless gate=FINAL.",
+  "submittedAtUtc": "2026-08-09T17:01:12.121Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ptx/9.3/units/xor-b32/lean/XorB32-v1.lean",
+      "sha256": "e2694a8894d49307ce1050f835478a7963361318d5510465e5ee166df528fa0a",
+      "sizeBytes": 19937
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/xor-b32/reviews/lean-mapping-critic-v1.md",
+      "sha256": "74862cce5ad65cf7cd8f322bf179d4392cae37a176af1dd9ac6138512d0a15f2",
+      "sizeBytes": 27068
+    }
+  ],
+  "humanConfirmationRecorded": true,
+  "gateApprovalPerformed": true,
+  "promotionPerformed": false,
+  "provenance": {
+    "agent": "spec-manager",
+    "sessionID": "ses_01887f78cffex1mbUrbB8K3bNb",
+    "messageID": "msg_fe77872c9001bUAfr0kX8vs1ek"
+  }
+}

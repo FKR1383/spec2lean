@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "recordType": "human_gate_decision",
+  "reviewId": "ptx-xor-b32-final-approval-v1",
+  "unitId": "ptx-xor-b32",
+  "gate": "FINAL",
+  "decision": "approved",
+  "reviewer": "Human reviewer",
+  "rationale": "The human operator explicitly approved Gate FINAL for run ptx-9.3-xor.b32-23b2e519 after the automated workflow reached its human-review boundary. Confirmed workflow state: run.json stage WAITING_FINAL_APPROVAL, gate FINAL pending, all prior gates (A, B, C, THEOREM_STRENGTH) approved; final critique at candidates/ptx/9.3/units/xor-b32/reviews/final-critic-v1.md reports 0 BLOCKER/0 MAJOR, source-faithful traceability (73 claims to PTX-9.3-XOR-001..033), no theorem weakening, no proof bypass, and all Lean artifacts compile 0 errors/0 warnings. This records only the explicit human approval of Gate FINAL and authorizes the next workflow stage; it is not final acceptance unless gate=FINAL per the workflow's acceptance semantics, and nothing was promoted.",
+  "submittedAtUtc": "2026-08-09T17:25:29.788Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ptx/9.3/units/xor-b32/lean/XorB32-v1.lean",
+      "sha256": "e2694a8894d49307ce1050f835478a7963361318d5510465e5ee166df528fa0a",
+      "sizeBytes": 19937
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/xor-b32/lean/XorB32Proofs-v1.lean",
+      "sha256": "b5f9d5dbb9be1eae18892b44f9da940f543f09504662dcd1fc52c225b9904b60",
+      "sizeBytes": 21500
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/xor-b32/reviews/final-critic-v1.md",
+      "sha256": "0dfb9f77f3830f2cf86a27bdc03e110eee795a51bb7f9e0eeeb4d458f01b7936",
+      "sizeBytes": 14474
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/xor-b32/semantics/semantics-v1.json",
+      "sha256": "815eaf68ff62e6e047f82b5ddf422cdd007e44463ba5ed33ec921bd95f702098",
+      "sizeBytes": 85856
+    }
+  ],
+  "humanConfirmationRecorded": true,
+  "gateApprovalPerformed": true,
+  "promotionPerformed": false,
+  "provenance": {
+    "agent": "spec-manager",
+    "sessionID": "ses_01871a6a6ffeiIJma4XfbGrc9D",
+    "messageID": "msg_fe78ec138001U2TAOMsowlH3vm"
+  }
+}

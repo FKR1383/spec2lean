@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "recordType": "human_theorem_strength_decision",
+  "reviewId": "ptx-xor-b32-theorem-strength-approval-v1",
+  "unitId": "ptx-xor-b32",
+  "gate": "C",
+  "decision": "approved",
+  "reviewer": "Human reviewer",
+  "rationale": "The human operator explicitly approved Gate THEOREM_STRENGTH for run ptx-9.3-xor.b32-23b2e519 after the automated workflow reached its human-review boundary. Verified prior to recording: run.json confirms stage WAITING_THEOREM_STRENGTH_APPROVAL with gates A/B/C approved and THEOREM_STRENGTH pending; the latest gate-relevant artifacts exist and were inspected — theorem obligations candidates/ptx/9.3/units/xor-b32/theorems/obligations-v1.json (7 theorem + 6 validation obligations, non-vacuous, traceable) and the independent critique candidates/ptx/9.3/units/xor-b32/reviews/theorem-strength-critic-v1.md (ADEQUATE, no BLOCKER/MAJOR, no sorry/admit/axioms/unsafe, no weakening or vacuity). This authorizes only the next workflow stage and is not final acceptance unless gate=FINAL.",
+  "submittedAtUtc": "2026-08-09T17:13:53.683Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ptx/9.3/units/xor-b32/theorems/obligations-v1.json",
+      "sha256": "02ac9f1688bd7475b9a46f69a60973dd925ef77477ff465b7c9d2fe44141c0b6",
+      "sizeBytes": 68398
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/xor-b32/reviews/theorem-strength-critic-v1.md",
+      "sha256": "e6224ac151f881d1ac857ede03ec1535efacbcb4508593d97fb6e52cd2c7aaa0",
+      "sizeBytes": 24136
+    }
+  ],
+  "humanConfirmationRecorded": true,
+  "gateApprovalPerformed": false,
+  "promotionPerformed": false,
+  "provenance": {
+    "agent": "spec-manager",
+    "sessionID": "ses_0187c5241ffefkNSjEhES63cv9",
+    "messageID": "msg_fe78403470016UFAB2fHG1Es3g"
+  }
+}
