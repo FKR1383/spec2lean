@@ -1,0 +1,133 @@
+
+> @spec2lean/orchestrator@0.1.0 perf-report
+> tsx src/perf-report.ts --run ptx-9.3-xor.b32-23b2e519
+
+{
+  "runId": "ptx-9.3-xor.b32-23b2e519",
+  "unit": "xor.b32",
+  "stage": "ACCEPTED",
+  "wallClockSeconds": 5230.9,
+  "agentExecutions": 14,
+  "retryExecutions": 3,
+  "stages": [
+    {
+      "stage": "SEMANTIC_EXTRACTION",
+      "seconds": 1232.4,
+      "executions": 3,
+      "retries": 2,
+      "transitions": 3
+    },
+    {
+      "stage": "SOURCE_CURATION",
+      "seconds": 991.5,
+      "executions": 2,
+      "retries": 1,
+      "transitions": 2
+    },
+    {
+      "stage": "PROOF_GENERATION",
+      "seconds": 423.5,
+      "executions": 1,
+      "retries": 0,
+      "transitions": 1
+    },
+    {
+      "stage": "THEOREM_STRENGTH_CRITIQUE",
+      "seconds": 413.6,
+      "executions": 1,
+      "retries": 0,
+      "transitions": 1
+    },
+    {
+      "stage": "SEMANTIC_CRITIQUE",
+      "seconds": 294.8,
+      "executions": 1,
+      "retries": 0,
+      "transitions": 1
+    },
+    {
+      "stage": "THEOREM_GENERATION",
+      "seconds": 293.2,
+      "executions": 1,
+      "retries": 0,
+      "transitions": 1
+    },
+    {
+      "stage": "LEAN_MAPPING_CRITIQUE",
+      "seconds": 288.7,
+      "executions": 1,
+      "retries": 0,
+      "transitions": 1
+    },
+    {
+      "stage": "LEAN_FORMALIZATION",
+      "seconds": 288.1,
+      "executions": 1,
+      "retries": 0,
+      "transitions": 1
+    },
+    {
+      "stage": "ARCHITECTURE",
+      "seconds": 236.2,
+      "executions": 1,
+      "retries": 0,
+      "transitions": 1
+    },
+    {
+      "stage": "FINAL_CRITIQUE",
+      "seconds": 221.4,
+      "executions": 1,
+      "retries": 0,
+      "transitions": 1
+    },
+    {
+      "stage": "WAITING_GATE_A",
+      "seconds": 192.9,
+      "executions": 0,
+      "retries": 0,
+      "transitions": 1
+    },
+    {
+      "stage": "ARCHITECTURE_CRITIQUE",
+      "seconds": 151.2,
+      "executions": 1,
+      "retries": 0,
+      "transitions": 1
+    },
+    {
+      "stage": "WAITING_GATE_C",
+      "seconds": 56.4,
+      "executions": 0,
+      "retries": 0,
+      "transitions": 1
+    },
+    {
+      "stage": "WAITING_THEOREM_STRENGTH_APPROVAL",
+      "seconds": 54.4,
+      "executions": 0,
+      "retries": 0,
+      "transitions": 1
+    },
+    {
+      "stage": "WAITING_FINAL_APPROVAL",
+      "seconds": 52.4,
+      "executions": 0,
+      "retries": 0,
+      "transitions": 1
+    },
+    {
+      "stage": "WAITING_GATE_B",
+      "seconds": 40.3,
+      "executions": 0,
+      "retries": 0,
+      "transitions": 1
+    },
+    {
+      "stage": "CREATED",
+      "seconds": 0,
+      "executions": 0,
+      "retries": 0,
+      "transitions": 1
+    }
+  ]
+}
