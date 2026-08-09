@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "recordType": "human_gate_decision",
+  "reviewId": "ptx-not-b32-b-approval-v1",
+  "unitId": "ptx-not-b32",
+  "gate": "B",
+  "decision": "approved",
+  "reviewer": "Human reviewer",
+  "rationale": "The human operator explicitly approved Gate B for run ptx-9.3-not.b32-5e83de43 after the automated workflow reached its human-review boundary (stage WAITING_GATE_B, revision 9). The semantic interpretation candidate semantics-v1.json (73 claims: 31 SOURCE_FACT, 23 DERIVED_INTERPRETATION, 6 DESIGN_DEPENDENCY, 0 ASSUMPTION, 13 OPEN_QUESTION) was independently critiqued by reviews/semantics-critic-v1.md with verdict SUITABLE for Human Gate B; core not.b32 semantics (d = ~a; over 32-bit untyped bit-value domain), operand order/roles, guard predication (guard-false no-op source-resolved via section 9.7.13.2), version/target facts, and honest gap handling were all confirmed source-faithful. This approval authorizes only the next workflow stage and is not final acceptance unless gate=FINAL.",
+  "submittedAtUtc": "2026-08-09T12:53:51.135Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ptx/9.3/units/not-b32/semantics/semantics-v1.json",
+      "sha256": "477f9408b1a1c43e2d5e1a7f71795954fa58eff1cc28efe53a4d9a4b4210d4f0",
+      "sizeBytes": 82943
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/not-b32/reviews/semantics-critic-v1.md",
+      "sha256": "e09d5fe1ebd6c592851654f706e69bbc2da369537b070c47a7c47affe69deddb",
+      "sizeBytes": 24619
+    }
+  ],
+  "humanConfirmationRecorded": true,
+  "gateApprovalPerformed": true,
+  "promotionPerformed": false,
+  "provenance": {
+    "agent": "spec-manager",
+    "sessionID": "ses_0196a5d01ffeTZDWr8rHoHSBSU",
+    "messageID": "msg_fe695f809001gnA4QBvNTLQpMH"
+  }
+}

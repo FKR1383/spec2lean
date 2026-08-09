@@ -1,0 +1,10 @@
+{
+  "sourcePath": "candidates/ptx/9.3/units/not-b32/lean/NotB32-v1.lean",
+  "packagePath": "lean/Spec2Lean/PTX/NotB32.lean",
+  "moduleImport": "Spec2Lean.PTX.NotB32",
+  "declarationNamespace": "Spec2Lean.PTX.NotB32",
+  "sourceSha256": "d73332a9ce0ce44b6b4d7981266d5c79c0adfd2a9a63d53353583a8ed2f46d8f",
+  "packageSha256": "d73332a9ce0ce44b6b4d7981266d5c79c0adfd2a9a63d53353583a8ed2f46d8f",
+  "isolatedNamespace": false,
+  "importAdjusted": false
+}

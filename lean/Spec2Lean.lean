@@ -3,3 +3,5 @@ import Spec2Lean.PTX.AddU32
 import Spec2Lean.PTX.AddU32Proofs
 import Spec2Lean.PTX.MovB32
 import Spec2Lean.PTX.MovB32Proofs
+import Spec2Lean.PTX.NotB32
+import Spec2Lean.PTX.NotB32Proofs

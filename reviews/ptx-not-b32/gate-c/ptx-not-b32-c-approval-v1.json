@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "recordType": "human_gate_decision",
+  "reviewId": "ptx-not-b32-c-approval-v1",
+  "unitId": "ptx-not-b32",
+  "gate": "C",
+  "decision": "approved",
+  "reviewer": "Human reviewer",
+  "rationale": "The human operator explicitly approved Gate C for run ptx-9.3-not.b32-5e83de43 after the automated workflow reached its human-review boundary. The run.json confirms stage WAITING_GATE_C (revision 13) with Gate A and Gate B approved and Gate C pending. The Lean mapping candidate NotB32-v1.lean was independently critiqued by reviews/lean-mapping-critic-v1.md with verdict SUITABLE for Human Gate C: it compiles cleanly (0 errors/warnings, no sorry/admit/axiom/unsafe), all 11 executable examples match expected results, all 48 semantic claim citations are valid, and load-bearing .b32/register-width/false-guard source anchors were re-verified against the official PTX ISA 9.3 HTML. The critique's four NOTE findings are confirmations for the human reviewer, not defects. This approval authorizes only the next workflow stage and is not final acceptance unless gate=FINAL.",
+  "submittedAtUtc": "2026-08-09T13:16:40.284Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ptx/9.3/units/not-b32/lean/NotB32-v1.lean",
+      "sha256": "d73332a9ce0ce44b6b4d7981266d5c79c0adfd2a9a63d53353583a8ed2f46d8f",
+      "sizeBytes": 18591
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/not-b32/reviews/lean-mapping-critic-v1.md",
+      "sha256": "feba6e526f0e539abc3da0125a89da20ebbd8cb75ca7a5dca7d4bb5b8cd30f3e",
+      "sizeBytes": 21839
+    }
+  ],
+  "humanConfirmationRecorded": true,
+  "gateApprovalPerformed": true,
+  "promotionPerformed": false,
+  "provenance": {
+    "agent": "spec-manager",
+    "sessionID": "ses_01955738fffeCSCNps3YV4FDbu",
+    "messageID": "msg_fe6aafd080013shBJ3rKPozbDx"
+  }
+}

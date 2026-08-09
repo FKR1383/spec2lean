@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "recordType": "human_gate_decision",
+  "reviewId": "ptx-not-b32-final-approval-v1",
+  "unitId": "ptx-not-b32",
+  "gate": "FINAL",
+  "decision": "approved",
+  "reviewer": "Human reviewer",
+  "rationale": "The human operator explicitly approved Gate FINAL for run ptx-9.3-not.b32-5e83de43 after the automated workflow reached its human-review boundary. This authorizes only the next workflow stage and is not final acceptance unless gate=FINAL.",
+  "submittedAtUtc": "2026-08-09T15:32:47.919Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ptx/9.3/units/not-b32/reviews/final-critic-v1.md",
+      "sha256": "d9e9a41356b2bd1bbcbfc809fb55147601aa321909d97428f3695e761d0a9e83",
+      "sizeBytes": 14726
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/not-b32/lean/NotB32Proofs-v1.lean",
+      "sha256": "391ee89f1827a8e9a0c94892c7feaa3a7e1d7708cb839f555d2a383ad4e68e31",
+      "sizeBytes": 20352
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/not-b32/lean/NotB32-v1.lean",
+      "sha256": "d73332a9ce0ce44b6b4d7981266d5c79c0adfd2a9a63d53353583a8ed2f46d8f",
+      "sizeBytes": 18591
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/not-b32/semantics/semantics-v1.json",
+      "sha256": "477f9408b1a1c43e2d5e1a7f71795954fa58eff1cc28efe53a4d9a4b4210d4f0",
+      "sizeBytes": 82943
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/not-b32/theorems/obligations-v1.json",
+      "sha256": "5b477e899ff7719a3de7cd3014c6c83320a30f188ea6890419fd87225c9ff02b",
+      "sizeBytes": 66951
+    }
+  ],
+  "humanConfirmationRecorded": true,
+  "gateApprovalPerformed": true,
+  "promotionPerformed": false,
+  "provenance": {
+    "agent": "spec-manager",
+    "sessionID": "ses_018d8c1aaffek040cgLX4liloi",
+    "messageID": "msg_fe7277746001sd3Yhfvr02L7db"
+  }
+}
