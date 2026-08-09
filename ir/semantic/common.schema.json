@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec2lean.dev/schema/semantic/common-v1.json",
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "classification": {
+      "enum": [
+        "SOURCE_FACT",
+        "DERIVED_INTERPRETATION",
+        "DESIGN_DEPENDENCY",
+        "ASSUMPTION",
+        "OPEN_QUESTION"
+      ]
+    },
+    "fingerprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidenceId", "specificationVersion", "source", "locator"],
+      "properties": {
+        "evidenceId": { "type": "string", "minLength": 1 },
+        "specificationVersion": { "type": "string", "minLength": 1 },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "documentPath",
+            "documentSha256",
+            "sourceManifestPath",
+            "sourceManifestSha256"
+          ],
+          "properties": {
+            "kind": { "enum": ["html", "pdf", "artifact"] },
+            "documentPath": { "type": "string", "minLength": 1 },
+            "documentSha256": { "$ref": "#/$defs/sha256" },
+            "sourceManifestPath": { "type": "string", "minLength": 1 },
+            "sourceManifestSha256": { "$ref": "#/$defs/sha256" }
+          }
+        },
+        "locator": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "section": { "type": "string" },
+            "heading": { "type": "string" },
+            "anchor": { "type": "string" },
+            "startLine": { "type": "integer", "minimum": 1 },
+            "endLine": { "type": "integer", "minimum": 1 },
+            "page": { "type": "integer", "minimum": 1 }
+          },
+          "minProperties": 1
+        },
+        "quotation": { "type": "string" },
+        "quotationSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "introducedInRevision"],
+      "properties": {
+        "status": { "enum": ["ACTIVE", "SUPERSEDED", "INVALIDATED"] },
+        "introducedInRevision": { "type": "integer", "minimum": 1 },
+        "supersedes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "invalidatedBy": { "type": "string", "minLength": 1 }
+      }
+    },
+    "claim": {
+      "type": "object",
+      "required": [
+        "semanticId",
+        "classification",
+        "statement",
+        "evidenceIds",
+        "dependencyIds",
+        "stateAffecting",
+        "humanApprovalDependencies",
+        "lifecycle"
+      ],
+      "properties": {
+        "semanticId": { "type": "string", "minLength": 1 },
+        "classification": { "$ref": "#/$defs/classification" },
+        "statement": { "type": "string", "minLength": 1 },
+        "evidenceIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "dependencyIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "stateAffecting": { "type": "boolean" },
+        "humanApprovalDependencies": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "lifecycle": { "$ref": "#/$defs/lifecycle" }
+      }
+    }
+  }
+}

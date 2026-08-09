@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec2lean.dev/schema/semantic/instruction-delta-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "deltaId",
+    "unit",
+    "sharedEnvironment",
+    "provenance",
+    "sharedReferences",
+    "evidence",
+    "claims",
+    "refinements",
+    "syntaxForms",
+    "operands",
+    "operation",
+    "stateEffects",
+    "preconditions",
+    "proofFamilies"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "deltaId": { "type": "string", "minLength": 1 },
+    "unit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["language", "specificationVersion", "unit", "unitSlug"],
+      "properties": {
+        "language": { "type": "string", "minLength": 1 },
+        "specificationVersion": { "type": "string", "minLength": 1 },
+        "unit": { "type": "string", "minLength": 1 },
+        "unitSlug": { "type": "string", "minLength": 1 }
+      }
+    },
+    "sharedEnvironment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["environmentId", "revision", "sha256"],
+      "properties": {
+        "environmentId": { "type": "string", "minLength": 1 },
+        "revision": { "type": "integer", "minimum": 1 },
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceBundle", "generatedBy"],
+      "properties": {
+        "sourceBundle": { "$ref": "common.schema.json#/$defs/fingerprint" },
+        "generatedBy": { "type": "string", "minLength": 1 },
+        "migrationStatus": { "enum": ["NON_AUTHORITATIVE_FIXTURE", "AGENT_GENERATED"] }
+      }
+    },
+    "sharedReferences": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["semanticId", "usage", "rationale"],
+        "properties": {
+          "semanticId": { "type": "string", "minLength": 1 },
+          "usage": { "enum": ["DEPENDENCY", "INSTANTIATION"] },
+          "rationale": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/evidence" }
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "allOf": [
+          { "$ref": "common.schema.json#/$defs/claim" },
+          { "unevaluatedProperties": false }
+        ]
+      }
+    },
+    "refinements": {
+      "type": "array",
+      "items": {
+        "allOf": [
+          { "$ref": "common.schema.json#/$defs/claim" },
+          {
+            "type": "object",
+            "required": ["targetSharedSemanticId", "kind", "rationale"],
+            "properties": {
+              "targetSharedSemanticId": { "type": "string", "minLength": 1 },
+              "kind": { "enum": ["REFINES", "OVERRIDES"] },
+              "rationale": { "type": "string", "minLength": 1 }
+            }
+          },
+          { "unevaluatedProperties": false }
+        ]
+      }
+    },
+    "syntaxForms": { "$ref": "#/$defs/syntaxForms" },
+    "operands": { "$ref": "#/$defs/operands" },
+    "operation": { "$ref": "#/$defs/operation" },
+    "stateEffects": { "$ref": "#/$defs/stateEffects" },
+    "preconditions": { "$ref": "#/$defs/preconditions" },
+    "proofFamilies": { "$ref": "#/$defs/proofFamilies" }
+  },
+  "$defs": {
+    "claimIds": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "syntaxForms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["syntaxId", "form", "semanticClaimIds"],
+        "properties": {
+          "syntaxId": { "type": "string", "minLength": 1 },
+          "form": { "type": "string", "minLength": 1 },
+          "semanticClaimIds": { "$ref": "#/$defs/claimIds" }
+        }
+      }
+    },
+    "operands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operandId", "name", "position", "role", "legalForms", "semanticClaimIds"],
+        "properties": {
+          "operandId": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "position": { "type": "integer", "minimum": 0 },
+          "role": { "enum": ["DESTINATION", "SOURCE", "GUARD", "MODIFIER", "OTHER"] },
+          "legalForms": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "semanticClaimIds": { "$ref": "#/$defs/claimIds" }
+        }
+      }
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "normalizedMeaning", "semanticClaimIds"],
+      "properties": {
+        "operationId": { "type": "string", "minLength": 1 },
+        "normalizedMeaning": { "type": "string", "minLength": 1 },
+        "pseudocode": { "type": "string" },
+        "semanticClaimIds": { "$ref": "#/$defs/claimIds" }
+      }
+    },
+    "stateEffects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["effectId", "component", "mode", "condition", "semanticClaimIds"],
+        "properties": {
+          "effectId": { "type": "string", "minLength": 1 },
+          "component": { "type": "string", "minLength": 1 },
+          "mode": { "enum": ["READ", "WRITE"] },
+          "condition": { "type": "string", "minLength": 1 },
+          "semanticClaimIds": { "$ref": "#/$defs/claimIds" }
+        }
+      }
+    },
+    "preconditions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["preconditionId", "kind", "statement", "semanticClaimIds"],
+        "properties": {
+          "preconditionId": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["STATIC", "DYNAMIC"] },
+          "statement": { "type": "string", "minLength": 1 },
+          "semanticClaimIds": { "$ref": "#/$defs/claimIds" }
+        }
+      }
+    },
+    "proofFamilies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["proofFamilyId", "description", "semanticClaimIds", "blockedBySemanticIds"],
+        "properties": {
+          "proofFamilyId": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "semanticClaimIds": { "$ref": "#/$defs/claimIds" },
+          "blockedBySemanticIds": { "$ref": "#/$defs/claimIds" }
+        }
+      }
+    }
+  }
+}

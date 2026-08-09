@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "environmentId": "ptx-9.3-shared-semantics",
+  "language": "PTX",
+  "specificationVersion": "9.3",
+  "revision": 1,
+  "review": {
+    "status": "DRAFT",
+    "records": []
+  },
+  "sourceManifests": [
+    {
+      "path": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+      "sha256": "622e6ce0d3114a909a62726530955993b5f2b98d2f60e45ae1ceb429512208f2"
+    }
+  ],
+  "evidence": [],
+  "entries": []
+}
