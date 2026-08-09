@@ -76,6 +76,7 @@ elaborates as a hypothesis to `(r' != r) = true` and simplifies to
 -/
 
 import Spec2Lean.PTX.XorB32
+import Spec2Lean.PTX.CoreProofs
 
 namespace Spec2Lean
 namespace PTX
@@ -273,9 +274,8 @@ theorem execXorB32_xor_fidelity
       s'.valueRegs r = some (xorValue va vb) := by
   refine ⟨updateDestination s i.d (xorValue va vb), ?_, ?_⟩
   · simp [execXorB32, hguard, ha, hb]
-  · unfold updateDestination
-    rw [hd]
-    simp
+  · rw [hd]
+    exact Core.updateDestination_reg_same s r (xorValue va vb)
 
 /-! ## PTX-XOR-THM-004 — destination-only frame
 
@@ -306,14 +306,14 @@ theorem xorB32Step_destination_only_frame
       constructor
       · intro r' hr'
         rw [hd]
-        simp [updateDestination]
-        simp at hr'
-        intro hrr
-        exfalso
-        exact hr' hrr
+        exact
+          Core.updateDestination_reg_other
+            s r r' (xorValue va vb) hr'
       · intro p
         rw [hd]
-        simp [updateDestination]
+        exact
+          Core.updateDestination_reg_pred_unchanged
+            s r (xorValue va vb) p
 
 /-! ## PTX-XOR-THM-005 — bit-bucket destination preserves the whole state
 
@@ -340,7 +340,9 @@ theorem xorB32Step_bit_bucket_preserves_state
       rfl
   | executed va vb _ _ _ =>
       rw [hd]
-      simp [updateDestination]
+      exact
+        Core.updateDestination_bitBucket_preserves_state
+          s (xorValue va vb)
 
 /-! ## PTX-XOR-THM-006 — guard-false preserves the whole state
 
@@ -420,7 +422,7 @@ totality claim. -/
 
 theorem evalGuard_unguarded_true
     (s : MachineState) : evalGuard s Guard.unguarded = some true := by
-  simp [evalGuard]
+  exact Core.evalGuard_unguarded_true s
 
 /-! ### PTX-XOR-THM-007 (supporting lemma) — `@p` guard expression evaluates
 to true when the predicate lookup is true
@@ -436,7 +438,7 @@ evaluation fact behind PRF-5, never as a determinism or totality claim. -/
 theorem evalGuard_atPos_true
     (s : MachineState) (p : PredId) (h : s.predRegs p = some true) :
     evalGuard s (Guard.atPos p) = some true := by
-  simp [evalGuard, h]
+  exact Core.evalGuard_atPos_true s p h
 
 /-! ### PTX-XOR-THM-007 (supporting lemma) — `@p` guard expression evaluates
 to false when the predicate lookup is false
@@ -452,7 +454,7 @@ evaluation fact behind PRF-5, never as a determinism or totality claim. -/
 theorem evalGuard_atPos_false
     (s : MachineState) (p : PredId) (h : s.predRegs p = some false) :
     evalGuard s (Guard.atPos p) = some false := by
-  simp [evalGuard, h]
+  exact Core.evalGuard_atPos_false s p h
 
 /-! ### PTX-XOR-THM-007 (supporting lemma) — `@!p` guard expression evaluates
 to true when the predicate lookup is false
@@ -469,7 +471,7 @@ evaluation fact behind PRF-5, never as a determinism or totality claim. -/
 theorem evalGuard_atNeg_true_when_pred_false
     (s : MachineState) (p : PredId) (h : s.predRegs p = some false) :
     evalGuard s (Guard.atNeg p) = some true := by
-  simp [evalGuard, h]
+  exact Core.evalGuard_atNeg_true_when_pred_false s p h
 
 /-! ### PTX-XOR-THM-007 (supporting lemma) — `@!p` guard expression evaluates
 to false when the predicate lookup is true
@@ -486,7 +488,7 @@ evaluation fact behind PRF-5, never as a determinism or totality claim. -/
 theorem evalGuard_atNeg_false_when_pred_true
     (s : MachineState) (p : PredId) (h : s.predRegs p = some true) :
     evalGuard s (Guard.atNeg p) = some false := by
-  simp [evalGuard, h]
+  exact Core.evalGuard_atNeg_false_when_pred_true s p h
 
 theorem xorB32_executes_iff_guard_true
     (s : MachineState) (i : XorB32Instruction) (b : Bool)
