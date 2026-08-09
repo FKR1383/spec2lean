@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 1,
+  "environmentId": "ptx-9.3-shared-semantics-test-fixture",
+  "language": "PTX",
+  "specificationVersion": "9.3",
+  "revision": 1,
+  "review": {
+    "status": "HUMAN_APPROVED",
+    "records": [
+      {
+        "path": "reviews/ptx-and-b32/gate-b/ptx-and-b32-b-approval-v1.json",
+        "sha256": "89563f44f371f048122f8c1934fd2058976366000f3a7454ee0ffd69581463c6"
+      }
+    ]
+  },
+  "sourceManifests": [
+    {
+      "path": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+      "sha256": "622e6ce0d3114a909a62726530955993b5f2b98d2f60e45ae1ceb429512208f2"
+    }
+  ],
+  "evidence": [
+    {
+      "evidenceId": "ptx.fixture.predication.syntax",
+      "specificationVersion": "9.3",
+      "source": {
+        "kind": "html",
+        "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+        "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+        "sourceManifestPath": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+        "sourceManifestSha256": "622e6ce0d3114a909a62726530955993b5f2b98d2f60e45ae1ceb429512208f2"
+      },
+      "locator": {
+        "anchor": "predicated-execution",
+        "heading": "Predicated Execution"
+      }
+    }
+  ],
+  "entries": [
+    {
+      "semanticId": "ptx.fixture.guard.syntax",
+      "classification": "SOURCE_FACT",
+      "statement": "Fixture representation of the reviewed claim that PTX instruction execution may be guarded by predication syntax.",
+      "evidenceIds": ["ptx.fixture.predication.syntax"],
+      "dependencyIds": [],
+      "stateAffecting": true,
+      "humanApprovalDependencies": [],
+      "lifecycle": {
+        "status": "ACTIVE",
+        "introducedInRevision": 1
+      },
+      "specificationVersion": "9.3",
+      "scope": "PTX_9_3_SHARED",
+      "review": {
+        "status": "HUMAN_APPROVED",
+        "confidence": "HIGH"
+      },
+      "provenance": {
+        "originatingArtifacts": [
+          {
+            "path": "accepted/ptx/9.3/and-b32/semantics/semantics-v2.json",
+            "sha256": "45e0fe93f02a3261976962026eb7b5b2e1a5343c10d4a388f500f6f30a24ca0e"
+          }
+        ],
+        "reviewRecords": [
+          {
+            "path": "reviews/ptx-and-b32/gate-b/ptx-and-b32-b-approval-v1.json",
+            "sha256": "89563f44f371f048122f8c1934fd2058976366000f3a7454ee0ffd69581463c6"
+          }
+        ]
+      }
+    },
+    {
+      "semanticId": "ptx.fixture.guard.noop",
+      "classification": "DERIVED_INTERPRETATION",
+      "statement": "Fixture interpretation: when the guard disables execution, the instruction produces no state transition.",
+      "evidenceIds": [],
+      "dependencyIds": ["ptx.fixture.guard.syntax"],
+      "stateAffecting": true,
+      "humanApprovalDependencies": [],
+      "lifecycle": {
+        "status": "ACTIVE",
+        "introducedInRevision": 1
+      },
+      "specificationVersion": "9.3",
+      "scope": "PTX_9_3_SHARED",
+      "review": {
+        "status": "HUMAN_APPROVED",
+        "confidence": "MEDIUM"
+      },
+      "provenance": {
+        "originatingArtifacts": [
+          {
+            "path": "accepted/ptx/9.3/and-b32/semantics/semantics-v2.json",
+            "sha256": "45e0fe93f02a3261976962026eb7b5b2e1a5343c10d4a388f500f6f30a24ca0e"
+          }
+        ],
+        "reviewRecords": [
+          {
+            "path": "reviews/ptx-and-b32/gate-b/ptx-and-b32-b-approval-v1.json",
+            "sha256": "89563f44f371f048122f8c1934fd2058976366000f3a7454ee0ffd69581463c6"
+          }
+        ]
+      }
+    },
+    {
+      "semanticId": "ptx.fixture.register.lookup-design",
+      "classification": "DESIGN_DEPENDENCY",
+      "statement": "Fixture design dependency: register lookup is represented as a total map in the test materialization.",
+      "evidenceIds": [],
+      "dependencyIds": [],
+      "stateAffecting": true,
+      "humanApprovalDependencies": ["test-fixture-only"],
+      "lifecycle": {
+        "status": "ACTIVE",
+        "introducedInRevision": 1
+      },
+      "specificationVersion": "9.3",
+      "scope": "PTX_9_3_SHARED",
+      "review": {
+        "status": "HUMAN_APPROVED",
+        "confidence": "MEDIUM"
+      },
+      "provenance": {
+        "originatingArtifacts": [
+          {
+            "path": "accepted/ptx/9.3/and-b32/semantics/semantics-v2.json",
+            "sha256": "45e0fe93f02a3261976962026eb7b5b2e1a5343c10d4a388f500f6f30a24ca0e"
+          }
+        ],
+        "reviewRecords": [
+          {
+            "path": "reviews/ptx-and-b32/gate-b/ptx-and-b32-b-approval-v1.json",
+            "sha256": "89563f44f371f048122f8c1934fd2058976366000f3a7454ee0ffd69581463c6"
+          }
+        ]
+      }
+    },
+    {
+      "semanticId": "ptx.fixture.lookup.assumption",
+      "classification": "ASSUMPTION",
+      "statement": "Fixture assumption: all named source registers used by the test are present.",
+      "evidenceIds": [],
+      "dependencyIds": ["ptx.fixture.register.lookup-design"],
+      "stateAffecting": true,
+      "humanApprovalDependencies": ["test-fixture-only"],
+      "lifecycle": {
+        "status": "ACTIVE",
+        "introducedInRevision": 1
+      },
+      "specificationVersion": "9.3",
+      "scope": "PTX_9_3_SHARED",
+      "review": {
+        "status": "HUMAN_APPROVED",
+        "confidence": "MEDIUM"
+      },
+      "provenance": {
+        "originatingArtifacts": [
+          {
+            "path": "accepted/ptx/9.3/and-b32/semantics/semantics-v2.json",
+            "sha256": "45e0fe93f02a3261976962026eb7b5b2e1a5343c10d4a388f500f6f30a24ca0e"
+          }
+        ],
+        "reviewRecords": [
+          {
+            "path": "reviews/ptx-and-b32/gate-b/ptx-and-b32-b-approval-v1.json",
+            "sha256": "89563f44f371f048122f8c1934fd2058976366000f3a7454ee0ffd69581463c6"
+          }
+        ]
+      }
+    },
+    {
+      "semanticId": "ptx.fixture.nonblocking.question",
+      "classification": "OPEN_QUESTION",
+      "statement": "Fixture-only non-state-affecting editorial question.",
+      "evidenceIds": [],
+      "dependencyIds": [],
+      "stateAffecting": false,
+      "humanApprovalDependencies": [],
+      "lifecycle": {
+        "status": "ACTIVE",
+        "introducedInRevision": 1
+      },
+      "specificationVersion": "9.3",
+      "scope": "PTX_9_3_SHARED",
+      "review": {
+        "status": "HUMAN_APPROVED",
+        "confidence": "LOW"
+      },
+      "provenance": {
+        "originatingArtifacts": [
+          {
+            "path": "accepted/ptx/9.3/and-b32/semantics/semantics-v2.json",
+            "sha256": "45e0fe93f02a3261976962026eb7b5b2e1a5343c10d4a388f500f6f30a24ca0e"
+          }
+        ],
+        "reviewRecords": [
+          {
+            "path": "reviews/ptx-and-b32/gate-b/ptx-and-b32-b-approval-v1.json",
+            "sha256": "89563f44f371f048122f8c1934fd2058976366000f3a7454ee0ffd69581463c6"
+          }
+        ]
+      }
+    }
+  ]
+}

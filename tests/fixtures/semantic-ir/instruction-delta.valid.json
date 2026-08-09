@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 1,
+  "deltaId": "ptx-9.3-and-b32-test-fixture-delta-v1",
+  "unit": {
+    "language": "PTX",
+    "specificationVersion": "9.3",
+    "unit": "and.b32",
+    "unitSlug": "and-b32"
+  },
+  "sharedEnvironment": {
+    "environmentId": "ptx-9.3-shared-semantics-test-fixture",
+    "revision": 1,
+    "sha256": "ce596782a73df9654bdb8f8d78b99cb8571f92413ba9e71637a5cdc4e9dc7985"
+  },
+  "provenance": {
+    "sourceBundle": {
+      "path": "accepted/ptx/9.3/and-b32/source-bundles/source-bundle-v2.json",
+      "sha256": "57e86be0f823fa70e7559ca21cba30bf7f4b434a87c33cb39b134ce13f27ea53"
+    },
+    "generatedBy": "semantic-ir-self-test-fixture",
+    "migrationStatus": "NON_AUTHORITATIVE_FIXTURE"
+  },
+  "sharedReferences": [
+    {
+      "semanticId": "ptx.fixture.guard.noop",
+      "usage": "DEPENDENCY",
+      "rationale": "Exercises transitive inclusion of the underlying guard source fact."
+    },
+    {
+      "semanticId": "ptx.fixture.register.lookup-design",
+      "usage": "INSTANTIATION",
+      "rationale": "Exercises an explicit instruction use of a shared design dependency."
+    }
+  ],
+  "evidence": [
+    {
+      "evidenceId": "ptx.fixture.and.operation",
+      "specificationVersion": "9.3",
+      "source": {
+        "kind": "html",
+        "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+        "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+        "sourceManifestPath": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+        "sourceManifestSha256": "622e6ce0d3114a909a62726530955993b5f2b98d2f60e45ae1ceb429512208f2"
+      },
+      "locator": {
+        "anchor": "logic-and-shift-instructions-and",
+        "heading": "Logic and Shift Instructions: and"
+      }
+    }
+  ],
+  "claims": [
+    {
+      "semanticId": "ptx.and-b32.fixture.operation-source",
+      "classification": "SOURCE_FACT",
+      "statement": "Fixture representation of the accepted and.b32 operation source claim.",
+      "evidenceIds": ["ptx.fixture.and.operation"],
+      "dependencyIds": [],
+      "stateAffecting": true,
+      "humanApprovalDependencies": [],
+      "lifecycle": {
+        "status": "ACTIVE",
+        "introducedInRevision": 1
+      }
+    },
+    {
+      "semanticId": "ptx.and-b32.fixture.operation-derived",
+      "classification": "DERIVED_INTERPRETATION",
+      "statement": "Fixture normalized interpretation of the instruction-specific operation.",
+      "evidenceIds": [],
+      "dependencyIds": ["ptx.and-b32.fixture.operation-source"],
+      "stateAffecting": true,
+      "humanApprovalDependencies": [],
+      "lifecycle": {
+        "status": "ACTIVE",
+        "introducedInRevision": 1
+      }
+    },
+    {
+      "semanticId": "ptx.and-b32.fixture.open-editorial",
+      "classification": "OPEN_QUESTION",
+      "statement": "Fixture-only non-state-affecting editorial question for critic grouping.",
+      "evidenceIds": [],
+      "dependencyIds": [],
+      "stateAffecting": false,
+      "humanApprovalDependencies": [],
+      "lifecycle": {
+        "status": "ACTIVE",
+        "introducedInRevision": 1
+      }
+    }
+  ],
+  "refinements": [
+    {
+      "semanticId": "ptx.and-b32.fixture.guard-refinement",
+      "classification": "DERIVED_INTERPRETATION",
+      "statement": "Fixture refinement connecting the shared disabled-guard behavior to this instruction's write effect.",
+      "evidenceIds": [],
+      "dependencyIds": ["ptx.fixture.guard.noop"],
+      "stateAffecting": true,
+      "humanApprovalDependencies": [],
+      "lifecycle": {
+        "status": "ACTIVE",
+        "introducedInRevision": 1
+      },
+      "targetSharedSemanticId": "ptx.fixture.guard.noop",
+      "kind": "REFINES",
+      "rationale": "Keeps the instruction-specific connection explicit instead of mutating the shared claim."
+    }
+  ],
+  "syntaxForms": [
+    {
+      "syntaxId": "ptx.and-b32.fixture.syntax",
+      "form": "@p and.b32 d, a, b;",
+      "semanticClaimIds": ["ptx.fixture.guard.noop", "ptx.and-b32.fixture.operation-source"]
+    }
+  ],
+  "operands": [
+    {
+      "operandId": "ptx.and-b32.fixture.destination",
+      "name": "d",
+      "position": 0,
+      "role": "DESTINATION",
+      "legalForms": ["register"],
+      "semanticClaimIds": ["ptx.and-b32.fixture.operation-derived"]
+    },
+    {
+      "operandId": "ptx.and-b32.fixture.source-a",
+      "name": "a",
+      "position": 1,
+      "role": "SOURCE",
+      "legalForms": ["register", "immediate"],
+      "semanticClaimIds": ["ptx.and-b32.fixture.operation-source"]
+    },
+    {
+      "operandId": "ptx.and-b32.fixture.source-b",
+      "name": "b",
+      "position": 2,
+      "role": "SOURCE",
+      "legalForms": ["register", "immediate"],
+      "semanticClaimIds": ["ptx.and-b32.fixture.operation-source"]
+    }
+  ],
+  "operation": {
+    "operationId": "ptx.and-b32.fixture.operation",
+    "normalizedMeaning": "Apply the fixture binary operation to the two source values and write the result when enabled.",
+    "semanticClaimIds": ["ptx.and-b32.fixture.operation-derived", "ptx.and-b32.fixture.guard-refinement"]
+  },
+  "stateEffects": [
+    {
+      "effectId": "ptx.and-b32.fixture.read-sources",
+      "component": "register-state",
+      "mode": "READ",
+      "condition": "instruction enabled",
+      "semanticClaimIds": ["ptx.fixture.register.lookup-design"]
+    },
+    {
+      "effectId": "ptx.and-b32.fixture.write-destination",
+      "component": "register-state",
+      "mode": "WRITE",
+      "condition": "instruction enabled",
+      "semanticClaimIds": ["ptx.and-b32.fixture.operation-derived", "ptx.and-b32.fixture.guard-refinement"]
+    }
+  ],
+  "preconditions": [
+    {
+      "preconditionId": "ptx.and-b32.fixture.operands-present",
+      "kind": "DYNAMIC",
+      "statement": "Fixture source operands can be resolved.",
+      "semanticClaimIds": ["ptx.fixture.register.lookup-design"]
+    }
+  ],
+  "proofFamilies": [
+    {
+      "proofFamilyId": "ptx.and-b32.fixture.guard-preservation",
+      "description": "Fixture family for disabled-guard state preservation.",
+      "semanticClaimIds": ["ptx.fixture.guard.noop", "ptx.and-b32.fixture.guard-refinement"],
+      "blockedBySemanticIds": []
+    }
+  ]
+}

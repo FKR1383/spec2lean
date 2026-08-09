@@ -11,6 +11,7 @@ import {
 } from "./human-decision-record.js"
 import { proofTargets } from "./proof-plan.js"
 import { REPO_ROOT } from "./repo.js"
+import { runSemanticIrSelfTests } from "./semantic-ir-self-test.js"
 import { canTransition, type RunState } from "./workflow.js"
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -21,6 +22,8 @@ assert(makeUnitSlug("mov.b32") === "mov-b32", "unit slug")
 assert(makeLeanModuleName("mov.b32") === "MovB32", "Lean module name")
 assert(canTransition("ARCHITECTURE_CRITIQUE", "WAITING_GATE_A"), "Gate A transition")
 assert(!canTransition("ARCHITECTURE", "LEAN_FORMALIZATION"), "illegal stage skip rejected")
+
+const semanticIrMetrics = await runSemanticIrSelfTests()
 
 const parsed = parseAgentResult(
   'prefix\nSPEC2LEAN_RESULT {"outcome":"SUCCESS","nextStage":"ARCHITECTURE_CRITIQUE","summary":"ok"}',
@@ -168,4 +171,8 @@ for (const agent of [
   assert(!text.includes("Do not prove properties for another PTX instruction."), `${agent} no stale proof lock`)
 }
 
-console.log(JSON.stringify({ ok: true, test: "orchestrator-self-test" }, null, 2))
+console.log(JSON.stringify({
+  ok: true,
+  test: "orchestrator-self-test",
+  semanticIr: semanticIrMetrics,
+}, null, 2))
