@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process"
 
 import { loadRun } from "./run-store.js"
+import { proofTargetSummary } from "./proof-plan.js"
 import type { FormalizationStage } from "./workflow.js"
 
 const HUMAN_WAIT_STAGES = new Set<FormalizationStage>([
@@ -101,6 +102,11 @@ async function main(): Promise<void> {
       return
     }
 
+    const beforeProofDeclared =
+      before.stage === "PROOF_GENERATION"
+        ? (await proofTargetSummary(before)).declared
+        : undefined
+
     const code = await runTick(runId)
     if (code !== 0) {
       const current = await loadRun(runId)
@@ -134,11 +140,33 @@ async function main(): Promise<void> {
     }
 
     const last = after.executions?.at(-1)
-    const retried = after.stage === before.stage && last?.outcome === "RETRY"
+    const retried =
+      after.stage === before.stage &&
+      last?.outcome === "RETRY"
 
-    if (retried) {
-      if (retryStage === after.stage) consecutiveRetries += 1
-      else {
+    const afterProofDeclared =
+      after.stage === "PROOF_GENERATION"
+        ? (await proofTargetSummary(after)).declared
+        : undefined
+
+    const proofMadeProgress =
+      before.stage === "PROOF_GENERATION" &&
+      after.stage === "PROOF_GENERATION" &&
+      beforeProofDeclared !== undefined &&
+      afterProofDeclared !== undefined &&
+      afterProofDeclared > beforeProofDeclared
+
+    if (proofMadeProgress) {
+      console.log(
+        `[spec2lean] proof progress ${beforeProofDeclared}/${(await proofTargetSummary(before)).total} -> ${afterProofDeclared}/${(await proofTargetSummary(after)).total}; stall counter reset`,
+      )
+
+      retryStage = undefined
+      consecutiveRetries = 0
+    } else if (retried) {
+      if (retryStage === after.stage) {
+        consecutiveRetries += 1
+      } else {
         retryStage = after.stage
         consecutiveRetries = 1
       }
