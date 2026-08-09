@@ -1,23 +1,44 @@
 import { tool } from "@opencode-ai/plugin"
 import { createHash } from "node:crypto"
 import { readFile, realpath, stat } from "node:fs/promises"
-import { isAbsolute, relative, resolve, sep } from "node:path"
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path"
 
 const TOOL_VERSION = 1
-const VERSION = "9.3"
+const PROFILE_PATH =
+  "language_packs/ptx/9.3/retrieval-profile.json"
 
-const INDEX_PATH =
-  `.spec2lean-cache/ptx/${VERSION}/source-index-v1.json`
+type RetrievalProfile = {
+  schemaVersion: number
+  language: string
+  specificationVersion: string
+  sourceManifest: string
+  index: {
+    schemaVersion: number
+    cachePath: string
+  }
+  context: {
+    targetMaxLines: number
+    sharedMaxLines: number
+    sharedSections: Array<{
+      anchor: string
+      purpose: string
+    }>
+  }
+  policy: {
+    interpretationPerformed: boolean
+    humanApprovalImplied: boolean
+    description: string
+  }
+}
 
-const SHARED_ANCHORS = [
-  "predicated-execution",
-  "control-flow-instructions-at",
-  "register-state-space",
-  "fundamental-types",
-  "variables",
-  "format-and-semantics-of-instruction-descriptions",
-  "restricted-use-of-sub-word-sizes",
-] as const
+type SourceManifest = {
+  specification_version?: string
+  artifacts?: Array<{
+    kind?: string
+    local_path?: string
+    sha256?: string
+  }>
+}
 
 type Section = {
   anchor: string
@@ -38,6 +59,7 @@ type Index = {
 }
 
 type Loaded = {
+  profile: RetrievalProfile
   index: Index
   lines: string[]
 }
@@ -85,15 +107,85 @@ async function load(worktree: string): Promise<Loaded> {
   loadedPromise = (async () => {
     const root = await realpath(worktree)
 
-    const indexPath = resolve(root, INDEX_PATH)
+    const profilePath = resolve(root, PROFILE_PATH)
+    ensureInside(root, profilePath)
+    const profile = JSON.parse(
+      await readFile(profilePath, "utf8"),
+    ) as RetrievalProfile
+
+    if (
+      profile.schemaVersion !== 1 ||
+      profile.language !== "PTX" ||
+      profile.specificationVersion !== "9.3" ||
+      profile.index.schemaVersion !== 1 ||
+      !Number.isInteger(profile.context.targetMaxLines) ||
+      profile.context.targetMaxLines <= 0 ||
+      profile.context.targetMaxLines > 200 ||
+      !Number.isInteger(profile.context.sharedMaxLines) ||
+      profile.context.sharedMaxLines <= 0 ||
+      profile.context.sharedMaxLines > 80 ||
+      profile.context.sharedSections.length === 0 ||
+      profile.context.sharedSections.some(
+        (section) =>
+          typeof section.anchor !== "string" ||
+          !/^[A-Za-z0-9._:-]+$/.test(section.anchor) ||
+          typeof section.purpose !== "string" ||
+          section.purpose.length === 0,
+      ) ||
+      new Set(
+        profile.context.sharedSections.map((section) => section.anchor),
+      ).size !== profile.context.sharedSections.length ||
+      profile.policy.interpretationPerformed !== false ||
+      profile.policy.humanApprovalImplied !== false
+    ) {
+      throw new Error("invalid PTX retrieval profile")
+    }
+
+    const indexPath = resolve(root, profile.index.cachePath)
     ensureInside(root, indexPath)
 
     const index = JSON.parse(
       await readFile(indexPath, "utf8"),
     ) as Index
 
-    if (index.specificationVersion !== VERSION) {
-      throw new Error("cached PTX index has the wrong specification version")
+    const manifestPath = resolve(root, profile.sourceManifest)
+    ensureInside(root, manifestPath)
+    const manifest = JSON.parse(
+      await readFile(manifestPath, "utf8"),
+    ) as SourceManifest
+    const htmlArtifact = manifest.artifacts?.find(
+      (artifact) => artifact.kind === "html",
+    )
+
+    if (
+      manifest.specification_version !== profile.specificationVersion ||
+      !htmlArtifact?.local_path ||
+      !htmlArtifact.sha256
+    ) {
+      throw new Error("PTX retrieval profile source manifest is invalid")
+    }
+
+    const expectedSourcePath =
+      `${dirname(profile.sourceManifest)}/${htmlArtifact.local_path}`
+
+    if (
+      index.schemaVersion !== profile.index.schemaVersion ||
+      index.specificationVersion !== profile.specificationVersion ||
+      index.source.relativePath !== expectedSourcePath ||
+      index.source.sha256 !== htmlArtifact.sha256
+    ) {
+      throw new Error("cached PTX index does not match the retrieval profile and manifest")
+    }
+
+    const missingSharedAnchors = profile.context.sharedSections
+      .map((section) => section.anchor)
+      .filter((anchor) =>
+        !index.sections.some((section) => section.anchor === anchor)
+      )
+    if (missingSharedAnchors.length > 0) {
+      throw new Error(
+        `cached PTX index lacks shared anchors: ${missingSharedAnchors.join(", ")}`,
+      )
     }
 
     const sourcePath = resolve(root, index.source.relativePath)
@@ -115,6 +207,7 @@ async function load(worktree: string): Promise<Loaded> {
     }
 
     return {
+      profile,
       index,
       lines: sourceData.toString("utf8").split(/\r?\n/),
     }
@@ -237,12 +330,21 @@ export default tool({
         })
       }
 
-      const shared = SHARED_ANCHORS.flatMap((anchor) => {
+      const shared = loaded.profile.context.sharedSections.flatMap((sharedSection) => {
         const section =
-          loaded.index.sections.find((item) => item.anchor === anchor)
+          loaded.index.sections.find(
+            (item) => item.anchor === sharedSection.anchor,
+          )
 
         return section
-          ? [boundedContext(loaded.lines, section, 48)]
+          ? [{
+              ...boundedContext(
+                loaded.lines,
+                section,
+                loaded.profile.context.sharedMaxLines,
+              ),
+              purpose: sharedSection.purpose,
+            }]
           : []
       })
 
@@ -250,13 +352,23 @@ export default tool({
         ok: true,
         tool: "spec_fast_context",
         version: TOOL_VERSION,
+        languagePack: {
+          retrievalProfile: PROFILE_PATH,
+          schemaVersion: loaded.profile.schemaVersion,
+          specificationVersion: loaded.profile.specificationVersion,
+        },
         source: loaded.index.source,
         unit: args.unit,
         mnemonic,
-        target: boundedContext(loaded.lines, best.section, 120),
+        target: boundedContext(
+          loaded.lines,
+          best.section,
+          loaded.profile.context.targetMaxLines,
+        ),
         shared,
         policy: {
           interpretationPerformed: false,
+          humanApprovalImplied: false,
           sourceModified: false,
           sourceHashVerified: true,
         },

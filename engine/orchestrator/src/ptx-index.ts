@@ -42,6 +42,17 @@ type Manifest = {
   }>
 }
 
+type RetrievalProfile = {
+  schemaVersion: number
+  language: string
+  specificationVersion: string
+  sourceManifest: string
+  index: {
+    schemaVersion: number
+    cachePath: string
+  }
+}
+
 type OpenSection = {
   anchor?: string
   startLine: number
@@ -49,8 +60,23 @@ type OpenSection = {
 
 const version = required("--version")
 
-const manifestRelative =
-  `documents/sources/nvidia/ptx/${version}/source-manifest.json`
+const profileRelative =
+  `language_packs/ptx/${version}/retrieval-profile.json`
+
+const profile = JSON.parse(
+  await readFile(resolve(REPO_ROOT, profileRelative), "utf8"),
+) as RetrievalProfile
+
+if (
+  profile.schemaVersion !== 1 ||
+  profile.language !== "PTX" ||
+  profile.specificationVersion !== version ||
+  profile.index.schemaVersion !== 1
+) {
+  throw new Error(`Invalid PTX retrieval profile: ${profileRelative}`)
+}
+
+const manifestRelative = profile.sourceManifest
 
 const manifest = JSON.parse(
   await readFile(resolve(REPO_ROOT, manifestRelative), "utf8"),
@@ -128,8 +154,7 @@ for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
 
 sections.sort((a, b) => a.startLine - b.startLine)
 
-const outputRelative =
-  `.spec2lean-cache/ptx/${version}/source-index-v1.json`
+const outputRelative = profile.index.cachePath
 
 const outputPath = resolve(REPO_ROOT, outputRelative)
 
@@ -138,9 +163,10 @@ await mkdir(dirname(outputPath), { recursive: true })
 await writeFile(
   outputPath,
   JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: profile.index.schemaVersion,
     language: "PTX",
     specificationVersion: version,
+    languagePackProfile: profileRelative,
     source: {
       relativePath: sourceRelative,
       sha256: actualSha256,
