@@ -1,7 +1,7 @@
-import { spawn } from "node:child_process"
-
+import { startOpenCode } from "./opencode.js"
 import { loadRun } from "./run-store.js"
 import { proofTargetSummary } from "./proof-plan.js"
+import { executeTick } from "./runner.js"
 import type { FormalizationStage } from "./workflow.js"
 
 const HUMAN_WAIT_STAGES = new Set<FormalizationStage>([
@@ -39,18 +39,6 @@ function integerArgument(name: string, fallback: number): number {
   return value
 }
 
-async function runTick(runId: string): Promise<number> {
-  return await new Promise((resolve, reject) => {
-    const child = spawn(
-      "npm",
-      ["run", "tick", "--", "--run", runId],
-      { stdio: "inherit", shell: false },
-    )
-    child.once("error", reject)
-    child.once("exit", (code: number | null) => resolve(code ?? 1))
-  })
-}
-
 async function main(): Promise<void> {
   const runId = required("--run")
   const maxTicks = integerArgument("--max-ticks", 25)
@@ -58,138 +46,145 @@ async function main(): Promise<void> {
   let ticks = 0
   let consecutiveRetries = 0
   let retryStage: FormalizationStage | undefined
+  let runtime: Awaited<ReturnType<typeof startOpenCode>> | undefined
 
-  while (true) {
-    const before = await loadRun(runId)
-    console.log(`[spec2lean] run=${runId} stage=${before.stage} revision=${before.revision}`)
+  try {
+    while (true) {
+      const before = await loadRun(runId)
+      console.log(`[spec2lean] run=${runId} stage=${before.stage} revision=${before.revision}`)
 
-    if (HUMAN_WAIT_STAGES.has(before.stage)) {
-      console.log(JSON.stringify({
-        ok: true,
-        stopped: true,
-        reason: "HUMAN_APPROVAL_REQUIRED",
-        runId,
-        stage: before.stage,
-        ticks,
-      }, null, 2))
-      return
-    }
-
-    if (TERMINAL_STAGES.has(before.stage)) {
-      const accepted = before.stage === "ACCEPTED"
-      console.log(JSON.stringify({
-        ok: accepted,
-        stopped: true,
-        reason: before.stage,
-        runId,
-        stage: before.stage,
-        ticks,
-      }, null, 2))
-      if (!accepted) process.exitCode = 2
-      return
-    }
-
-    if (ticks >= maxTicks) {
-      console.log(JSON.stringify({
-        ok: false,
-        stopped: true,
-        reason: "MAX_TICKS_REACHED",
-        runId,
-        stage: before.stage,
-        ticks,
-      }, null, 2))
-      process.exitCode = 2
-      return
-    }
-
-    const beforeProofDeclared =
-      before.stage === "PROOF_GENERATION"
-        ? (await proofTargetSummary(before)).declared
-        : undefined
-
-    const code = await runTick(runId)
-    if (code !== 0) {
-      const current = await loadRun(runId)
-      console.log(JSON.stringify({
-        ok: false,
-        stopped: true,
-        reason: "TICK_PROCESS_FAILED",
-        runId,
-        stage: current.stage,
-        activeExecution: current.activeExecution ?? null,
-        exitCode: code,
-      }, null, 2))
-      process.exitCode = code
-      return
-    }
-
-    ticks += 1
-    const after = await loadRun(runId)
-
-    if (after.revision <= before.revision) {
-      console.log(JSON.stringify({
-        ok: false,
-        stopped: true,
-        reason: "RUN_REVISION_DID_NOT_ADVANCE",
-        runId,
-        beforeRevision: before.revision,
-        afterRevision: after.revision,
-      }, null, 2))
-      process.exitCode = 2
-      return
-    }
-
-    const last = after.executions?.at(-1)
-    const retried =
-      after.stage === before.stage &&
-      last?.outcome === "RETRY"
-
-    const afterProofDeclared =
-      after.stage === "PROOF_GENERATION"
-        ? (await proofTargetSummary(after)).declared
-        : undefined
-
-    const proofMadeProgress =
-      before.stage === "PROOF_GENERATION" &&
-      after.stage === "PROOF_GENERATION" &&
-      beforeProofDeclared !== undefined &&
-      afterProofDeclared !== undefined &&
-      afterProofDeclared > beforeProofDeclared
-
-    if (proofMadeProgress) {
-      console.log(
-        `[spec2lean] proof progress ${beforeProofDeclared}/${(await proofTargetSummary(before)).total} -> ${afterProofDeclared}/${(await proofTargetSummary(after)).total}; stall counter reset`,
-      )
-
-      retryStage = undefined
-      consecutiveRetries = 0
-    } else if (retried) {
-      if (retryStage === after.stage) {
-        consecutiveRetries += 1
-      } else {
-        retryStage = after.stage
-        consecutiveRetries = 1
+      if (HUMAN_WAIT_STAGES.has(before.stage)) {
+        console.log(JSON.stringify({
+          ok: true,
+          stopped: true,
+          reason: "HUMAN_APPROVAL_REQUIRED",
+          runId,
+          stage: before.stage,
+          ticks,
+        }, null, 2))
+        return
       }
-    } else {
-      retryStage = undefined
-      consecutiveRetries = 0
-    }
 
-    console.log(`[spec2lean] transition ${before.stage} -> ${after.stage}`)
+      if (TERMINAL_STAGES.has(before.stage)) {
+        const accepted = before.stage === "ACCEPTED"
+        console.log(JSON.stringify({
+          ok: accepted,
+          stopped: true,
+          reason: before.stage,
+          runId,
+          stage: before.stage,
+          ticks,
+        }, null, 2))
+        if (!accepted) process.exitCode = 2
+        return
+      }
 
-    if (consecutiveRetries >= maxStageRetries) {
-      console.log(JSON.stringify({
-        ok: false,
-        stopped: true,
-        reason: "STAGE_RETRY_LIMIT_REACHED",
-        runId,
-        stage: after.stage,
-        consecutiveRetries,
-        hint: `Run npm run doctor -- --run ${runId}`,
-      }, null, 2))
-      process.exitCode = 2
-      return
+      if (ticks >= maxTicks) {
+        console.log(JSON.stringify({
+          ok: false,
+          stopped: true,
+          reason: "MAX_TICKS_REACHED",
+          runId,
+          stage: before.stage,
+          ticks,
+        }, null, 2))
+        process.exitCode = 2
+        return
+      }
+
+      const beforeProofDeclared =
+        before.stage === "PROOF_GENERATION"
+          ? (await proofTargetSummary(before)).declared
+          : undefined
+
+      runtime ??= await startOpenCode()
+      try {
+        await executeTick(runId, { runtime })
+      } catch (error) {
+        const current = await loadRun(runId)
+        console.log(JSON.stringify({
+          ok: false,
+          stopped: true,
+          reason: "TICK_EXECUTION_FAILED",
+          runId,
+          stage: current.stage,
+          activeExecution: current.activeExecution ?? null,
+          error: error instanceof Error ? error.message : String(error),
+        }, null, 2))
+        process.exitCode = 1
+        return
+      }
+
+      ticks += 1
+      const after = await loadRun(runId)
+
+      if (after.revision <= before.revision) {
+        console.log(JSON.stringify({
+          ok: false,
+          stopped: true,
+          reason: "RUN_REVISION_DID_NOT_ADVANCE",
+          runId,
+          beforeRevision: before.revision,
+          afterRevision: after.revision,
+        }, null, 2))
+        process.exitCode = 2
+        return
+      }
+
+      const last = after.executions?.at(-1)
+      const retried =
+        after.stage === before.stage &&
+        last?.outcome === "RETRY"
+
+      const afterProofDeclared =
+        after.stage === "PROOF_GENERATION"
+          ? (await proofTargetSummary(after)).declared
+          : undefined
+
+      const proofMadeProgress =
+        before.stage === "PROOF_GENERATION" &&
+        after.stage === "PROOF_GENERATION" &&
+        beforeProofDeclared !== undefined &&
+        afterProofDeclared !== undefined &&
+        afterProofDeclared > beforeProofDeclared
+
+      if (proofMadeProgress) {
+        console.log(
+          `[spec2lean] proof progress ${beforeProofDeclared}/${(await proofTargetSummary(before)).total} -> ${afterProofDeclared}/${(await proofTargetSummary(after)).total}; stall counter reset`,
+        )
+
+        retryStage = undefined
+        consecutiveRetries = 0
+      } else if (retried) {
+        if (retryStage === after.stage) {
+          consecutiveRetries += 1
+        } else {
+          retryStage = after.stage
+          consecutiveRetries = 1
+        }
+      } else {
+        retryStage = undefined
+        consecutiveRetries = 0
+      }
+
+      console.log(`[spec2lean] transition ${before.stage} -> ${after.stage}`)
+
+      if (consecutiveRetries >= maxStageRetries) {
+        console.log(JSON.stringify({
+          ok: false,
+          stopped: true,
+          reason: "STAGE_RETRY_LIMIT_REACHED",
+          runId,
+          stage: after.stage,
+          consecutiveRetries,
+          hint: `Run npm run doctor -- --run ${runId}`,
+        }, null, 2))
+        process.exitCode = 2
+        return
+      }
     }
+  } finally {
+    runtime?.runtime.server.close()
   }
 }
 

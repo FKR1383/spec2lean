@@ -1,5 +1,6 @@
 import { access } from "node:fs/promises"
 import { resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 
 import {
   parseAgentResult,
@@ -409,9 +410,16 @@ async function finalizeProofStageLocally(run: RunState): Promise<AgentResult | u
   }
 }
 
-async function main(): Promise<void> {
-  const runId = required("--run")
-  const dryRun = process.argv.includes("--dry-run")
+export type TickOptions = {
+  dryRun?: boolean
+  runtime?: Awaited<ReturnType<typeof startOpenCode>>
+}
+
+export async function executeTick(
+  runId: string,
+  options: TickOptions = {},
+): Promise<void> {
+  const dryRun = options.dryRun ?? false
   let run = await loadRun(runId)
 
   const basePlan = planForRun(run)
@@ -482,7 +490,8 @@ async function main(): Promise<void> {
     return
   }
 
-  const runtime = await startOpenCode()
+  const runtime = options.runtime ?? await startOpenCode()
+  const ownsRuntime = options.runtime === undefined
 
   try {
     const agents = unwrap<Agent[]>(await runtime.runtime.client.app.agents())
@@ -618,8 +627,21 @@ async function main(): Promise<void> {
       summary: result.summary,
     }, null, 2))
   } finally {
-    runtime.runtime.server.close()
+    if (ownsRuntime) {
+      runtime.runtime.server.close()
+    }
   }
 }
 
-await main()
+async function main(): Promise<void> {
+  await executeTick(required("--run"), {
+    dryRun: process.argv.includes("--dry-run"),
+  })
+}
+
+if (
+  process.argv[1] !== undefined &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  await main()
+}
