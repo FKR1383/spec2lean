@@ -34,6 +34,30 @@ import {
 type Agent = { name: string }
 type Session = { id: string }
 
+const FAST_FIRST_AGENTS:
+  Partial<Record<FormalizationStage, string>> = {
+    SOURCE_CURATION: "source-curator-fast",
+    SEMANTIC_EXTRACTION: "semantic-extractor-fast",
+  }
+
+function executionAgentForRun(
+  run: RunState,
+  fallbackAgent: string,
+): string {
+  const fastAgent = FAST_FIRST_AGENTS[run.stage]
+
+  if (!fastAgent) return fallbackAgent
+
+  const stageAlreadyAttempted =
+    (run.executions ?? []).some(
+      (execution) => execution.stage === run.stage,
+    )
+
+  return stageAlreadyAttempted
+    ? fallbackAgent
+    : fastAgent
+}
+
 function argument(name: string): string | undefined {
   const index = process.argv.indexOf(name)
   return index === -1 ? undefined : process.argv[index + 1]
@@ -371,7 +395,13 @@ async function main(): Promise<void> {
   const runId = required("--run")
   const dryRun = process.argv.includes("--dry-run")
   let run = await loadRun(runId)
-  const plan = planForRun(run)
+
+  const basePlan = planForRun(run)
+  const plan = {
+    ...basePlan,
+    agent: executionAgentForRun(run, basePlan.agent),
+  }
+
   const artifact = artifactContractForRun(run)
 
   let prompt: string
