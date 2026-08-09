@@ -90,6 +90,23 @@ Rebuild the local hash-verified index with:
 npm --prefix engine/orchestrator run ptx-index -- --version 9.3
 ```
 
+## Semantic environment and delta IR
+
+The typed semantic composition layer is documented in
+`ir/semantic/README.md`. It validates hash-pinned shared semantic environments
+and instruction deltas, materializes a deterministic complete review view, and
+prepares a compact classification-grouped critic packet while retaining the
+full-view fallback.
+
+```bash
+./spec2lean semantic-ir validate-delta <environment.json> <delta.json>
+./spec2lean semantic-ir materialize <environment.json> <delta.json>
+./spec2lean semantic-ir review-packet <environment.json> <delta.json>
+```
+
+The PTX 9.3 language pack currently contains only a `DRAFT` shared-environment
+shell. The engine will not treat accepted unit artifacts as shared approval.
+
 ## Lean package integration
 
 New instruction modules are isolated under a unit namespace such as
