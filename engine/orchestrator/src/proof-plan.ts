@@ -110,14 +110,17 @@ export async function proofTargetSummary(run: RunState): Promise<{
   declared: number
   remaining: number
   next?: ProofTarget
+  missing: ProofTarget[]
 }> {
   const targets = await proofTargets(run)
   const declared = await declaredProofNames(run)
-  const next = targets.find((target) => !declared.has(target.name))
+  const missing = targets.filter((target) => !declared.has(target.name))
+
   return {
     total: targets.length,
-    declared: targets.filter((target) => declared.has(target.name)).length,
-    remaining: targets.filter((target) => !declared.has(target.name)).length,
-    next,
+    declared: targets.length - missing.length,
+    remaining: missing.length,
+    next: missing[0],
+    missing,
   }
 }

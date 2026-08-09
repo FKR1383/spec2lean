@@ -16,7 +16,6 @@ import { installProofPackage, prepareLeanPackage, type LeanPackageInfo } from ".
 import { prohibitedLeanTokens, verifyLeanFile } from "./lean-local.js"
 import { startOpenCode, unwrap } from "./opencode.js"
 import {
-  nextProofTarget,
   proofArtifactPath,
   proofTargetSummary,
   type ProofTarget,
@@ -161,8 +160,31 @@ async function buildProofPrompt(run: RunState): Promise<ProofPromptContext & { p
     }
   }
 
-  const target = existingCompiles ? summary.next : (await nextProofTarget(run)) ?? summary.next
-  const mode = exists && !existingCompiles ? "REPAIR" : "PROVE_ONE"
+  const repairMode = exists && !existingCompiles
+  const batchTargets = repairMode ? [] : summary.missing
+
+  const target: ProofTarget | undefined =
+    batchTargets.length === 0
+      ? undefined
+      : {
+          obligationId: batchTargets.map((item) => item.obligationId).join(", "),
+          name: `${batchTargets.length} remaining approved theorem declarations`,
+          statement: batchTargets
+            .map((item, index) => [
+              `-- TARGET ${index + 1}: ${item.obligationId} / ${item.name}`,
+              item.statement,
+              ...(item.strengthRisks.length > 0
+                ? [
+                    "-- Strength caveats:",
+                    ...item.strengthRisks.map((risk) => `-- - ${risk}`),
+                  ]
+                : []),
+            ].join("\n"))
+            .join("\n\n"),
+          strengthRisks: [...new Set(batchTargets.flatMap((item) => item.strengthRisks))],
+        }
+
+  const mode = repairMode ? "REPAIR" : "PROVE_BATCH"
 
   const prompt = [
     "# Spec2Lean Proof Subtask",
@@ -178,11 +200,13 @@ async function buildProofPrompt(run: RunState): Promise<ProofPromptContext & { p
     "# Hard constraints",
     "",
     "- Do not read NVIDIA source files, architecture, or semantic claim bundles during this subtask.",
-    "- The theorem-strength-approved statement below is authoritative.",
+    "- The theorem-strength-approved statements below are authoritative.",
+    "- The orchestrator already extracted the frozen approved theorem statements; do not re-read the obligation JSON or theorem-strength review.",
     "- Do not weaken it, add semantic preconditions, or change semantics.",
     "- Do not use sorry, admit, new axiom, or unsafe.",
     "- Write/edit the proof artifact EARLY, then use Lean diagnostics; do not mentally plan the whole proof set.",
-    "- Work on exactly ONE theorem declaration per invocation, unless this is a repair of the existing file.",
+    "- When the current proof artifact compiles, prove ALL remaining approved theorem declarations in this invocation.",
+    "- Do not stop after the first successful theorem.",
     "- If the proof file already exists, preserve all previously compiling theorem declarations.",
     "- Use candidate_write create only if the proof file does not exist; otherwise use candidate_write replace with its exact current SHA-256.",
     "- Import only the installed semantics module and required standard/project modules.",
@@ -207,7 +231,9 @@ async function buildProofPrompt(run: RunState): Promise<ProofPromptContext & { p
             ...(target.strengthRisks.length > 0
               ? ["Strength caveats:", ...target.strengthRisks.map((risk) => `- ${risk}`), ""]
               : []),
-            "Create or extend the proof file with this theorem only, then immediately run lean_check_file on the proof artifact.",
+            "Create or extend the proof file with ALL theorem declarations listed above.",
+            "Then immediately run lean_check_file.",
+            "Repair concrete diagnostics in the SAME session until the complete batch compiles or a genuine theorem/semantic conflict is found.",
           ]
         : [
             "All approved theorem declarations are already present. Only verify the proof file with Lean and report SUCCESS if it compiles cleanly.",
