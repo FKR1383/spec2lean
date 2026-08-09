@@ -11,6 +11,7 @@ const INDEX_PATH =
 
 const SHARED_ANCHORS = [
   "predicated-execution",
+  "control-flow-instructions-at",
   "register-state-space",
   "fundamental-types",
   "variables",

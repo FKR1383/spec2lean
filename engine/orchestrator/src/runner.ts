@@ -48,12 +48,30 @@ function executionAgentForRun(
 
   if (!fastAgent) return fallbackAgent
 
-  const stageAlreadyAttempted =
-    (run.executions ?? []).some(
-      (execution) => execution.stage === run.stage,
+  // Fast-first is scoped to the CURRENT ENTRY into a stage, not the entire
+  // lifetime of the run. A legitimate semantic revision may route
+  // SEMANTIC_EXTRACTION -> SOURCE_CURATION -> SEMANTIC_EXTRACTION again.
+  // That new entry deserves a fresh fast-path attempt.
+  const latestEntry = [...run.history]
+    .reverse()
+    .find(
+      (event) =>
+        event.to === run.stage &&
+        event.from !== run.stage,
     )
 
-  return stageAlreadyAttempted
+  const enteredAt =
+    latestEntry?.at ?? run.createdAt
+
+  const fastAlreadyAttemptedThisEntry =
+    (run.executions ?? []).some(
+      (execution) =>
+        execution.stage === run.stage &&
+        execution.agent === fastAgent &&
+        Date.parse(execution.at) >= Date.parse(enteredAt),
+    )
+
+  return fastAlreadyAttemptedThisEntry
     ? fallbackAgent
     : fastAgent
 }
