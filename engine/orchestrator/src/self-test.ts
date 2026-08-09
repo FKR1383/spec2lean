@@ -1,8 +1,14 @@
-import { readFile } from "node:fs/promises"
+import { randomUUID } from "node:crypto"
+import { readFile, unlink } from "node:fs/promises"
 import { resolve } from "node:path"
 
 import { parseAgentResult } from "./agent-result.js"
 import { makeLeanModuleName, makeUnitSlug } from "./artifact-contract.js"
+import {
+  artifactPathsForGate,
+  verifyHumanDecisionRecord,
+  writeHumanDecisionRecord,
+} from "./human-decision-record.js"
 import { proofTargets } from "./proof-plan.js"
 import { REPO_ROOT } from "./repo.js"
 import { canTransition, type RunState } from "./workflow.js"
@@ -21,6 +27,36 @@ const parsed = parseAgentResult(
 )
 assert(parsed.outcome === "SUCCESS", "result parsing")
 
+const retrievalProfile = JSON.parse(
+  await readFile(
+    resolve(
+      REPO_ROOT,
+      "language_packs/ptx/9.3/retrieval-profile.json",
+    ),
+    "utf8",
+  ),
+) as {
+  specificationVersion?: string
+  context?: { sharedSections?: unknown[] }
+  policy?: {
+    interpretationPerformed?: boolean
+    humanApprovalImplied?: boolean
+  }
+}
+assert(
+  retrievalProfile.specificationVersion === "9.3",
+  "PTX retrieval profile version",
+)
+assert(
+  retrievalProfile.context?.sharedSections?.length === 7,
+  "PTX shared retrieval sections",
+)
+assert(
+  retrievalProfile.policy?.interpretationPerformed === false &&
+    retrievalProfile.policy?.humanApprovalImplied === false,
+  "retrieval profile does not claim semantic approval",
+)
+
 const runPath = resolve(REPO_ROOT, "runs/ptx-9.3-mov.b32-f910feea/run.json")
 try {
   const run = JSON.parse(await readFile(runPath, "utf8")) as RunState
@@ -38,9 +74,86 @@ try {
   } catch (error) {
     if ((error as { code?: string }).code !== "ENOENT") throw error
   }
+
+  const gateArtifacts = await artifactPathsForGate(run, "B")
+  assert(
+    gateArtifacts[0] ===
+      "candidates/ptx/9.3/units/mov-b32/semantics/semantics-v2.json",
+    "deterministic Gate B candidate selection",
+  )
+  assert(
+    gateArtifacts[1] ===
+      "candidates/ptx/9.3/units/mov-b32/reviews/semantics-critic-v2.md",
+    "deterministic Gate B critic selection",
+  )
+
+  await verifyHumanDecisionRecord({
+    run,
+    gate: "B",
+    decision: "approved",
+    reviewId: "ptx-mov-b32-b-approval-v1",
+    reviewPath:
+      "reviews/ptx-mov-b32/gate-b/ptx-mov-b32-b-approval-v1.json",
+    reviewer: "Human reviewer",
+    rationale: "Existing record compatibility check.",
+  })
+
+  const reviewId = `controller-decision-self-test-${randomUUID()}`
+  const reviewPath = `reviews/tool-tests/${reviewId}.json`
+  const decisionInput = {
+    run,
+    gate: "B" as const,
+    decision: "approved" as const,
+    reviewId,
+    reviewPath,
+    reviewer: "Self-test reviewer",
+    rationale: "Self-test of deterministic hash-bound human decision recording.",
+  }
+
+  try {
+    await writeHumanDecisionRecord(decisionInput)
+    await verifyHumanDecisionRecord(decisionInput)
+    const record = JSON.parse(
+      await readFile(resolve(REPO_ROOT, reviewPath), "utf8"),
+    ) as { provenance?: { controller?: string }; artifacts?: unknown[] }
+    assert(
+      record.provenance?.controller === "spec2lean-cli",
+      "deterministic decision provenance",
+    )
+    assert(record.artifacts?.length === 2, "decision artifact fingerprints")
+  } finally {
+    await unlink(resolve(REPO_ROOT, reviewPath)).catch(() => undefined)
+  }
 } catch (error) {
   if ((error as { code?: string }).code !== "ENOENT") throw error
 }
+
+for (const controller of ["approve", "reject"]) {
+  const text = await readFile(
+    resolve(REPO_ROOT, `engine/orchestrator/src/${controller}.ts`),
+    "utf8",
+  )
+  assert(!text.includes("startOpenCode"), `${controller} does not start OpenCode`)
+  assert(
+    text.includes("writeHumanDecisionRecord"),
+    `${controller} records decisions deterministically`,
+  )
+}
+
+const runLoopSource = await readFile(
+  resolve(REPO_ROOT, "engine/orchestrator/src/run-loop.ts"),
+  "utf8",
+)
+assert(!runLoopSource.includes("npm\""), "run loop does not spawn npm ticks")
+assert(!runLoopSource.includes("spawn("), "run loop executes ticks in-process")
+assert(
+  runLoopSource.includes("runtime ??= await startOpenCode()"),
+  "run loop reuses one lazy OpenCode runtime",
+)
+assert(
+  runLoopSource.includes("await executeTick(runId, { runtime })"),
+  "run loop passes the shared runtime into each tick",
+)
 
 for (const agent of [
   "lean-formalizer",

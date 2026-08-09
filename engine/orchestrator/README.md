@@ -32,6 +32,12 @@ Approve and automatically resume until the next human boundary:
 ./spec2lean approve --run <run-id> --gate B
 ```
 
+The approval command itself is the explicit human decision. The controller
+deterministically selects the latest candidate and independent critique for
+that gate, records their SHA-256 hashes in an immutable `reviews/` record,
+verifies the record, and only then advances the state machine. Recording a
+decision does not invoke an LLM and never promotes an artifact.
+
 Reject and route back to an allowed revision stage; the wrapper automatically
 resumes the revision loop:
 
@@ -64,6 +70,26 @@ Session completion uses OpenCode message `step-finish` information as well as
 session status; a terminal `length`/resource outcome is therefore detected
 without waiting for a long artificial timeout.
 
+One `formalize`/`resume` loop keeps a single OpenCode server alive across all
+agent stages until it reaches a human or terminal boundary. Each stage still
+uses a separate persisted session, and the standalone `tick` command still
+owns and closes its own runtime, so crash recovery and bounded diagnostics do
+not depend on an in-memory session object.
+
+## PTX source retrieval profile
+
+PTX 9.3 deterministic retrieval policy is versioned in
+`language_packs/ptx/9.3/retrieval-profile.json`. It identifies the pinned
+source manifest, local index schema/cache path, context bounds, and shared
+section anchors used by `spec_fast_context`. The profile explicitly performs
+retrieval only; it is not a semantic interpretation or human approval.
+
+Rebuild the local hash-verified index with:
+
+```bash
+npm --prefix engine/orchestrator run ptx-index -- --version 9.3
+```
+
 ## Lean package integration
 
 New instruction modules are isolated under a unit namespace such as
@@ -81,8 +107,8 @@ session:
 
 1. extract the human-approved theorem declarations from the obligation artifact;
 2. locally check any existing proof artifact first;
-3. give the Proof Engineer one missing theorem declaration (or concrete Lean
-   diagnostics) per invocation;
+3. give the Proof Engineer the remaining theorem declarations as one batch
+   (or concrete Lean diagnostics for an existing noncompiling batch);
 4. re-run `lake env lean` locally;
 5. keep already compiling declarations;
 6. move to final critique only when all approved declarations are present,
