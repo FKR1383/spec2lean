@@ -76,6 +76,7 @@ elaborates as a hypothesis to `(r' != r) = true` and simplifies to
 -/
 
 import Spec2Lean.PTX.NotB32
+import Spec2Lean.PTX.CoreProofs
 
 namespace Spec2Lean
 namespace PTX
@@ -246,9 +247,8 @@ theorem execNotB32_complement_fidelity
       s'.valueRegs r = some (complementValue va) := by
   refine ⟨updateDestination s i.d (complementValue va), ?_, ?_⟩
   · simp [execNotB32, hguard, ha]
-  · unfold updateDestination
-    rw [hd]
-    simp
+  · rw [hd]
+    exact Core.updateDestination_reg_same s r (complementValue va)
 
 /-! ## PTX-NOT-THM-004 — destination-only frame
 
@@ -279,14 +279,14 @@ theorem notB32Step_destination_only_frame
       constructor
       · intro r' hr'
         rw [hd]
-        simp [updateDestination]
-        simp at hr'
-        intro hrr
-        exfalso
-        exact hr' hrr
+        exact
+          Core.updateDestination_reg_other
+            s r r' (complementValue va) hr'
       · intro p
         rw [hd]
-        simp [updateDestination]
+        exact
+          Core.updateDestination_reg_pred_unchanged
+            s r (complementValue va) p
 
 /-! ## PTX-NOT-THM-005 — bit-bucket destination preserves the whole state
 
@@ -313,7 +313,9 @@ theorem notB32Step_bit_bucket_preserves_state
       rfl
   | executed va _ _ =>
       rw [hd]
-      simp [updateDestination]
+      exact
+        Core.updateDestination_bitBucket_preserves_state
+          s (complementValue va)
 
 /-! ## PTX-NOT-THM-006 — guard-false preserves the whole state
 
@@ -393,7 +395,7 @@ totality claim. -/
 
 theorem evalGuard_unguarded_true
     (s : MachineState) : evalGuard s Guard.unguarded = some true := by
-  simp [evalGuard]
+  exact Core.evalGuard_unguarded_true s
 
 /-! ### PTX-NOT-THM-007 (supporting lemma) — `@p` guard expression evaluates
 to true when the predicate lookup is true
@@ -409,7 +411,7 @@ evaluation fact behind PRF-5, never as a determinism or totality claim. -/
 theorem evalGuard_atPos_true
     (s : MachineState) (p : PredId) (h : s.predRegs p = some true) :
     evalGuard s (Guard.atPos p) = some true := by
-  simp [evalGuard, h]
+  exact Core.evalGuard_atPos_true s p h
 
 /-! ### PTX-NOT-THM-007 (supporting lemma) — `@p` guard expression evaluates
 to false when the predicate lookup is false
@@ -425,7 +427,7 @@ evaluation fact behind PRF-5, never as a determinism or totality claim. -/
 theorem evalGuard_atPos_false
     (s : MachineState) (p : PredId) (h : s.predRegs p = some false) :
     evalGuard s (Guard.atPos p) = some false := by
-  simp [evalGuard, h]
+  exact Core.evalGuard_atPos_false s p h
 
 /-! ### PTX-NOT-THM-007 (supporting lemma) — `@!p` guard expression evaluates
 to true when the predicate lookup is false
@@ -442,7 +444,7 @@ evaluation fact behind PRF-5, never as a determinism or totality claim. -/
 theorem evalGuard_atNeg_true_when_pred_false
     (s : MachineState) (p : PredId) (h : s.predRegs p = some false) :
     evalGuard s (Guard.atNeg p) = some true := by
-  simp [evalGuard, h]
+  exact Core.evalGuard_atNeg_true_when_pred_false s p h
 
 /-! ### PTX-NOT-THM-007 (supporting lemma) — `@!p` guard expression evaluates
 to false when the predicate lookup is true
@@ -459,7 +461,7 @@ evaluation fact behind PRF-5, never as a determinism or totality claim. -/
 theorem evalGuard_atNeg_false_when_pred_true
     (s : MachineState) (p : PredId) (h : s.predRegs p = some true) :
     evalGuard s (Guard.atNeg p) = some false := by
-  simp [evalGuard, h]
+  exact Core.evalGuard_atNeg_false_when_pred_true s p h
 
 theorem notB32_executes_iff_guard_true
     (s : MachineState) (i : NotB32Instruction) (b : Bool)

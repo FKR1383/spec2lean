@@ -64,7 +64,7 @@ candidates/ptx/9.3/units/not-b32/semantics/semantics-v1.json and, where
 applicable, the architecture design choice.
 -/
 
-import Spec2Lean.Basic
+import Spec2Lean.PTX.Core
 
 namespace Spec2Lean
 namespace PTX
@@ -72,54 +72,20 @@ namespace NotB32
 
 /-! # not.b32 bounded formalization -/
 
--- Width of the `.b32` fundamental type (32 bits).
--- Claim PTX-NOT-SEM1-013: `.b32` is a "Bits (untyped)" fundamental type;
--- claim PTX-NOT-SEM1-015: scalar registers may have a 32-bit width.
-def b32Bits : Nat := 32
+/-!
+Compatibility layer for the pre-v2 NotB32 vocabulary.
 
--- 2^32, the number of 32-bit bit patterns. This is the size of the fixed-width
--- 32-bit untyped bit-value domain proposed for `.b32` (design D-11;
--- PTX-NOT-SEM1-062).
-def b32DomainSize : Nat := 2 ^ b32Bits
-
-/-
-2. 32-bit untyped bit-value representation.
-A `.b32` value is a wrapper around a Fin (2^32) value, so every B32 value is a
-number in [0, 2^32), in bijection with the 32-bit bit patterns of the "Bits
-(untyped)" basic type (PTX-NOT-SEM1-013/018). The exact Lean encoding is a
-Lean-mapping decision per design D-11 / PTX-NOT-SEM1-062. The wrapper
-intentionally has no arithmetic operators: the only operation is the explicit
-bitwise-complement rule `complementValue` below, so the complement semantics
-`d = ~a;` cannot be hidden inside a library operator.
+These declarations are definitional aliases of the shared PTX Core.
+Existing NotB32 theorem statements and downstream names therefore retain
+their previous shape while the common implementation is reused.
 -/
-structure B32 where
-  toFin : Fin b32DomainSize
-deriving DecidableEq
 
--- Custom Repr so executable examples print the numeric value, not the proof
--- carrying Fin wrapper.
-instance : Repr B32 where
-  reprPrec v _ := repr v.toFin.val
+abbrev b32Bits := Core.b32Bits
+abbrev b32DomainSize := Core.b32DomainSize
 
-/-
-3. Register identifier representation.
-Registers are referenced by name (registers are not fully addressable in PTX).
-Claims PTX-NOT-SEM1-015; design D-12.
--/
-structure RegId where
-  name : String
-deriving DecidableEq, Repr
-
-/-
-4. Predicate-register identifier representation.
-Predicate registers are virtual `.pred` registers; the value domain is
-two-valued (Boolean-like) per the architecture (design D-13). The exact Lean
-encoding of the 1-bit predicate register value domain is an open question
-(PTX-NOT-SEM1-069). Claim PTX-NOT-SEM1-023.
--/
-structure PredId where
-  name : String
-deriving DecidableEq, Repr
+abbrev B32 := Core.B32
+abbrev RegId := Core.RegId
+abbrev PredId := Core.PredId
 
 /-
 5. Source operand representation for the approved semantics.
@@ -145,10 +111,17 @@ bit bucket, execution performs no register write (the result is discarded),
 supported only to the strength of the general section 9.2 rule
 (PTX-9.3-NOT-016; PTX-NOT-SEM1-011/067).
 -/
-inductive Destination where
-  | reg : RegId -> Destination     -- destination register
-  | bitBucket : Destination        -- bit bucket `_`: result discarded
-deriving DecidableEq, Repr
+abbrev Destination := Core.Destination
+
+namespace Destination
+
+abbrev reg : RegId -> Destination :=
+  Core.Destination.reg
+
+abbrev bitBucket : Destination :=
+  Core.Destination.bitBucket
+
+end Destination
 
 /-
 7. Optional guard representation.
@@ -157,11 +130,20 @@ deriving DecidableEq, Repr
 - atNeg p   : `@!p`; complete guard expression is the negation of predicate p.
 Claims PTX-NOT-SEM1-022/037/044; design D-19/D-21.
 -/
-inductive Guard where
-  | unguarded : Guard
-  | atPos : PredId -> Guard
-  | atNeg : PredId -> Guard
-deriving DecidableEq, Repr
+abbrev Guard := Core.Guard
+
+namespace Guard
+
+abbrev unguarded : Guard :=
+  Core.Guard.unguarded
+
+abbrev atPos : PredId -> Guard :=
+  Core.Guard.atPos
+
+abbrev atNeg : PredId -> Guard :=
+  Core.Guard.atNeg
+
+end Guard
 
 /-
 Instruction type specifier for the bounded unit.
@@ -182,9 +164,7 @@ state is required by the base form's syntax and description
 means register r is not defined in the state, represented as partial execution
 rather than an invented error (PTX-NOT-SEM1-052/053/054).
 -/
-structure MachineState where
-  valueRegs : RegId -> Option B32
-  predRegs : PredId -> Option Bool
+abbrev MachineState := Core.MachineState
 
 /-
 A well-formed not.b32 instruction: optional guard, destination d, then the
@@ -216,13 +196,7 @@ def evalSource (s : MachineState) : SourceOperand -> Option B32
 A missing predicate register yields none (partial execution).
 Claims PTX-NOT-SEM1-022/037; design D-19.
 -/
-def evalGuard (s : MachineState) : Guard -> Option Bool
-  | Guard.unguarded => some true
-  | Guard.atPos p => s.predRegs p
-  | Guard.atNeg p =>
-      match s.predRegs p with
-      | some b => some (not b)
-      | none => none
+abbrev evalGuard := Core.evalGuard
 
 /-
 11. Explicit bitwise-complement rule (d = ~a;).
@@ -255,20 +229,24 @@ When d is the bit bucket `_`, no value register is written (the result is
 discarded), supported to the strength of the general section 9.2 rule
 (PTX-NOT-SEM1-067).
 -/
-def updateDestination (s : MachineState) (d : Destination) (value : B32) : MachineState :=
-  match d with
-  | Destination.reg r =>
-      { s with valueRegs := fun r' => if r' == r then some value else s.valueRegs r' }
-  | Destination.bitBucket => s
+abbrev updateDestination := Core.updateDestination
 
 /-
 Execution outcome representation (design D-8; PTX-NOT-SEM1-064).
 No error constructor is proposed because no explicit exceptional behavior for
 the bounded base not.b32 is evidenced (PTX-NOT-SEM1-052, GAP-4).
 -/
-inductive ExecOutcome where
-  | executed : MachineState -> ExecOutcome   -- guard true: destination updated
-  | guardFalse : MachineState -> ExecOutcome -- guard false: state unchanged
+abbrev ExecOutcome := Core.ExecOutcome
+
+namespace ExecOutcome
+
+abbrev executed : MachineState -> ExecOutcome :=
+  Core.ExecOutcome.executed
+
+abbrev guardFalse : MachineState -> ExecOutcome :=
+  Core.ExecOutcome.guardFalse
+
+end ExecOutcome
 
 /-
 13. Guarded not.b32 execution.
@@ -321,14 +299,11 @@ inductive NotB32Step : MachineState -> NotB32Instruction -> MachineState -> Prop
 
 -- Convenience constructor: reduce a Nat to the B32 domain modulo 2^32.
 -- This is an example helper; it does not add semantics beyond complementValue.
-def mkB32 (n : Nat) : B32 :=
-  { toFin := Fin.mk (n % b32DomainSize) (Nat.mod_lt n (by decide : 0 < b32DomainSize)) }
+abbrev mkB32 := Core.mkB32
 
 -- Convenience state constructor from binding lists (first binding wins).
 -- This is an example helper for the minimal state design (PTX-NOT-SEM1-060).
-def mkState (valueRegBindings : List (RegId × B32)) (predRegBindings : List (PredId × Bool)) : MachineState :=
-  { valueRegs := fun r => valueRegBindings.find? (fun b => b.1 == r) |>.map Prod.snd,
-    predRegs := fun p => predRegBindings.find? (fun b => b.1 == p) |>.map Prod.snd }
+abbrev mkState := Core.mkState
 
 -- Example-only identifiers (not part of the semantics).
 private def exR1 : RegId := { name := "r1" }
