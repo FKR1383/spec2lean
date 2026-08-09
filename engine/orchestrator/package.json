@@ -18,7 +18,8 @@
     "brief": "tsx src/gate-brief.ts",
     "self-test": "tsx src/self-test.ts",
     "doctor": "tsx src/doctor.ts",
-    "perf-report": "tsx src/perf-report.ts"
+    "perf-report": "tsx src/perf-report.ts",
+    "ptx-index": "tsx src/ptx-index.ts"
   },
   "dependencies": {
     "@opencode-ai/sdk": "^1.18.14"

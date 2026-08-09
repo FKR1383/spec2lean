@@ -47,3 +47,6 @@ documents/sources/nvidia/ptx/9.3/raw/
 candidates/.probe-hash-*
 candidates/tool-tests/
 reviews/tool-tests/
+
+# Deterministic local Spec2Lean indexes
+.spec2lean-cache/

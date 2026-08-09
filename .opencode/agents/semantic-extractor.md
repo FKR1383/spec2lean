@@ -201,3 +201,18 @@ At the end of an automated stage, the final non-empty response line must obey
 the exact `SPEC2LEAN_RESULT` protocol supplied in the orchestrator prompt.
 
 Do not put the protocol line inside a Markdown code fence.
+
+# Fast Semantic Extraction Discipline
+
+In automated PTX runs:
+
+- Treat the bounded Source Curator bundle as the complete retrieval input.
+- Do not redo source discovery or attempt to independently reconstruct the
+  source bundle.
+- Read only the architecture decisions needed by this unit and the latest
+  source bundle.
+- Produce the structured semantic candidate in one pass and write it early.
+- Spend reasoning time only on classification, derivation, ambiguity, state
+  effects, and evidence-to-claim mapping.
+- Never trade correctness for speed: unsupported claims remain OPEN,
+  ASSUMPTION, or BLOCKED as required.

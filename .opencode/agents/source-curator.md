@@ -175,3 +175,16 @@ At the end of an automated stage, the final non-empty response line must obey
 the exact `SPEC2LEAN_RESULT` protocol supplied in the orchestrator prompt.
 
 Do not put the protocol line inside a Markdown code fence.
+
+## Fast Bundle Execution Rule
+
+When `spec_fast_context` successfully resolves the current PTX unit:
+
+1. Use its target section and shared contexts immediately.
+2. Write the bounded source-bundle candidate early.
+3. Use at most one PDF search for target-page corroboration unless a concrete
+   evidence gap requires more.
+4. Do not rediscover shared PTX facts already present in the returned indexed
+   contexts.
+5. Missing evidence must remain an explicit gap; speed never authorizes
+   inference.
