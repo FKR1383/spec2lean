@@ -25,6 +25,7 @@ Proof family correspondence (architecture Section 10 / PRF families):
 -/
 
 import Spec2Lean.PTX.AndB32
+import Spec2Lean.PTX.CoreProofs
 
 namespace Spec2Lean
 namespace PTX
@@ -159,7 +160,7 @@ theorem execAndB32_and_fidelity
   refine ⟨updateDestination s i.d (andValue va vb), ?_, ?_⟩
   · simp [execAndB32, hguard, ha, hb]
   · rw [hd]
-    simp [updateDestination]
+    exact Core.updateDestination_reg_same s r (andValue va vb)
 
 /-! # PTX-AND-THM-004: destination-only frame property -/
 
@@ -180,13 +181,14 @@ theorem andB32Step_destination_only_frame
       constructor
       · intro r' hne
         rw [hd]
-        simp [updateDestination]
-        intro hrEq
-        simp at hne
-        exact False.elim (hne hrEq)
+        exact
+          Core.updateDestination_reg_other
+            s r r' (andValue va vb) hne
       · intro p
         rw [hd]
-        simp [updateDestination]
+        exact
+          Core.updateDestination_reg_pred_unchanged
+            s r (andValue va vb) p
 
 /-! # PTX-AND-THM-005: bit-bucket destination preserves the state -/
 
@@ -199,7 +201,9 @@ theorem andB32Step_bit_bucket_preserves_state
   | guardFalse hgf => rfl
   | executed va vb hgt hsa hsb =>
       rw [hd]
-      simp [updateDestination]
+      exact
+        Core.updateDestination_bitBucket_preserves_state
+          s (andValue va vb)
 
 /-! # PTX-AND-THM-006: guard-false behavior preserves the state -/
 
@@ -245,27 +249,27 @@ theorem andB32_executes_iff_guard_true
 
 theorem evalGuard_unguarded_true
     (s : MachineState) : evalGuard s Guard.unguarded = some true := by
-  simp [evalGuard]
+  exact Core.evalGuard_unguarded_true s
 
 theorem evalGuard_atPos_true
     (s : MachineState) (p : PredId) (h : s.predRegs p = some true) :
     evalGuard s (Guard.atPos p) = some true := by
-  simp [evalGuard, h]
+  exact Core.evalGuard_atPos_true s p h
 
 theorem evalGuard_atNeg_true_when_pred_false
     (s : MachineState) (p : PredId) (h : s.predRegs p = some false) :
     evalGuard s (Guard.atNeg p) = some true := by
-  simp [evalGuard, h]
+  exact Core.evalGuard_atNeg_true_when_pred_false s p h
 
 theorem evalGuard_atPos_false
     (s : MachineState) (p : PredId) (h : s.predRegs p = some false) :
     evalGuard s (Guard.atPos p) = some false := by
-  simp [evalGuard, h]
+  exact Core.evalGuard_atPos_false s p h
 
 theorem evalGuard_atNeg_false_when_pred_true
     (s : MachineState) (p : PredId) (h : s.predRegs p = some true) :
     evalGuard s (Guard.atNeg p) = some false := by
-  simp [evalGuard, h]
+  exact Core.evalGuard_atNeg_false_when_pred_true s p h
 
 end AndB32
 end PTX

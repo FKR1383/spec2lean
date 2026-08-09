@@ -77,7 +77,7 @@ candidates/ptx/9.3/units/and-b32/semantics/semantics-v2.json and, where
 applicable, the architecture design choice.
 -/
 
-import Spec2Lean.Basic
+import Spec2Lean.PTX.Core
 
 namespace Spec2Lean
 namespace PTX
@@ -85,55 +85,66 @@ namespace AndB32
 
 /-! # and.b32 bounded formalization -/
 
--- Width of the `.b32` fundamental type (32 bits).
--- Claim PTX-AND-SEM2-013: `.b32` is a "Bits (untyped)" fundamental type;
--- claim PTX-AND-SEM2-015: scalar registers may have a 32-bit width;
--- claim PTX-AND-SEM2-026: the bounded base result width is 32 bits.
-def b32Bits : Nat := 32
+/-!
+Compatibility layer for the pre-v2 AndB32 vocabulary.
 
--- 2^32, the number of 32-bit bit patterns. This is the size of the fixed-width
--- 32-bit untyped bit-value domain proposed for `.b32` (design D-11;
--- PTX-AND-SEM2-056).
-def b32DomainSize : Nat := 2 ^ b32Bits
-
-/-
-2. 32-bit untyped bit-value representation.
-A `.b32` value is a wrapper around a Fin (2^32) value, so every B32 value is a
-number in [0, 2^32), in bijection with the 32-bit bit patterns of the "Bits
-(untyped)" basic type (PTX-AND-SEM2-013/018/056). The exact Lean encoding is a
-Lean-mapping decision per design D-11 / PTX-AND-SEM2-056. The wrapper
-intentionally has no arithmetic operators: the only operation is the explicit
-bitwise-and rule `andValue` below, so the and semantics `d = a & b;` cannot be
-hidden inside a library operator.
+These declarations are definitional aliases of the shared PTX Core.
+Existing AndB32 theorem statements and downstream names therefore retain
+their previous shape while the common implementation is reused.
 -/
-structure B32 where
-  toFin : Fin b32DomainSize
-deriving DecidableEq
 
--- Custom Repr so executable examples print the numeric value, not the proof
--- carrying Fin wrapper.
-instance : Repr B32 where
-  reprPrec v _ := repr v.toFin.val
+abbrev b32Bits := Core.b32Bits
+abbrev b32DomainSize := Core.b32DomainSize
 
-/-
-3. Register identifier representation.
-Registers are referenced by name (registers are not fully addressable in PTX).
-Claims PTX-AND-SEM2-015/022; design D-12.
--/
-structure RegId where
-  name : String
-deriving DecidableEq, Repr
+abbrev B32 := Core.B32
+abbrev RegId := Core.RegId
+abbrev PredId := Core.PredId
 
-/-
-4. Predicate-register identifier representation.
-Predicate registers are virtual `.pred` registers; the value domain is
-two-valued (Boolean-like) per the architecture (design D-13). The exact Lean
-encoding of the 1-bit predicate register value domain is an open question
-(PTX-AND-SEM2-065). Claim PTX-AND-SEM2-043.
--/
-structure PredId where
-  name : String
-deriving DecidableEq, Repr
+abbrev Destination := Core.Destination
+
+namespace Destination
+
+abbrev reg : RegId -> Destination :=
+  Core.Destination.reg
+
+abbrev bitBucket : Destination :=
+  Core.Destination.bitBucket
+
+end Destination
+
+abbrev Guard := Core.Guard
+
+namespace Guard
+
+abbrev unguarded : Guard :=
+  Core.Guard.unguarded
+
+abbrev atPos : PredId -> Guard :=
+  Core.Guard.atPos
+
+abbrev atNeg : PredId -> Guard :=
+  Core.Guard.atNeg
+
+end Guard
+
+abbrev MachineState := Core.MachineState
+abbrev evalGuard := Core.evalGuard
+abbrev updateDestination := Core.updateDestination
+
+abbrev ExecOutcome := Core.ExecOutcome
+
+namespace ExecOutcome
+
+abbrev executed : MachineState -> ExecOutcome :=
+  Core.ExecOutcome.executed
+
+abbrev guardFalse : MachineState -> ExecOutcome :=
+  Core.ExecOutcome.guardFalse
+
+end ExecOutcome
+
+abbrev mkB32 := Core.mkB32
+abbrev mkState := Core.mkState
 
 /-
 5. Source operand representation for the approved semantics.
@@ -164,32 +175,6 @@ inductive SourceB where
 deriving DecidableEq, Repr
 
 /-
-6. Destination operand representation.
-The destination is a register variable (of a type size-compatible with .b32)
-or the bit bucket `_` as a candidate alternative (design D-18). When `d` is the
-bit bucket, execution performs no register write (the result is discarded),
-supported only to the strength of the general section 9.2 rule
-(architecture SF-A13; PTX-AND-SEM2-022/062).
--/
-inductive Destination where
-  | reg : RegId -> Destination     -- destination register
-  | bitBucket : Destination        -- bit bucket `_`: result discarded
-deriving DecidableEq, Repr
-
-/-
-7. Optional guard representation.
-- unguarded : no guard; complete guard expression is true (unconditional).
-- atPos p   : `@p`;  complete guard expression is the value of predicate p.
-- atNeg p   : `@!p`; complete guard expression is the negation of predicate p.
-Claims PTX-AND-SEM2-029/030/035/043; design D-19/D-21.
--/
-inductive Guard where
-  | unguarded : Guard
-  | atPos : PredId -> Guard
-  | atNeg : PredId -> Guard
-deriving DecidableEq, Repr
-
-/-
 Instruction type specifier for the bounded unit.
 Only `.b32` is in scope; the unit identity fixes the mnemonic `and`, the type
 `.b32`, and the empty modifier set (the scalar and syntax has no modifier
@@ -198,19 +183,6 @@ position). Claims PTX-AND-SEM2-003/004/005/028.
 inductive AndTypeSpecifier where
   | b32 : AndTypeSpecifier
 deriving DecidableEq, Repr
-
-/-
-8. Minimal state required by the approved semantics.
-The state for the bounded base and.b32 is the pair (value-register file,
-predicate-register file). No memory, shared, special-register, or concurrency
-state is required by the base form's syntax and description
-(PTX-AND-SEM2-054; design D-5/D-14). Lookups are partial: `valueRegs r = none`
-means register r is not defined in the state, represented as partial execution
-rather than an invented error (PTX-AND-SEM2-048/049/050).
--/
-structure MachineState where
-  valueRegs : RegId -> Option B32
-  predRegs : PredId -> Option Bool
 
 /-
 A well-formed and.b32 instruction: optional guard, destination d, then the two
@@ -241,22 +213,6 @@ def evalSourceB (s : MachineState) : SourceB -> Option B32
   | SourceB.imm v => some v
 
 /-
-10. Complete guard-expression evaluation.
-- unguarded : true (unconditional execution)
-- @p        : value of predicate register p
-- @!p       : logical negation of the value of p
-A missing predicate register yields none (partial execution).
-Claims PTX-AND-SEM2-029/030/035; design D-19.
--/
-def evalGuard (s : MachineState) : Guard -> Option Bool
-  | Guard.unguarded => some true
-  | Guard.atPos p => s.predRegs p
-  | Guard.atNeg p =>
-      match s.predRegs p with
-      | some b => some (not b)
-      | none => none
-
-/-
 11. Explicit bitwise-and rule (d = a & b;).
 `andValue` returns the bitwise and of its two arguments over the 32-bit untyped
 `.b32` bit-value domain: each of the 32 bits of the result is the and of the
@@ -276,32 +232,6 @@ def andValue (x y : B32) : B32 :=
   { toFin :=
       ⟨Nat.land x.toFin.val y.toFin.val % b32DomainSize,
        Nat.mod_lt (Nat.land x.toFin.val y.toFin.val) (by decide : 0 < b32DomainSize)⟩ }
-
-/-
-12. Destination update.
-When the instruction executes and d is a register, the bounded MachineState
-model updates only the destination value register and preserves all predicate
-registers (PTX-AND-SEM2-036/037). The model contains no carry-flag,
-status-register, or condition-code component; the base form has no such
-operands (PTX-AND-SEM2-037).
-When d is the bit bucket `_`, no value register is written (the result is
-discarded), supported to the strength of the general section 9.2 rule
-(PTX-AND-SEM2-062).
--/
-def updateDestination (s : MachineState) (d : Destination) (value : B32) : MachineState :=
-  match d with
-  | Destination.reg r =>
-      { s with valueRegs := fun r' => if r' == r then some value else s.valueRegs r' }
-  | Destination.bitBucket => s
-
-/-
-Execution outcome representation (design D-8; PTX-AND-SEM2-058).
-No error constructor is proposed because no explicit exceptional behavior for
-the bounded base and.b32 is evidenced (PTX-AND-SEM2-048, GAP absence records).
--/
-inductive ExecOutcome where
-  | executed : MachineState -> ExecOutcome   -- guard true: destination updated
-  | guardFalse : MachineState -> ExecOutcome -- guard false: state unchanged
 
 /-
 13. Guarded and.b32 execution.
@@ -355,17 +285,6 @@ inductive AndB32Step : MachineState -> AndB32Instruction -> MachineState -> Prop
       AndB32Step s i (updateDestination s i.d (andValue va vb))
 
 /-! # Helper definitions for executable examples (not semantic definitions) -/
-
--- Convenience constructor: reduce a Nat to the B32 domain modulo 2^32.
--- This is an example helper; it does not add semantics beyond andValue.
-def mkB32 (n : Nat) : B32 :=
-  { toFin := Fin.mk (n % b32DomainSize) (Nat.mod_lt n (by decide : 0 < b32DomainSize)) }
-
--- Convenience state constructor from binding lists (first binding wins).
--- This is an example helper for the minimal state design (PTX-AND-SEM2-054).
-def mkState (valueRegBindings : List (RegId × B32)) (predRegBindings : List (PredId × Bool)) : MachineState :=
-  { valueRegs := fun r => valueRegBindings.find? (fun b => b.1 == r) |>.map Prod.snd,
-    predRegs := fun p => predRegBindings.find? (fun b => b.1 == p) |>.map Prod.snd }
 
 -- Example-only identifiers (not part of the semantics).
 private def exR1 : RegId := { name := "r1" }
