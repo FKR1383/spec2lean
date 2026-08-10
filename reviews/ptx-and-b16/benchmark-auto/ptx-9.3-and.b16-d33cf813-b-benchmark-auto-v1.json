@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "recordType": "benchmark_gate_auto_advance",
+  "reviewId": "ptx-9.3-and.b16-d33cf813-b-benchmark-auto-v1",
+  "unitId": "ptx-and-b16",
+  "runId": "ptx-9.3-and.b16-d33cf813",
+  "gate": "B",
+  "decision": "auto_advanced",
+  "controller": "Spec2Lean benchmark controller",
+  "rationale": "Benchmark-only unattended execution advanced this review boundary. This is not a human semantic approval and cannot authorize promotion.",
+  "submittedAtUtc": "2026-08-10T11:51:04.594Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ptx/9.3/units/and-b16/semantics/semantics-v2.json",
+      "sha256": "15bca9dc9b63ba9e507df2634f61443f7c2ef627d4acac8bea88e75b399ca92a",
+      "sizeBytes": 15445
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/and-b16/reviews/semantics-critic-v1.md",
+      "sha256": "c6f5e5699ff2b048a249dee55caaf65b348ddc3aaf1a45ed5e5bf75742d4bcd2",
+      "sizeBytes": 2714
+    }
+  ],
+  "humanConfirmationRecorded": false,
+  "gateApprovalPerformed": false,
+  "promotionPerformed": false,
+  "provenance": {
+    "controller": "spec2lean-cli",
+    "command": "formalize --auto-approve"
+  }
+}

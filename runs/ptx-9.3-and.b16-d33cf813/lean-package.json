@@ -1,0 +1,10 @@
+{
+  "sourcePath": "candidates/ptx/9.3/units/and-b16/lean/AndB16-v1.lean",
+  "packagePath": "lean/Spec2Lean/PTX/AndB16.lean",
+  "moduleImport": "Spec2Lean.PTX.AndB16",
+  "declarationNamespace": "Spec2Lean.PTX.AndB16",
+  "sourceSha256": "4abe5059b5d3a2a0803618761dbc50bce8cb0a524791a49b0b2f9cdbddcf3d07",
+  "packageSha256": "4abe5059b5d3a2a0803618761dbc50bce8cb0a524791a49b0b2f9cdbddcf3d07",
+  "isolatedNamespace": false,
+  "importAdjusted": false
+}

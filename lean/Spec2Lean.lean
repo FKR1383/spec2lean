@@ -17,3 +17,8 @@ import Spec2Lean.PTX.CnotB32
 import Spec2Lean.PTX.CnotB32Proofs
 import Spec2Lean.PTX.ShlB32
 import Spec2Lean.PTX.ShlB32Proofs
+import Spec2Lean.PTX.AndB16
+import Spec2Lean.PTX.AndB16Proofs
+import Spec2Lean.PTX.OrB16
+import Spec2Lean.PTX.OrB16Proofs
+import Spec2Lean.PTX.XorB16

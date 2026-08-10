@@ -1,0 +1,256 @@
+{
+  "schema_version": 1,
+  "obligation_set_id": "ptx-9.3-xor-b16-obligations-v1",
+  "run_id": "ptx-9.3-xor.b16-67bf3e37",
+  "stage": "THEOREM_GENERATION",
+  "stage_attempt": 1,
+  "run_revision": 13,
+  "status": "READY_FOR_STRENGTH_REVIEW",
+  "status_rationale": "Lean mapping exists and compiles (`candidates/ptx/9.3/units/xor-b16/lean/XorB16-v2.lean`) with namespace `Spec2Lean.PTX.XorB16`; this stage proposes Lean theorem obligations only with no proofs.",
+  "unit": {
+    "language": "PTX",
+    "specification_version": "9.3",
+    "construct": "xor.b16",
+    "instruction_family": "xor",
+    "bounded_unit": "PTX ISA 9.3 bounded scalar form `xor.b16 d, a, b;`",
+    "scope_boundary": "Only .b16 is in scope, with mapped state of register/predicate files, optional predicate guard, and `SourceB` allowing register/immediate while `SourceA` remains register-only per open-issue preservation in this run."
+  },
+  "gate_c_reference": {
+    "record_path": "reviews/ptx-xor-b16/benchmark-auto/ptx-9.3-xor.b16-67bf3e37-c-benchmark-auto-v1.json",
+    "review_id": "ptx-9.3-xor.b16-67bf3e37-c-benchmark-auto-v1",
+    "gate": "C",
+    "decision": "auto_advanced",
+    "humanConfirmationRecorded": false,
+    "gateApprovalPerformed": false,
+    "submittedAtUtc": "2026-08-10T11:57:59.942Z"
+  },
+  "semantics_reference": {
+    "path": "candidates/ptx/9.3/units/xor-b16/semantics/semantics-v1.json",
+    "interpretation_id": "ptx-9.3-xor-b16-semantics-v1",
+    "claim_count": 8,
+    "claim_counts": {
+      "total": 8,
+      "SOURCE_FACT": 1,
+      "DERIVED_INTERPRETATION": 4,
+      "DESIGN_DEPENDENCY": 1,
+      "ASSUMPTION": 0,
+      "OPEN_QUESTION": 3
+    },
+    "semantic_claim_ids": [
+      "PTX-XORB16-SEM-001",
+      "PTX-XORB16-SEM-002",
+      "PTX-XORB16-SEM-003",
+      "PTX-XORB16-SEM-004",
+      "PTX-XORB16-SEM-005",
+      "PTX-XORB16-SEM-006",
+      "PTX-XORB16-SEM-007",
+      "PTX-XORB16-SEM-008"
+    ]
+  },
+  "source_bundle_reference": {
+    "path": "candidates/ptx/9.3/units/xor-b16/source-bundles/source-bundle-v1.json",
+    "bundle_id": "source-bundle-v1",
+    "fragment_ids": [
+      "XOR16_SYNTAX_FORM",
+      "XOR16_DESCRIPTION",
+      "XOR16_SEMANTICS",
+      "XOR16_TYPE_SPECIFIERS",
+      "XOR16_OPERAND_SIZE_NOTE",
+      "XOR16_EXAMPLE_B16",
+      "XOR16_EXAMPLE_B32",
+      "SF-8",
+      "SF-9",
+      "SF-10"
+    ]
+  },
+  "architecture_reference": {
+    "path": "candidates/ptx/9.3/units/xor-b16/architecture/foundation-v1.md"
+  },
+  "lean_mapping_reference": {
+    "path": "candidates/ptx/9.3/units/xor-b16/lean/XorB16-v2.lean",
+    "namespace": "Spec2Lean.PTX.XorB16"
+  },
+  "compliance_notes": [
+    "No proofs are written in this stage.",
+    "The theorem set intentionally does not assert behavior for destination `Destination.bitBucket` because legality/effect remain open in the approved semantics (PTX-XORB16-SEM-008).",
+    "No semantics are imported from other units.",
+    "Theorems are phrased against definitions in this bounded artifact and are non-vacuous relative to its partial relation/function semantics."
+  ],
+  "validation_obligations": [
+    {
+      "obligation_id": "PTX-XORB16-VAL-001",
+      "title": "Bounded syntax, type, and operand shape",
+      "description": "Instruction form is bounded to `.b16` with optional guard and ordered fields `(d, a, b)`; destination and sources are modeled as bounded datatypes.",
+      "check_type": "static definitional check",
+      "status": "SATISFIED_IN_CANDIDATE",
+      "semantic_claim_ids": [
+        "PTX-XORB16-SEM-001",
+        "PTX-XORB16-SEM-002",
+        "PTX-XORB16-SEM-004"
+      ],
+      "lean_declarations_used": [
+        "XorB16Instruction",
+        "XorTypeSpecifier",
+        "Destination",
+        "SourceA",
+        "SourceB",
+        "Guard"
+      ]
+    },
+    {
+      "obligation_id": "PTX-XORB16-VAL-002",
+      "title": "16-bit bounded value representation",
+      "description": "`B16` is represented as a `Fin (2 ^ 16)` value, enforcing bounded width in type.",
+      "check_type": "representation invariant",
+      "status": "SATISFIED_IN_CANDIDATE",
+      "semantic_claim_ids": [
+        "PTX-XORB16-SEM-002",
+        "PTX-XORB16-SEM-003"
+      ],
+      "lean_declarations_used": [
+        "B16",
+        "b16Bits",
+        "b16DomainSize",
+        "Fin"
+      ]
+    },
+    {
+      "obligation_id": "PTX-XORB16-VAL-003",
+      "title": "Minimal state and partial transition convention",
+      "description": "Machine state consists of register and predicate files only; executable `execXorB16` and relation `XorB16Step` are partial via missing guard/source lookups and unresolved bit-bucket destination update case.",
+      "check_type": "static definitional check / semantics convention",
+      "status": "SATISFIED_IN_CANDIDATE",
+      "semantic_claim_ids": [
+        "PTX-XORB16-SEM-004",
+        "PTX-XORB16-SEM-005",
+        "PTX-XORB16-SEM-006",
+        "PTX-XORB16-SEM-008"
+      ],
+      "lean_declarations_used": [
+        "MachineState",
+        "ExecOutcome",
+        "execXorB16",
+        "evalGuard",
+        "evalSourceA",
+        "evalSourceB",
+        "updateDestination"
+      ]
+    }
+  ],
+  "theorem_obligations": [
+    {
+      "obligation_id": "PTX-XORB16-THM-001",
+      "proposed_name": "XorB16Step_deterministic",
+      "category": "relational determinism",
+      "intent": "For fixed pre-state and instruction, the one-step relation has at most one post-state.",
+      "precise_statement_in_words": "For all states `s`, instructions `i`, and states `s1 s2`, if `XorB16Step s i s1` and `XorB16Step s i s2`, then `s1 = s2`.",
+      "lean_statement_sketch": "theorem XorB16Step_deterministic (s : MachineState) (i : XorB16Instruction) (s1 s2 : MachineState) (h1 : XorB16Step s i s1) (h2 : XorB16Step s i s2) : s1 = s2",
+      "hypotheses": [
+        "h1 : XorB16Step s i s1",
+        "h2 : XorB16Step s i s2"
+      ],
+      "conclusion": "s1 = s2",
+      "semantic_claim_ids": [
+        "PTX-XORB16-SEM-004",
+        "PTX-XORB16-SEM-005"
+      ],
+      "lean_declarations_used": [
+        "XorB16Step",
+        "evalGuard",
+        "evalSourceA",
+        "evalSourceB",
+        "updateDestination"
+      ],
+      "non_vacuity_argument": "Both executed and guard-false constructors are present in the relation, so uniqueness is a substantive claim about at-most-one reachable post-state for fixed `(s, i)`.",
+      "proof_strategy_hint": "Case split on h1 and h2; constructor mismatch on guard results is impossible after rewriting. Same-constructor cases reduce to congruence on `updateDestination` or reflexivity."
+    },
+    {
+      "obligation_id": "PTX-XORB16-THM-002",
+      "proposed_name": "execXorB16_XorB16Step_correspondence",
+      "category": "function/relation correspondence",
+      "intent": "Characterize executable outcomes via the relation and tie `none` to absence of a step in this bounded artifact.",
+      "precise_statement_in_words": "(a) If `execXorB16 s i` is `some` executed or `some` guard-false, the corresponding `XorB16Step` holds. (b) If `XorB16Step s i s'` holds, then `execXorB16 s i` is `some` with matching state and constructor. (c) `execXorB16 s i = none` iff no `XorB16Step s i _` exists.",
+      "lean_statement_sketch": "theorems: execXorB16_exec_corresp, execXorB16_guardFalse_corresp, XorB16Step_complete, execXorB16_none_iff_no_step",
+      "hypotheses": [
+        "h : execXorB16 s i = some (ExecOutcome.executed s')",
+        "h : execXorB16 s i = some (ExecOutcome.guardFalse s')",
+        "hstep : XorB16Step s i s'",
+        "hnone : execXorB16 s i = none"
+      ],
+      "conclusion": "Executable-relation behavior matches branch-by-branch, and `none` is exact partiality.",
+      "semantic_claim_ids": [
+        "PTX-XORB16-SEM-004",
+        "PTX-XORB16-SEM-005",
+        "PTX-XORB16-SEM-008"
+      ],
+      "lean_declarations_used": [
+        "execXorB16",
+        "XorB16Step",
+        "ExecOutcome",
+        "evalGuard",
+        "evalSourceA",
+        "evalSourceB",
+        "updateDestination"
+      ],
+      "non_vacuity_argument": "This bridges two independently defined interfaces (`execXorB16` and `XorB16Step`) and includes all branches, including partiality (`none`).",
+      "proof_strategy_hint": "Unfold definitions and split on `evalGuard`, source lookups, and destination update result; match each branch to the corresponding relation constructor."
+    },
+    {
+      "obligation_id": "PTX-XORB16-THM-003",
+      "proposed_name": "execXorB16_xor_result",
+      "category": "behavioral correctness",
+      "intent": "Under true guard and resolved sources with register destination, execution writes exactly `xorValue va vb` to that destination register.",
+      "precise_statement_in_words": "If guard evaluates to true, `i.d = Destination.reg r`, and source reads are `va` and `vb`, then `execXorB16 s i` returns `some (ExecOutcome.executed s')` and `s'.valueRegs r = some (xorValue va vb)`.",
+      "lean_statement_sketch": "theorem execXorB16_xor_result (s : MachineState) (i : XorB16Instruction) (r : RegId) (va vb : B16) (hguard : evalGuard s i.guard = some true) (hd : i.d = Destination.reg r) (ha : evalSourceA s i.a = some va) (hb : evalSourceB s i.b = some vb) : ∃ s', execXorB16 s i = some (ExecOutcome.executed s') ∧ s'.valueRegs r = some (xorValue va vb)",
+      "hypotheses": [
+        "hguard : evalGuard s i.guard = some true",
+        "hd : i.d = Destination.reg r",
+        "ha : evalSourceA s i.a = some va",
+        "hb : evalSourceB s i.b = some vb"
+      ],
+      "conclusion": "There exists a deterministic executed state where destination register value equals `xorValue va vb`.",
+      "semantic_claim_ids": [
+        "PTX-XORB16-SEM-003",
+        "PTX-XORB16-SEM-004",
+        "PTX-XORB16-SEM-005"
+      ],
+      "lean_declarations_used": [
+        "execXorB16",
+        "XorB16Instruction",
+        "Destination.reg",
+        "xorValue",
+        "MachineState.valueRegs",
+        "updateDestination",
+        "evalGuard",
+        "evalSourceA",
+        "evalSourceB"
+      ],
+      "non_vacuity_argument": "The theorem ties concrete bitwise semantics `d := a ^ b` to an explicit destination-register value in the resulting state.",
+      "proof_strategy_hint": "Use `hguard`, `ha`, `hb` to force the executed branch, then simplify `updateDestination` under `hd` and read back the destination field."
+    },
+    {
+      "obligation_id": "PTX-XORB16-THM-004",
+      "proposed_name": "XorB16Step_predicate_file_frame",
+      "category": "frame locality",
+      "intent": "Predicate registers are preserved by a one-step relation transition in this bounded model.",
+      "precise_statement_in_words": "For any `XorB16Step s i s'`, every predicate register has identical value in `s` and `s'`.",
+      "lean_statement_sketch": "theorem XorB16Step_predicate_file_frame (s : MachineState) (i : XorB16Instruction) (s' : MachineState) (h : XorB16Step s i s') : ∀ p, s'.predRegs p = s.predRegs p",
+      "hypotheses": [
+        "h : XorB16Step s i s'"
+      ],
+      "conclusion": "∀ p, s'.predRegs p = s.predRegs p",
+      "semantic_claim_ids": [
+        "PTX-XORB16-SEM-004",
+        "PTX-XORB16-SEM-005"
+      ],
+      "lean_declarations_used": [
+        "XorB16Step",
+        "MachineState.predRegs",
+        "updateDestination"
+      ],
+      "non_vacuity_argument": "The bounded state model includes predicate files and the transition updates only value registers for register destinations, so this is a meaningful frame-property theorem.",
+      "proof_strategy_hint": "Split on relation constructor; both constructors preserve predicate file equality by direct simplification and extensionality.",
+      "proof_requires_open_question_handling": "No theorem in this file relies on semantics for `Destination.bitBucket` or mandatory undefined semantics for false-guard side effects."
+    }
+  ]
+}

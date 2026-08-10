@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "obligation_set_id": "ptx-9.3-or-b16-obligations-v1",
+  "run_id": "ptx-9.3-or.b16-ab7bd730",
+  "stage": "THEOREM_GENERATION",
+  "stage_attempt": 1,
+  "run_revision": 14,
+  "status": "READY_FOR_STRENGTH_REVIEW",
+  "status_rationale": "Gate C is benchmark-auto approved (reviews/ptx-or-b16/benchmark-auto/ptx-9.3-or.b16-ab7bd730-c-benchmark-auto-v1.json). Lean mapping v2 exists in namespace Spec2Lean.PTX.OrB16 with no outstanding mapping defects. No proofs are written at this stage.",
+  "unit": {
+    "language": "PTX",
+    "specification_version": "9.3",
+    "construct": "or.b16",
+    "instruction_family": "or",
+    "bounded_unit": "PTX ISA 9.3 bounded scalar form `or.b16 d, a, b;`",
+    "scope_boundary": "Only .b16 with optional predicate predication and register-file + predicate-file state is in scope. Source2 immediate is not modeled in this bounded Lean artifact; destination `_` is not asserted by the mapping."
+  },
+  "gate_c_reference": {
+    "record_path": "reviews/ptx-or-b16/benchmark-auto/ptx-9.3-or.b16-ab7bd730-c-benchmark-auto-v1.json",
+    "review_id": "ptx-9.3-or.b16-ab7bd730-c-benchmark-auto-v1",
+    "gate": "C",
+    "decision": "auto_advanced",
+    "humanConfirmationRecorded": false,
+    "gateApprovalPerformed": false,
+    "submittedAtUtc": "2026-08-10T11:57:03.809Z"
+  },
+  "semantics_reference": {
+    "path": "candidates/ptx/9.3/units/or-b16/semantics/semantics-v2.json",
+    "interpretation_id": "ptx-9.3-or-b16-semantics-v2",
+    "claim_count": 22,
+    "claim_counts": {
+      "total": 22,
+      "SOURCE_FACT": 10,
+      "DERIVED_INTERPRETATION": 0,
+      "DESIGN_DEPENDENCY": 2,
+      "ASSUMPTION": 6,
+      "OPEN_QUESTION": 4
+    }
+  },
+  "source_bundle_reference": {
+    "path": "candidates/ptx/9.3/units/or-b16/source-bundles/source-bundle-v1.json",
+    "bundle_id": "ptx-9.3-or-b16-source-bundle-v1",
+    "fragment_ids": [
+      "PTX-9.3-ORB16-001",
+      "PTX-9.3-ORB16-002",
+      "PTX-9.3-ORB16-003",
+      "PTX-9.3-ORB16-004",
+      "PTX-9.3-ORB16-005",
+      "PTX-9.3-ORB16-006",
+      "PTX-9.3-ORB16-007",
+      "PTX-9.3-ORB16-008",
+      "PTX-9.3-ORB16-009",
+      "PTX-9.3-ORB16-010",
+      "PTX-9.3-ORB16-011",
+      "PTX-9.3-ORB16-012",
+      "PTX-9.3-ORB16-013",
+      "PTX-9.3-ORB16-014",
+      "PTX-9.3-ORB16-015",
+      "PTX-9.3-ORB16-016"
+    ]
+  },
+  "lean_mapping_reference": {
+    "path": "candidates/ptx/9.3/units/or-b16/lean/OrB16-v2.lean",
+    "namespace": "Spec2Lean.PTX.OrB16"
+  },
+  "architecture_reference": {
+    "path": "candidates/ptx/9.3/units/or-b16/architecture/foundation-v1.md"
+  },
+  "compliance_notes": [
+    "No proofs are included at this stage.",
+    "No vacuous function-totality/determinism claims: relational determinism is over OrB16Step, with explicit function/relation bridge obligation handled separately.",
+    "Open-question- and design-dependent parts are respected: this set does not assert bit-bucket semantics for destination `_` nor immediate support for source-b beyond what is represented by SourceB.reg."
+  ],
+  "validation_obligations": [
+    {
+      "obligation_id": "PTX-ORB16-VAL-001",
+      "title": "Bounded instruction syntax and operand order",
+      "description": "Instruction structure includes optional guard and exactly fields (d, a, b) for destination then two sources, with .b16 type and no additional operand constructors in the mapped artifact.",
+      "check_type": "static definitional check",
+      "status": "SATISFIED_IN_CANDIDATE",
+      "semantic_claim_ids": ["SF-ORB16-001", "SF-ORB16-002", "SF-ORB16-010", "DD-ORB16-001", "DD-ORB16-002", "OQ-ORB16-01", "DI-ORB16-002", "DI-ORB16-005"],
+      "lean_declarations_used": ["OrB16Instruction", "Destination", "SourceA", "SourceB", "Guard", "OrTypeSpecifier"]
+    },
+    {
+      "obligation_id": "PTX-ORB16-VAL-002",
+      "title": "16-bit bounded value representation",
+      "description": "B16 is represented via `Fin (2^16)`, enforcing bounded 16-bit values in type and ensuring all state writes remain within 16-bit domain.",
+      "check_type": "representation invariant",
+      "status": "SATISFIED_IN_CANDIDATE",
+      "semantic_claim_ids": ["SF-ORB16-003", "SF-ORB16-010", "DI-ORB16-003"],
+      "lean_declarations_used": ["B16", "b16Bits", "b16DomainSize", "Fin", "mkB16"]
+    },
+    {
+      "obligation_id": "PTX-ORB16-VAL-003",
+      "title": "Minimal state + partial outcome convention",
+      "description": "MachineState contains only value-register and predicate maps; `execOrB16` yields `Option` outcomes and returns `none` for malformed guard/predicate or unresolved source reads, preserving the partial-execution convention.",
+      "check_type": "static definitional check / semantics convention",
+      "status": "SATISFIED_IN_CANDIDATE",
+      "semantic_claim_ids": ["SF-ORB16-007", "DI-ORB16-001", "DI-ORB16-004", "DI-ORB16-006", "DI-ORB16-005", "DI-ORB16-006"],
+      "lean_declarations_used": ["MachineState", "ExecOutcome", "execOrB16", "evalGuard", "evalSourceA", "evalSourceB", "updateDestination"]
+    }
+  ],
+  "theorem_obligations": [
+    {
+      "obligation_id": "PTX-ORB16-THM-001",
+      "proposed_name": "OrB16Step_deterministic",
+      "category": "relational determinism",
+      "intent": "For fixed pre-state and instruction, `OrB16Step` has at most one post-state.",
+      "precise_statement_in_words": "For all states s and instruction i and states s1 s2, if `OrB16Step s i s1` and `OrB16Step s i s2`, then `s1 = s2`.",
+      "lean_statement_sketch": "theorem OrB16Step_deterministic (s : MachineState) (i : OrB16Instruction) (s1 s2 : MachineState) (h1 : OrB16Step s i s1) (h2 : OrB16Step s i s2) : s1 = s2",
+      "hypotheses": [
+        "h1 : OrB16Step s i s1",
+        "h2 : OrB16Step s i s2"
+      ],
+      "conclusion": "s1 = s2",
+      "semantic_claim_ids": ["SF-ORB16-007", "DI-ORB16-006", "DI-ORB16-005", "DI-ORB16-004"],
+      "lean_declarations_used": ["OrB16Step", "evalGuard", "evalSourceA", "evalSourceB", "updateDestination", "orValue"],
+      "non_vacuity_argument": "Both `executed` and `notExecuted` branches are possible in the relation via guard and read-resolution behavior; the theorem excludes the possibility of two distinct relation outcomes from one fixed `(s, i)`.",
+      "proof_strategy_hint": "Case-split on h1 and h2. Branch mismatch on `evalGuard` values is impossible; same-constructor cases simplify to equality of update expressions and reflexive state."
+    },
+    {
+      "obligation_id": "PTX-ORB16-THM-002",
+      "proposed_name": "execOrB16_OrB16Step_correspondence",
+      "category": "function/relation correspondence",
+      "intent": "Relate `execOrB16` outcomes to relation steps in both directions and characterize partiality with `none`.",
+      "precise_statement_in_words": "(a) if `execOrB16` returns an executed state, then that state satisfies `OrB16Step`; (b) if it returns notExecuted state, then that state satisfies `OrB16Step`; (c) if `OrB16Step s i s'` holds, then `execOrB16 s i` is some executed/notExecuted outcome matching `s'`; (d) `execOrB16 s i = none` iff no relation step from `(s, i)` exists.",
+      "lean_statement_sketch": "theorems: execOrB16_corresp_executed, execOrB16_corresp_notExecuted, OrB16Step_complete, OrB16Step_partial_complete",
+      "hypotheses": [
+        "h : execOrB16 s i = some (ExecOutcome.executed s')",
+        "h : execOrB16 s i = some (ExecOutcome.notExecuted s')",
+        "hstep : OrB16Step s i s'"
+      ],
+      "conclusion": "Four-way correspondence between function and relation including partial-completeness.",
+      "semantic_claim_ids": ["DI-ORB16-006", "DI-ORB16-004", "DI-ORB16-005", "SF-ORB16-007", "SF-ORB16-006", "SF-ORB16-007"],
+      "lean_declarations_used": ["execOrB16", "OrB16Step", "ExecOutcome", "evalGuard", "evalSourceA", "evalSourceB", "updateDestination", "orValue"],
+      "non_vacuity_argument": "The function includes three observably different outcomes (executed, notExecuted, none); correspondence must match constructor-level branches and is not a reflexive property.",
+      "proof_strategy_hint": "Unfold `execOrB16` and `OrB16Step`; split on guard and source lookups for soundness/completeness, and use existential packaging for part (c)."
+    },
+    {
+      "obligation_id": "PTX-ORB16-THM-003",
+      "proposed_name": "execOrB16_or_result",
+      "category": "behavioral conformance",
+      "intent": "Under true guard and resolved sources, executed post-state writes register destination with `orValue va vb` at the selected destination.",
+      "precise_statement_in_words": "If `evalGuard` is true, destination register is `r`, and sources evaluate to `va` and `vb`, then `execOrB16` returns executed state `s'` with `s'.valueRegs r = some (orValue va vb)`.",
+      "lean_statement_sketch": "theorem execOrB16_or_result (s : MachineState) (i : OrB16Instruction) (r : RegId) (va vb : B16) (hguard : evalGuard s i.guard = some true) (hd : i.d = Destination.reg r) (ha : evalSourceA s i.a = some va) (hb : evalSourceB s i.b = some vb) : ∃ s', execOrB16 s i = some (ExecOutcome.executed s') ∧ s'.valueRegs r = some (orValue va vb)",
+      "hypotheses": [
+        "hguard : evalGuard s i.guard = some true",
+        "hd : i.d = Destination.reg r",
+        "ha : evalSourceA s i.a = some va",
+        "hb : evalSourceB s i.b = some vb"
+      ],
+      "conclusion": "executed state writes `orValue va vb` to the destination register.",
+      "semantic_claim_ids": ["SF-ORB16-003", "SF-ORB16-005", "SF-ORB16-006", "SF-ORB16-008", "SF-ORB16-007", "DI-ORB16-006", "DI-ORB16-002"],
+      "lean_declarations_used": ["execOrB16", "orValue", "Destination.reg", "updateDestination", "MachineState.valueRegs", "evalSourceA", "evalSourceB", "evalGuard"],
+      "non_vacuity_argument": "This explicitly pins the concrete computed value written by the instruction (`a | b`) to the resulting state, rather than only asserting some write occurred.",
+      "proof_strategy_hint": "Use hguard and source hypotheses to force executed branch, then simplify updateDestination with hd and evaluate by definition."
+    },
+    {
+      "obligation_id": "PTX-ORB16-THM-004",
+      "proposed_name": "OrB16Step_false_guard_preserves_state",
+      "category": "control-flow no-op",
+      "intent": "A false-guard instruction step preserves the full machine state unchanged.",
+      "precise_statement_in_words": "If `OrB16Step s i s'` and `evalGuard s i.guard = some false`, then `s' = s`.",
+      "lean_statement_sketch": "theorem OrB16Step_false_guard_preserves_state (s : MachineState) (i : OrB16Instruction) (s' : MachineState) (h : OrB16Step s i s') (hguard : evalGuard s i.guard = some false) : s' = s",
+      "hypotheses": [
+        "h : OrB16Step s i s'",
+        "hguard : evalGuard s i.guard = some false"
+      ],
+      "conclusion": "s' = s",
+      "semantic_claim_ids": ["SF-ORB16-007", "DI-ORB16-006", "DI-ORB16-001", "DI-ORB16-002"],
+      "lean_declarations_used": ["OrB16Step", "evalGuard", "ExecOutcome.notExecuted", "MachineState", "i.guard"],
+      "non_vacuity_argument": "The theorem proves a meaningful effect of false-guard predication in relation semantics; it is not implied by mere totality of a function.",
+      "proof_strategy_hint": "Unfold OrB16Step and resolve constructor mismatch from hguard; only notExecuted constructor remains, yielding reflexive state equality."
+    },
+    {
+      "obligation_id": "PTX-ORB16-THM-005",
+      "proposed_name": "OrB16Step_predicate_file_frame",
+      "category": "frame/locality",
+      "intent": "Predicate register file is unchanged by the relation step; only value register destination may change in executed case.",
+      "precise_statement_in_words": "For any step `OrB16Step s i s'`, for all predicates p, `s'.predRegs p = s.predRegs p`.",
+      "lean_statement_sketch": "theorem OrB16Step_predicate_file_frame (s : MachineState) (i : OrB16Instruction) (s' : MachineState) (h : OrB16Step s i s') : ∀ p, s'.predRegs p = s.predRegs p",
+      "hypotheses": [
+        "h : OrB16Step s i s'"
+      ],
+      "conclusion": "Predicate register values are frame-preserved.",
+      "semantic_claim_ids": ["SF-ORB16-007", "DI-ORB16-001", "DI-ORB16-006", "DI-ORB16-002"],
+      "lean_declarations_used": ["OrB16Step", "MachineState.predRegs", "updateDestination"],
+      "non_vacuity_argument": "The bounded state model includes predicate lookups, so invariance is a meaningful locality claim for this execution relation.",
+      "proof_strategy_hint": "Both constructors of OrB16Step update only `valueRegs` (executed) or leave state unchanged (notExecuted), so `predRegs` is syntactically unchanged in either case."
+    }
+  ]
+}

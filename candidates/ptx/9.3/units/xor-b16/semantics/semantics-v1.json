@@ -1,0 +1,132 @@
+{
+  "schema_version": 2,
+  "interpretation_id": "ptx-9.3-xor-b16-semantics-v1",
+  "run_id": "ptx-9.3-xor.b16-67bf3e37",
+  "revision_of": null,
+  "revision_reason": "Legacy bounded semantic interpretation for xor.b16 outside delta fast path (UNIT_OUTSIDE_DELTA_CAPABILITY fallback).",
+  "status": "READY_FOR_CRITIQUE",
+  "status_rationale": "Constructed from architecture/foundation v1 and source-bundle-v1 only. No Lean code, no invented semantics.",
+  "language": "PTX",
+  "specification_version": "9.3",
+  "construct": "xor.b16",
+  "instruction_family": "xor",
+  "architecture_reference": {
+    "path": "candidates/ptx/9.3/units/xor-b16/architecture/foundation-v1.md",
+    "status_note": "Draft architecture; not human approved in this run."
+  },
+  "source_bundle_references": [
+    {
+      "path": "candidates/ptx/9.3/units/xor-b16/source-bundles/source-bundle-v1.json",
+      "bundle_id": "source-bundle-v1",
+      "role": "primary official-specification evidence interface"
+    }
+  ],
+  "construct_metadata": {
+    "construct_identity": "xor.b16",
+    "syntax_variants": [
+      "xor.type d, a, b;",
+      "xor.b16 d, a, b;",
+      "@p xor.b16 d, a, b;",
+      "@!p xor.b16 d, a, b;"
+    ],
+    "has_modifiers": false
+  },
+  "source_facts": [
+    {"id": "SF-1", "classification": "SOURCE_FACT", "statement": "Opcode family syntax is declared as 'xor.type d, a, b;' with type alternatives including .pred, .b16, .b32, .b64.", "evidence_fragment_ids": ["XOR16_SYNTAX_FORM", "SF-1"]},
+    {"id": "SF-2", "classification": "SOURCE_FACT", "statement": "Section prose defines operation as bitwise XOR; Semantics block states 'd = a ^ b;'.", "evidence_fragment_ids": ["XOR16_DESCRIPTION", "XOR16_SEMANTICS", "SF-2", "SF-7"]},
+    {"id": "SF-3", "classification": "SOURCE_FACT", "statement": "Operands must match in size, but not necessarily in type; predicate types are allowed for this family.", "evidence_fragment_ids": ["XOR16_OPERAND_SIZE_NOTE", "XOR16_PREDICATE_NOTE", "SF-3"]},
+    {"id": "SF-4", "classification": "SOURCE_FACT", "statement": "The xor section is introduced in PTX ISA version 1.0.", "evidence_fragment_ids": ["XOR16_PTX_ISA_NOTE", "SF-4"]},
+    {"id": "SF-5", "classification": "SOURCE_FACT", "statement": "The xor family is supported on all target architectures.", "evidence_fragment_ids": ["XOR16_TARGET_NOTE", "SF-5"]},
+    {"id": "SF-6", "classification": "SOURCE_FACT", "statement": "Examples in this section include 'xor.b32  d,q,r;' and 'xor.b16  d,x,0x0001;'.", "evidence_fragment_ids": ["XOR16_EXAMPLE_B32", "XOR16_EXAMPLE_B16", "SF-6"]},
+    {"id": "SF-8", "classification": "SOURCE_FACT", "statement": "Section 9.7 says all PTX instructions may be predicated and may omit guard from syntax in instruction-description form.", "evidence_fragment_ids": ["SF-8"]},
+    {"id": "SF-9", "classification": "SOURCE_FACT", "statement": "Section 9.3 defines optional guard prefix @{!}p where absence means unconditional execution; guard controls conditional execution.", "evidence_fragment_ids": ["SF-9"]},
+    {"id": "SF-10", "classification": "SOURCE_FACT", "statement": "Result-producing instructions use operands d, a, b and may have optional bit-bucket '_' as destination in general PTX syntax.", "evidence_fragment_ids": ["SF-10"]},
+    {"id": "SF-11", "classification": "SOURCE_FACT", "statement": "Fundamental types are basic-type + width specifiers; .b16 is among bit-size specifiers.", "evidence_fragment_ids": ["SF-11", "SF-12"]}
+  ],
+  "derived_interpretations": [
+    {"id": "DI-1", "classification": "DERIVED_INTERPRETATION", "statement": "The bounded unit form is 'xor.b16 d, a, b;'.", "evidence_fragment_ids": ["XOR16_SYNTAX_FORM", "SF-1"]},
+    {"id": "DI-2", "classification": "DERIVED_INTERPRETATION", "statement": "Instruction computes a bitwise exclusive-or of operand bits: write-back value is d := (a ^ b) over the .b16 value width.", "evidence_fragment_ids": ["XOR16_SEMANTICS", "XOR16_DESCRIPTION", "XOR16_OPERAND_SIZE_NOTE"]},
+    {"id": "DI-3", "classification": "DERIVED_INTERPRETATION", "statement": "Predicate guard is optional and may be absent (unconditional), @p (execute when p is true), or @!p (execute when p is false).", "evidence_fragment_ids": ["SF-9", "SF-8"]},
+    {"id": "DI-4", "classification": "DERIVED_INTERPRETATION", "statement": "Execution reads a and b and writes d on execute in this bounded model.", "evidence_fragment_ids": ["XOR16_DESCRIPTION", "XOR16_SEMANTICS", "SF-10"]}
+  ],
+  "design_dependencies": [
+    {"id": "DD-1", "classification": "DESIGN_DEPENDENCY", "statement": "Bounded scope is limited to '.b16' form (excluding .pred/.b32/.b64).", "evidence_fragment_ids": ["XOR16_TYPE_SPECIFIERS", "SF-1"]},
+    {"id": "DD-2", "classification": "DESIGN_DEPENDENCY", "statement": "Bounded state model assumes register + predicate files only (no memory side effects) for this instruction form.", "evidence_fragment_ids": ["SF-14", "SF-16", "SF-10"]}
+  ],
+  "assumptions": [],
+  "open_questions": [
+    {"id": "OQ-1", "classification": "OPEN_QUESTION", "statement": "Whether source operand 'a' may be an immediate constant for xor.b16 is not directly evidenced in the section text for this form.", "evidence_fragment_ids": ["XOR16_EXAMPLE_B16", "XOR16_EXAMPLE_B32", "SF-19", "SF-6"]},
+    {"id": "OQ-2", "classification": "OPEN_QUESTION", "statement": "Whether destination '_' (bit bucket) is legal for xor.b16 is inferred only via general PTX syntax guidance, not directly proven in xor.b16 slice.", "evidence_fragment_ids": ["SF-10", "SF-6"]},
+    {"id": "OQ-3", "classification": "OPEN_QUESTION", "statement": "Exact immediate width/truncation/cast policy for '.b16' immediates is not stated in this bounded fragment.", "evidence_fragment_ids": ["XOR16_EXAMPLE_B16", "SF-18"]},
+    {"id": "OQ-4", "classification": "OPEN_QUESTION", "statement": "Guard-false state effect is not explicitly stated in the xor section text itself; it is derived from predication control context.", "evidence_fragment_ids": ["SF-9"]}
+  ],
+  "syntax": {
+    "base_scalar_form": "xor.type d, a, b;",
+    "bounded_scalar_form": "xor.b16 d, a, b;",
+    "operand_order": ["d", "a", "b"],
+    "guard_forms": ["none", "@p", "@!p"]
+  },
+  "operands": {
+    "destination": {"name": "d", "role": "destination", "typing": ".b16 or size-compatible .b16-equivalent type", "classification": "DERIVED_INTERPRETATION", "evidence_fragment_ids": ["XOR16_OPERAND_SIZE_NOTE", "SF-11"]},
+    "sources": [
+      {"name": "a", "role": "source", "classification": "DERIVED_INTERPRETATION", "evidence_fragment_ids": ["XOR16_DESCRIPTION", "XOR16_EXAMPLE_B32"]},
+      {"name": "b", "role": "source", "classification": "DERIVED_INTERPRETATION", "evidence_fragment_ids": ["XOR16_DESCRIPTION", "XOR16_EXAMPLE_B16", "XOR16_EXAMPLE_B32"]}
+    ]
+  },
+  "types": {
+    "instruction_type": ".b16",
+    "basic_type": "Bits (untyped)",
+    "width_bits": 16,
+    "typing_rule": "Operands are size-compatible with .b16; exact type may differ if same size.",
+    "classification": "DERIVED_INTERPRETATION",
+    "evidence_fragment_ids": ["XOR16_OPERAND_SIZE_NOTE", "SF-11", "SF-13"]
+  },
+  "guard_semantics": {
+    "no_guard": "execute_unconditionally",
+    "at_p": "execute_if_guard_predicate_true",
+    "at_not_p": "execute_if_guard_predicate_false",
+    "false_guard_consequence": "open_question",
+    "classification": "OPEN_QUESTION",
+    "evidence_fragment_ids": ["SF-9", "SF-8"]
+  },
+  "behavior": {
+    "semantic_pseudocode": "d = a ^ b;",
+    "classification": "SOURCE_FACT",
+    "evidence_fragment_ids": ["XOR16_SEMANTICS"],
+    "notes": ["Execution is on bit patterns; no arithmetic carry/borrow is defined for this operation."]
+  },
+  "state_reads": [
+    {"component": "source a", "classification": "DERIVED_INTERPRETATION", "statement": "Read current value of a before writing d.", "evidence_fragment_ids": ["XOR16_SEMANTICS", "XOR16_DESCRIPTION"]},
+    {"component": "source b", "classification": "DERIVED_INTERPRETATION", "statement": "Read current value of b before writing d.", "evidence_fragment_ids": ["XOR16_SEMANTICS", "XOR16_DESCRIPTION"]},
+    {"component": "guard predicate (if present)", "classification": "DERIVED_INTERPRETATION", "statement": "Read predicate p (optionally negated) to determine complete guard.", "evidence_fragment_ids": ["SF-9", "SF-8"]}
+  ],
+  "state_writes": [
+    {"component": "dest register d", "classification": "DERIVED_INTERPRETATION", "statement": "Write d := a ^ b on execute when complete guard is true and d is a concrete destination register.", "evidence_fragment_ids": ["XOR16_SEMANTICS", "XOR16_DESCRIPTION", "SF-2", "SF-10"]},
+    {"component": "dest '_'", "classification": "OPEN_QUESTION", "statement": "If d is bit-bucket '_', result is discarded; legality for xor.b16 slice is not directly evidenced.", "evidence_fragment_ids": ["SF-10"]}
+  ],
+  "exceptional_behavior": {
+    "statement": "No explicit error/trap/exception clause appears in the xor family snippet used here.",
+    "classification": "OPEN_QUESTION",
+    "evidence_fragment_ids": ["XOR16_SEMANTICS", "XOR16_DESCRIPTION"]
+  },
+  "ambiguous_items": [
+    {"item": "Operand immediates", "classification": "OPEN_QUESTION", "statement": "Immediate support is ambiguous for xor.b16 sources from available direct evidence; one .b16 example shows immediate in source b.", "evidence_fragment_ids": ["XOR16_EXAMPLE_B16", "XOR16_EXAMPLE_B32"]},
+    {"item": "Bit bucket destination", "classification": "OPEN_QUESTION", "statement": "Bit-bucket applicability is from general grammar only, not a direct xor.b16 example.", "evidence_fragment_ids": ["SF-10"]}
+  ],
+  "version_and_target": {
+    "introduced_in": "PTX ISA 1.0",
+    "target": "all architectures",
+    "classification": "SOURCE_FACT",
+    "evidence_fragment_ids": ["XOR16_PTX_ISA_NOTE", "XOR16_TARGET_NOTE"]
+  },
+  "semantic_claims": [
+    {"id": "PTX-XORB16-SEM-001", "classification": "SOURCE_FACT", "statement": "xor family syntax and type alternatives are as quoted in section 9.7.8.3.", "evidence_fragment_ids": ["SF-1"]},
+    {"id": "PTX-XORB16-SEM-002", "classification": "DERIVED_INTERPRETATION", "statement": "This bounded artifact covers the .b16 instantiation only.", "evidence_fragment_ids": ["XOR16_TYPE_SPECIFIERS", "SF-1"]},
+    {"id": "PTX-XORB16-SEM-003", "classification": "DERIVED_INTERPRETATION", "statement": "Semantics computes bitwise XOR of a and b and stores to d.", "evidence_fragment_ids": ["XOR16_DESCRIPTION", "XOR16_SEMANTICS"]},
+    {"id": "PTX-XORB16-SEM-004", "classification": "DERIVED_INTERPRETATION", "statement": "Guard-less form executes unconditionally; @p and @!p execute according to predicate truth/falsity.", "evidence_fragment_ids": ["SF-8", "SF-9"]},
+    {"id": "PTX-XORB16-SEM-005", "classification": "DERIVED_INTERPRETATION", "statement": "State reads and writes are: read a and b; when enabled write d; no additional side-effect fields are asserted in this bounded model.", "evidence_fragment_ids": ["XOR16_DESCRIPTION", "XOR16_SEMANTICS", "SF-10"]},
+    {"id": "PTX-XORB16-SEM-006", "classification": "OPEN_QUESTION", "statement": "Guard-false state effect remains open at this stage because explicit false-guard state text is not in the bounded syntax slice.", "evidence_fragment_ids": ["SF-9"]},
+    {"id": "PTX-XORB16-SEM-007", "classification": "OPEN_QUESTION", "statement": "Whether 'a' may be an immediate for xor.b16 remains unresolved by direct evidence.", "evidence_fragment_ids": ["XOR16_EXAMPLE_B16"]},
+    {"id": "PTX-XORB16-SEM-008", "classification": "OPEN_QUESTION", "statement": "Whether 'd' may be '_' for xor.b16 is unresolved by direct evidence.", "evidence_fragment_ids": ["SF-10"]}
+  ]
+}
