@@ -1,18 +1,24 @@
 import { startOpenCode } from "./opencode.js"
-import { loadRun } from "./run-store.js"
+import { recordBenchmarkAutoAdvance } from "./benchmark-decision-record.js"
+import { GATES } from "./gates.js"
+import { loadRun, saveRun } from "./run-store.js"
 import { proofTargetSummary } from "./proof-plan.js"
 import { executeTick } from "./runner.js"
-import type { FormalizationStage } from "./workflow.js"
+import {
+  transitionRun,
+  type FormalizationStage,
+  type GateName,
+} from "./workflow.js"
 
-const HUMAN_WAIT_STAGES = new Set<FormalizationStage>([
-  "WAITING_GATE_A",
-  "WAITING_GATE_B",
-  "WAITING_GATE_C",
-  "WAITING_THEOREM_STRENGTH_APPROVAL",
-  "WAITING_FINAL_APPROVAL",
-])
+const GATE_FOR_WAIT_STAGE = new Map<FormalizationStage, GateName>(
+  Object.entries(GATES).map(([gate, plan]) => [
+    plan.waitingStage,
+    gate as GateName,
+  ]),
+)
 
 const TERMINAL_STAGES = new Set<FormalizationStage>([
+  "BENCHMARK_COMPLETE",
   "ACCEPTED",
   "BLOCKED",
   "FAILED",
@@ -55,7 +61,41 @@ async function main(): Promise<void> {
       const before = await loadRun(runId)
       console.log(`[spec2lean] run=${runId} stage=${before.stage} revision=${before.revision}`)
 
-      if (HUMAN_WAIT_STAGES.has(before.stage)) {
+      const waitingGate = GATE_FOR_WAIT_STAGE.get(before.stage)
+      if (waitingGate !== undefined && before.benchmark?.autoApprove === true) {
+        const decision = await recordBenchmarkAutoAdvance(before, waitingGate)
+        const target = waitingGate === "FINAL"
+          ? "BENCHMARK_COMPLETE"
+          : GATES[waitingGate].approvedStage
+        let next = transitionRun(
+          before,
+          target,
+          `${decision.recovered ? "Recovered" : "Recorded"} benchmark-only ${waitingGate} auto-advance; review=${decision.reviewPath}; humanConfirmationRecorded=false`,
+        )
+        next = {
+          ...next,
+          gates: {
+            ...next.gates,
+            [waitingGate]: "benchmark_auto_advanced",
+          },
+        }
+        await saveRun(next)
+        console.log(JSON.stringify({
+          ok: true,
+          deterministic: true,
+          benchmarkOnly: true,
+          humanConfirmationRecorded: false,
+          runId,
+          gate: waitingGate,
+          reviewPath: decision.reviewPath,
+          fromStage: before.stage,
+          toStage: next.stage,
+          revision: next.revision,
+        }, null, 2))
+        continue
+      }
+
+      if (waitingGate !== undefined) {
         console.log(JSON.stringify({
           ok: true,
           stopped: true,
@@ -68,7 +108,7 @@ async function main(): Promise<void> {
       }
 
       if (TERMINAL_STAGES.has(before.stage)) {
-        const accepted = before.stage === "ACCEPTED"
+        const accepted = before.stage === "ACCEPTED" || before.stage === "BENCHMARK_COMPLETE"
         console.log(JSON.stringify({
           ok: accepted,
           stopped: true,

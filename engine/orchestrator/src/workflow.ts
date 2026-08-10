@@ -23,6 +23,7 @@ export const FORMALIZATION_STAGES = [
   "FINAL_CRITIQUE",
   "WAITING_FINAL_APPROVAL",
 
+  "BENCHMARK_COMPLETE",
   "ACCEPTED",
   "BLOCKED",
   "FAILED",
@@ -45,6 +46,7 @@ export type GateName =
 export type GateStatus =
   | "pending"
   | "approved"
+  | "benchmark_auto_advanced"
   | "rejected"
 
 export type RunEvent = {
@@ -146,6 +148,10 @@ export type RunState = {
   executions?: AgentExecution[]
   activeExecution?: ActiveExecution
   semanticV2?: SemanticV2State
+  benchmark?: {
+    autoApprove: true
+    startedAtUtc: string
+  }
 }
 
 const transitions:
@@ -261,10 +267,13 @@ const transitions:
   ],
 
   WAITING_FINAL_APPROVAL: [
+    "BENCHMARK_COMPLETE",
     "ACCEPTED",
     "BLOCKED",
     "FAILED",
   ],
+
+  BENCHMARK_COMPLETE: [],
 
   ACCEPTED: [],
 

@@ -90,6 +90,13 @@ console.log(JSON.stringify({
   runId: run.runId,
   unit: run.unit,
   stage: run.stage,
+  benchmark: run.benchmark?.autoApprove === true
+    ? {
+        autoApprove: true,
+        humanApproved: false,
+        promotable: false,
+      }
+    : undefined,
   wallClockSeconds: Number(
     ((Date.parse(run.updatedAt) - Date.parse(run.createdAt)) / 1000).toFixed(1),
   ),

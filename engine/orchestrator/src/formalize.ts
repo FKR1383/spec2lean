@@ -42,6 +42,7 @@ const run = await createRun({
   specVersion,
   unit: required("--unit"),
   sourceManifest,
+  benchmarkAutoApprove: process.argv.includes("--auto-approve"),
 })
 
 const started = transitionRun(run, "ARCHITECTURE", "one-command formalization start")
@@ -52,6 +53,7 @@ console.log(JSON.stringify({
   runId: started.runId,
   stage: started.stage,
   artifactRoot: started.artifactRoot,
+  benchmarkAutoApprove: started.benchmark?.autoApprove ?? false,
 }, null, 2))
 
 const code = await runLoopProcess(started.runId, {

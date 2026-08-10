@@ -62,6 +62,13 @@ Translation mode may introduce additional translation-specific gates later.
 
 Nothing may be promoted to `accepted/` without explicit human approval.
 
+For performance measurement only, a run created explicitly with
+`formalize --auto-approve` may auto-advance review boundaries. Every such
+decision must be hash-bound, recorded as `benchmark_gate_auto_advance`, and
+state `humanConfirmationRecorded: false`. A benchmark run ends at
+`BENCHMARK_COMPLETE`; it is not human-approved and must not be finalized or
+promoted to `accepted/`.
+
 ## Repository Boundaries
 
 - `engine/`: orchestration code

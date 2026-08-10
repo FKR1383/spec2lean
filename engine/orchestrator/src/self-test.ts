@@ -5,6 +5,10 @@ import { resolve } from "node:path"
 import { parseAgentResult } from "./agent-result.js"
 import { normalizeAgentDecision } from "./agent-decision.js"
 import {
+  benchmarkDecisionLocation,
+  recordBenchmarkAutoAdvance,
+} from "./benchmark-decision-record.js"
+import {
   DEFAULT_PROVIDER_RETRY_BUDGET_MS,
   ProviderRetryBudgetExceededError,
   findCompletedResponse,
@@ -190,6 +194,37 @@ assert(
   "proof progress recognizes indented top-level theorem declarations",
 )
 
+const benchmarkRun: RunState = {
+  ...baseArtifactRun,
+  runId: `benchmark-auto-self-test-${randomUUID()}`,
+  stage: "WAITING_GATE_A",
+  benchmark: {
+    autoApprove: true,
+    startedAtUtc: "2026-01-01T00:00:00.000Z",
+  },
+}
+const benchmarkLocation = benchmarkDecisionLocation(benchmarkRun, "A")
+try {
+  const recorded = await recordBenchmarkAutoAdvance(benchmarkRun, "A")
+  const benchmarkRecord = JSON.parse(
+    await readFile(resolve(REPO_ROOT, recorded.reviewPath), "utf8"),
+  ) as {
+    recordType?: string
+    humanConfirmationRecorded?: boolean
+    gateApprovalPerformed?: boolean
+    promotionPerformed?: boolean
+  }
+  assert(
+    benchmarkRecord.recordType === "benchmark_gate_auto_advance" &&
+      benchmarkRecord.humanConfirmationRecorded === false &&
+      benchmarkRecord.gateApprovalPerformed === false &&
+      benchmarkRecord.promotionPerformed === false,
+    "benchmark auto-advance is explicitly non-human and non-promoting",
+  )
+} finally {
+  await unlink(resolve(REPO_ROOT, benchmarkLocation.reviewPath)).catch(() => undefined)
+}
+
 const semanticIrMetrics = await runSemanticIrSelfTests()
 const semanticV2Metrics = await runSemanticV2SelfTests()
 
@@ -351,6 +386,15 @@ const sharedApprovalController = await readFile(
 )
 assert(!sharedApprovalController.includes("startOpenCode"), "shared approval does not start OpenCode")
 
+const finalizeController = await readFile(
+  resolve(REPO_ROOT, "engine/orchestrator/src/finalize.ts"),
+  "utf8",
+)
+assert(
+  finalizeController.includes("Benchmark auto-approve runs are not human-approved"),
+  "benchmark runs cannot be finalized or promoted",
+)
+
 const runLoopSource = await readFile(
   resolve(REPO_ROOT, "engine/orchestrator/src/run-loop.ts"),
   "utf8",
@@ -364,6 +408,11 @@ assert(
 assert(
   runLoopSource.includes("providerRetryBudgetMs: providerRetryBudgetSeconds * 1000"),
   "run loop passes the shared runtime and bounded provider retry policy into each tick",
+)
+assert(
+  runLoopSource.includes("recordBenchmarkAutoAdvance") &&
+    runLoopSource.includes('"BENCHMARK_COMPLETE"'),
+  "run loop records benchmark decisions and terminates outside human acceptance",
 )
 const runnerSource = await readFile(
   resolve(REPO_ROOT, "engine/orchestrator/src/runner.ts"),

@@ -23,7 +23,7 @@ import type { GateName, RunState } from "./workflow.js"
 
 type HumanDecision = "approved" | "rejected"
 
-type ArtifactFingerprint = {
+export type ArtifactFingerprint = {
   relativePath: string
   sha256: string
   sizeBytes: number
@@ -240,6 +240,14 @@ async function fingerprintArtifact(
   }
 }
 
+export async function artifactFingerprintsForGate(
+  run: RunState,
+  gate: GateName,
+): Promise<ArtifactFingerprint[]> {
+  const paths = await artifactPathsForGate(run, gate)
+  return await Promise.all(paths.map((path) => fingerprintArtifact(path)))
+}
+
 async function ensureSafeDirectoryTree(
   root: string,
   targetDirectory: string,
@@ -281,7 +289,7 @@ async function ensureSafeDirectoryTree(
   }
 }
 
-async function resolveReviewDestination(
+export async function resolveReviewDestination(
   relativePath: string,
 ): Promise<string> {
   validateRelativePath(relativePath)
@@ -298,6 +306,36 @@ async function resolveReviewDestination(
   return absolutePath
 }
 
+export async function publishImmutableReviewRecord(
+  relativePath: string,
+  content: Buffer,
+  temporarySuffix: string,
+): Promise<void> {
+  const destination = await resolveReviewDestination(relativePath)
+  try {
+    await access(destination)
+    throw new Error(`review record already exists: ${relativePath}`)
+  } catch (error) {
+    if (
+      !(error instanceof Error && "code" in error && error.code === "ENOENT")
+    ) {
+      throw error
+    }
+  }
+
+  const temporary = resolve(
+    dirname(destination),
+    `.${randomUUID()}.${temporarySuffix}.tmp`,
+  )
+
+  try {
+    await writeFile(temporary, content, { flag: "wx", mode: 0o600 })
+    await link(temporary, destination)
+  } finally {
+    await unlink(temporary).catch(() => undefined)
+  }
+}
+
 export async function writeHumanDecisionRecord(
   input: RecordHumanDecisionInput,
 ): Promise<void> {
@@ -308,10 +346,7 @@ export async function writeHumanDecisionRecord(
     throw new Error("rationale must not be empty")
   }
 
-  const artifactPaths = await artifactPathsForGate(input.run, input.gate)
-  const artifacts = await Promise.all(
-    artifactPaths.map((path) => fingerprintArtifact(path)),
-  )
+  const artifacts = await artifactFingerprintsForGate(input.run, input.gate)
 
   const record: HumanDecisionRecord = {
     schemaVersion: 1,
@@ -336,32 +371,12 @@ export async function writeHumanDecisionRecord(
     },
   }
 
-  const destination = await resolveReviewDestination(input.reviewPath)
-  try {
-    await access(destination)
-    throw new Error(`human decision record already exists: ${input.reviewPath}`)
-  } catch (error) {
-    if (
-      !(error instanceof Error && "code" in error && error.code === "ENOENT")
-    ) {
-      throw error
-    }
-  }
-
   const content = Buffer.from(`${JSON.stringify(record, null, 2)}\n`, "utf8")
-  const temporary = resolve(
-    dirname(destination),
-    `.${randomUUID()}.human-decision.tmp`,
+  await publishImmutableReviewRecord(
+    input.reviewPath,
+    content,
+    "human-decision",
   )
-
-  try {
-    await writeFile(temporary, content, { flag: "wx", mode: 0o600 })
-    // A hard link publishes the complete temporary file only if the immutable
-    // destination does not already exist. Unlike rename, it cannot overwrite.
-    await link(temporary, destination)
-  } finally {
-    await unlink(temporary).catch(() => undefined)
-  }
 }
 
 export async function verifyHumanDecisionRecord(

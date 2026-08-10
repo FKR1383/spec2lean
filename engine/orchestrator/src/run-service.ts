@@ -10,6 +10,7 @@ export type CreateRunInput = {
   specVersion: string
   unit: string
   sourceManifest: string
+  benchmarkAutoApprove?: boolean
 }
 
 export async function createRun(input: CreateRunInput): Promise<RunState> {
@@ -55,6 +56,14 @@ export async function createRun(input: CreateRunInput): Promise<RunState> {
         reason: "run initialized",
       },
     ],
+    ...(input.benchmarkAutoApprove
+      ? {
+          benchmark: {
+            autoApprove: true as const,
+            startedAtUtc: now,
+          },
+        }
+      : {}),
   }
 
   await saveRun(run)

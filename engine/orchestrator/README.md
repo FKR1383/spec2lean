@@ -18,6 +18,18 @@ For PTX, the source manifest is inferred from the specification version. The
 run state is persisted under `runs/<run-id>/run.json`, so a closed terminal or
 interrupted client does not discard workflow progress.
 
+For an unattended performance benchmark, opt in at run creation:
+
+```bash
+./spec2lean formalize --language ptx --version 9.3 --unit <unit> --auto-approve
+```
+
+This does not forge human approval. Each boundary gets an immutable,
+hash-bound `benchmark_gate_auto_advance` record with
+`humanConfirmationRecorded: false`. The run terminates at
+`BENCHMARK_COMPLETE` and cannot be finalized or promoted to `accepted/`.
+Normal runs still stop at every human gate.
+
 ## Human gates
 
 Prepare a concise read-only brief:

@@ -47,6 +47,12 @@ const runId = required("--run")
 const push = process.argv.includes("--push")
 const run = await loadRun(runId)
 
+if (run.benchmark?.autoApprove === true) {
+  throw new Error(
+    "Benchmark auto-approve runs are not human-approved and cannot be finalized or promoted",
+  )
+}
+
 if (run.stage !== "ACCEPTED" || run.gates.FINAL !== "approved") {
   throw new Error(`Run must be at ACCEPTED with FINAL approved; current stage=${run.stage}`)
 }
