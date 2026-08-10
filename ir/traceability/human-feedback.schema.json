@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec2lean.dev/schema/traceability/human-feedback-v1.json",
+  "title": "Spec2Lean human traceability feedback",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "recordType",
+    "feedbackId",
+    "runId",
+    "unit",
+    "reviewer",
+    "submittedAtUtc",
+    "decision",
+    "comment",
+    "target",
+    "humanConfirmationRecorded",
+    "gateApprovalPerformed",
+    "promotionPerformed",
+    "provenance"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "recordType": { "const": "human_traceability_feedback" },
+    "feedbackId": { "type": "string", "minLength": 1 },
+    "runId": { "type": "string", "minLength": 1 },
+    "unit": { "type": "string", "minLength": 1 },
+    "reviewer": { "type": "string", "minLength": 1 },
+    "submittedAtUtc": { "type": "string", "format": "date-time" },
+    "decision": { "enum": ["CONFIRM_MAPPING", "REQUEST_CHANGE", "QUESTION"] },
+    "comment": { "type": "string", "minLength": 1 },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifestPath",
+        "manifestSha256",
+        "leanPath",
+        "leanSha256",
+        "entryId",
+        "declarationName",
+        "semanticIds",
+        "evidenceIds"
+      ],
+      "properties": {
+        "manifestPath": { "type": "string", "minLength": 1 },
+        "manifestSha256": { "$ref": "#/$defs/sha256" },
+        "leanPath": { "type": "string", "minLength": 1 },
+        "leanSha256": { "$ref": "#/$defs/sha256" },
+        "entryId": { "type": "string", "minLength": 1 },
+        "declarationName": { "type": "string", "minLength": 1 },
+        "semanticIds": { "$ref": "#/$defs/stringArray" },
+        "evidenceIds": { "$ref": "#/$defs/stringArray" }
+      }
+    },
+    "humanConfirmationRecorded": { "const": true },
+    "gateApprovalPerformed": { "const": false },
+    "promotionPerformed": { "const": false },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["controller", "command"],
+      "properties": {
+        "controller": { "const": "spec2lean-gui" },
+        "command": { "const": "traceability feedback" }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "stringArray": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    }
+  }
+}

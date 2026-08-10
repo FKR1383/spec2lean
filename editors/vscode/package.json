@@ -1,0 +1,74 @@
+{
+  "name": "spec2lean-vscode",
+  "displayName": "Spec2Lean Evidence",
+  "description": "Source-to-Lean traceability and human feedback for Spec2Lean.",
+  "version": "0.1.0",
+  "publisher": "spec2lean",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": ["Other", "Programming Languages"],
+  "activationEvents": [
+    "onLanguage:lean4",
+    "onCommand:spec2lean.showEvidence",
+    "onCommand:spec2lean.buildEvidenceManifest",
+    "onCommand:spec2lean.refreshEvidence"
+  ],
+  "main": "./dist/extension.cjs",
+  "files": [
+    "dist/**",
+    "README.md",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run build"
+  },
+  "dependencies": {
+    "pdfjs-dist": "4.8.69"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/vscode": "^1.95.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.2"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "spec2lean.showEvidence",
+        "title": "Spec2Lean: Show Evidence for Declaration"
+      },
+      {
+        "command": "spec2lean.buildEvidenceManifest",
+        "title": "Spec2Lean: Build Evidence Manifest for Current Run"
+      },
+      {
+        "command": "spec2lean.refreshEvidence",
+        "title": "Spec2Lean: Refresh Evidence Manifests"
+      }
+    ],
+    "configuration": {
+      "title": "Spec2Lean",
+      "properties": {
+        "spec2lean.repositoryRoot": {
+          "type": "string",
+          "default": "",
+          "description": "Optional absolute path to the Spec2Lean repository. Empty means auto-detect from the workspace."
+        },
+        "spec2lean.reviewer": {
+          "type": "string",
+          "default": "",
+          "description": "Reviewer identity included in traceability feedback records."
+        },
+        "spec2lean.autoRevealEvidence": {
+          "type": "boolean",
+          "default": true,
+          "description": "Update an open evidence panel as the Lean cursor moves between mapped declarations."
+        }
+      }
+    }
+  }
+}

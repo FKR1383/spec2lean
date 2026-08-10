@@ -25,6 +25,8 @@ Usage:
   ./spec2lean self-test
   ./spec2lean typecheck
   ./spec2lean semantic-ir <command> [paths...]
+  ./spec2lean traceability build --run <run-id> [--pdf-boxes]
+  ./spec2lean traceability validate --manifest <path>
   ./spec2lean perf-report --run <run-id>
   ./spec2lean semantic-report --run <run-id>
 TXT
@@ -128,6 +130,10 @@ case "$cmd" in
 
   semantic-ir)
     exec npm --prefix "$ORCH" run semantic-ir -- "$@"
+    ;;
+
+  traceability)
+    exec npm --prefix "$ORCH" run traceability -- "$@"
     ;;
 
   perf-report)

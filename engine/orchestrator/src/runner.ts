@@ -38,6 +38,11 @@ import {
 } from "./semantic-v2.js"
 import { planForRun } from "./stage-plan.js"
 import {
+  buildTraceabilityManifest,
+  verifyTraceabilityManifest,
+  writeTraceabilityManifest,
+} from "./traceability.js"
+import {
   retryRun,
   transitionRun,
   type FormalizationStage,
@@ -793,6 +798,24 @@ export async function executeTick(
             outcome: "RETRY",
             nextStage: "SEMANTIC_EXTRACTION",
             summary: `Semantic delta fast path failed deterministically and has switched to explicit legacy fallback: ${detail}`,
+          }
+        }
+      }
+      if (result.outcome === "SUCCESS" && run.stage === "LEAN_FORMALIZATION") {
+        try {
+          const manifest = await buildTraceabilityManifest({ runId: run.runId })
+          const issues = await verifyTraceabilityManifest(manifest)
+          if (issues.length > 0) throw new Error(issues.join(" | "))
+          const manifestPath = await writeTraceabilityManifest(manifest)
+          result = {
+            ...result,
+            summary: `${result.summary} Deterministic Lean-to-source evidence manifest: ${manifestPath}.`,
+          }
+        } catch (error) {
+          result = {
+            outcome: "RETRY",
+            nextStage: run.stage,
+            summary: `Lean artifact passed verification, but deterministic traceability generation failed: ${error instanceof Error ? error.message : String(error)}`,
           }
         }
       }

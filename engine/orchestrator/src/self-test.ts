@@ -36,6 +36,12 @@ import { withRepositoryLock } from "./repository-lock.js"
 import { runSemanticIrSelfTests } from "./semantic-ir-self-test.js"
 import { runSemanticV2SelfTests } from "./semantic-v2-self-test.js"
 import {
+  buildTraceabilityManifest,
+  manifestEntryForLine,
+  traceabilityManifestPath,
+  verifyTraceabilityManifest,
+} from "./traceability.js"
+import {
   buildApprovedSharedEnvironment,
   sharedApprovalCandidateIssues,
   verifySharedApprovalCandidateFiles,
@@ -515,6 +521,12 @@ assert(
     runnerSource.match(/model: runtime\.model\.full/g)?.length === 2,
   "active-session recovery is pinned to explicit model provenance",
 )
+assert(
+  runnerSource.includes('run.stage === "LEAN_FORMALIZATION"') &&
+    runnerSource.includes("buildTraceabilityManifest({ runId: run.runId })") &&
+    runnerSource.includes("writeTraceabilityManifest(manifest)"),
+  "verified Lean formalization automatically emits its evidence manifest",
+)
 
 const projectModel = await loadProjectModel()
 const projectConfig = JSON.parse(
@@ -611,6 +623,59 @@ assert(
     deltaAgent.includes("The orchestrator will record the failure") &&
     deltaAgent.includes("Do not copy shared entries into local claims"),
   "delta extractor preserves grounding, reuse, and fallback boundaries",
+)
+
+const traceabilityManifest = await buildTraceabilityManifest({
+  runId: "ptx-9.3-or.b16-ab7bd730",
+})
+const traceabilityIssues = await verifyTraceabilityManifest(traceabilityManifest)
+assert(traceabilityIssues.length === 0, `traceability manifest verifies: ${traceabilityIssues.join(", ")}`)
+const orValueEntry = traceabilityManifest.entries.find((entry) => entry.declarationName === "orValue")
+assert(
+  orValueEntry !== undefined &&
+    orValueEntry.semanticIds.includes("SF-ORB16-003") &&
+    orValueEntry.evidence.some((evidence) => evidence.evidenceId === "PTX-9.3-ORB16-005"),
+  "traceability generator resolves Lean claim comments to exact source fragments",
+)
+assert(
+  orValueEntry !== undefined &&
+    manifestEntryForLine(
+      traceabilityManifest,
+      traceabilityManifest.leanDocument.path,
+      orValueEntry.leanRange.startLine,
+    )?.entryId === orValueEntry.entryId,
+  "traceability line lookup resolves the current Lean declaration",
+)
+const pdfViewPath = traceabilityManifestPath({
+  ...traceabilityManifest,
+  diagnostics: {
+    ...traceabilityManifest.diagnostics,
+    pdfAlignment: { matched: 1, ambiguous: [], unmatched: [] },
+  },
+})
+assert(
+  traceabilityManifestPath(traceabilityManifest) !== pdfViewPath,
+  "traceability manifests are content-addressed and optional PDF views never overwrite the base mapping",
+)
+const invalidTraceabilityIssues = await verifyTraceabilityManifest({
+  ...traceabilityManifest,
+  leanDocument: {
+    ...traceabilityManifest.leanDocument,
+    sha256: "0".repeat(64),
+  },
+  entries: traceabilityManifest.entries.map((entry, index) => index === 0
+    ? {
+        ...entry,
+        evidence: entry.evidence.map((evidence, evidenceIndex) => evidenceIndex === 0
+          ? { ...evidence, locator: { ...evidence.locator, bbox: [1.1, 0, 0.1, 0.1] } }
+          : evidence),
+      }
+    : entry),
+})
+assert(
+  invalidTraceabilityIssues.some((issue) => issue.includes("hash mismatch")) &&
+    invalidTraceabilityIssues.some((issue) => issue.includes("bbox")),
+  "traceability verification rejects stale artifacts and invalid normalized PDF boxes",
 )
 
 const protectedTreesAfter = {

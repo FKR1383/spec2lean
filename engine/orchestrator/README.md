@@ -61,6 +61,27 @@ Resume an interrupted/incomplete batch and report aggregate performance with:
 Do not put the same unit in a batch twice or start two independent batches for
 the same unit artifact root.
 
+## Lean-to-source evidence manifests
+
+The VS Code evidence UI consumes a deterministic manifest instead of parsing
+or semantically interpreting Lean on its own. Build and verify that manifest
+for a run with:
+
+```bash
+./spec2lean traceability build --run <run-id> --pdf-boxes
+./spec2lean traceability validate \
+  --manifest runs/<run-id>/traceability/evidence-<manifest-sha256>.json
+```
+
+The generator joins the claim IDs attached to Lean declarations to the
+structured semantic document and hash-bound source-bundle fragments. Missing
+links remain diagnostics. Successful `LEAN_FORMALIZATION` now emits this
+immutable manifest automatically; rebuilding identical evidence reuses the
+same content-addressed file. A later PDF rendition is another immutable view,
+not an overwrite. Human feedback recorded through the UI is an
+immutable `human_traceability_feedback` record with
+`gateApprovalPerformed: false`; it cannot approve or promote a unit.
+
 ## Human gates
 
 Prepare a concise read-only brief:
