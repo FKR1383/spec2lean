@@ -13,3 +13,5 @@ import Spec2Lean.PTX.AndB32
 import Spec2Lean.PTX.AndB32Proofs
 import Spec2Lean.PTX.OrB32
 import Spec2Lean.PTX.OrB32Proofs
+import Spec2Lean.PTX.CnotB32
+import Spec2Lean.PTX.CnotB32Proofs

@@ -1,0 +1,202 @@
+{
+  "schema_version": 2,
+  "interpretation_id": "ptx-9.3-cnot-b32-semantics-v1",
+  "revision_of": null,
+  "revision_reason": "Initial bounded semantic interpretation for cnot.b32 (legacy semantics path due UNIT_OUTSIDE_DELTA_CAPABILITY).",
+  "status": "READY_FOR_CRITIQUE",
+  "status_rationale": "Initial semantics for scalar cnot.b32 using only source bundle candidates/ptx/9.3/units/cnot-b32/source-bundles/source-bundle-v1.json.",
+  "language": "PTX",
+  "specification_version": "9.3",
+  "construct": "cnot.b32",
+  "instruction_family": "cnot",
+  "source_bundle_references": [
+    {
+      "path": "candidates/ptx/9.3/units/cnot-b32/source-bundles/source-bundle-v1.json",
+      "bundle_id": "ptx-9.3-cnot-b32-source-bundle-v1",
+      "role": "primary evidence source",
+      "note": "Fragments PTX-9.3-CNOT-001..019 are the only evidence used in this stage."
+    }
+  ],
+  "architecture_reference": {
+    "path": "candidates/ptx/9.3/units/cnot-b32/architecture/foundation-v1.md",
+    "status_note": "Draft only: not human-approved Gate A in this run.",
+    "sha256": null
+  },
+  "syntax": {
+    "base_form": "cnot.type d, a;",
+    "bounded_form": "cnot.b32 d, a;",
+    "guard_forms": ["@p cnot.b32 d, a;", "@!p cnot.b32 d, a;"],
+    "syntax_evidence": "PTX-9.3-CNOT-003"
+  },
+  "operands": {
+    "order": "d, a",
+    "roles": {
+      "d": "destination",
+      "a": "source"
+    },
+    "role_evidence": ["PTX-9.3-CNOT-003", "PTX-9.3-CNOT-004"]
+  },
+  "types": {
+    "instruction_type": ".b32",
+    "size_bits": 32,
+    "typing_note": "Derived from .type set and .b32 being a 32-bit bit type.",
+    "typing_evidence": ["PTX-9.3-CNOT-003", "PTX-9.3-CNOT-011", "PTX-9.3-CNOT-006"],
+    "open_question": "Exact width/cast behavior for literals 1 and 0 in `d = (a==0) ? 1 : 0;` is not explicit."
+  },
+  "state_reads": [
+    {
+      "component": "source a",
+      "description": "Read source value of a for comparison against zero.",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-CNOT-005", "PTX-9.3-CNOT-004"]
+    },
+    {
+      "component": "predicate (guard)",
+      "description": "Read predicate register referenced by guard when present.",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-CNOT-015", "PTX-9.3-CNOT-016"]
+    }
+  ],
+  "state_writes": [
+    {
+      "component": "destination d",
+      "description": "Write computed result to destination register when execution is enabled.",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-CNOT-005", "PTX-9.3-CNOT-004"]
+    },
+    {
+      "component": "whole state on guard false",
+      "description": "No state change when complete guard is false (do nothing).",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-CNOT-016", "PTX-9.3-CNOT-019"]
+    }
+  ],
+  "guard_semantics": {
+    "no_guard": {
+      "expression": "true",
+      "exec": "execute"
+    },
+    "at_p": {
+      "expression": "p",
+      "exec": "execute iff p true"
+    },
+    "at_bang_p": {
+      "expression": "not p",
+      "exec": "execute iff p false"
+    },
+    "source": "PTX-9.3-CNOT-015, PTX-9.3-CNOT-016"
+  },
+  "behavior": {
+    "semantic_pseudocode": "d = (a == 0) ? 1 : 0;",
+    "source": "PTX-9.3-CNOT-005",
+    "guard_true": "Read a, compute predicate expression (if present), and write d when true.",
+    "guard_false": "No destination write and no visible state update.",
+    "determinism": "Derived interpretation: deterministic for a fixed state and well-typed instruction."
+  },
+  "exceptional_behavior": {
+    "statement": "No explicit error/exceptional-behavior clause was found in this evidence set.",
+    "classification": "OPEN_QUESTION",
+    "evidence_fragment_ids": ["PTX-9.3-CNOT-005"]
+  },
+  "undefined_behavior": {
+    "statement": "No explicit undefined-behavior clause was found in this evidence set.",
+    "classification": "OPEN_QUESTION",
+    "evidence_fragment_ids": ["PTX-9.3-CNOT-005"]
+  },
+  "implementation_defined_behavior": {
+    "statement": "No explicit implementation-defined behavior clause was found in this evidence set.",
+    "classification": "OPEN_QUESTION",
+    "evidence_fragment_ids": ["PTX-9.3-CNOT-005"]
+  },
+  "version_and_target": {
+    "introduced": {
+      "value": "PTX ISA version 1.0",
+      "evidence_fragment": "PTX-9.3-CNOT-007",
+      "classification": "SOURCE_FACT"
+    },
+    "supported_on_all_targets": {
+      "value": true,
+      "evidence_fragment": "PTX-9.3-CNOT-008",
+      "classification": "SOURCE_FACT"
+    }
+  },
+  "design_dependencies": [
+    {
+      "id": "D-0c",
+      "statement": "Bounded scope is scalar `.b32` only.",
+      "classification": "DESIGN_DEPENDENCY",
+      "source": "candidates/ptx/9.3/units/cnot-b32/architecture/foundation-v1.md"
+    }
+  ],
+  "open_questions": [
+    {
+      "id": "OQ-1",
+      "statement": "Whether source operand `a` may be an immediate.",
+      "classification": "OPEN_QUESTION",
+      "evidence_fragment_ids": ["PTX-9.3-CNOT-003", "PTX-9.3-CNOT-009"]
+    },
+    {
+      "id": "OQ-2",
+      "statement": "Whether bit-bucket `_` destination is permitted for cnot.b32.",
+      "classification": "OPEN_QUESTION",
+      "evidence_fragment_ids": ["PTX-9.3-CNOT-016"]
+    },
+    {
+      "id": "OQ-3",
+      "statement": "Exact representation of constants 1 and 0 in .b32 pseudocode.",
+      "classification": "OPEN_QUESTION",
+      "evidence_fragment_ids": ["PTX-9.3-CNOT-005"]
+    }
+  ],
+  "semantic_claims": [
+    {
+      "claim_id": "PTX-CNOT-SEM1-001",
+      "classification": "SOURCE_FACT",
+      "statement": "The `cnot` syntax line is `cnot.type d, a;` with `.type = { .b16, .b32, .b64 }`.",
+      "evidence_fragment_ids": ["PTX-9.3-CNOT-003"],
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-CNOT-SEM1-002",
+      "classification": "SOURCE_FACT",
+      "statement": "`cnot` is logical negation with semantics `d = (a==0) ? 1 : 0;`.",
+      "evidence_fragment_ids": ["PTX-9.3-CNOT-004", "PTX-9.3-CNOT-005"],
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-CNOT-SEM1-003",
+      "classification": "DERIVED_INTERPRETATION",
+      "statement": "Bounded base form instantiated as `cnot.b32 d, a;`.",
+      "evidence_fragment_ids": ["PTX-9.3-CNOT-003"],
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-CNOT-SEM1-004",
+      "classification": "SOURCE_FACT",
+      "statement": "Family note: operand sizes must match, but not necessarily type.",
+      "evidence_fragment_ids": ["PTX-9.3-CNOT-006"],
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-CNOT-SEM1-005",
+      "classification": "SOURCE_FACT",
+      "statement": "Predication is optional and prefix form is `@{!}p`.",
+      "evidence_fragment_ids": ["PTX-9.3-CNOT-013", "PTX-9.3-CNOT-015", "PTX-9.3-CNOT-016"],
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-CNOT-SEM1-006",
+      "classification": "DERIVED_INTERPRETATION",
+      "statement": "Execution updates destination only when guard condition is true/absent and writes `(a==0)?1:0`.",
+      "evidence_fragment_ids": ["PTX-9.3-CNOT-005", "PTX-9.3-CNOT-019", "PTX-9.3-CNOT-016"],
+      "blocking_if_wrong": true
+    },
+    {
+      "claim_id": "PTX-CNOT-SEM1-007",
+      "classification": "OPEN_QUESTION",
+      "statement": "Bit bucket destination and immediate-source questions remain unresolved.",
+      "evidence_fragment_ids": ["PTX-9.3-CNOT-016", "PTX-9.3-CNOT-003", "PTX-9.3-CNOT-009"],
+      "blocking_if_wrong": false
+    }
+  ]
+}

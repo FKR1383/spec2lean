@@ -1,0 +1,180 @@
+{
+  "schema_version": 1,
+  "obligation_set_id": "ptx-9.3-cnot-b32-obligations-v3",
+  "run_id": "ptx-9.3-cnot.b32-96465672",
+  "stage": "THEOREM_GENERATION",
+  "stage_attempt": 3,
+  "run_revision": 19,
+  "status": "READY_FOR_STRENGTH_REVIEW",
+  "status_rationale": "Reissued obligations for theorem-strength review after prior attempt protocol retry; Lean mapping v3 remains unchanged and compile-checked. The set is non-vacuous and maps directly to approved cnot.b32 semantics-v2 and bounded cnot.b32 Lean definitions.",
+  "unit": {
+    "language": "PTX",
+    "specification_version": "9.3",
+    "construct": "cnot.b32",
+    "instruction_family": "cnot",
+    "bounded_unit": "PTX ISA 9.3 bounded scalar form cnot.b32 d, a; with optional guard and register-only source/destination",
+    "scope_boundary": "Only scalar .b32 form is represented. Source and destination are register-only in this bounded unit. No source/explicitly modeled errors, UB, or implementation-defined behavior."
+  },
+  "gate_c_reference": {
+    "record_path": "reviews/ptx-cnot-b32/benchmark-auto/ptx-9.3-cnot.b32-96465672-c-benchmark-auto-v1.json",
+    "review_id": "ptx-9.3-cnot.b32-96465672-c-benchmark-auto-v1",
+    "gate": "C",
+    "decision": "auto_advanced",
+    "humanConfirmationRecorded": false,
+    "gateApprovalPerformed": true
+  },
+  "gate_b_reference": {
+    "record_path": "reviews/ptx-cnot-b32/benchmark-auto/ptx-9.3-cnot.b32-96465672-b-benchmark-auto-v1.json",
+    "review_id": "ptx-9.3-cnot.b32-96465672-b-benchmark-auto-v1",
+    "gate": "B",
+    "decision": "auto_advanced",
+    "humanConfirmationRecorded": false,
+    "gateApprovalPerformed": true
+  },
+  "gate_a_reference": {
+    "record_path": "reviews/ptx-cnot-b32/benchmark-auto/ptx-9.3-cnot.b32-96465672-a-benchmark-auto-v1.json",
+    "review_id": "ptx-9.3-cnot.b32-96465672-a-benchmark-auto-v1",
+    "gate": "A",
+    "decision": "auto_advanced",
+    "humanConfirmationRecorded": false,
+    "gateApprovalPerformed": true
+  },
+  "semantics_reference": {
+    "path": "candidates/ptx/9.3/units/cnot-b32/semantics/semantics-v2.json",
+    "interpretation_id": "ptx-9.3-cnot-b32-semantics-v2",
+    "claim_count": 24,
+    "claim_counts": {
+      "total": 24,
+      "SOURCE_FACT": 8,
+      "DERIVED_INTERPRETATION": 4,
+      "DESIGN_DEPENDENCY": 2,
+      "ASSUMPTION": 0,
+      "OPEN_QUESTION": 4
+    }
+  },
+  "source_bundle_reference": {
+    "path": "candidates/ptx/9.3/units/cnot-b32/source-bundles/source-bundle-v1.json",
+    "bundle_id": "ptx-9.3-cnot-b32-source-bundle-v1",
+    "fragment_ids": [
+      "PTX-9.3-CNOT-003",
+      "PTX-9.3-CNOT-004",
+      "PTX-9.3-CNOT-005",
+      "PTX-9.3-CNOT-006",
+      "PTX-9.3-CNOT-009",
+      "PTX-9.3-CNOT-015",
+      "PTX-9.3-CNOT-016"
+    ]
+  },
+  "lean_mapping_reference": {
+    "path": "candidates/ptx/9.3/units/cnot-b32/lean/CnotB32-v3.lean",
+    "sha256": "269a95a748fd4c248c3a5546c5aa0fc303ae230d72eb23229abb4988bbb6eafb",
+    "namespace": "Spec2Lean.PTX.CnotB32",
+    "size_bytes": 5494,
+    "lean_check": {
+      "independently_run_at_obligation_generation": true,
+      "success": true,
+      "errorCount": 0,
+      "warningCount": 0
+    }
+  },
+  "architecture_reference": {
+    "path": "candidates/ptx/9.3/units/cnot-b32/architecture/foundation-v1.md",
+    "status_note": "Draft architecture artifact used for bounded scope and mapping assumptions in this benchmark run."
+  },
+  "human_assumption_references": [],
+  "compliance_notes": [
+    "No proofs are written in this stage.",
+    "No vacuous, circular, or trivial single-valuedness claims are proposed.",
+    "No new axioms, sorry/admit, or unsafe are used.",
+    "No source semantics are invented."
+  ],
+  "validation_obligations": [
+    {
+      "obligation_id": "PTX-CNOT-VAL-001",
+      "title": "Bounded instruction syntax is `.b32` only",
+      "description": "`CnotTypeSpecifier` has exactly one constructor `.b32`, and `CnotB32Instruction` fields are `type, guard, d, a`, matching `cnot.b32 d, a;`.",
+      "check_type": "static definitional check",
+      "status": "SATISFIED_IN_CANDIDATE",
+      "semantic_claim_ids": ["SF-1", "DI-1"],
+      "lean_declarations_used": ["CnotTypeSpecifier", "CnotB32Instruction", "execCnotB32"],
+      "basis": "Semantics SF-1/DI-1 and bounded architecture scope."
+    },
+    {
+      "obligation_id": "PTX-CNOT-VAL-002",
+      "title": "32-bit domain representation is enforced",
+      "description": "`U32` is represented as `Fin (2^32)`, so all bitwise values are in modular 32-bit range by type.",
+      "check_type": "representation invariant",
+      "status": "SATISFIED_IN_CANDIDATE",
+      "semantic_claim_ids": ["SF-1", "DI-1"],
+      "lean_declarations_used": ["U32", "b32Bits", "b32Modulus", "mkB32", "cnotB32"],
+      "basis": "Semantics SF-1 and DI-1; Lean type construction."
+    },
+    {
+      "obligation_id": "PTX-CNOT-VAL-003",
+      "title": "Lean file has no proof-bypass constructs",
+      "description": "CnotB32-v3 contains no sorry, admit, new axioms, or unsafe blocks.",
+      "check_type": "static verification check",
+      "status": "SATISFIED_IN_CANDIDATE",
+      "semantic_claim_ids": [],
+      "lean_declarations_used": [],
+      "basis": "Project restrictions and file inspection/critic records."
+    },
+    {
+      "obligation_id": "PTX-CNOT-VAL-004",
+      "title": "Lean mapping compiles",
+      "description": "`lean_check_file` on CnotB32-v3.lean succeeds with 0 errors and 0 warnings.",
+      "check_type": "Lean compilation check",
+      "status": "SATISFIED_IN_CANDIDATE",
+      "semantic_claim_ids": [],
+      "lean_declarations_used": [],
+      "basis": "Direct lean_check_file execution at theorem-generation time."
+    }
+  ],
+  "theorem_obligations": [
+    {
+      "obligation_id": "PTX-CNOT-THM-001",
+      "proposed_name": "cnotB32_exec_guard_false_no_state_change",
+      "category": "guarded control-flow",
+      "intent": "If complete guard evaluates false, execution returns `guardFalse` with the unchanged state.",
+      "precise_statement_in_words": "For all states s and instructions i, if evalGuard s i.guard = some false then execCnotB32 s i = some (ExecOutcome.guardFalse s).",
+      "lean_statement_sketch": "theorem cnotB32_exec_guard_false_no_state_change (s : MachineState) (i : CnotB32Instruction) (h : evalGuard s i.guard = some false) : execCnotB32 s i = some (ExecOutcome.guardFalse s)",
+      "hypotheses": ["h : evalGuard s i.guard = some false"],
+      "conclusion": "execCnotB32 s i = some (ExecOutcome.guardFalse s)",
+      "semantic_claim_ids": ["SF-4", "SF-5", "DI-2"],
+      "lean_declarations_used": ["execCnotB32", "evalGuard", "ExecOutcome", "CnotB32Instruction", "MachineState"],
+      "non_vacuity_argument": "Example states can realize false guard (e.g. `Guard.atPos` with pred false); theorem asserts non-trivial no-op outcome, not merely function extensionality.",
+      "strength_risks": ["Do not weaken h to `evalGuard ... = some v` or omit completeness of the false case."],
+      "proof_strategy_hint": "Unfold execCnotB32 and rewrite with h; reduce to the `some false` branch."
+    },
+    {
+      "obligation_id": "PTX-CNOT-THM-002",
+      "proposed_name": "cnotB32_exec_true_guard_writes_cnot_result",
+      "category": "behavioral conformance",
+      "intent": "On true guard and resolvable source, destination register receives `cnotB32` of the source value in the executed post-state.",
+      "precise_statement_in_words": "If evalGuard is `some true`, destination is a register r, and evalSource is `some va`, then execCnotB32 produces an executed state whose destination register r equals `cnotB32 va`.",
+      "lean_statement_sketch": "theorem cnotB32_exec_true_guard_writes_cnot_result (s : MachineState) (i : CnotB32Instruction) (r : RegId) (va : U32) (hguard : evalGuard s i.guard = some true) (hd : i.d = Destination.reg r) (ha : evalSource s i.a = some va) : ∃ s', execCnotB32 s i = some (ExecOutcome.executed s') ∧ s'.valueRegs r = some (cnotB32 va)",
+      "hypotheses": ["hguard : evalGuard s i.guard = some true", "hd : i.d = Destination.reg r", "ha : evalSource s i.a = some va"],
+      "conclusion": "∃ s', execCnotB32 s i = some (ExecOutcome.executed s') ∧ s'.valueRegs r = some (cnotB32 va)",
+      "semantic_claim_ids": ["SF-2", "DI-2", "DI-3"],
+      "lean_declarations_used": ["execCnotB32", "evalGuard", "evalSource", "Destination.reg", "updateDestination", "cnotB32", "ExecOutcome", "MachineState"],
+      "non_vacuity_argument": "Concrete states with non-missing guard/source force this branch and produce a non-trivial written value (`0` becomes `1`; non-zero becomes `0`).",
+      "strength_risks": ["Destination bit-bucket case intentionally excluded here via explicit `Destination.reg` precondition."],
+      "proof_strategy_hint": "Split evalGuard with hguard, split evalSource with ha, and simplify updateDestination at index r after rewriting hd."
+    },
+    {
+      "obligation_id": "PTX-CNOT-THM-003",
+      "proposed_name": "cnotB32_exec_none_iff_missing_guard_or_true_source",
+      "category": "partiality characterization",
+      "intent": "Characterize exactly when partiality (`none`) occurs in bounded executable semantics.",
+      "precise_statement_in_words": "execCnotB32 s i = none iff guard is missing, or guard is true and source is missing.",
+      "lean_statement_sketch": "theorem cnotB32_exec_none_iff_missing_guard_or_true_source (s : MachineState) (i : CnotB32Instruction) : execCnotB32 s i = none ↔ (evalGuard s i.guard = none) ∨ (evalGuard s i.guard = some true ∧ evalSource s i.a = none)",
+      "hypotheses": [],
+      "conclusion": "execCnotB32 s i = none ↔ (evalGuard s i.guard = none) ∨ (evalGuard s i.guard = some true ∧ evalSource s i.a = none)",
+      "semantic_claim_ids": ["DI-2", "DI-4"],
+      "lean_declarations_used": ["execCnotB32", "evalGuard", "evalSource", "MachineState", "CnotB32Instruction"],
+      "non_vacuity_argument": "States with missing predicate produce no result, and states with true guard but missing source also produce no result; both directions are behaviorally meaningful.",
+      "strength_risks": ["Do not include guard=false in the none condition; false guard should return guard-false outcome."],
+      "proof_strategy_hint": "Case split on evalGuard, then on evalSource when in the true case, matching execCnotB32 cases directly."
+    }
+  ]
+}

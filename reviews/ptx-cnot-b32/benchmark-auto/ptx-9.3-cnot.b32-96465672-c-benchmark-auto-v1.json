@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "recordType": "benchmark_gate_auto_advance",
+  "reviewId": "ptx-9.3-cnot.b32-96465672-c-benchmark-auto-v1",
+  "unitId": "ptx-cnot-b32",
+  "runId": "ptx-9.3-cnot.b32-96465672",
+  "gate": "C",
+  "decision": "auto_advanced",
+  "controller": "Spec2Lean benchmark controller",
+  "rationale": "Benchmark-only unattended execution advanced this review boundary. This is not a human semantic approval and cannot authorize promotion.",
+  "submittedAtUtc": "2026-08-10T02:38:08.844Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ptx/9.3/units/cnot-b32/lean/CnotB32-v3.lean",
+      "sha256": "269a95a748fd4c248c3a5546c5aa0fc303ae230d72eb23229abb4988bbb6eafb",
+      "sizeBytes": 5494
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/cnot-b32/reviews/lean-mapping-critic-v3.md",
+      "sha256": "fb87910f2400230a755a86c77b404c4cbaf0fbdf498a47b85e12e27ab6cc0189",
+      "sizeBytes": 1428
+    }
+  ],
+  "humanConfirmationRecorded": false,
+  "gateApprovalPerformed": false,
+  "promotionPerformed": false,
+  "provenance": {
+    "controller": "spec2lean-cli",
+    "command": "formalize --auto-approve"
+  }
+}

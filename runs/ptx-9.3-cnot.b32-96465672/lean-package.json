@@ -1,0 +1,10 @@
+{
+  "sourcePath": "candidates/ptx/9.3/units/cnot-b32/lean/CnotB32-v3.lean",
+  "packagePath": "lean/Spec2Lean/PTX/CnotB32.lean",
+  "moduleImport": "Spec2Lean.PTX.CnotB32",
+  "declarationNamespace": "Spec2Lean.PTX.CnotB32",
+  "sourceSha256": "269a95a748fd4c248c3a5546c5aa0fc303ae230d72eb23229abb4988bbb6eafb",
+  "packageSha256": "269a95a748fd4c248c3a5546c5aa0fc303ae230d72eb23229abb4988bbb6eafb",
+  "isolatedNamespace": false,
+  "importAdjusted": false
+}
