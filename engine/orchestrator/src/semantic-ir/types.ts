@@ -24,6 +24,7 @@ export type ContentFingerprint = {
 
 export type EvidenceRecord = {
   evidenceId: string
+  sourceBundleEvidenceId?: string
   specificationVersion: string
   source: {
     kind: "html" | "pdf" | "artifact"
@@ -62,10 +63,16 @@ export type SemanticClaim = {
 
 export type SharedSemanticEntry = SemanticClaim & {
   specificationVersion: string
-  scope: "PTX_9_3_SHARED"
+  scope: string
   provenance: {
     originatingArtifacts: ContentFingerprint[]
     reviewRecords: ContentFingerprint[]
+    acceptedUnitSupport: Array<{
+      unit: string
+      acceptedEvidenceIds: string[]
+      artifacts: ContentFingerprint[]
+      reviewRecords: ContentFingerprint[]
+    }>
   }
   review: {
     status: ReviewStatus
@@ -79,6 +86,13 @@ export type SharedSemanticEnvironment = {
   language: string
   specificationVersion: string
   revision: number
+  scope: {
+    scopeId: string
+    statement: string
+    eligibilityRequirements: string[]
+    excludedFeatures: string[]
+    outsideScopeAction: "DEEP_REVIEW_OR_LEGACY_FALLBACK"
+  }
   review: {
     status: ReviewStatus
     records: ContentFingerprint[]

@@ -37,7 +37,7 @@ export function makeLeanModuleName(
     .join("")
 }
 
-function stageAttempt(
+export function stageAttempt(
   run: RunState,
   stage: FormalizationStage,
 ): number {
@@ -63,7 +63,7 @@ export type ArtifactContract = {
 export function artifactContractForRun(
   run: RunState,
 ): ArtifactContract {
-  const attempt =
+  let attempt =
     stageAttempt(
       run,
       run.stage,
@@ -74,6 +74,18 @@ export function artifactContractForRun(
 
   const leanName =
     run.leanModuleName
+
+  if (
+    run.stage === "SEMANTIC_EXTRACTION" &&
+    run.semanticV2?.mode === "LEGACY_FALLBACK" &&
+    run.semanticV2.current !== undefined &&
+    attempt <= run.semanticV2.current.attempt
+  ) {
+    // Preserve the failed/superseded delta attempt and any partial
+    // deterministic outputs. The legacy agent always receives a fresh
+    // immutable semantics revision.
+    attempt = run.semanticV2.current.attempt + 1
+  }
 
   let outputPath: string
 
@@ -94,8 +106,9 @@ export function artifactContractForRun(
       break
 
     case "SEMANTIC_EXTRACTION":
-      outputPath =
-        `${root}/semantics/semantics-v${attempt}.json`
+      outputPath = run.semanticV2?.mode === "DELTA_FAST_PATH"
+        ? `${root}/semantics/semantic-delta-v${attempt}.json`
+        : `${root}/semantics/semantics-v${attempt}.json`
       break
 
     case "SEMANTIC_CRITIQUE":

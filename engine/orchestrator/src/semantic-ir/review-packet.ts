@@ -1,4 +1,4 @@
-import { canonicalJson } from "./canonical.js"
+import { canonicalJson, canonicalSha256 } from "./canonical.js"
 import { semanticDeltaSha256, sharedEnvironmentSha256 } from "./document.js"
 import { materializeSemanticView } from "./materialize.js"
 import type {
@@ -37,7 +37,13 @@ export type DeltaCriticPacket = {
     classification: ClaimClassification
     statement: string
     environmentReviewStatus: SharedSemanticEnvironment["review"]["status"]
+    reviewConfidence?: "LOW" | "MEDIUM" | "HIGH"
+    stateAffecting: boolean
+    evidenceIds: string[]
+    usage: "DEPENDENCY" | "INSTANTIATION" | "TRANSITIVE_DEPENDENCY"
   }>
+  instantiatedSharedSemanticIds: string[]
+  riskySharedSemanticIds: string[]
   deltaByClassification: Record<ClaimClassification, ReviewClaim[]>
   refinements: Array<{
     semanticId: string
@@ -50,6 +56,7 @@ export type DeltaCriticPacket = {
     kind: "MATERIALIZED_FULL_VIEW"
     deterministicViewId: string
     canonicalBytes: number
+    canonicalSha256: string
   }
 }
 
@@ -68,6 +75,21 @@ export function createDeltaCriticPacket(
     ASSUMPTION: byClassification("ASSUMPTION"),
     OPEN_QUESTION: byClassification("OPEN_QUESTION"),
   }
+  const directReferences = new Map(
+    delta.sharedReferences.map((reference) => [reference.semanticId, reference]),
+  )
+  const sharedDependencies = fullView.claims
+    .filter((claim) => claim.origin.kind === "SHARED")
+    .map((claim) => ({
+      semanticId: claim.semanticId,
+      classification: claim.classification,
+      statement: claim.statement,
+      environmentReviewStatus: shared.review.status,
+      reviewConfidence: claim.sharedReview?.confidence,
+      stateAffecting: claim.stateAffecting,
+      evidenceIds: claim.evidenceIds,
+      usage: directReferences.get(claim.semanticId)?.usage ?? "TRANSITIVE_DEPENDENCY" as const,
+    }))
 
   return {
     schemaVersion: 1,
@@ -81,14 +103,19 @@ export function createDeltaCriticPacket(
       deltaSha256: semanticDeltaSha256(delta),
       deltaSourceBundle: { ...delta.provenance.sourceBundle },
     },
-    sharedDependencies: fullView.claims
-      .filter((claim) => claim.origin.kind === "SHARED")
-      .map((claim) => ({
-        semanticId: claim.semanticId,
-        classification: claim.classification,
-        statement: claim.statement,
-        environmentReviewStatus: shared.review.status,
-      })),
+    sharedDependencies,
+    instantiatedSharedSemanticIds: delta.sharedReferences
+      .filter((reference) => reference.usage === "INSTANTIATION")
+      .map((reference) => reference.semanticId)
+      .sort(),
+    riskySharedSemanticIds: sharedDependencies
+      .filter((dependency) =>
+        dependency.stateAffecting ||
+        dependency.classification !== "SOURCE_FACT" ||
+        dependency.reviewConfidence !== "HIGH",
+      )
+      .map((dependency) => dependency.semanticId)
+      .sort(),
     deltaByClassification,
     refinements: [...delta.refinements]
       .sort((left, right) => left.semanticId.localeCompare(right.semanticId))
@@ -104,6 +131,7 @@ export function createDeltaCriticPacket(
       kind: "MATERIALIZED_FULL_VIEW",
       deterministicViewId: fullView.viewId,
       canonicalBytes: Buffer.byteLength(canonicalJson(fullView), "utf8"),
+      canonicalSha256: canonicalSha256(fullView),
     },
   }
 }

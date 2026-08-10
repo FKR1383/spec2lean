@@ -4,6 +4,24 @@
   "language": "PTX",
   "specificationVersion": "9.3",
   "revision": 1,
+  "scope": {
+    "scopeId": "PTX_9_3_BOUNDED_SCALAR_B32_REGISTER_PREDICATE_CORE",
+    "statement": "PTX ISA 9.3 bounded scalar .b32 instructions whose modeled effects are confined to ordinary value registers and optional predicate guards.",
+    "eligibilityRequirements": [
+      "The unit is a scalar .b32 instruction.",
+      "Its bounded syntax reads ordinary value registers or immediate bit values and may read one predicate guard.",
+      "Its bounded state effects are confined to ordinary destination-register update or no update.",
+      "Instruction-specific legality, operation, typing compatibility, and exceptional behavior remain in the unit delta."
+    ],
+    "excludedFeatures": [
+      "memory, texture, surface, atomic, barrier, concurrency, call, return, branch, and control-transfer effects",
+      "special-register, parameter, address-variable, function-address, or kernel-address semantics",
+      "vector, packed, matrix, tensor, and non-.b32 value forms",
+      "implicit flags, carry, status, condition-code, rounding, saturation, or exception state",
+      "instruction-specific permission to use the bit-bucket destination"
+    ],
+    "outsideScopeAction": "DEEP_REVIEW_OR_LEGACY_FALLBACK"
+  },
   "review": {
     "status": "DRAFT",
     "records": []

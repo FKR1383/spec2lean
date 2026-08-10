@@ -1,7 +1,7 @@
 ---
 description: Independently checks source evidence, semantic interpretations, Lean definitions, theorem obligations, and proofs for faithfulness and strength
 mode: primary
-model: opencode/deepseek-v4-flash-free
+model: openai/gpt-5.3-codex-spark
 temperature: 0
 steps: 64
 permission:

@@ -13,6 +13,7 @@ Usage:
   ./spec2lean status --run <run-id>
   ./spec2lean brief --run <run-id> --gate A|B|C|THEOREM_STRENGTH|FINAL
   ./spec2lean approve --run <run-id> --gate <gate> [--no-resume]
+  ./spec2lean approve-shared --language <language> --version <version> --reviewer <name> --rationale <text>
   ./spec2lean reject --run <run-id> --gate <gate> --to <stage> --reason <text> [--no-resume]
   ./spec2lean resume --run <run-id> [--max-ticks N]
   ./spec2lean doctor --run <run-id>
@@ -20,6 +21,8 @@ Usage:
   ./spec2lean self-test
   ./spec2lean typecheck
   ./spec2lean semantic-ir <command> [paths...]
+  ./spec2lean perf-report --run <run-id>
+  ./spec2lean semantic-report --run <run-id>
 TXT
 }
 
@@ -74,6 +77,10 @@ case "$cmd" in
     exec npm --prefix "$ORCH" run loop -- --run "$run_id" --max-ticks 50 --max-stage-retries 4
     ;;
 
+  approve-shared)
+    exec npm --prefix "$ORCH" run approve-shared -- "$@"
+    ;;
+
   reject)
     run_id="$(find_arg --run "$@")" || { echo "missing --run" >&2; exit 2; }
     npm --prefix "$ORCH" run reject -- "$@"
@@ -105,6 +112,14 @@ case "$cmd" in
 
   semantic-ir)
     exec npm --prefix "$ORCH" run semantic-ir -- "$@"
+    ;;
+
+  perf-report)
+    exec npm --prefix "$ORCH" run perf-report -- "$@"
+    ;;
+
+  semantic-report)
+    exec npm --prefix "$ORCH" run semantic-report -- "$@"
     ;;
 
   *)

@@ -21,6 +21,44 @@ type SessionStatus =
       next: number
     }
 
+export const DEFAULT_PROVIDER_RETRY_BUDGET_MS = 60_000
+
+export function providerRetryBudgetExceeded(
+  retryStartedAt: number,
+  now: number,
+  retryBudgetMs: number,
+): boolean {
+  return now - retryStartedAt >= retryBudgetMs
+}
+
+export class ProviderRetryBudgetExceededError extends Error {
+  readonly attempt: number
+  readonly providerMessage: string
+  readonly nextRetryAt: number
+  readonly retryElapsedMs: number
+  readonly retryBudgetMs: number
+
+  constructor(input: {
+    attempt: number
+    providerMessage: string
+    nextRetryAt: number
+    retryElapsedMs: number
+    retryBudgetMs: number
+  }) {
+    super(
+      `Provider retry budget exceeded after ${input.retryElapsedMs}ms ` +
+      `(budget=${input.retryBudgetMs}ms, attempt=${input.attempt}, ` +
+      `next=${input.nextRetryAt}, message=${input.providerMessage})`,
+    )
+    this.name = "ProviderRetryBudgetExceededError"
+    this.attempt = input.attempt
+    this.providerMessage = input.providerMessage
+    this.nextRetryAt = input.nextRetryAt
+    this.retryElapsedMs = input.retryElapsedMs
+    this.retryBudgetMs = input.retryBudgetMs
+  }
+}
+
 export type AsyncPromptBody = {
   agent: string
   model: {
@@ -166,18 +204,22 @@ export async function waitForAgentResult(
   options?: {
     pollMs?: number
     maxWaitMs?: number
+    providerRetryBudgetMs?: number
     ignoreResponse?: string
     missingStatusIsTerminal?: boolean
   },
 ): Promise<string> {
   const pollMs = options?.pollMs ?? 2_000
   const maxWaitMs = options?.maxWaitMs ?? 30 * 60 * 1000
+  const providerRetryBudgetMs =
+    options?.providerRetryBudgetMs ?? DEFAULT_PROVIDER_RETRY_BUDGET_MS
   const ignoreResponse = options?.ignoreResponse
   const missingStatusIsTerminal = options?.missingStatusIsTerminal ?? false
   const started = Date.now()
   let lastHeartbeat = started
   let seenBusy = false
   let missingStatusPolls = 0
+  let providerRetryStartedAt: number | undefined
 
   while (true) {
     const messages = await listMessages(baseUrl, sessionId)
@@ -196,6 +238,28 @@ export async function waitForAgentResult(
       missingStatusPolls = 0
     } else if (status === undefined && (seenBusy || missingStatusIsTerminal)) {
       missingStatusPolls += 1
+    }
+
+    const now = Date.now()
+
+    if (status?.type === "retry") {
+      providerRetryStartedAt ??= now
+      const retryElapsedMs = now - providerRetryStartedAt
+      if (providerRetryBudgetExceeded(
+        providerRetryStartedAt,
+        now,
+        providerRetryBudgetMs,
+      )) {
+        throw new ProviderRetryBudgetExceededError({
+          attempt: status.attempt,
+          providerMessage: status.message,
+          nextRetryAt: status.next,
+          retryElapsedMs,
+          retryBudgetMs: providerRetryBudgetMs,
+        })
+      }
+    } else {
+      providerRetryStartedAt = undefined
     }
 
     // OpenCode may stop listing a completed session in /session/status.  The
@@ -219,12 +283,13 @@ export async function waitForAgentResult(
       )
     }
 
-    const now = Date.now()
-
     if (now - lastHeartbeat >= 30_000) {
       const elapsedSeconds = Math.floor((now - started) / 1000)
+      const retryDetail = status?.type === "retry"
+        ? ` attempt=${status.attempt} next=${status.next} provider=${JSON.stringify(status.message)}`
+        : ""
       console.log(
-        `[spec2lean] session=${sessionId} status=${status?.type ?? "unknown"} finish=${finishReason ?? "none"} elapsed=${elapsedSeconds}s`,
+        `[spec2lean] session=${sessionId} status=${status?.type ?? "unknown"} finish=${finishReason ?? "none"} elapsed=${elapsedSeconds}s${retryDetail}`,
       )
       lastHeartbeat = now
     }

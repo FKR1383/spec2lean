@@ -44,6 +44,14 @@ function normalizeSharedEntry(entry: SharedSemanticEntry): SharedSemanticEntry {
     provenance: {
       originatingArtifacts: sortedFingerprints(entry.provenance.originatingArtifacts),
       reviewRecords: sortedFingerprints(entry.provenance.reviewRecords),
+      acceptedUnitSupport: [...entry.provenance.acceptedUnitSupport]
+        .map((support) => ({
+          ...support,
+          acceptedEvidenceIds: sortedStrings(support.acceptedEvidenceIds),
+          artifacts: sortedFingerprints(support.artifacts),
+          reviewRecords: sortedFingerprints(support.reviewRecords),
+        }))
+        .sort((left, right) => left.unit.localeCompare(right.unit)),
     },
   }
 }
@@ -54,6 +62,11 @@ export function normalizeSharedEnvironment(
 ): SharedSemanticEnvironment {
   return {
     ...environment,
+    scope: {
+      ...environment.scope,
+      eligibilityRequirements: sortedStrings(environment.scope.eligibilityRequirements),
+      excludedFeatures: sortedStrings(environment.scope.excludedFeatures),
+    },
     review: {
       ...environment.review,
       records: sortedFingerprints(environment.review.records),

@@ -1,0 +1,408 @@
+{
+  "schemaVersion": 1,
+  "deltaId": "ptx-9.3-or.b32-semantic-delta-v1",
+  "unit": {
+    "language": "PTX",
+    "specificationVersion": "9.3",
+    "unit": "or.b32",
+    "unitSlug": "or-b32"
+  },
+  "sharedEnvironment": {
+    "environmentId": "ptx-9.3-bounded-scalar-b32-register-predicate-core",
+    "revision": 1,
+    "sha256": "11eef31e7205bc9ea6f225c77b0e515d722f8da991c7dcfd821f57faa8bd05b0"
+  },
+  "provenance": {
+    "sourceBundle": {
+      "path": "candidates/ptx/9.3/units/or-b32/source-bundles/source-bundle-v1.json",
+      "sha256": "425a3f7fe526616f7a2b30681eb07b321dfaf57f95d06205e49bd3bb3889a918"
+    },
+    "generatedBy": "gpt-5.3-codex-spark"
+  },
+  "sharedReferences": [
+    {
+      "semanticId": "ptx.9.3.b32.domain-source",
+      "usage": "DEPENDENCY",
+      "rationale": "Provides bounded primitive domain and width facts used by the .b32 specialization."
+    },
+    {
+      "semanticId": "ptx.9.3.register.state-space-source",
+      "usage": "DEPENDENCY",
+      "rationale": "Provides register-state-space typing and width assumptions used by local preconditions and effects."
+    },
+    {
+      "semanticId": "ptx.9.3.predication.applicability-source",
+      "usage": "DEPENDENCY",
+      "rationale": "Establishes that all PTX instructions are predicable in the shared model."
+    },
+    {
+      "semanticId": "ptx.9.3.predication.false-guard-source",
+      "usage": "DEPENDENCY",
+      "rationale": "Controls bounded false-guard transition shape and no-op behavior derivation."
+    },
+    {
+      "semanticId": "ptx.9.3.state.register-model-design",
+      "usage": "INSTANTIATION",
+      "rationale": "Instantiates the two-file bounded register model for or.b32."
+    },
+    {
+      "semanticId": "ptx.9.3.register.lookup-partial-design",
+      "usage": "INSTANTIATION",
+      "rationale": "Instantiates partial-state lookup behavior for register/constant resolution."
+    }
+  ],
+  "evidence": [
+    {
+      "evidenceId": "ptx-9.3.or.semantic.evidence-OR-001",
+      "specificationVersion": "9.3",
+      "sourceBundleEvidenceId": "PTX-9.3-OR-001",
+      "source": {
+        "kind": "html",
+        "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+        "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+        "sourceManifestPath": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+        "sourceManifestSha256": "622e6ce0d3114a909a62726530955993b5f2b98d2f60e45ae1ceb429512208f2"
+      },
+      "locator": {
+        "section": "9.7.8.2",
+        "heading": "Logic and Shift Instructions: or",
+        "anchor": "logic-and-shift-instructions-or",
+        "startLine": 14290,
+        "endLine": 14323
+      },
+      "quotation": "Syntax\nor.type d, a, b;\n\n.type = { .pred, .b16, .b32, .b64 };\n\nDescription\nCompute the bit-wise OR.\n\nSemantics\nd = a | b;"
+    },
+    {
+      "evidenceId": "ptx-9.3.or.semantic.evidence-OR-SHARED-001",
+      "specificationVersion": "9.3",
+      "sourceBundleEvidenceId": "PTX-9.3-OR-SHARED-001",
+      "source": {
+        "kind": "html",
+        "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+        "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+        "sourceManifestPath": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+        "sourceManifestSha256": "622e6ce0d3114a909a62726530955993b5f2b98d2f60e45ae1ceb429512208f2"
+      },
+      "locator": {
+        "section": "9.2",
+        "heading": "PTX Instructions",
+        "anchor": "ptx-instructions",
+        "startLine": 7513,
+        "endLine": 7535
+      },
+      "quotation": "PTX instructions generally have from zero to four operands, plus an optional guard predicate appearing after an @ symbol to the left of the opcode: ... For instructions that create a result value, the d operand is the destination operand, while a, b, and c are source operands."
+    },
+    {
+      "evidenceId": "ptx-9.3.or.semantic.evidence-OR-SHARED-002",
+      "specificationVersion": "9.3",
+      "sourceBundleEvidenceId": "PTX-9.3-OR-SHARED-002",
+      "source": {
+        "kind": "html",
+        "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+        "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+        "sourceManifestPath": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+        "sourceManifestSha256": "622e6ce0d3114a909a62726530955993b5f2b98d2f60e45ae1ceb429512208f2"
+      },
+      "locator": {
+        "section": "9.3",
+        "heading": "Predicated Execution",
+        "anchor": "predicated-execution",
+        "startLine": 7537,
+        "endLine": 7550
+      },
+      "quotation": "All instructions have an optional guard predicate ... prefix an instruction with @{!}p ... Instructions without a guard predicate are executed unconditionally."
+    },
+    {
+      "evidenceId": "ptx-9.3.or.semantic.evidence-OR-SHARED-003",
+      "specificationVersion": "9.3",
+      "sourceBundleEvidenceId": "PTX-9.3-OR-SHARED-003",
+      "source": {
+        "kind": "html",
+        "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+        "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+        "sourceManifestPath": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+        "sourceManifestSha256": "622e6ce0d3114a909a62726530955993b5f2b98d2f60e45ae1ceb429512208f2"
+      },
+      "locator": {
+        "section": "9.7.13.2",
+        "heading": "Control Flow Instructions: @",
+        "anchor": "control-flow-instructions-at",
+        "startLine": 21826,
+        "endLine": 21842
+      },
+      "quotation": "@{!}p    instruction;\nExecute an instruction ... for threads that have the guard predicate True. Threads with a False guard predicate do nothing."
+    },
+    {
+      "evidenceId": "ptx-9.3.or.semantic.evidence-OR-SHARED-004",
+      "specificationVersion": "9.3",
+      "sourceBundleEvidenceId": "PTX-9.3-OR-SHARED-004",
+      "source": {
+        "kind": "html",
+        "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+        "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+        "sourceManifestPath": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+        "sourceManifestSha256": "622e6ce0d3114a909a62726530955993b5f2b98d2f60e45ae1ceb429512208f2"
+      },
+      "locator": {
+        "section": "5.2.1",
+        "heading": "Fundamental Types",
+        "anchor": "fundamental-types",
+        "startLine": 3015,
+        "endLine": 3062
+      },
+      "quotation": "A fundamental type specifies both a basic type and a size. Register variables are always of a fundamental type."
+    },
+    {
+      "evidenceId": "ptx-9.3.or.semantic.evidence-OR-SHARED-005",
+      "specificationVersion": "9.3",
+      "sourceBundleEvidenceId": "PTX-9.3-OR-SHARED-005",
+      "source": {
+        "kind": "html",
+        "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+        "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+        "sourceManifestPath": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+        "sourceManifestSha256": "622e6ce0d3114a909a62726530955993b5f2b98d2f60e45ae1ceb429512208f2"
+      },
+      "locator": {
+        "section": "5.1.1",
+        "heading": "Register State Space",
+        "anchor": "register-state-space",
+        "startLine": 2613,
+        "endLine": 2631
+      },
+      "quotation": "Registers (.reg state space) are fast storage locations... Register size is restricted; ... scalar registers have a width of ... 32- ..."
+    }
+  ],
+  "claims": [
+    {
+      "semanticId": "PTX-9.3-OR-SEM-001",
+      "classification": "SOURCE_FACT",
+      "statement": "The instruction syntax family is `or.type d, a, b;` and `.type` includes `{ .pred, .b16, .b32, .b64 }`.",
+      "evidenceIds": ["ptx-9.3.or.semantic.evidence-OR-001"],
+      "dependencyIds": [],
+      "stateAffecting": false,
+      "humanApprovalDependencies": [],
+      "lifecycle": { "status": "ACTIVE", "introducedInRevision": 1 }
+    },
+    {
+      "semanticId": "PTX-9.3-OR-SEM-002",
+      "classification": "SOURCE_FACT",
+      "statement": "The family semantics include `d = a | b;` for `or.type` instructions.",
+      "evidenceIds": ["ptx-9.3.or.semantic.evidence-OR-001"],
+      "dependencyIds": ["PTX-9.3-OR-SEM-001"],
+      "stateAffecting": true,
+      "humanApprovalDependencies": [],
+      "lifecycle": { "status": "ACTIVE", "introducedInRevision": 1 }
+    },
+    {
+      "semanticId": "PTX-9.3-OR-SEM-003",
+      "classification": "SOURCE_FACT",
+      "statement": "PTX syntax allows an optional guard predicate prefix for instructions, and for resultful instructions `d` is destination while `a,b` are sources.",
+      "evidenceIds": ["ptx-9.3.or.semantic.evidence-OR-SHARED-001", "ptx-9.3.or.semantic.evidence-OR-SHARED-002"],
+      "dependencyIds": ["PTX-9.3-OR-SEM-001"],
+      "stateAffecting": true,
+      "humanApprovalDependencies": [],
+      "lifecycle": { "status": "ACTIVE", "introducedInRevision": 1 }
+    },
+    {
+      "semanticId": "PTX-9.3-OR-SEM-004",
+      "classification": "SOURCE_FACT",
+      "statement": "False predication semantics states guarded threads with predicate false do not execute the instruction.",
+      "evidenceIds": ["ptx-9.3.or.semantic.evidence-OR-SHARED-003"],
+      "dependencyIds": ["PTX-9.3-OR-SEM-003"],
+      "stateAffecting": true,
+      "humanApprovalDependencies": [],
+      "lifecycle": { "status": "ACTIVE", "introducedInRevision": 1 }
+    },
+    {
+      "semanticId": "PTX-9.3-OR-SEM-005",
+      "classification": "DERIVED_INTERPRETATION",
+      "statement": "Bounded instruction form is `or.b32 d, a, b;` and operands are interpreted in the 32-bit domain of the `.b32` form.",
+      "evidenceIds": ["ptx-9.3.or.semantic.evidence-OR-001", "ptx-9.3.or.semantic.evidence-OR-SHARED-004", "ptx-9.3.or.semantic.evidence-OR-SHARED-005"],
+      "dependencyIds": ["PTX-9.3-OR-SEM-001", "PTX-9.3-OR-SEM-002"],
+      "stateAffecting": true,
+      "humanApprovalDependencies": [],
+      "lifecycle": { "status": "ACTIVE", "introducedInRevision": 1 }
+    },
+    {
+      "semanticId": "PTX-9.3-OR-SEM-006",
+      "classification": "DERIVED_INTERPRETATION",
+      "statement": "Execution of `or.b32` occurs exactly when the complete predicate guard is true; when false, the local transition is no-op (state unchanged).",
+      "evidenceIds": ["ptx-9.3.or.semantic.evidence-OR-SHARED-002", "ptx-9.3.or.semantic.evidence-OR-SHARED-003", "ptx-9.3.or.semantic.evidence-OR-001"],
+      "dependencyIds": ["PTX-9.3-OR-SEM-003", "PTX-9.3-OR-SEM-004", "PTX-9.3-OR-SEM-002"],
+      "stateAffecting": true,
+      "humanApprovalDependencies": [],
+      "lifecycle": { "status": "ACTIVE", "introducedInRevision": 1 }
+    },
+    {
+      "semanticId": "PTX-9.3-OR-SEM-007",
+      "classification": "DERIVED_INTERPRETATION",
+      "statement": "Transition shape is: read operands `a` and `b` (with `b` also allowing immediate when present), compute 32-bit bitwise OR, then write destination `d` when `d` is a real register and guard is true; otherwise unchanged state.",
+      "evidenceIds": ["ptx-9.3.or.semantic.evidence-OR-001", "ptx-9.3.or.semantic.evidence-OR-SHARED-001", "ptx-9.3.or.semantic.evidence-OR-SHARED-003", "ptx-9.3.or.semantic.evidence-OR-SHARED-005"],
+      "dependencyIds": ["PTX-9.3-OR-SEM-002", "PTX-9.3-OR-SEM-005", "PTX-9.3-OR-SEM-006"],
+      "stateAffecting": true,
+      "humanApprovalDependencies": [],
+      "lifecycle": { "status": "ACTIVE", "introducedInRevision": 1 }
+    },
+    {
+      "semanticId": "PTX-9.3-OR-SEM-008",
+      "classification": "DESIGN_DEPENDENCY",
+      "statement": "Local state model is register-file plus predicate-file only; no memory, flags, or control/status effects are included for this unit.",
+      "evidenceIds": ["ptx-9.3.or.semantic.evidence-OR-SHARED-004", "ptx-9.3.or.semantic.evidence-OR-SHARED-005"],
+      "dependencyIds": ["ptx.9.3.state.register-model-design"],
+      "stateAffecting": true,
+      "humanApprovalDependencies": ["shared-environment:ptx-9.3-bounded-scalar-b32-register-predicate-core:v1"],
+      "lifecycle": { "status": "ACTIVE", "introducedInRevision": 1 }
+    },
+    {
+      "semanticId": "PTX-9.3-OR-SEM-009",
+      "classification": "DESIGN_DEPENDENCY",
+      "statement": "Lookups on register/constant operands are partial in this bounded formalization; unresolved bindings yield no defined transition.",
+      "evidenceIds": ["ptx-9.3.or.semantic.evidence-OR-SHARED-005"],
+      "dependencyIds": ["ptx.9.3.register.lookup-partial-design"],
+      "stateAffecting": true,
+      "humanApprovalDependencies": ["shared-environment:ptx-9.3-bounded-scalar-b32-register-predicate-core:v1"],
+      "lifecycle": { "status": "ACTIVE", "introducedInRevision": 1 }
+    },
+    {
+      "semanticId": "PTX-9.3-OR-SEM-010",
+      "classification": "ASSUMPTION",
+      "statement": "For this bounded unit, destination `d` is required to be a register; bit-bucket `_` is not adopted in the core model due lack of or.b32-specific evidence.",
+      "evidenceIds": ["ptx-9.3.or.semantic.evidence-OR-001"],
+      "dependencyIds": ["PTX-9.3-OR-SEM-001"],
+      "stateAffecting": true,
+      "humanApprovalDependencies": [],
+      "lifecycle": { "status": "ACTIVE", "introducedInRevision": 1 }
+    },
+    {
+      "semanticId": "PTX-9.3-OR-SEM-011",
+      "classification": "OPEN_QUESTION",
+      "statement": "Whether source operand `a` can be an immediate constant in `or.b32` is not directly demonstrated in the bounded section evidence; this remains a parser-level question.",
+      "evidenceIds": ["ptx-9.3.or.semantic.evidence-OR-001", "ptx-9.3.or.semantic.evidence-OR-SHARED-001"],
+      "dependencyIds": ["PTX-9.3-OR-SEM-005"],
+      "stateAffecting": false,
+      "humanApprovalDependencies": [],
+      "lifecycle": { "status": "ACTIVE", "introducedInRevision": 1 }
+    }
+  ],
+  "refinements": [],
+  "syntaxForms": [
+    {
+      "syntaxId": "or-type-form",
+      "form": "or.type d, a, b;",
+      "semanticClaimIds": ["PTX-9.3-OR-SEM-001"]
+    },
+    {
+      "syntaxId": "or-b32-form",
+      "form": "or.b32 d, a, b;",
+      "semanticClaimIds": ["PTX-9.3-OR-SEM-001", "PTX-9.3-OR-SEM-005", "PTX-9.3-OR-SEM-010"]
+    },
+    {
+      "syntaxId": "or-b32-guarded-form",
+      "form": "@p or.b32 d, a, b; | @!p or.b32 d, a, b;",
+      "semanticClaimIds": ["PTX-9.3-OR-SEM-003", "PTX-9.3-OR-SEM-006"]
+    }
+  ],
+  "operands": [
+    {
+      "operandId": "d",
+      "name": "d",
+      "position": 0,
+      "role": "DESTINATION",
+      "legalForms": ["register"],
+      "semanticClaimIds": ["PTX-9.3-OR-SEM-001", "PTX-9.3-OR-SEM-007", "PTX-9.3-OR-SEM-010"]
+    },
+    {
+      "operandId": "a",
+      "name": "a",
+      "position": 1,
+      "role": "SOURCE",
+      "legalForms": ["register"],
+      "semanticClaimIds": ["PTX-9.3-OR-SEM-001", "PTX-9.3-OR-SEM-007", "PTX-9.3-OR-SEM-011"]
+    },
+    {
+      "operandId": "b",
+      "name": "b",
+      "position": 2,
+      "role": "SOURCE",
+      "legalForms": ["register", "immediate"],
+      "semanticClaimIds": ["PTX-9.3-OR-SEM-001", "PTX-9.3-OR-SEM-005", "PTX-9.3-OR-SEM-007"]
+    }
+  ],
+  "operation": {
+    "operationId": "or-b32-operation",
+    "normalizedMeaning": "Given operands d, a, b and optional predicate guard, evaluate d := a | b in 32-bit bitwise domain when guard is true; otherwise keep state unchanged.",
+    "pseudocode": "if guard then\n  state[d] := (read(a) OR read(b))\nelse\n  state := state",
+    "semanticClaimIds": ["PTX-9.3-OR-SEM-005", "PTX-9.3-OR-SEM-006", "PTX-9.3-OR-SEM-007"]
+  },
+  "stateEffects": [
+    {
+      "effectId": "E-OR-READ-A",
+      "component": "value-register-file",
+      "mode": "READ",
+      "condition": "If source a is a register and guard allows execution.",
+      "semanticClaimIds": ["PTX-9.3-OR-SEM-007", "PTX-9.3-OR-SEM-009"]
+    },
+    {
+      "effectId": "E-OR-READ-B",
+      "component": "value-register-file",
+      "mode": "READ",
+      "condition": "If source b is a register and guard allows execution.",
+      "semanticClaimIds": ["PTX-9.3-OR-SEM-007", "PTX-9.3-OR-SEM-005"]
+    },
+    {
+      "effectId": "E-OR-READ-GUARD",
+      "component": "predicate-register-file",
+      "mode": "READ",
+      "condition": "If a guard is present, evaluate its predicate or negated predicate before execution decision.",
+      "semanticClaimIds": ["PTX-9.3-OR-SEM-003", "PTX-9.3-OR-SEM-006"]
+    },
+    {
+      "effectId": "E-OR-WRITE-D",
+      "component": "value-register-file",
+      "mode": "WRITE",
+      "condition": "If guard is true and destination is a register, write result into d.",
+      "semanticClaimIds": ["PTX-9.3-OR-SEM-007", "PTX-9.3-OR-SEM-010", "PTX-9.3-OR-SEM-005"]
+    }
+  ],
+  "preconditions": [
+    {
+      "preconditionId": "PRE-OR-STATIC-1",
+      "kind": "STATIC",
+      "statement": "Instruction form is the bounded `or.b32 d, a, b;` with 32-bit operands and destination/register legality per local model.",
+      "semanticClaimIds": ["PTX-9.3-OR-SEM-005", "PTX-9.3-OR-SEM-010"]
+    },
+    {
+      "preconditionId": "PRE-OR-STATIC-2",
+      "kind": "STATIC",
+      "statement": "If present, guard is `@p` or `@!p` over predicate register in optional PTX predicate syntax.",
+      "semanticClaimIds": ["PTX-9.3-OR-SEM-003", "PTX-9.3-OR-SEM-006"]
+    },
+    {
+      "preconditionId": "PRE-OR-DYN-1",
+      "kind": "DYNAMIC",
+      "statement": "Dynamic transition is defined only under partial-lookup success for all referenced registers/constants.",
+      "semanticClaimIds": ["PTX-9.3-OR-SEM-009"]
+    }
+  ],
+  "proofFamilies": [
+    {
+      "proofFamilyId": "PF-OR-DET",
+      "description": "Determinism: under well-typed and defined lookups, guard and OR computation determine at most one next state.",
+      "semanticClaimIds": ["PTX-9.3-OR-SEM-005", "PTX-9.3-OR-SEM-006", "PTX-9.3-OR-SEM-007", "PTX-9.3-OR-SEM-009"],
+      "blockedBySemanticIds": []
+    },
+    {
+      "proofFamilyId": "PF-OR-GUARD",
+      "description": "Guard semantics links predication text to exact execution condition and false-guard no-op behavior in this bounded model.",
+      "semanticClaimIds": ["PTX-9.3-OR-SEM-003", "PTX-9.3-OR-SEM-004", "PTX-9.3-OR-SEM-006"],
+      "blockedBySemanticIds": []
+    },
+    {
+      "proofFamilyId": "PF-OR-STATE",
+      "description": "Single-write locality: only destination register write occurs on true-guard branch; false-guard branch does not change state.",
+      "semanticClaimIds": ["PTX-9.3-OR-SEM-007", "PTX-9.3-OR-SEM-008", "PTX-9.3-OR-SEM-010"],
+      "blockedBySemanticIds": []
+    }
+  ]
+}

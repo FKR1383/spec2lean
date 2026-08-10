@@ -33,6 +33,8 @@ function hasCode(
 }
 
 function reverseSemanticCollections(shared: SharedSemanticEnvironment): void {
+  shared.scope.eligibilityRequirements.reverse()
+  shared.scope.excludedFeatures.reverse()
   shared.entries.reverse()
   shared.evidence.reverse()
   shared.sourceManifests.reverse()
@@ -43,6 +45,12 @@ function reverseSemanticCollections(shared: SharedSemanticEnvironment): void {
     entry.humanApprovalDependencies.reverse()
     entry.provenance.originatingArtifacts.reverse()
     entry.provenance.reviewRecords.reverse()
+    entry.provenance.acceptedUnitSupport.reverse()
+    for (const support of entry.provenance.acceptedUnitSupport) {
+      support.acceptedEvidenceIds.reverse()
+      support.artifacts.reverse()
+      support.reviewRecords.reverse()
+    }
   }
 }
 
@@ -85,6 +93,7 @@ export async function runSemanticIrSelfTests(): Promise<{
     "common.schema.json",
     "shared-environment.schema.json",
     "instruction-delta.schema.json",
+    "semantic-profile.schema.json",
   ]) {
     JSON.parse(
       await readFile(resolve(REPO_ROOT, "ir/semantic", schema), "utf8"),

@@ -1,8 +1,13 @@
-import { randomUUID } from "node:crypto"
-import { readFile, unlink } from "node:fs/promises"
+import { createHash, randomUUID } from "node:crypto"
+import { readFile, readdir, unlink } from "node:fs/promises"
 import { resolve } from "node:path"
 
 import { parseAgentResult } from "./agent-result.js"
+import {
+  DEFAULT_PROVIDER_RETRY_BUDGET_MS,
+  ProviderRetryBudgetExceededError,
+  providerRetryBudgetExceeded,
+} from "./async-session.js"
 import { makeLeanModuleName, makeUnitSlug } from "./artifact-contract.js"
 import {
   artifactPathsForGate,
@@ -10,20 +15,108 @@ import {
   writeHumanDecisionRecord,
 } from "./human-decision-record.js"
 import { proofTargets } from "./proof-plan.js"
-import { REPO_ROOT } from "./repo.js"
+import { loadProjectModel, REPO_ROOT } from "./repo.js"
 import { runSemanticIrSelfTests } from "./semantic-ir-self-test.js"
+import { runSemanticV2SelfTests } from "./semantic-v2-self-test.js"
+import {
+  buildApprovedSharedEnvironment,
+  sharedApprovalCandidateIssues,
+  verifySharedApprovalCandidateFiles,
+} from "./shared-environment-approval.js"
+import { validProfile, type SemanticProfile } from "./semantic-v2.js"
+import type { SharedSemanticEnvironment } from "./semantic-ir/types.js"
 import { canTransition, type RunState } from "./workflow.js"
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`SELF_TEST_FAILED: ${message}`)
 }
 
+async function protectedTreeFingerprint(relativeRoot: string): Promise<string> {
+  const hash = createHash("sha256")
+  const visit = async (relativeDirectory: string): Promise<void> => {
+    const entries = await readdir(resolve(REPO_ROOT, relativeDirectory), {
+      withFileTypes: true,
+    })
+    for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+      const relativePath = `${relativeDirectory}/${entry.name}`
+      if (entry.isDirectory()) {
+        await visit(relativePath)
+      } else if (entry.isFile()) {
+        hash.update(relativePath)
+        hash.update(await readFile(resolve(REPO_ROOT, relativePath)))
+      }
+    }
+  }
+  await visit(relativeRoot)
+  return hash.digest("hex")
+}
+
+const protectedTreesBefore = {
+  accepted: await protectedTreeFingerprint("accepted"),
+  candidates: await protectedTreeFingerprint("candidates"),
+}
+
 assert(makeUnitSlug("mov.b32") === "mov-b32", "unit slug")
 assert(makeLeanModuleName("mov.b32") === "MovB32", "Lean module name")
 assert(canTransition("ARCHITECTURE_CRITIQUE", "WAITING_GATE_A"), "Gate A transition")
 assert(!canTransition("ARCHITECTURE", "LEAN_FORMALIZATION"), "illegal stage skip rejected")
+assert(
+  !providerRetryBudgetExceeded(1_000, 60_999, DEFAULT_PROVIDER_RETRY_BUDGET_MS),
+  "provider retry remains active before the bounded budget",
+)
+assert(
+  providerRetryBudgetExceeded(1_000, 61_000, DEFAULT_PROVIDER_RETRY_BUDGET_MS),
+  "provider retry stops at the bounded budget",
+)
+const providerRetryError = new ProviderRetryBudgetExceededError({
+  attempt: 2,
+  providerMessage: "rate limited",
+  nextRetryAt: 70_000,
+  retryElapsedMs: DEFAULT_PROVIDER_RETRY_BUDGET_MS,
+  retryBudgetMs: DEFAULT_PROVIDER_RETRY_BUDGET_MS,
+})
+assert(
+  providerRetryError.attempt === 2 &&
+    providerRetryError.providerMessage === "rate limited",
+  "provider retry diagnostics preserve structured status",
+)
 
 const semanticIrMetrics = await runSemanticIrSelfTests()
+const semanticV2Metrics = await runSemanticV2SelfTests()
+
+const productionSemanticProfileInput = JSON.parse(
+  await readFile(resolve(REPO_ROOT, "language_packs/ptx/9.3/semantic-profile.json"), "utf8"),
+) as unknown
+assert(validProfile(productionSemanticProfileInput), "production semantic profile is structurally valid")
+const productionSemanticProfile = productionSemanticProfileInput as SemanticProfile
+const sharedReviewCandidate = JSON.parse(
+  await readFile(resolve(REPO_ROOT, productionSemanticProfile.approval.reviewCandidatePath), "utf8"),
+) as SharedSemanticEnvironment
+const sharedReviewPacket = await readFile(
+  resolve(REPO_ROOT, productionSemanticProfile.approval.humanReviewPacketPath),
+  "utf8",
+)
+assert(
+  sharedApprovalCandidateIssues(productionSemanticProfile, sharedReviewCandidate).length === 0,
+  "shared-environment human-review candidate matches the typed production profile",
+)
+await verifySharedApprovalCandidateFiles(sharedReviewCandidate)
+assert(
+  sharedReviewPacket.includes("NOT HUMAN APPROVED") &&
+    sharedReviewPacket.includes(createHash("sha256").update(
+      await readFile(resolve(REPO_ROOT, productionSemanticProfile.approval.reviewCandidatePath)),
+    ).digest("hex")),
+  "shared human-review packet identifies the exact unapproved candidate",
+)
+const syntheticApprovedEnvironment = buildApprovedSharedEnvironment(sharedReviewCandidate, {
+  path: productionSemanticProfile.approval.approvalRecordPath,
+  sha256: "0".repeat(64),
+})
+assert(
+  syntheticApprovedEnvironment.review.status === "HUMAN_APPROVED" &&
+    syntheticApprovedEnvironment.entries.every((entry) => entry.review.status === "HUMAN_APPROVED"),
+  "shared approval derivation changes only explicit review state and binds the approval record",
+)
 
 const parsed = parseAgentResult(
   'prefix\nSPEC2LEAN_RESULT {"outcome":"SUCCESS","nextStage":"ARCHITECTURE_CRITIQUE","summary":"ok"}',
@@ -143,6 +236,12 @@ for (const controller of ["approve", "reject"]) {
   )
 }
 
+const sharedApprovalController = await readFile(
+  resolve(REPO_ROOT, "engine/orchestrator/src/approve-shared.ts"),
+  "utf8",
+)
+assert(!sharedApprovalController.includes("startOpenCode"), "shared approval does not start OpenCode")
+
 const runLoopSource = await readFile(
   resolve(REPO_ROOT, "engine/orchestrator/src/run-loop.ts"),
   "utf8",
@@ -154,25 +253,67 @@ assert(
   "run loop reuses one lazy OpenCode runtime",
 )
 assert(
-  runLoopSource.includes("await executeTick(runId, { runtime })"),
-  "run loop passes the shared runtime into each tick",
+  runLoopSource.includes("providerRetryBudgetMs: providerRetryBudgetSeconds * 1000"),
+  "run loop passes the shared runtime and bounded provider retry policy into each tick",
+)
+const runnerSource = await readFile(
+  resolve(REPO_ROOT, "engine/orchestrator/src/runner.ts"),
+  "utf8",
+)
+assert(
+  runnerSource.includes("run.activeExecution.model === runtime.model.full") &&
+    runnerSource.includes("model: runtime.model.full"),
+  "active-session recovery is pinned to explicit model provenance",
 )
 
-for (const agent of [
-  "lean-formalizer",
-  "proof-engineer",
-  "semantic-extractor",
-  "source-curator",
-  "spec-architect",
-]) {
-  const text = await readFile(resolve(REPO_ROOT, `.opencode/agents/${agent}.md`), "utf8")
-  assert(!text.includes("# First Formalization Unit"), `${agent} obsolete first-unit block removed`)
-  assert(!text.includes("Do not formalize another PTX instruction."), `${agent} no stale unit lock`)
-  assert(!text.includes("Do not prove properties for another PTX instruction."), `${agent} no stale proof lock`)
+const projectModel = await loadProjectModel()
+const projectConfig = JSON.parse(
+  await readFile(resolve(REPO_ROOT, "opencode.json"), "utf8"),
+) as { enabled_providers?: unknown[] }
+assert(
+  projectConfig.enabled_providers?.includes(projectModel.providerID),
+  "project model provider is explicitly enabled",
+)
+const agentFiles = (await readdir(resolve(REPO_ROOT, ".opencode/agents")))
+  .filter((name) => name.endsWith(".md"))
+for (const agentFile of agentFiles) {
+  const text = await readFile(resolve(REPO_ROOT, `.opencode/agents/${agentFile}`), "utf8")
+  assert(
+    text.includes(`model: ${projectModel.full}`),
+    `${agentFile} model matches the project model`,
+  )
+  assert(!text.includes("# First Formalization Unit"), `${agentFile} obsolete first-unit block removed`)
+  assert(!text.includes("Do not formalize another PTX instruction."), `${agentFile} no stale unit lock`)
+  assert(!text.includes("Do not prove properties for another PTX instruction."), `${agentFile} no stale proof lock`)
 }
+
+const deltaAgent = await readFile(
+  resolve(REPO_ROOT, ".opencode/agents/semantic-extractor-delta.md"),
+  "utf8",
+)
+assert(
+  deltaAgent.includes("sourceBundleEvidenceId") &&
+    deltaAgent.includes("The orchestrator will record the failure") &&
+    deltaAgent.includes("Do not copy shared entries into local claims"),
+  "delta extractor preserves grounding, reuse, and fallback boundaries",
+)
+
+const protectedTreesAfter = {
+  accepted: await protectedTreeFingerprint("accepted"),
+  candidates: await protectedTreeFingerprint("candidates"),
+}
+assert(
+  protectedTreesBefore.accepted === protectedTreesAfter.accepted,
+  "self-tests do not modify accepted artifacts",
+)
+assert(
+  protectedTreesBefore.candidates === protectedTreesAfter.candidates,
+  "self-tests do not modify candidate artifacts",
+)
 
 console.log(JSON.stringify({
   ok: true,
   test: "orchestrator-self-test",
   semanticIr: semanticIrMetrics,
+  semanticV2: semanticV2Metrics,
 }, null, 2))

@@ -1,4 +1,5 @@
 import { loadRun } from "./run-store.js"
+import { semanticV2Telemetry } from "./semantic-v2-telemetry.js"
 
 function argument(name: string): string | undefined {
   const index = process.argv.indexOf(name)
@@ -15,9 +16,12 @@ const run = await loadRun(required("--run"))
 
 type Metric = {
   milliseconds: number
+  agentMilliseconds: number
+  unmeasuredExecutions: number
   transitions: number
   executions: number
   retries: number
+  providerRetries: number
 }
 
 const metrics = new Map<string, Metric>()
@@ -27,9 +31,12 @@ function metric(stage: string): Metric {
   if (!value) {
     value = {
       milliseconds: 0,
+      agentMilliseconds: 0,
+      unmeasuredExecutions: 0,
       transitions: 0,
       executions: 0,
       retries: 0,
+      providerRetries: 0,
     }
     metrics.set(stage, value)
   }
@@ -53,15 +60,30 @@ for (const event of run.history) {
 for (const execution of run.executions ?? []) {
   const m = metric(execution.stage)
   m.executions += 1
+  const startedAt = execution.startedAt === undefined
+    ? Number.NaN
+    : Date.parse(execution.startedAt)
+  const finishedAt = Date.parse(execution.at)
+  if (Number.isFinite(startedAt) && Number.isFinite(finishedAt)) {
+    m.agentMilliseconds += Math.max(0, finishedAt - startedAt)
+  } else {
+    m.unmeasuredExecutions += 1
+  }
   if (execution.outcome === "RETRY") m.retries += 1
+  if (execution.failureClass === "PROVIDER_RETRY_BUDGET_EXCEEDED") {
+    m.providerRetries += 1
+  }
 }
 
 const stages = [...metrics.entries()]
   .map(([stage, m]) => ({
     stage,
     seconds: Number((m.milliseconds / 1000).toFixed(1)),
+    activeAgentSeconds: Number((m.agentMilliseconds / 1000).toFixed(1)),
+    unmeasuredExecutions: m.unmeasuredExecutions,
     executions: m.executions,
     retries: m.retries,
+    providerRetries: m.providerRetries,
     transitions: m.transitions,
   }))
   .sort((a, b) => b.seconds - a.seconds)
@@ -77,5 +99,19 @@ console.log(JSON.stringify({
   retryExecutions: (run.executions ?? [])
     .filter((execution) => execution.outcome === "RETRY")
     .length,
+  activeAgentSeconds: Number((
+    [...metrics.values()].reduce(
+      (total, stage) => total + stage.agentMilliseconds,
+      0,
+    ) / 1000
+  ).toFixed(1)),
+  unmeasuredAgentExecutions: [...metrics.values()].reduce(
+    (total, stage) => total + stage.unmeasuredExecutions,
+    0,
+  ),
+  providerRetryExecutions: (run.executions ?? [])
+    .filter((execution) => execution.failureClass === "PROVIDER_RETRY_BUDGET_EXCEEDED")
+    .length,
+  semanticV2: semanticV2Telemetry(run),
   stages,
 }, null, 2))

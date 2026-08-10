@@ -1,0 +1,114 @@
+{
+  "schema_version": 2,
+  "interpretation_id": "ptx-9.3-or-b32-semantics-v2",
+  "revision_of": "ptx-9.3-or-b32-semantic-delta-v1",
+  "revision_reason": "Rebuilt v2 semantic interpretation artifact due prior invalid JSON",
+  "status": "READY_FOR_CRITIQUE",
+  "language": "PTX",
+  "specification_version": "9.3",
+  "construct": "or.b32",
+  "instruction_family": "or",
+  "source_bundle_references": [
+    {
+      "path": "candidates/ptx/9.3/units/or-b32/source-bundles/source-bundle-v1.json",
+      "bundle_id": "ptx-9.3-or-b32-source-bundle-v1"
+    }
+  ],
+  "architecture_reference": {
+    "path": "candidates/ptx/9.3/units/or-b32/architecture/foundation-v5.md",
+    "status_note": "latest architecture candidate for this run"
+  },
+  "bundle_evidence_index": {
+    "fragments": [
+      "PTX-9.3-OR-001",
+      "PTX-9.3-OR-SHARED-001",
+      "PTX-9.3-OR-SHARED-002",
+      "PTX-9.3-OR-SHARED-003",
+      "PTX-9.3-OR-SHARED-004",
+      "PTX-9.3-OR-SHARED-005",
+      "PTX-9.3-OR-SHARED-006"
+    ]
+  },
+  "syntax": {
+    "bounded_base_form": "or.b32 d, a, b;",
+    "guarded_form": "@p or.b32 d, a, b; or @!p or.b32 d, a, b;",
+    "source_syntax_quote": "or.type d, a, b; .type = { .pred, .b16, .b32, .b64 };",
+    "notes": "Destination d then sources a, b; optional predicate guard prefix to the left of opcode."
+  },
+  "operands": {
+    "d": { "role": "destination", "legal_forms": ["register"], "classification": "DERIVED_INTERPRETATION", "evidence_fragment_ids": ["PTX-9.3-OR-001", "PTX-9.3-OR-SHARED-001"] },
+    "a": { "role": "source", "legal_forms": ["register"], "classification": "DERIVED_INTERPRETATION", "evidence_fragment_ids": ["PTX-9.3-OR-001", "PTX-9.3-OR-SHARED-001", "PTX-9.3-OR-SHARED-004", "PTX-9.3-OR-SHARED-006"] },
+    "b": { "role": "source", "legal_forms": ["register", "immediate"], "classification": "DERIVED_INTERPRETATION", "evidence_fragment_ids": ["PTX-9.3-OR-001", "PTX-9.3-OR-SHARED-001", "PTX-9.3-OR-SHARED-004", "PTX-9.3-OR-SHARED-006"] }
+  },
+  "types": {
+    "instruction_type": ".b32",
+    "basic_type": "Bits (untyped)",
+    "width_bits": 32,
+    "rule": "`.type` set includes .b32; or notes require operand sizes match.",
+    "classification": "DERIVED_INTERPRETATION",
+    "evidence_fragment_ids": ["PTX-9.3-OR-001", "PTX-9.3-OR-SHARED-004", "PTX-9.3-OR-SHARED-005", "PTX-9.3-OR-SHARED-006"]
+  },
+  "guard_semantics": {
+    "no_guard": "execute",
+    "at_p": "execute iff predicate is true",
+    "at_bang_p": "execute iff predicate is false",
+    "false_guard": "state unchanged in bounded model",
+    "evidence_fragment_ids": ["PTX-9.3-OR-SHARED-002", "PTX-9.3-OR-SHARED-003"],
+    "classification": "DERIVED_INTERPRETATION"
+  },
+  "state_reads": [
+    { "component": "value register file", "description": "Read a and b as source values; immediate b uses literal value.", "classification": "DERIVED_INTERPRETATION", "evidence_fragment_ids": ["PTX-9.3-OR-001", "PTX-9.3-OR-SHARED-001", "PTX-9.3-OR-SHARED-004"] },
+    { "component": "predicate register file", "description": "Read predicate for guarded execution condition.", "classification": "DERIVED_INTERPRETATION", "evidence_fragment_ids": ["PTX-9.3-OR-SHARED-002", "PTX-9.3-OR-SHARED-003"] }
+  ],
+  "state_writes": [
+    { "component": "value register d", "description": "On guard true, write d := a OR b (32-bit).", "classification": "DERIVED_INTERPRETATION", "evidence_fragment_ids": ["PTX-9.3-OR-001", "PTX-9.3-OR-SHARED-004", "PTX-9.3-OR-SHARED-006"] },
+    { "component": "all state", "description": "On guard false, no local state update is represented.", "classification": "DERIVED_INTERPRETATION", "evidence_fragment_ids": ["PTX-9.3-OR-SHARED-003"] }
+  ],
+  "exceptional_behavior": {
+    "statement": "No explicit exception/error clause appears for or.b32 in the collected text; this is not treated as a positive guarantee.",
+    "status": "OPEN_QUESTION",
+    "classification": "OPEN_QUESTION",
+    "evidence_fragment_ids": ["PTX-9.3-OR-001", "PTX-9.3-OR-SHARED-001"]
+  },
+  "undefined_behavior": {
+    "statement": "No explicit undefined-behavior clause appears for or.b32 in the collected text; this is recorded as unresolved.",
+    "status": "OPEN_QUESTION",
+    "classification": "OPEN_QUESTION",
+    "evidence_fragment_ids": ["PTX-9.3-OR-001", "PTX-9.3-OR-SHARED-001"]
+  },
+  "implementation_defined_behavior": {
+    "statement": "No explicit implementation-defined-behavior clause appears for this bounded form in the collected text.",
+    "status": "OPEN_QUESTION",
+    "classification": "OPEN_QUESTION",
+    "evidence_fragment_ids": ["PTX-9.3-OR-001", "PTX-9.3-OR-SHARED-001"]
+  },
+  "design_dependencies": [
+    { "id": "DD-STATE", "classification": "DESIGN_DEPENDENCY", "statement": "State is a bounded model with value and predicate registers only; no modeled side state.", "evidence_fragment_ids": ["PTX-9.3-OR-SHARED-004", "PTX-9.3-OR-SHARED-005", "PTX-9.3-OR-SHARED-006", "PTX-9.3-OR-SHARED-001"] },
+    { "id": "DD-TRANSITION", "classification": "DESIGN_DEPENDENCY", "statement": "Partial transition behavior for unresolved state/typing is represented as undefined outcome in this artifact.", "evidence_fragment_ids": [] },
+    { "id": "DD-LOCAL", "classification": "DESIGN_DEPENDENCY", "statement": "Single-writer locality: only destination register d is written on execute branch.", "evidence_fragment_ids": ["PTX-9.3-OR-001"] }
+  ],
+  "human_assumptions": [
+    {
+      "id": "HA-1",
+      "classification": "ASSUMPTION",
+      "statement": "No extra modeled side effects are introduced for this bounded unit beyond state-file reads/writes stated here.",
+      "evidence_fragment_ids": ["PTX-9.3-OR-SHARED-004", "PTX-9.3-OR-SHARED-005", "PTX-9.3-OR-SHARED-006"]
+    }
+  ],
+  "open_questions": [
+    { "id": "OQ-1", "classification": "OPEN_QUESTION", "question": "Can source operand a be immediate for or.b32? Source fragments show immediate only in b position.", "evidence_fragment_ids": ["PTX-9.3-OR-001"] },
+    { "id": "OQ-2", "classification": "OPEN_QUESTION", "question": "Is destination '_' admissible for or.b32 specifically? A general PTX optional destination rule exists but is not or.b32-specific here.", "evidence_fragment_ids": ["PTX-9.3-OR-SHARED-001", "PTX-9.3-OR-001"] },
+    { "id": "OQ-3", "classification": "OPEN_QUESTION", "question": "Do false-guard threads truly have absolutely no other effects beyond unchanged local state?", "evidence_fragment_ids": ["PTX-9.3-OR-SHARED-003"] }
+  ],
+  "semantic_claims": [
+    { "claim_id": "PTX-9.3-OR-SEM2-001", "classification": "SOURCE_FACT", "statement": "or section defines `or.type d, a, b;` with type set including `.b32`.", "evidence_fragment_ids": ["PTX-9.3-OR-001"], "state_affecting": true },
+    { "claim_id": "PTX-9.3-OR-SEM2-002", "classification": "SOURCE_FACT", "statement": "Semantics is `d = a | b;`.", "evidence_fragment_ids": ["PTX-9.3-OR-001"], "state_affecting": true },
+    { "claim_id": "PTX-9.3-OR-SEM2-003", "classification": "SOURCE_FACT", "statement": "PTX instructions may be predicated via optional `@p` form; unguarded executes without predicate.", "evidence_fragment_ids": ["PTX-9.3-OR-SHARED-002"], "state_affecting": true },
+    { "claim_id": "PTX-9.3-OR-SEM2-004", "classification": "SOURCE_FACT", "statement": "Predicated execution semantics says do instruction if predicate true and do nothing on false guard.", "evidence_fragment_ids": ["PTX-9.3-OR-SHARED-003"], "state_affecting": true },
+    { "claim_id": "PTX-9.3-OR-SEM2-005", "classification": "DERIVED_INTERPRETATION", "statement": "Bounded form is `or.b32 d, a, b;`, i.e., 32-bit instantiation of family syntax.", "evidence_fragment_ids": ["PTX-9.3-OR-001", "PTX-9.3-OR-SHARED-004", "PTX-9.3-OR-SHARED-005", "PTX-9.3-OR-SHARED-006"], "state_affecting": true },
+    { "claim_id": "PTX-9.3-OR-SEM2-006", "classification": "DERIVED_INTERPRETATION", "statement": "Execution writes d with bitwise OR of a and b when guard is true, and leaves local state unchanged when guard is false.", "evidence_fragment_ids": ["PTX-9.3-OR-001", "PTX-9.3-OR-SHARED-002", "PTX-9.3-OR-SHARED-003", "PTX-9.3-OR-SHARED-001"], "state_affecting": true },
+    { "claim_id": "PTX-9.3-OR-SEM2-007", "classification": "DERIVED_INTERPRETATION", "statement": "Second source operand b includes immediate form in `.b32` example `or.b32 mask mask,0x00010001`.", "evidence_fragment_ids": ["PTX-9.3-OR-001"], "state_affecting": false },
+    { "claim_id": "PTX-9.3-OR-SEM2-008", "classification": "DESIGN_DEPENDENCY", "statement": "No explicit error/UB/implementation-defined outcomes were encoded for this bounded unit; these concerns are left as open questions.", "evidence_fragment_ids": ["PTX-9.3-OR-001", "PTX-9.3-OR-SHARED-001"], "state_affecting": true },
+    { "claim_id": "PTX-9.3-OR-SEM2-009", "classification": "OPEN_QUESTION", "statement": "Destination `_` support for or.b32 is unresolved by gathered evidence.", "evidence_fragment_ids": ["PTX-9.3-OR-SHARED-001", "PTX-9.3-OR-001"], "state_affecting": true }
+  ]
+}

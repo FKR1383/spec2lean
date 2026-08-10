@@ -30,6 +30,7 @@
       "required": ["evidenceId", "specificationVersion", "source", "locator"],
       "properties": {
         "evidenceId": { "type": "string", "minLength": 1 },
+        "sourceBundleEvidenceId": { "type": "string", "minLength": 1 },
         "specificationVersion": { "type": "string", "minLength": 1 },
         "source": {
           "type": "object",

@@ -109,6 +109,12 @@ function validateEvidence(
   if (!stringValue(value.evidenceId)) {
     add(issues, "MISSING_EVIDENCE_ID", `${path}.evidenceId`, "Evidence ID is required")
   }
+  if (
+    value.sourceBundleEvidenceId !== undefined &&
+    !stringValue(value.sourceBundleEvidenceId)
+  ) {
+    add(issues, "INVALID_SOURCE_BUNDLE_EVIDENCE_ID", `${path}.sourceBundleEvidenceId`, "Source-bundle evidence ID must be a non-empty string")
+  }
   if (value.specificationVersion !== specificationVersion) {
     add(issues, "EVIDENCE_VERSION_MISMATCH", `${path}.specificationVersion`, "Evidence version must match its semantic document")
   }
@@ -298,6 +304,24 @@ export function validateSharedSemanticEnvironment(
     add(issues, "INVALID_REVISION", "$.revision", "Environment revision must be a positive integer")
   }
 
+  if (!isObject(input.scope)) {
+    add(issues, "INVALID_SHARED_SCOPE", "$.scope", "An explicit shared-environment scope is required")
+  } else {
+    for (const field of ["scopeId", "statement"] as const) {
+      if (!stringValue(input.scope[field])) {
+        add(issues, "INVALID_SHARED_SCOPE", `$.scope.${field}`, `${field} is required`)
+      }
+    }
+    for (const field of ["eligibilityRequirements", "excludedFeatures"] as const) {
+      if (!stringArray(input.scope[field]) || input.scope[field].length === 0) {
+        add(issues, "INVALID_SHARED_SCOPE", `$.scope.${field}`, `${field} must be a non-empty string array`)
+      }
+    }
+    if (input.scope.outsideScopeAction !== "DEEP_REVIEW_OR_LEGACY_FALLBACK") {
+      add(issues, "INVALID_SHARED_SCOPE", "$.scope.outsideScopeAction", "Outside-scope units must require deeper review or legacy fallback")
+    }
+  }
+
   const sourceManifests = Array.isArray(input.sourceManifests) ? input.sourceManifests : []
   if (!Array.isArray(input.sourceManifests) || sourceManifests.length === 0) {
     add(issues, "MISSING_SOURCE_MANIFEST", "$.sourceManifests", "At least one source manifest fingerprint is required")
@@ -330,8 +354,11 @@ export function validateSharedSemanticEnvironment(
     if (isObject(value) && value.specificationVersion !== input.specificationVersion) {
       add(issues, "SEMANTIC_VERSION_MISMATCH", `${path}.specificationVersion`, "Shared entry version must match the environment")
     }
-    if (isObject(value) && value.scope !== "PTX_9_3_SHARED") {
-      add(issues, "INVALID_SHARED_SCOPE", `${path}.scope`, "Shared entry must use PTX_9_3_SHARED scope")
+    if (
+      isObject(value) &&
+      (!isObject(input.scope) || value.scope !== input.scope.scopeId)
+    ) {
+      add(issues, "INVALID_SHARED_SCOPE", `${path}.scope`, "Shared entry scope must match the environment scopeId")
     }
     if (
       isObject(value) &&
@@ -357,6 +384,30 @@ export function validateSharedSemanticEnvironment(
         issues,
         isObject(input.review) && input.review.status === "HUMAN_APPROVED",
       )
+      if (!Array.isArray(value.provenance.acceptedUnitSupport) || value.provenance.acceptedUnitSupport.length === 0) {
+        add(issues, "MISSING_ACCEPTED_SUPPORT", `${path}.provenance.acceptedUnitSupport`, "At least one prior accepted-unit support record is required")
+      } else {
+        const units = new Set<string>()
+        value.provenance.acceptedUnitSupport.forEach((support, supportIndex) => {
+          const supportPath = `${path}.provenance.acceptedUnitSupport[${supportIndex}]`
+          if (!isObject(support)) {
+            add(issues, "INVALID_ACCEPTED_SUPPORT", supportPath, "Accepted-unit support must be an object")
+            return
+          }
+          if (!stringValue(support.unit)) {
+            add(issues, "INVALID_ACCEPTED_SUPPORT", `${supportPath}.unit`, "Accepted unit is required")
+          } else if (units.has(support.unit)) {
+            add(issues, "DUPLICATE_ACCEPTED_SUPPORT", `${path}.provenance.acceptedUnitSupport`, `Duplicate accepted-unit support: ${support.unit}`)
+          } else {
+            units.add(support.unit)
+          }
+          if (!stringArray(support.acceptedEvidenceIds) || support.acceptedEvidenceIds.length === 0) {
+            add(issues, "INVALID_ACCEPTED_SUPPORT", `${supportPath}.acceptedEvidenceIds`, "Accepted evidence IDs must be a non-empty string array")
+          }
+          validateFingerprintList(support.artifacts, `${supportPath}.artifacts`, issues, true)
+          validateFingerprintList(support.reviewRecords, `${supportPath}.reviewRecords`, issues, true)
+        })
+      }
     }
     if (!isObject(value) || !isObject(value.review)) {
       add(issues, "INVALID_ENTRY_REVIEW", `${path}.review`, "Shared entry review state is required")
@@ -569,6 +620,8 @@ export function validateInstructionSemanticDelta(
   duplicateIds(allEvidence, "evidenceId", "$.combinedEvidence", issues, "DUPLICATE_EVIDENCE_ID")
   const evidenceById = evidenceMap(allEvidence)
 
+  const localEvidenceById = evidenceMap(localEvidence)
+
   const deltaSemanticIds = duplicateIds([...claims, ...refinements], "semanticId", "$.claimsAndRefinements", issues, "DUPLICATE_SEMANTIC_ID")
   for (const id of deltaSemanticIds) {
     if (sharedIds.has(id)) add(issues, "SEMANTIC_ID_COLLIDES_WITH_SHARED", "$.claimsAndRefinements", `Delta semantic ID collides with shared ID: ${id}`)
@@ -579,11 +632,32 @@ export function validateInstructionSemanticDelta(
     const path = `$.claims[${index}]`
     validateClaimShape(claim, path, issues)
     validateClaimLinks(claim, path, allSemanticIds, evidenceById, issues)
+    if (isObject(claim) && claim.classification === "SOURCE_FACT" && stringArray(claim.evidenceIds)) {
+      let hasBundleTrace = false
+      for (const evidenceId of claim.evidenceIds) {
+        const record = localEvidenceById.get(evidenceId)
+        if (record !== undefined && stringValue(record.sourceBundleEvidenceId)) {
+          hasBundleTrace = true
+        }
+      }
+      if (!hasBundleTrace) {
+        add(issues, "SOURCE_FACT_MISSING_BUNDLE_TRACE", `${path}.evidenceIds`, "Delta SOURCE_FACT requires at least one local source-bundle evidence trace")
+      }
+    }
   })
   refinements.forEach((refinement, index) => {
     const path = `$.refinements[${index}]`
     validateClaimShape(refinement, path, issues)
     validateClaimLinks(refinement, path, allSemanticIds, evidenceById, issues)
+    if (isObject(refinement) && refinement.classification === "SOURCE_FACT" && stringArray(refinement.evidenceIds)) {
+      const hasBundleTrace = refinement.evidenceIds.some((evidenceId) => {
+        const record = localEvidenceById.get(evidenceId)
+        return record !== undefined && stringValue(record.sourceBundleEvidenceId)
+      })
+      if (!hasBundleTrace) {
+        add(issues, "SOURCE_FACT_MISSING_BUNDLE_TRACE", `${path}.evidenceIds`, "Delta SOURCE_FACT refinement requires a local source-bundle evidence trace")
+      }
+    }
     if (!isObject(refinement) || !stringValue(refinement.targetSharedSemanticId) || !sharedIds.has(refinement.targetSharedSemanticId)) {
       add(issues, "INVALID_REFINEMENT_TARGET", `${path}.targetSharedSemanticId`, "Refinement target must be an existing shared semantic ID")
     } else if (!referencedSharedIds.has(refinement.targetSharedSemanticId)) {

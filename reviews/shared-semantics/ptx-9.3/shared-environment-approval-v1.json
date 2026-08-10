@@ -1,0 +1,78 @@
+{
+  "approvedEnvironmentPath": "language_packs/ptx/9.3/semantic/shared-environment-approved-v1.json",
+  "candidate": {
+    "canonicalSha256": "24ce0b7d7a5e10225340dab10d122f9a5b956ade31cc05559d6c387c9198b2d6",
+    "path": "language_packs/ptx/9.3/semantic/shared-environment-review-candidate-v1.json",
+    "sha256": "0e90be42971775eac38596ce4e87caaabb2b8a5cdaf4be02fa106348320a0d5c"
+  },
+  "decision": "approved",
+  "environmentId": "ptx-9.3-bounded-scalar-b32-register-predicate-core",
+  "humanConfirmationRecorded": true,
+  "humanReviewPacket": {
+    "path": "reviews/shared-semantics/ptx-9.3/shared-environment-first-human-review-v1.md",
+    "sha256": "81589aa5a235f3f5f7e01bf3a78acdaadedd0c73a57ef99bb1eb192f39081e93"
+  },
+  "language": "PTX",
+  "priorUnitApprovalsReinterpretedAsSharedApproval": false,
+  "provenance": {
+    "command": "approve-shared",
+    "controller": "spec2lean-cli"
+  },
+  "rationale": "I approve revision 1 for PTX_9_3_BOUNDED_SCALAR_B32_REGISTER_PREDICATE_CORE, with bit-bucket applicability remaining instruction-specific and all DESIGN_DEPENDENCY entries remaining project modeling conventions.",
+  "recordType": "shared_semantic_environment_decision",
+  "reviewer": "Human reviewer",
+  "reviewId": "ptx-9.3-bounded-scalar-b32-register-predicate-core-approval-r1",
+  "revision": 1,
+  "schemaVersion": 1,
+  "scopeId": "PTX_9_3_BOUNDED_SCALAR_B32_REGISTER_PREDICATE_CORE",
+  "semanticEntries": [
+    {
+      "classification": "SOURCE_FACT",
+      "semanticId": "ptx.9.3.b32.domain-source",
+      "statementSha256": "bd1c703ac62f2207ae0ea2deb96f55968e09e26aa950873f78846a05a02cbe96"
+    },
+    {
+      "classification": "SOURCE_FACT",
+      "semanticId": "ptx.9.3.bit-bucket.rule-source",
+      "statementSha256": "780b8183d68c635b4426b264b2926986b4d4d703288dfb9497172e93e710b861"
+    },
+    {
+      "classification": "SOURCE_FACT",
+      "semanticId": "ptx.9.3.predication.applicability-source",
+      "statementSha256": "dad0ec78773a28a3de05cfaf030c2fad6e2d2f5728aba2319cc6480cde539c96"
+    },
+    {
+      "classification": "DERIVED_INTERPRETATION",
+      "semanticId": "ptx.9.3.predication.false-guard-noop-derived",
+      "statementSha256": "7c0f59a08c65d07cd962ca82e05d27d02260881bc4f268f83174b32edb4bd637"
+    },
+    {
+      "classification": "SOURCE_FACT",
+      "semanticId": "ptx.9.3.predication.false-guard-source",
+      "statementSha256": "bc05f495690fc868966fc1d23e3ed53996ece580d0827709f0fc18526f9edb5a"
+    },
+    {
+      "classification": "DESIGN_DEPENDENCY",
+      "semanticId": "ptx.9.3.register.lookup-partial-design",
+      "statementSha256": "a7f916f37faa13bd8bbf4384ef4f939859100b78671f4209d4918eea3726f006"
+    },
+    {
+      "classification": "SOURCE_FACT",
+      "semanticId": "ptx.9.3.register.state-space-source",
+      "statementSha256": "609d7bd7d65627ea96d87cae6e246534cfdcbace7e55c27b748f40d1b92d62f0"
+    },
+    {
+      "classification": "DESIGN_DEPENDENCY",
+      "semanticId": "ptx.9.3.register.value-representation-design",
+      "statementSha256": "2d4e0a2d191d895ea145d73a7b8fb522b4a3ed80bb3e74a086975d2c2882205f"
+    },
+    {
+      "classification": "DESIGN_DEPENDENCY",
+      "semanticId": "ptx.9.3.state.register-model-design",
+      "statementSha256": "9ce1dd36a33f4579b5f0843270186ad29e5592825af68cd535a6d28a166b0451"
+    }
+  ],
+  "sharedEnvironmentApprovalPerformed": true,
+  "specificationVersion": "9.3",
+  "submittedAtUtc": "2026-08-09T22:37:16.069Z"
+}

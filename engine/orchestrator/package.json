@@ -11,6 +11,7 @@
     "loop": "tsx src/run-loop.ts",
     "async-smoke": "tsx src/async-smoke.ts",
     "approve": "tsx src/approve.ts",
+    "approve-shared": "tsx src/approve-shared.ts",
     "reject": "tsx src/reject.ts",
     "formalize": "tsx src/formalize.ts",
     "finalize": "tsx src/finalize.ts",
@@ -20,7 +21,8 @@
     "doctor": "tsx src/doctor.ts",
     "perf-report": "tsx src/perf-report.ts",
     "ptx-index": "tsx src/ptx-index.ts",
-    "semantic-ir": "tsx src/semantic-ir-cli.ts"
+    "semantic-ir": "tsx src/semantic-ir-cli.ts",
+    "semantic-report": "tsx src/semantic-v2-report.ts"
   },
   "dependencies": {
     "@opencode-ai/sdk": "^1.18.14"

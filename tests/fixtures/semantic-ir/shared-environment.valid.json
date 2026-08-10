@@ -4,6 +4,13 @@
   "language": "PTX",
   "specificationVersion": "9.3",
   "revision": 1,
+  "scope": {
+    "scopeId": "PTX_9_3_TEST_FIXTURE_SCOPE",
+    "statement": "Synthetic bounded PTX semantic-IR test scope.",
+    "eligibilityRequirements": ["Synthetic fixture unit only."],
+    "excludedFeatures": ["All production use."],
+    "outsideScopeAction": "DEEP_REVIEW_OR_LEGACY_FALLBACK"
+  },
   "review": {
     "status": "HUMAN_APPROVED",
     "records": [
@@ -50,7 +57,7 @@
         "introducedInRevision": 1
       },
       "specificationVersion": "9.3",
-      "scope": "PTX_9_3_SHARED",
+      "scope": "PTX_9_3_TEST_FIXTURE_SCOPE",
       "review": {
         "status": "HUMAN_APPROVED",
         "confidence": "HIGH"
@@ -66,6 +73,24 @@
           {
             "path": "reviews/ptx-and-b32/gate-b/ptx-and-b32-b-approval-v1.json",
             "sha256": "89563f44f371f048122f8c1934fd2058976366000f3a7454ee0ffd69581463c6"
+          }
+        ],
+        "acceptedUnitSupport": [
+          {
+            "unit": "and.b32",
+            "acceptedEvidenceIds": ["fixture-only"],
+            "artifacts": [
+              {
+                "path": "accepted/ptx/9.3/and-b32/semantics/semantics-v2.json",
+                "sha256": "45e0fe93f02a3261976962026eb7b5b2e1a5343c10d4a388f500f6f30a24ca0e"
+              }
+            ],
+            "reviewRecords": [
+              {
+                "path": "reviews/ptx-and-b32/gate-b/ptx-and-b32-b-approval-v1.json",
+                "sha256": "89563f44f371f048122f8c1934fd2058976366000f3a7454ee0ffd69581463c6"
+              }
+            ]
           }
         ]
       }
@@ -83,7 +108,7 @@
         "introducedInRevision": 1
       },
       "specificationVersion": "9.3",
-      "scope": "PTX_9_3_SHARED",
+      "scope": "PTX_9_3_TEST_FIXTURE_SCOPE",
       "review": {
         "status": "HUMAN_APPROVED",
         "confidence": "MEDIUM"
@@ -99,6 +124,24 @@
           {
             "path": "reviews/ptx-and-b32/gate-b/ptx-and-b32-b-approval-v1.json",
             "sha256": "89563f44f371f048122f8c1934fd2058976366000f3a7454ee0ffd69581463c6"
+          }
+        ],
+        "acceptedUnitSupport": [
+          {
+            "unit": "and.b32",
+            "acceptedEvidenceIds": ["fixture-only"],
+            "artifacts": [
+              {
+                "path": "accepted/ptx/9.3/and-b32/semantics/semantics-v2.json",
+                "sha256": "45e0fe93f02a3261976962026eb7b5b2e1a5343c10d4a388f500f6f30a24ca0e"
+              }
+            ],
+            "reviewRecords": [
+              {
+                "path": "reviews/ptx-and-b32/gate-b/ptx-and-b32-b-approval-v1.json",
+                "sha256": "89563f44f371f048122f8c1934fd2058976366000f3a7454ee0ffd69581463c6"
+              }
+            ]
           }
         ]
       }
@@ -116,7 +159,7 @@
         "introducedInRevision": 1
       },
       "specificationVersion": "9.3",
-      "scope": "PTX_9_3_SHARED",
+      "scope": "PTX_9_3_TEST_FIXTURE_SCOPE",
       "review": {
         "status": "HUMAN_APPROVED",
         "confidence": "MEDIUM"
@@ -132,6 +175,24 @@
           {
             "path": "reviews/ptx-and-b32/gate-b/ptx-and-b32-b-approval-v1.json",
             "sha256": "89563f44f371f048122f8c1934fd2058976366000f3a7454ee0ffd69581463c6"
+          }
+        ],
+        "acceptedUnitSupport": [
+          {
+            "unit": "and.b32",
+            "acceptedEvidenceIds": ["fixture-only"],
+            "artifacts": [
+              {
+                "path": "accepted/ptx/9.3/and-b32/semantics/semantics-v2.json",
+                "sha256": "45e0fe93f02a3261976962026eb7b5b2e1a5343c10d4a388f500f6f30a24ca0e"
+              }
+            ],
+            "reviewRecords": [
+              {
+                "path": "reviews/ptx-and-b32/gate-b/ptx-and-b32-b-approval-v1.json",
+                "sha256": "89563f44f371f048122f8c1934fd2058976366000f3a7454ee0ffd69581463c6"
+              }
+            ]
           }
         ]
       }
@@ -149,7 +210,7 @@
         "introducedInRevision": 1
       },
       "specificationVersion": "9.3",
-      "scope": "PTX_9_3_SHARED",
+      "scope": "PTX_9_3_TEST_FIXTURE_SCOPE",
       "review": {
         "status": "HUMAN_APPROVED",
         "confidence": "MEDIUM"
@@ -165,6 +226,24 @@
           {
             "path": "reviews/ptx-and-b32/gate-b/ptx-and-b32-b-approval-v1.json",
             "sha256": "89563f44f371f048122f8c1934fd2058976366000f3a7454ee0ffd69581463c6"
+          }
+        ],
+        "acceptedUnitSupport": [
+          {
+            "unit": "and.b32",
+            "acceptedEvidenceIds": ["fixture-only"],
+            "artifacts": [
+              {
+                "path": "accepted/ptx/9.3/and-b32/semantics/semantics-v2.json",
+                "sha256": "45e0fe93f02a3261976962026eb7b5b2e1a5343c10d4a388f500f6f30a24ca0e"
+              }
+            ],
+            "reviewRecords": [
+              {
+                "path": "reviews/ptx-and-b32/gate-b/ptx-and-b32-b-approval-v1.json",
+                "sha256": "89563f44f371f048122f8c1934fd2058976366000f3a7454ee0ffd69581463c6"
+              }
+            ]
           }
         ]
       }
@@ -182,7 +261,7 @@
         "introducedInRevision": 1
       },
       "specificationVersion": "9.3",
-      "scope": "PTX_9_3_SHARED",
+      "scope": "PTX_9_3_TEST_FIXTURE_SCOPE",
       "review": {
         "status": "HUMAN_APPROVED",
         "confidence": "LOW"
@@ -198,6 +277,24 @@
           {
             "path": "reviews/ptx-and-b32/gate-b/ptx-and-b32-b-approval-v1.json",
             "sha256": "89563f44f371f048122f8c1934fd2058976366000f3a7454ee0ffd69581463c6"
+          }
+        ],
+        "acceptedUnitSupport": [
+          {
+            "unit": "and.b32",
+            "acceptedEvidenceIds": ["fixture-only"],
+            "artifacts": [
+              {
+                "path": "accepted/ptx/9.3/and-b32/semantics/semantics-v2.json",
+                "sha256": "45e0fe93f02a3261976962026eb7b5b2e1a5343c10d4a388f500f6f30a24ca0e"
+              }
+            ],
+            "reviewRecords": [
+              {
+                "path": "reviews/ptx-and-b32/gate-b/ptx-and-b32-b-approval-v1.json",
+                "sha256": "89563f44f371f048122f8c1934fd2058976366000f3a7454ee0ffd69581463c6"
+              }
+            ]
           }
         ]
       }

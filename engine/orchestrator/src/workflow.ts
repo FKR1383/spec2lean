@@ -55,6 +55,7 @@ export type RunEvent = {
 }
 
 export type AgentExecution = {
+  startedAt?: string
   at: string
   stage: FormalizationStage
   agent: string
@@ -62,14 +63,57 @@ export type AgentExecution = {
   outcome: string
   nextStage: FormalizationStage
   response: string
+  failureClass?: "PROVIDER_RETRY_BUDGET_EXCEEDED"
 }
 
 export type ActiveExecution = {
   startedAt: string
   stage: FormalizationStage
   agent: string
+  model?: string
   sessionId: string
   expectedArtifact: string
+}
+
+export type SemanticV2Mode =
+  | "UNASSESSED"
+  | "DELTA_FAST_PATH"
+  | "LEGACY_FALLBACK"
+
+export type SemanticV2ArtifactSet = {
+  attempt: number
+  deltaPath: string
+  materializedPath: string
+  criticPacketPath: string
+  deltaBytes?: number
+  materializedBytes?: number
+  criticPacketBytes?: number
+  deltaSha256?: string
+  materializedSha256?: string
+  criticPacketSha256?: string
+}
+
+export type SemanticV2Event = {
+  at: string
+  kind: "ELIGIBILITY" | "FALLBACK" | "MATERIALIZED" | "CRITIC_FALLBACK"
+  code: string
+  detail: string
+}
+
+export type SemanticV2State = {
+  profilePath: string
+  sharedEnvironmentPath: string
+  mode: SemanticV2Mode
+  environment?: {
+    environmentId: string
+    revision: number
+    sha256: string
+    reviewStatus: string
+  }
+  missingRequiredSemanticIds: string[]
+  fallbackReason?: string
+  current?: SemanticV2ArtifactSet
+  events: SemanticV2Event[]
 }
 
 export type RunState = {
@@ -100,6 +144,7 @@ export type RunState = {
 
   executions?: AgentExecution[]
   activeExecution?: ActiveExecution
+  semanticV2?: SemanticV2State
 }
 
 const transitions:

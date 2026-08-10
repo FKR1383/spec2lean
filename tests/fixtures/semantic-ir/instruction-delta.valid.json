@@ -10,7 +10,7 @@
   "sharedEnvironment": {
     "environmentId": "ptx-9.3-shared-semantics-test-fixture",
     "revision": 1,
-    "sha256": "ce596782a73df9654bdb8f8d78b99cb8571f92413ba9e71637a5cdc4e9dc7985"
+    "sha256": "c0f4e607a8e97d02fa9a87d83c829a2bfb63f89bc49334826b680458f4bc24fb"
   },
   "provenance": {
     "sourceBundle": {
@@ -35,6 +35,7 @@
   "evidence": [
     {
       "evidenceId": "ptx.fixture.and.operation",
+      "sourceBundleEvidenceId": "AND_SEMANTICS",
       "specificationVersion": "9.3",
       "source": {
         "kind": "html",

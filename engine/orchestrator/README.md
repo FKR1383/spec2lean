@@ -70,6 +70,20 @@ Session completion uses OpenCode message `step-finish` information as well as
 session status; a terminal `length`/resource outcome is therefore detected
 without waiting for a long artificial timeout.
 
+OpenCode provider backoff is distinct from a Spec2Lean semantic `RETRY`.
+Provider retry waits are bounded to 60 seconds by default, then the stalled
+session is aborted and recorded with failure class
+`PROVIDER_RETRY_BUDGET_EXCEEDED`. Override the bound explicitly when needed:
+
+```bash
+./spec2lean resume --run <run-id> --provider-retry-budget-seconds 90
+```
+
+The performance report counts these provider failures separately from agent
+retry outcomes. New executions also record their start time, so
+`activeAgentSeconds` excludes human-gate pauses and offline time; historical
+executions without start timestamps remain visible as `unmeasuredExecutions`.
+
 One `formalize`/`resume` loop keeps a single OpenCode server alive across all
 agent stages until it reaches a human or terminal boundary. Each stage still
 uses a separate persisted session, and the standalone `tick` command still
@@ -104,8 +118,44 @@ full-view fallback.
 ./spec2lean semantic-ir review-packet <environment.json> <delta.json>
 ```
 
-The PTX 9.3 language pack currently contains only a `DRAFT` shared-environment
-shell. The engine will not treat accepted unit artifacts as shared approval.
+The PTX 9.3 language pack keeps its production pointer on the empty `DRAFT`
+shell while the first bounded scalar `.b32` shared-environment candidate is at
+human review. Accepted per-unit decisions support that candidate but do not
+constitute shared approval.
+
+Review and, only after an explicit human decision, approve with:
+
+```bash
+less reviews/shared-semantics/ptx-9.3/shared-environment-first-human-review-v1.md
+./spec2lean approve-shared --language ptx --version 9.3 \
+  --reviewer "<human reviewer>" \
+  --rationale "<explicit shared-scope approval rationale>"
+```
+
+The approval command is deterministic, invokes no OpenCode agent, verifies
+all pinned files, writes immutable review/environment artifacts, and changes
+the profile pointer only after the approved environment validates.
+
+The real workflow evaluates
+`language_packs/<language>/<version>/semantic-profile.json` when entering
+semantic extraction. A bounded, human-approved environment uses the
+`semantic-extractor-delta` agent; the orchestrator then verifies the delta,
+source-bundle fragments, official source hashes, and state-affecting gaps
+before writing the full view and compact critic packet. Semantic Critic sees
+the packet first and can explicitly request full review.
+
+An ineligible environment, missing dependency, invalid or ungrounded delta,
+state-affecting open question, unsupported unit feature, or critic revision is
+recorded in `run.json` as `LEGACY_FALLBACK`. The subsequent extraction uses the
+existing full semantic artifact and agent path. Normal Gate B behavior is
+unchanged.
+
+Inspect v2 routing and size telemetry with:
+
+```bash
+./spec2lean semantic-report --run <run-id>
+./spec2lean perf-report --run <run-id>
+```
 
 ## Lean package integration
 

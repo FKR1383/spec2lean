@@ -43,6 +43,8 @@ async function main(): Promise<void> {
   const runId = required("--run")
   const maxTicks = integerArgument("--max-ticks", 25)
   const maxStageRetries = integerArgument("--max-stage-retries", 4)
+  const providerRetryBudgetSeconds =
+    integerArgument("--provider-retry-budget-seconds", 60)
   let ticks = 0
   let consecutiveRetries = 0
   let retryStage: FormalizationStage | undefined
@@ -99,7 +101,10 @@ async function main(): Promise<void> {
 
       runtime ??= await startOpenCode()
       try {
-        await executeTick(runId, { runtime })
+        await executeTick(runId, {
+          runtime,
+          providerRetryBudgetMs: providerRetryBudgetSeconds * 1000,
+        })
       } catch (error) {
         const current = await loadRun(runId)
         console.log(JSON.stringify({

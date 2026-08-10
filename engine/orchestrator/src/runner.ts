@@ -10,6 +10,7 @@ import { artifactContractForRun } from "./artifact-contract.js"
 import { verifyExpectedArtifact } from "./artifact-verify.js"
 import {
   abortSession,
+  ProviderRetryBudgetExceededError,
   sendPromptAsync,
   waitForAgentResult,
 } from "./async-session.js"
@@ -23,6 +24,12 @@ import {
 } from "./proof-plan.js"
 import { REPO_ROOT } from "./repo.js"
 import { loadRun, saveRun } from "./run-store.js"
+import {
+  markSemanticV2Fallback,
+  materializeSemanticDeltaForRun,
+  prepareSemanticV2Run,
+  verifySemanticV2CriticPreflight,
+} from "./semantic-v2.js"
 import { planForRun } from "./stage-plan.js"
 import {
   canTransition,
@@ -45,6 +52,13 @@ function executionAgentForRun(
   run: RunState,
   fallbackAgent: string,
 ): string {
+  if (
+    run.stage === "SEMANTIC_EXTRACTION" &&
+    run.semanticV2?.mode === "DELTA_FAST_PATH"
+  ) {
+    return "semantic-extractor-delta"
+  }
+
   const fastAgent = FAST_FIRST_AGENTS[run.stage]
 
   if (!fastAgent) return fallbackAgent
@@ -97,7 +111,7 @@ async function fileExists(repoRelativePath: string): Promise<boolean> {
   }
 }
 
-function buildGeneralPrompt(run: RunState): string {
+export function buildGeneralPrompt(run: RunState): string {
   const plan = planForRun(run)
   const artifact = artifactContractForRun(run)
   const revisionTargets =
@@ -132,6 +146,64 @@ function buildGeneralPrompt(run: RunState): string {
     "# Stage Task",
     "",
     plan.task,
+    ...(run.stage === "SEMANTIC_EXTRACTION" && run.semanticV2?.mode === "DELTA_FAST_PATH"
+      ? [
+          "",
+          "# Semantic Architecture v2 — DELTA FAST PATH",
+          "",
+          `Shared environment: ${run.semanticV2.sharedEnvironmentPath}`,
+          `Shared environment hash: ${run.semanticV2.environment?.sha256 ?? "missing"}`,
+          `Delta output: ${run.semanticV2.current?.deltaPath ?? artifact.outputPath}`,
+          `Deterministic materialized view: ${run.semanticV2.current?.materializedPath ?? "assigned after validation"}`,
+          `Deterministic critic packet: ${run.semanticV2.current?.criticPacketPath ?? "assigned after validation"}`,
+          "Generate ONLY the typed instruction-specific semantic delta.",
+          "Do not reproduce shared claims as local claims.",
+          "Read ir/semantic/instruction-delta.schema.json and the shared environment before writing.",
+          "Every new SOURCE_FACT must use local official evidence with sourceBundleEvidenceId set to an exact fragment_id from the latest bounded source bundle.",
+          "Pin the exact latest source-bundle path/hash and shared environment ID/revision/hash.",
+          "The orchestrator will validate grounding, block state-affecting open questions, materialize the full view, and construct the critic packet.",
+          "If a needed shared semantic ID is unavailable or the instruction exceeds the environment, return RETRY at SEMANTIC_EXTRACTION and state that full fallback is required. Do not invent the missing shared fact.",
+        ]
+      : []),
+    ...(run.stage === "SEMANTIC_EXTRACTION" && run.semanticV2?.mode === "LEGACY_FALLBACK"
+      ? [
+          "",
+          "# Explicit Semantic v2 Fallback",
+          "",
+          `Fallback reason: ${run.semanticV2.fallbackReason ?? "delta path unavailable"}`,
+          "Produce the existing complete legacy semantic interpretation at the required semantics-vN.json path.",
+          "Do not report or imply that the delta fast path succeeded.",
+        ]
+      : []),
+    ...(run.stage === "SEMANTIC_CRITIQUE" && run.semanticV2?.mode === "DELTA_FAST_PATH" && run.semanticV2.current !== undefined
+      ? [
+          "",
+          "# Semantic Architecture v2 — COMPACT CRITIC PATH",
+          "",
+          `Compact critic packet: ${run.semanticV2.current.criticPacketPath}`,
+          `Instruction delta: ${run.semanticV2.current.deltaPath}`,
+          `Deterministic full view fallback: ${run.semanticV2.current.materializedPath}`,
+          `Hash-bound shared environment: ${run.semanticV2.sharedEnvironmentPath}`,
+          "Read the compact packet first. Deeply review all new SOURCE_FACT, DERIVED_INTERPRETATION, DESIGN_DEPENDENCY, ASSUMPTION, OPEN_QUESTION, refinement, and risky shared-dependency entries.",
+          "Independently compare new source facts with the bounded source bundle and official evidence as needed.",
+          "The deterministic validator establishes structure only; it does not establish interpretive correctness.",
+          "If the packet is insufficient or a broader full review is required, return REVISE to SEMANTIC_EXTRACTION or SOURCE_CURATION and begin the summary with FULL_REVIEW_REQUIRED:.",
+          "The full materialized view remains available; never convert insufficient review scope into SUCCESS.",
+        ]
+      : []),
+    ...(run.semanticV2?.mode === "DELTA_FAST_PATH" &&
+      run.semanticV2.current !== undefined &&
+      !["SEMANTIC_EXTRACTION", "SEMANTIC_CRITIQUE"].includes(run.stage)
+      ? [
+          "",
+          "# Gate-B Semantic v2 Input",
+          "",
+          `The complete semantic artifact is the deterministic materialized view at ${run.semanticV2.current.materializedPath}.`,
+          `Its instruction-specific provenance delta is ${run.semanticV2.current.deltaPath}.`,
+          "Treat the human-approved materialized view as the semantic authority for this unit while preserving claim classifications and origin IDs in traceability.",
+          "Do not expect the legacy hand-authored semantics JSON layout and do not regenerate semantic content.",
+        ]
+      : []),
     ...(run.stage === "FINAL_CRITIQUE"
       ? [
           "",
@@ -413,6 +485,7 @@ async function finalizeProofStageLocally(run: RunState): Promise<AgentResult | u
 export type TickOptions = {
   dryRun?: boolean
   runtime?: Awaited<ReturnType<typeof startOpenCode>>
+  providerRetryBudgetMs?: number
 }
 
 export async function executeTick(
@@ -421,6 +494,72 @@ export async function executeTick(
 ): Promise<void> {
   const dryRun = options.dryRun ?? false
   let run = await loadRun(runId)
+
+  if (run.stage === "SEMANTIC_EXTRACTION") {
+    const prepared = await prepareSemanticV2Run(run)
+    if (prepared !== run) {
+      run = prepared
+      if (!dryRun) await saveRun(run)
+    }
+  }
+  if (
+    run.stage === "SEMANTIC_CRITIQUE" &&
+    run.semanticV2?.mode === "DELTA_FAST_PATH"
+  ) {
+    const preflight = await verifySemanticV2CriticPreflight(run)
+    if (!preflight.ok) {
+      const detail = preflight.issues.join(" | ")
+      run = markSemanticV2Fallback(
+        run,
+        "SEMANTIC_V2_CRITIC_PREFLIGHT_FAILED",
+        detail,
+        "CRITIC_FALLBACK",
+      )
+      if (dryRun) {
+        console.log(JSON.stringify({
+          dryRun: true,
+          runId: run.runId,
+          stage: "SEMANTIC_CRITIQUE",
+          localFallbackTo: "SEMANTIC_EXTRACTION",
+          issues: preflight.issues,
+        }, null, 2))
+        return
+      }
+      let next = transitionRun(
+        run,
+        "SEMANTIC_EXTRACTION",
+        `orchestrator semantic-v2 preflight fallback: ${detail}`,
+      )
+      next = {
+        ...next,
+        activeExecution: undefined,
+        executions: [
+          ...(run.executions ?? []),
+          {
+            at: new Date().toISOString(),
+            stage: "SEMANTIC_CRITIQUE",
+            agent: "orchestrator-semantic-v2-preflight",
+            sessionId: "local",
+            outcome: "REVISE",
+            nextStage: "SEMANTIC_EXTRACTION",
+            response: detail,
+          },
+        ],
+      }
+      await saveRun(next)
+      console.log(JSON.stringify({
+        ok: true,
+        runId: next.runId,
+        agent: "orchestrator-semantic-v2-preflight",
+        outcome: "REVISE",
+        fromStage: "SEMANTIC_CRITIQUE",
+        toStage: "SEMANTIC_EXTRACTION",
+        revision: next.revision,
+        summary: detail,
+      }, null, 2))
+      return
+    }
+  }
 
   const basePlan = planForRun(run)
   const plan = {
@@ -502,7 +641,28 @@ export async function executeTick(
     let sessionId: string
     let submitted = false
 
-    if (run.activeExecution && run.activeExecution.stage === run.stage && run.activeExecution.agent === plan.agent) {
+    const resumableActiveExecution =
+      run.activeExecution !== undefined &&
+      run.activeExecution.stage === run.stage &&
+      run.activeExecution.agent === plan.agent &&
+      run.activeExecution.model === runtime.model.full
+
+    if (run.activeExecution !== undefined && !resumableActiveExecution) {
+      const stale = run.activeExecution
+      await abortSession(runtime.runtime.server.url, stale.sessionId).catch(() => {})
+      console.log(
+        `[spec2lean] abandoning stale active session=${stale.sessionId} ` +
+        `agent=${stale.agent} model=${stale.model ?? "unrecorded"}; ` +
+        `current-agent=${plan.agent} current-model=${runtime.model.full}`,
+      )
+      run = {
+        ...run,
+        activeExecution: undefined,
+      }
+      await saveRun(run)
+    }
+
+    if (resumableActiveExecution && run.activeExecution !== undefined) {
       sessionId = run.activeExecution.sessionId
       console.log(`[spec2lean] resuming active session=${sessionId} agent=${plan.agent}`)
     } else {
@@ -521,6 +681,7 @@ export async function executeTick(
           startedAt: new Date().toISOString(),
           stage: run.stage,
           agent: plan.agent,
+          model: runtime.model.full,
           sessionId,
           expectedArtifact: artifact.outputPath,
         },
@@ -540,11 +701,13 @@ export async function executeTick(
 
     let response = ""
     let result: AgentResult | undefined
+    let failureClass: "PROVIDER_RETRY_BUDGET_EXCEEDED" | undefined
 
     try {
       response = await waitForAgentResult(runtime.runtime.server.url, sessionId, {
         pollMs: 2_000,
         maxWaitMs: run.stage === "PROOF_GENERATION" ? 15 * 60 * 1000 : 30 * 60 * 1000,
+        providerRetryBudgetMs: options.providerRetryBudgetMs,
         missingStatusIsTerminal: !submitted,
       })
       try {
@@ -555,6 +718,7 @@ export async function executeTick(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       const recoverable =
+        error instanceof ProviderRetryBudgetExceededError ||
         message.includes("timed out") ||
         message.includes("terminated without textual result") ||
         message.includes("reason=length") ||
@@ -564,10 +728,15 @@ export async function executeTick(
 
       await abortSession(runtime.runtime.server.url, sessionId).catch(() => {})
       response = `[ORCHESTRATOR_RECOVERY] ${message}`
+      if (error instanceof ProviderRetryBudgetExceededError) {
+        failureClass = "PROVIDER_RETRY_BUDGET_EXCEEDED"
+      }
       result = {
         outcome: "RETRY",
         nextStage: run.stage,
-        summary: `Agent execution ended without a usable stage result (${message}). The same stage is safely resumable; any written artifact will be verified before another agent is started.`,
+        summary: error instanceof ProviderRetryBudgetExceededError
+          ? `OpenCode provider retry exceeded the bounded ${error.retryBudgetMs}ms budget: ${error.providerMessage}. The stalled session was aborted; the stage remains safely resumable and no semantic conclusion was inferred from the provider failure.`
+          : `Agent execution ended without a usable stage result (${message}). The same stage is safely resumable; any written artifact will be verified before another agent is started.`,
       }
     }
 
@@ -588,6 +757,67 @@ export async function executeTick(
           nextStage: run.stage,
           summary: `Agent reported SUCCESS but artifact verification failed: ${verification.issues.join(" | ")}`,
         }
+      } else if (
+        run.stage === "SEMANTIC_EXTRACTION" &&
+        run.semanticV2?.mode === "DELTA_FAST_PATH"
+      ) {
+        try {
+          run = await materializeSemanticDeltaForRun(run)
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error)
+          run = markSemanticV2Fallback(
+            run,
+            "DELTA_VALIDATION_OR_MATERIALIZATION_FAILED",
+            detail,
+          )
+          result = {
+            outcome: "RETRY",
+            nextStage: "SEMANTIC_EXTRACTION",
+            summary: `Semantic delta fast path failed deterministically and has switched to explicit legacy fallback: ${detail}`,
+          }
+        }
+      }
+    }
+
+    if (
+      run.stage === "SEMANTIC_EXTRACTION" &&
+      run.semanticV2?.mode === "DELTA_FAST_PATH" &&
+      result.outcome !== "SUCCESS"
+    ) {
+      run = markSemanticV2Fallback(
+        run,
+        "DELTA_AGENT_DID_NOT_COMPLETE",
+        `${result.outcome}: ${result.summary}`,
+      )
+      if (result.outcome === "BLOCKED") {
+        result = {
+          outcome: "RETRY",
+          nextStage: "SEMANTIC_EXTRACTION",
+          summary: `Delta extractor could not soundly complete; the run is switching to the full legacy Semantic Extractor for an independent determination: ${result.summary}`,
+        }
+      }
+    }
+    const criticRequestedFullReview =
+      run.stage === "SEMANTIC_CRITIQUE" &&
+      run.semanticV2?.mode === "DELTA_FAST_PATH" &&
+      result.summary.includes("FULL_REVIEW_REQUIRED")
+    if (
+      run.stage === "SEMANTIC_CRITIQUE" &&
+      run.semanticV2?.mode === "DELTA_FAST_PATH" &&
+      (result.outcome === "REVISE" || criticRequestedFullReview)
+    ) {
+      run = markSemanticV2Fallback(
+        run,
+        "SEMANTIC_CRITIC_REQUESTED_REVISION",
+        result.summary,
+        "CRITIC_FALLBACK",
+      )
+      if (criticRequestedFullReview && result.outcome !== "REVISE") {
+        result = {
+          outcome: "REVISE",
+          nextStage: "SEMANTIC_EXTRACTION",
+          summary: result.summary,
+        }
       }
     }
 
@@ -602,6 +832,7 @@ export async function executeTick(
       executions: [
         ...(run.executions ?? []),
         {
+          startedAt: run.activeExecution?.startedAt,
           at: new Date().toISOString(),
           stage: run.stage,
           agent: plan.agent,
@@ -609,6 +840,7 @@ export async function executeTick(
           outcome: result.outcome,
           nextStage,
           response: response || (submitted ? "[no textual response]" : "[resumed session]"),
+          ...(failureClass === undefined ? {} : { failureClass }),
         },
       ],
     }

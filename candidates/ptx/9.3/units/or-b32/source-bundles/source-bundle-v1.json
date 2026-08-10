@@ -1,0 +1,163 @@
+{
+  "schema_version": 2,
+  "bundle_id": "ptx-9.3-or-b32-source-bundle-v1",
+  "revision_of": null,
+  "revision_reason": "Initial bounded source-bundle for the or.b32 unit, produced at stage SOURCE_CURATION (run ptx-9.3-or.b32-a1e12839, attempt 1, revision 13). This artifact records official PTX ISA 9.3 evidence for or.b32 and required shared context.",
+  "run_id": "ptx-9.3-or.b32-a1e12839",
+  "stage": "SOURCE_CURATION",
+  "stage_attempt": 1,
+  "run_revision": 13,
+  "status": "DRAFT_SOURCE_BUNDLE_NOT_SEMANTICALLY_INTERPRETED",
+  "language": "PTX",
+  "specification_version": "9.3",
+  "construct": "or.b32",
+  "instruction_family": "or",
+  "source_documents": [
+    {
+      "document_id": "ptx-isa-9.3-html",
+      "publisher": "NVIDIA Corporation",
+      "document_title": "Parallel Thread Execution ISA",
+      "specification_version": "9.3",
+      "source_kind": "HTML",
+      "local_path": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+      "sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+      "size_bytes": 3577575,
+      "total_lines": 47743,
+      "url": "https://docs.nvidia.com/cuda/parallel-thread-execution/index.html",
+      "read_in_this_curation_pass": true
+    }
+  ],
+  "fragments": [
+    {
+      "fragment_id": "PTX-9.3-OR-001",
+      "document_id": "ptx-isa-9.3-html",
+      "section_number": "9.7.8.2",
+      "section_heading": "Logic and Shift Instructions: or",
+      "html_anchor": "logic-and-shift-instructions-or",
+      "html_line_start": 14290,
+      "html_line_end": 14323,
+      "exact_quote": "9.7.8.2. Logic and Shift Instructions: or\n\nBitwise OR.\n\nSyntax\nor.type d, a, b;\n\n.type = { .pred, .b16, .b32, .b64 };\n\nDescription\nCompute the bit-wise or operation for the bits in a and b.\n\nSemantics\nd = a | b;\n\nNotes\nThe size of the operands must match, but not necessarily the type.\nAllowed types include predicate registers.\n\nPTX ISA Notes\nIntroduced in PTX ISA version 1.0.\n\nTarget ISA Notes\nSupported on all target architectures.\n\nExamples\nor.b32  mask mask,0x00010001\nor.pred  p,q,r;",
+      "source_sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+      "reason_for_inclusion": "Bounds the or instruction family and the or.b32 scalar form (syntax, semantics, notes, and examples)."
+    }
+  ],
+  "shared_contexts": [
+    {
+      "fragment_id": "PTX-9.3-OR-SHARED-001",
+      "section_number": "9.2",
+      "section_heading": "PTX Instructions",
+      "html_anchor": "ptx-instructions",
+      "html_line_start": 7513,
+      "html_line_end": 7535,
+      "exact_quote": "PTX instructions generally have from zero to four operands, plus an optional guard predicate appearing after an @ symbol to the left of the opcode:\n@p opcode;\n@p opcode a;\n@p opcode d, a;\n@p opcode d, a, b;\n@p opcode d, a, b, c;\nFor instructions that create a result value, the d operand is the destination operand, while a, b, and c are source operands.\nFor some instructions the destination operand is optional. A bit bucket operand denoted with an underscore (_) may be used in place of a destination register.",
+      "source_sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856"
+    },
+    {
+      "fragment_id": "PTX-9.3-OR-SHARED-002",
+      "section_number": "9.3",
+      "section_heading": "Predicated Execution",
+      "html_anchor": "predicated-execution",
+      "html_line_start": 7537,
+      "html_line_end": 7550,
+      "exact_quote": "In PTX, predicate registers are virtual and have .pred as the type specifier. So, predicate registers can be declared as\n.reg .pred p, q, r;\nAll instructions have an optional guard predicate which controls conditional execution of the instruction. The syntax to specify conditional execution is to prefix an instruction with @{!}p, where p is a predicate variable, optionally negated. Instructions without a guard predicate are executed unconditionally.",
+      "source_sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856"
+    },
+    {
+      "fragment_id": "PTX-9.3-OR-SHARED-003",
+      "section_number": "9.7.13.2",
+      "section_heading": "Control Flow Instructions: @",
+      "html_anchor": "control-flow-instructions-at",
+      "html_line_start": 21826,
+      "html_line_end": 21842,
+      "exact_quote": "@{!}p    instruction;\nExecute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing.",
+      "source_sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856"
+    },
+    {
+      "fragment_id": "PTX-9.3-OR-SHARED-004",
+      "section_number": "5.2.1",
+      "section_heading": "Fundamental Types",
+      "html_anchor": "fundamental-types",
+      "html_line_start": 3015,
+      "html_line_end": 3062,
+      "exact_quote": "In PTX, the fundamental types reflect the native data types supported by the target architectures. A fundamental type specifies both a basic type and a size. Register variables are always of a fundamental type, and instructions operate on these types. The same type-size specifiers are used for both variable definitions and for typing instructions, so their names are intentionally short.\n. b8, .b16, .b32, .b64, .b128\nPredicate\n.pred",
+      "source_sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856"
+    },
+    {
+      "fragment_id": "PTX-9.3-OR-SHARED-005",
+      "section_number": "5.1.1",
+      "section_heading": "Register State Space",
+      "html_anchor": "register-state-space",
+      "html_line_start": 2613,
+      "html_line_end": 2631,
+      "exact_quote": "Registers (.reg state space) are fast storage locations... Register size is restricted; aside from predicate registers which are 1-bit, scalar registers have a width of 8-, 16-, 32-, 64-, or 128-bits.",
+      "source_sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856"
+    },
+    {
+      "fragment_id": "PTX-9.3-OR-SHARED-006",
+      "section_number": "5.4",
+      "section_heading": "Variables",
+      "html_anchor": "variables",
+      "html_line_start": 3741,
+      "html_line_end": 3756,
+      "exact_quote": "All storage for data is specified with variable declarations... A variable declaration names the space in which the variable resides, its type and size, its name, an optional array size... Predicate variables may only be declared in the register state space.",
+      "source_sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856"
+    }
+  ],
+  "coverage": {
+    "or_construct_covered": {
+      "status": "COVERED",
+      "fragment_ids": ["PTX-9.3-OR-001"]
+    },
+    "or_syntax_operands_covered": {
+      "status": "COVERED",
+      "fragment_ids": ["PTX-9.3-OR-001", "PTX-9.3-OR-SHARED-001"]
+    },
+    "or_semantics_covered": {
+      "status": "COVERED",
+      "fragment_ids": ["PTX-9.3-OR-001"]
+    },
+    "or_notes_and_metadata_covered": {
+      "status": "COVERED",
+      "fragment_ids": ["PTX-9.3-OR-001"]
+    },
+    "or_examples_or_predicate_forms_covered": {
+      "status": "COVERED",
+      "fragment_ids": ["PTX-9.3-OR-001"]
+    },
+    "predication_context_covered": {
+      "status": "COVERED",
+      "fragment_ids": ["PTX-9.3-OR-SHARED-002", "PTX-9.3-OR-SHARED-003", "PTX-9.3-OR-SHARED-001"]
+    },
+    "type_fundamentals_covered": {
+      "status": "COVERED",
+      "fragment_ids": ["PTX-9.3-OR-SHARED-004"]
+    },
+    "false_guard_noop_noted": {
+      "status": "COVERED",
+      "fragment_ids": ["PTX-9.3-OR-SHARED-003"]
+    }
+  },
+  "known_evidence_gaps": [
+    {
+      "gap_id": "GAP-OR-1",
+      "severity": "informational",
+      "description": "The or section contains one or more examples, and `or.b32 mask mask,0x00010001` is present, but the instruction section does not normatively enumerate an independent operand-encoding grammar for immediate vs. register forms beyond that example. Any immediate-operand parser rule is not directly proven in this section.",
+      "related_fragments": ["PTX-9.3-OR-001"],
+      "do_not_infer": true
+    },
+    {
+      "gap_id": "GAP-OR-2",
+      "severity": "informational",
+      "description": "The explicit false-guard no-op clause is in control-flow section 9.7.13.2, not in the or instruction section; this artifact cross-references that general predication section but does not attach an inferred per-instruction theorem.",
+      "related_fragments": ["PTX-9.3-OR-SHARED-003"],
+      "do_not_infer": true
+    }
+  ],
+  "curation_notes": [
+    "All quotations are exact text from the official NVIDIA PTX ISA 9.3 HTML source and use stable line anchors.",
+    "source hash verification is from spec_fast_context (SHA-256 e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856).",
+    "This artifact is evidence-only and does not interpret semantics; entries are quotations and source coverage only.",
+    "One shared control-flow section (9.7.13.2) is included for predication semantics and false-guard behavior wording.",
+    "No PDF search was performed in this pass."
+  ]
+}

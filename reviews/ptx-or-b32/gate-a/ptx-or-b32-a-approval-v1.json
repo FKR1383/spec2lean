@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "recordType": "human_gate_decision",
+  "reviewId": "ptx-or-b32-a-approval-v1",
+  "unitId": "ptx-or-b32",
+  "gate": "A",
+  "decision": "approved",
+  "reviewer": "Human reviewer",
+  "rationale": "The human operator explicitly approved Gate A for run ptx-9.3-or.b32-a1e12839 after the automated workflow reached its human-review boundary. This deterministic record authorizes only the next workflow stage and is not final acceptance unless gate=FINAL.",
+  "submittedAtUtc": "2026-08-09T23:47:52.332Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ptx/9.3/units/or-b32/architecture/foundation-v5.md",
+      "sha256": "e7614a6337a94ab1500a4db6f8ce1767d978d92789cfe3d618d75733a4ae09e5",
+      "sizeBytes": 10406
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/or-b32/reviews/architecture-critic-v5.md",
+      "sha256": "fd1e05e31eee419ab04feffac477e9bff777654393d5b09d7915168ee4e7323f",
+      "sizeBytes": 2609
+    }
+  ],
+  "humanConfirmationRecorded": true,
+  "gateApprovalPerformed": true,
+  "promotionPerformed": false,
+  "provenance": {
+    "controller": "spec2lean-cli",
+    "runId": "ptx-9.3-or.b32-a1e12839",
+    "command": "approve"
+  }
+}
