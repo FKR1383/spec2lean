@@ -43,6 +43,37 @@ function positiveInteger(name: string, fallback: number, maximum?: number): numb
   return value
 }
 
+export function resolveWorkerCount(
+  workersRaw: string | undefined,
+  concurrencyRaw: string | undefined,
+  fallback: number,
+): number {
+  if (
+    workersRaw !== undefined &&
+    concurrencyRaw !== undefined &&
+    workersRaw !== concurrencyRaw
+  ) {
+    throw new Error(
+      `--workers and --concurrency disagree: ${workersRaw} versus ${concurrencyRaw}`,
+    )
+  }
+
+  const raw = workersRaw ?? concurrencyRaw
+  const value = raw === undefined ? fallback : Number(raw)
+  if (!Number.isInteger(value) || value <= 0 || value > 8) {
+    throw new Error(`Invalid worker count: ${raw ?? value} (maximum 8)`)
+  }
+  return value
+}
+
+function workerCount(fallback: number): number {
+  return resolveWorkerCount(
+    argument("--workers"),
+    argument("--concurrency"),
+    fallback,
+  )
+}
+
 export function parseBatchUnits(values: readonly string[]): string[] {
   const units = values
     .flatMap((value) => value.split(","))
@@ -84,7 +115,7 @@ async function createBatch(): Promise<FormalizationBatch> {
     ...argumentsFor("--units"),
     ...argumentsFor("--unit"),
   ])
-  const concurrency = positiveInteger("--concurrency", 2, 8)
+  const concurrency = workerCount(2)
   const autoApprove = process.argv.includes("--auto-approve")
   const now = new Date().toISOString()
   const batchId = `${language}-${specVersion}-batch-${randomUUID().slice(0, 8)}`
@@ -125,7 +156,7 @@ async function main(): Promise<void> {
     ? await createBatch()
     : await loadBatch(required("--batch"))
   const options = {
-    concurrency: positiveInteger("--concurrency", batch.concurrency, 8),
+    concurrency: workerCount(batch.concurrency),
     maxTicks: positiveInteger("--max-ticks", 50),
     maxStageRetries: positiveInteger("--max-stage-retries", 4),
     maxStageRevisions: positiveInteger("--max-stage-revisions", 3),

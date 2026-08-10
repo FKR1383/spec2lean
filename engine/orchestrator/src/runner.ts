@@ -27,6 +27,7 @@ import {
   proofTargetSummary,
   type ProofTarget,
 } from "./proof-plan.js"
+import { reconcileProofStageResult } from "./proof-stage-result.js"
 import { REPO_ROOT } from "./repo.js"
 import { loadRun, saveRun } from "./run-store.js"
 import {
@@ -763,7 +764,7 @@ export async function executeTick(
     // Deterministic artifact verification outranks model self-reporting.
     if (run.stage === "PROOF_GENERATION") {
       const local = await finalizeProofStageLocally(run)
-      if (local) result = local
+      result = reconcileProofStageResult(result, local)
       if (result.outcome === "SUCCESS") {
         await installProofPackage(run)
       }

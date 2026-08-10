@@ -11,8 +11,8 @@ Spec2Lean CLI
 Usage:
   ./spec2lean formalize --language ptx --version 9.3 --unit mov.b32
   ./spec2lean formalize --language ptx --version 9.3 --unit mov.b32 --auto-approve
-  ./spec2lean formalize-batch --language ptx --version 9.3 --units and.b64,or.b64 --concurrency 2 [--auto-approve]
-  ./spec2lean resume-batch --batch <batch-id> [--concurrency N]
+  ./spec2lean formalize-batch --language ptx --version 9.3 --units and.b64,or.b64 --workers 2 [--auto-approve]
+  ./spec2lean resume-batch --batch <batch-id> [--workers N]
   ./spec2lean batch-report --batch <batch-id>
   ./spec2lean status --run <run-id>
   ./spec2lean brief --run <run-id> --gate A|B|C|THEOREM_STRENGTH|FINAL

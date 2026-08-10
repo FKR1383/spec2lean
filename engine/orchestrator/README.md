@@ -39,21 +39,22 @@ Start several independent units together with a bounded worker pool:
   --language ptx \
   --version 9.3 \
   --units and.b64,or.b64,xor.b64 \
-  --concurrency 2 \
+  --workers 2 \
   --auto-approve
 ```
 
 `--auto-approve` retains the same benchmark-only, non-promoting semantics as a
 single run. Every unit has its own persistent `run.json`; the batch manifest
 under `runs/batches/` only coordinates those runs. Output lines are prefixed
-with the unit name. Concurrency defaults to 2 and is capped at 8. Shared Lean
+with the unit name. The worker count defaults to 2 and is capped at 8;
+`--concurrency` remains a compatibility alias for `--workers`. Shared Lean
 package installation/build sections use a cross-process repository lock so
 parallel agents cannot overwrite the root import module.
 
 Resume an interrupted/incomplete batch and report aggregate performance with:
 
 ```bash
-./spec2lean resume-batch --batch <batch-id> --concurrency 2
+./spec2lean resume-batch --batch <batch-id> --workers 2
 ./spec2lean batch-report --batch <batch-id>
 ```
 

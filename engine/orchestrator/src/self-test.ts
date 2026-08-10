@@ -20,7 +20,7 @@ import {
   makeUnitSlug,
 } from "./artifact-contract.js"
 import { mapWithConcurrency } from "./batch-runtime.js"
-import { parseBatchUnits } from "./formalize-batch.js"
+import { parseBatchUnits, resolveWorkerCount } from "./formalize-batch.js"
 import { normalizeCriticResultFromReview } from "./critic-disposition.js"
 import {
   artifactPathsForGate,
@@ -30,6 +30,7 @@ import {
 import { verifyLeanFile } from "./lean-local.js"
 import { packageTransform } from "./lean-package.js"
 import { proofTargets, theoremDeclarationNames } from "./proof-plan.js"
+import { reconcileProofStageResult } from "./proof-stage-result.js"
 import { loadProjectModel, REPO_ROOT } from "./repo.js"
 import { withRepositoryLock } from "./repository-lock.js"
 import { runSemanticIrSelfTests } from "./semantic-ir-self-test.js"
@@ -86,6 +87,15 @@ try {
   batchCollisionRejected = true
 }
 assert(batchCollisionRejected, "batch unit parser rejects artifact-path collisions")
+assert(resolveWorkerCount("4", undefined, 2) === 4, "--workers controls batch concurrency")
+assert(resolveWorkerCount(undefined, "3", 2) === 3, "legacy --concurrency remains supported")
+let workerConflictRejected = false
+try {
+  resolveWorkerCount("2", "3", 2)
+} catch {
+  workerConflictRejected = true
+}
+assert(workerConflictRejected, "conflicting worker aliases are rejected")
 
 let activeBatchOperations = 0
 let maximumBatchOperations = 0
@@ -134,6 +144,23 @@ const majorCriticResult = normalizeCriticResultFromReview(
 assert(
   majorCriticResult.outcome === "REVISE",
   "BLOCKER/MAJOR critic reviews still require revision",
+)
+const blockedProofResult = reconcileProofStageResult(
+  {
+    outcome: "BLOCKED",
+    nextStage: "BLOCKED",
+    summary: "approved theorem is false under the installed relation",
+  },
+  {
+    outcome: "RETRY",
+    nextStage: "PROOF_GENERATION",
+    summary: "proof file does not compile",
+  },
+)
+assert(
+  blockedProofResult.outcome === "BLOCKED" &&
+    blockedProofResult.nextStage === "BLOCKED",
+  "local Lean diagnostics cannot erase a proof agent's semantic BLOCKED result",
 )
 assert(canTransition("ARCHITECTURE_CRITIQUE", "WAITING_GATE_A"), "Gate A transition")
 assert(!canTransition("ARCHITECTURE", "LEAN_FORMALIZATION"), "illegal stage skip rejected")
