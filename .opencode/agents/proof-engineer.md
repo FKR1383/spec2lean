@@ -1,9 +1,9 @@
 ---
 description: Proves approved Lean theorem obligations without changing semantics, weakening statements, or adding unsupported assumptions
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: opencode/deepseek-v4-flash-free
 temperature: 0
-steps: 48
+steps: 80
 permission:
   read: allow
   lean_check_file: allow
@@ -225,6 +225,11 @@ The preferred proof workflow is empirical:
 4. compile it;
 5. inspect actual Lean diagnostics;
 6. repair only concrete failures.
+
+In REPAIR mode, spend the session only on the diagnostics supplied by the
+orchestrator. After every `candidate_write`, immediately run
+`lean_check_file`; never end the session with an unchecked final write. Reserve
+enough tool steps for that final check and protocol response.
 
 Do not mentally simulate Lean for every theorem before candidate_write.
 

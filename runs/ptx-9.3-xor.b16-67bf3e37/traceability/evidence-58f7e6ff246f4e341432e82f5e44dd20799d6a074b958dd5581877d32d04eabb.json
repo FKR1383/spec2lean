@@ -1,0 +1,443 @@
+{
+  "schemaVersion": 2,
+  "manifestType": "spec2lean_evidence_manifest",
+  "generator": "spec2lean-traceability-v2",
+  "runId": "ptx-9.3-xor.b16-67bf3e37",
+  "language": "ptx",
+  "specificationVersion": "9.3",
+  "unit": "xor.b16",
+  "documentRole": "SEMANTICS",
+  "sourceManifest": {
+    "path": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+    "sha256": "622e6ce0d3114a909a62726530955993b5f2b98d2f60e45ae1ceb429512208f2"
+  },
+  "leanDocument": {
+    "path": "candidates/ptx/9.3/units/xor-b16/lean/XorB16-v2.lean",
+    "sha256": "2aff6d6943c165801650c4afaf4227da81b6fece9e5a8c34e45419a0e523e863"
+  },
+  "semanticDocument": {
+    "path": "candidates/ptx/9.3/units/xor-b16/semantics/semantics-v1.json",
+    "sha256": "cf378f9652408114c6a4d33924f585b57b5db37f8782b09b1eb2cda356a9a8a2"
+  },
+  "sourceBundles": [
+    {
+      "path": "candidates/ptx/9.3/units/xor-b16/source-bundles/source-bundle-v1.json",
+      "sha256": "841c06e3fe2b9c33cc3985b9cab1fc80517cc8fc61452d44352264e5bd7709fe"
+    }
+  ],
+  "entries": [
+    {
+      "entryId": "def:b16Bits:32",
+      "declarationKind": "def",
+      "declarationName": "b16Bits",
+      "leanRange": {
+        "startLine": 32,
+        "endLine": 35
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-002"
+      ]
+    },
+    {
+      "entryId": "def:b16DomainSize:36",
+      "declarationKind": "def",
+      "declarationName": "b16DomainSize",
+      "leanRange": {
+        "startLine": 36,
+        "endLine": 39
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-002",
+        "PTX-XORB16-SEM-003"
+      ]
+    },
+    {
+      "entryId": "structure:B16:40",
+      "declarationKind": "structure",
+      "declarationName": "B16",
+      "leanRange": {
+        "startLine": 40,
+        "endLine": 48
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-002",
+        "PTX-XORB16-SEM-003"
+      ]
+    },
+    {
+      "entryId": "structure:RegId:49",
+      "declarationKind": "structure",
+      "declarationName": "RegId",
+      "leanRange": {
+        "startLine": 49,
+        "endLine": 54
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-002",
+        "PTX-XORB16-SEM-005"
+      ]
+    },
+    {
+      "entryId": "structure:PredId:55",
+      "declarationKind": "structure",
+      "declarationName": "PredId",
+      "leanRange": {
+        "startLine": 55,
+        "endLine": 61
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-004",
+        "PTX-XORB16-SEM-005"
+      ]
+    },
+    {
+      "entryId": "inductive:SourceA:62",
+      "declarationKind": "inductive",
+      "declarationName": "SourceA",
+      "leanRange": {
+        "startLine": 62,
+        "endLine": 69
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-007"
+      ]
+    },
+    {
+      "entryId": "inductive:SourceB:70",
+      "declarationKind": "inductive",
+      "declarationName": "SourceB",
+      "leanRange": {
+        "startLine": 70,
+        "endLine": 76
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-001",
+        "PTX-XORB16-SEM-003",
+        "PTX-XORB16-SEM-007"
+      ]
+    },
+    {
+      "entryId": "inductive:Destination:77",
+      "declarationKind": "inductive",
+      "declarationName": "Destination",
+      "leanRange": {
+        "startLine": 77,
+        "endLine": 83
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-008"
+      ]
+    },
+    {
+      "entryId": "inductive:Guard:84",
+      "declarationKind": "inductive",
+      "declarationName": "Guard",
+      "leanRange": {
+        "startLine": 84,
+        "endLine": 91
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-004"
+      ]
+    },
+    {
+      "entryId": "inductive:XorTypeSpecifier:92",
+      "declarationKind": "inductive",
+      "declarationName": "XorTypeSpecifier",
+      "leanRange": {
+        "startLine": 92,
+        "endLine": 97
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-002"
+      ]
+    },
+    {
+      "entryId": "structure:MachineState:98",
+      "declarationKind": "structure",
+      "declarationName": "MachineState",
+      "leanRange": {
+        "startLine": 98,
+        "endLine": 103
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-005"
+      ]
+    },
+    {
+      "entryId": "structure:XorB16Instruction:104",
+      "declarationKind": "structure",
+      "declarationName": "XorB16Instruction",
+      "leanRange": {
+        "startLine": 104,
+        "endLine": 113
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-002",
+        "PTX-XORB16-SEM-004"
+      ]
+    },
+    {
+      "entryId": "def:evalSourceA:114",
+      "declarationKind": "def",
+      "declarationName": "evalSourceA",
+      "leanRange": {
+        "startLine": 114,
+        "endLine": 119
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-005"
+      ]
+    },
+    {
+      "entryId": "def:evalSourceB:120",
+      "declarationKind": "def",
+      "declarationName": "evalSourceB",
+      "leanRange": {
+        "startLine": 120,
+        "endLine": 126
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-005"
+      ]
+    },
+    {
+      "entryId": "def:evalGuard:127",
+      "declarationKind": "def",
+      "declarationName": "evalGuard",
+      "leanRange": {
+        "startLine": 127,
+        "endLine": 136
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-004",
+        "PTX-XORB16-SEM-006"
+      ]
+    },
+    {
+      "entryId": "def:xorValue:137",
+      "declarationKind": "def",
+      "declarationName": "xorValue",
+      "leanRange": {
+        "startLine": 137,
+        "endLine": 146
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-003"
+      ]
+    },
+    {
+      "entryId": "def:updateDestination:147",
+      "declarationKind": "def",
+      "declarationName": "updateDestination",
+      "leanRange": {
+        "startLine": 147,
+        "endLine": 162
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-008"
+      ]
+    },
+    {
+      "entryId": "def:eval:163",
+      "declarationKind": "def",
+      "declarationName": "eval",
+      "leanRange": {
+        "startLine": 163,
+        "endLine": 178
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-005",
+        "PTX-XORB16-SEM-008"
+      ]
+    },
+    {
+      "entryId": "inductive:ExecOutcome:179",
+      "declarationKind": "inductive",
+      "declarationName": "ExecOutcome",
+      "leanRange": {
+        "startLine": 179,
+        "endLine": 184
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-005",
+        "PTX-XORB16-SEM-006"
+      ]
+    },
+    {
+      "entryId": "def:execXorB16:185",
+      "declarationKind": "def",
+      "declarationName": "execXorB16",
+      "leanRange": {
+        "startLine": 185,
+        "endLine": 201
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-005"
+      ]
+    },
+    {
+      "entryId": "inductive:XorB16Step:202",
+      "declarationKind": "inductive",
+      "declarationName": "XorB16Step",
+      "leanRange": {
+        "startLine": 202,
+        "endLine": 215
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-005"
+      ]
+    },
+    {
+      "entryId": "def:mkB16:216",
+      "declarationKind": "def",
+      "declarationName": "mkB16",
+      "leanRange": {
+        "startLine": 216,
+        "endLine": 224
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:mkState:225",
+      "declarationKind": "def",
+      "declarationName": "mkState",
+      "leanRange": {
+        "startLine": 225,
+        "endLine": 239
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-005"
+      ]
+    }
+  ],
+  "diagnostics": {
+    "declarationsWithoutReferences": [
+      "b16Bits",
+      "b16DomainSize",
+      "B16",
+      "RegId",
+      "PredId",
+      "SourceA",
+      "SourceB",
+      "Destination",
+      "Guard",
+      "XorTypeSpecifier",
+      "MachineState",
+      "XorB16Instruction",
+      "evalSourceA",
+      "evalSourceB",
+      "evalGuard",
+      "xorValue",
+      "updateDestination",
+      "eval",
+      "ExecOutcome",
+      "execXorB16",
+      "XorB16Step",
+      "mkB16",
+      "mkState"
+    ],
+    "unresolvedReferences": [
+      "PTX-XORB16-SEM-001",
+      "PTX-XORB16-SEM-002",
+      "PTX-XORB16-SEM-003",
+      "PTX-XORB16-SEM-004",
+      "PTX-XORB16-SEM-005",
+      "PTX-XORB16-SEM-006",
+      "PTX-XORB16-SEM-007",
+      "PTX-XORB16-SEM-008"
+    ]
+  }
+}

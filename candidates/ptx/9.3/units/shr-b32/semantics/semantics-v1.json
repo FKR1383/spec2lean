@@ -1,0 +1,301 @@
+{
+  "schema_version": 2,
+  "interpretation_id": "ptx-9.3-shr-b32-semantics-v1",
+  "revision_of": null,
+  "revision_reason": "Legacy bounded semantic interpretation for unit outside delta path, derived from approved run inputs in candidates/ptx/9.3/units/shr-b32/architecture/foundation-v1.md and source-bundle-v1.json.",
+  "status": "READY_FOR_CRITIQUE",
+  "language": "PTX",
+  "specification_version": "9.3",
+  "construct": "shr.b32",
+  "instruction_family": "shr",
+
+  "architecture_reference": {
+    "path": "candidates/ptx/9.3/units/shr-b32/architecture/foundation-v1.md",
+    "sha256": null,
+    "status_note": "Draft architecture (no human Gate A approval for this run context)."
+  },
+
+  "source_bundle_references": [
+    {
+      "path": "candidates/ptx/9.3/units/shr-b32/source-bundles/source-bundle-v1.json",
+      "bundle_id": "ptx-9.3-shr-b32-source-bundle-v1",
+      "role": "primary official-source bundle",
+      "evidence_fragments": [
+        "PTX-9.3-SHR-001",
+        "PTX-9.3-SHR-002",
+        "PTX-9.3-SHR-003",
+        "PTX-9.3-SHR-004",
+        "PTX-9.3-SHR-005",
+        "PTX-9.3-SHR-006",
+        "PTX-9.3-SHR-007",
+        "PTX-9.3-SHR-008",
+        "PTX-9.3-SHR-010",
+        "PTX-9.3-SHR-011",
+        "PTX-9.3-SHR-012"
+      ]
+    }
+  ],
+
+  "human_assumption_references": {
+    "note": "No human-approved assumptions are present for shr.b32 in this run context."
+  },
+
+  "syntax": {
+    "bounded_form": "shr.b32 d, a, b;",
+    "guarded_forms": [
+      "shr.b32 d, a, b;",
+      "@p shr.b32 d, a, b;",
+      "@!p shr.b32 d, a, b;"
+    ],
+    "source_syntax_quote": "shr.type d, a, b; .type = { .b16, .b32, .b64, .u16, .u32, .u64, .s16, .s32, .s64 };",
+    "source_evidence_fragment_ids": ["PTX-9.3-SHR-003"],
+    "modifiers": {
+      "statement": "No modifier position appears in shr syntax block.",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-SHR-003"]
+    }
+  },
+
+  "operands": {
+    "order": "d, a, b",
+    "roles": {
+      "d": {
+        "role": "destination",
+        "description": "Destination register/slot updated with shift result on execute. Formality of `_` destination applicability is not explicit in shr subsection.",
+        "classification": "OPEN_QUESTION",
+        "classification_support": ["PTX-9.3-SHR-008"]
+      },
+      "a": {
+        "role": "first source",
+        "description": "Right-shift source; destination and first source must match in size (not necessarily type)."
+      },
+      "b": {
+        "role": "shift amount source",
+        "description": "Second source providing unsigned 32-bit shift amount regardless of instruction type."
+      }
+    },
+    "notes": [
+      "Shr examples demonstrate forms including shr.u16, shr.s32, shr.b16 etc. No shr.b32-specific example appears in the captured examples block.",
+      "Operand class/form exact for `a` and `b` (register vs immediate forms) is not fully specified in shr subsection for this bounded source bundle."
+    ],
+    "operands_evidence": {
+      "a_b_size_rule": ["PTX-9.3-SHR-006"],
+      "b_width_rule": ["PTX-9.3-SHR-004", "PTX-9.3-SHR-006"],
+      "syntax_rule": ["PTX-9.3-SHR-003"],
+      "examples": ["PTX-9.3-SHR-009"]
+    }
+  },
+
+  "types": {
+    "instruction_type": ".b32",
+    "basic_type": "Bits (untyped)",
+    "width_bits": 32,
+    "operand_typing_rule": "Operands d and a are 32-bit compatible by size (same size required, type may differ). Operand b is 32-bit irrespective of instruction type.",
+    "compatibility_basis": [
+      "PTX-9.3-SHR-006",
+      "PTX-9.3-SHR-007",
+      "PTX-9.3-SHR-012"
+    ],
+    "classification": "DERIVED_INTERPRETATION"
+  },
+
+  "guard_semantics": {
+    "no_guard": {
+      "eval": "true",
+      "execution": "execute"
+    },
+    "at_p": {
+      "eval": "p",
+      "execution": "execute iff predicate p is true"
+    },
+    "at_bang_p": {
+      "eval": "not p",
+      "execution": "execute iff predicate p is false"
+    },
+    "false_guard_consequence": {
+      "execution": "no-op",
+      "state_change": "unchanged bounded state",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-SHR-010", "PTX-9.3-SHR-011"]
+    },
+    "evidence": [
+      "PTX-9.3-SHR-010",
+      "PTX-9.3-SHR-011"
+    ]
+  },
+
+  "preconditions": {
+    "static": [
+      {
+        "id": "PRE-1",
+        "description": "Instruction family is shr; chosen bounded form is `.b32`.",
+        "classification": "SOURCE_FACT",
+        "evidence_fragment_ids": ["PTX-9.3-SHR-001", "PTX-9.3-SHR-003"]
+      },
+      {
+        "id": "PRE-2",
+        "description": "d and a are size-compatible and b is 32-bit, with explicit size-matching rule from shr subsection.",
+        "classification": "DERIVED_INTERPRETATION",
+        "evidence_fragment_ids": ["PTX-9.3-SHR-006"]
+      },
+      {
+        "id": "PRE-3",
+        "description": "If predicated, guard is optional and may be a predicate register with optional negation.",
+        "classification": "DERIVED_INTERPRETATION",
+        "evidence_fragment_ids": ["PTX-9.3-SHR-010", "PTX-9.3-SHR-011"]
+      },
+      {
+        "id": "PRE-4",
+        "description": "No dynamic value preconditions are explicitly stated for operands or flags in shr section.",
+        "classification": "OPEN_QUESTION",
+        "evidence_fragment_ids": ["PTX-9.3-SHR-004", "PTX-9.3-SHR-005", "PTX-9.3-SHR-006"]
+      }
+    ]
+  },
+
+  "state_reads": [
+    {
+      "component": "source operand a",
+      "description": "Source `a` value is read to compute the shifted result according to semantics `d = a >> b;`.",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-SHR-004", "PTX-9.3-SHR-005"]
+    },
+    {
+      "component": "shift amount source b",
+      "description": "Operand `b` is read to determine shift amount (`Shift a right by amount specified by unsigned 32-bit value in b`).",
+      "classification": "SOURCE_FACT",
+      "evidence_fragment_ids": ["PTX-9.3-SHR-004"]
+    },
+    {
+      "component": "guard predicate p",
+      "description": "Predicate register is read for guard evaluation when present.",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-SHR-010", "PTX-9.3-SHR-011"]
+    }
+  ],
+
+  "state_writes": [
+    {
+      "component": "destination d",
+      "description": "On execute path, destination receives right-shifted value of a by clamped amount. Sign-fill is used for `.s16/.s32/.s64`, zero-fill for `.u16/.u32/.u64` and `.b*` family in shr notes.",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-SHR-004", "PTX-9.3-SHR-006", "PTX-9.3-SHR-007"]
+    },
+    {
+      "component": "entire state when false guard",
+      "description": "When complete guard expression is false, no state components are updated in this bounded model.",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-SHR-011", "PTX-9.3-SHR-010"]
+    }
+  ],
+
+  "behavior": {
+    "semantic_pseudocode": "d = a >> b;",
+    "pseudocode_source": "PTX-9.3-SHR-005",
+    "shift_amount_rule": {
+      "statement": "Shift amount is clamped when it exceeds register width N; bounded form uses clamp by width 32 for shr.b32 pending explicit N expansion.",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-SHR-006", "PTX-9.3-SHR-003", "PTX-9.3-SHR-012"]
+    },
+    "fill_behavior": {
+      "statement": "Right shift fill is sign-bit when signed type forms are used, otherwise zero-fill. In bounded `.b32` view where source type family is selected from .b32, zero-fill applies to untyped `.b32`; signed family forms remain an open-family-choice issue for the bounded scalar form.",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-SHR-004", "PTX-9.3-SHR-007", "PTX-9.3-SHR-012"]
+    },
+    "guard_true": "If no guard or evaluated guard predicate is true, execute and update d as specified.",
+    "guard_false": "If evaluated guard predicate is false, instruction does not execute (do-nothing for threads).",
+    "determinism": {
+      "statement": "Execution is deterministic for a fixed bounded state and instruction instance under stated shift function and guard semantics.",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-SHR-004", "PTX-9.3-SHR-005", "PTX-9.3-SHR-010", "PTX-9.3-SHR-011"]
+    }
+  },
+
+  "exceptional_behavior": {
+    "statement": "No explicit error/exception/trap clause is captured in the retrieved shr-bounded evidence.",
+    "classification": "OPEN_QUESTION",
+    "evidence_fragment_ids": ["PTX-9.3-SHR-004", "PTX-9.3-SHR-005", "PTX-9.3-SHR-006", "PTX-9.3-SHR-007"]
+  },
+
+  "undefined_behavior": {
+    "statement": "No explicit undefined-behavior clause is captured for shr.b32 in current evidence.",
+    "classification": "OPEN_QUESTION",
+    "evidence_fragment_ids": ["PTX-9.3-SHR-004", "PTX-9.3-SHR-005"]
+  },
+
+  "implementation_defined_behavior": {
+    "statement": "No explicit implementation-defined-behavior clause is captured for shr in current evidence.",
+    "classification": "OPEN_QUESTION",
+    "evidence_fragment_ids": ["PTX-9.3-SHR-004", "PTX-9.3-SHR-005"]
+  },
+
+  "version_and_target": {
+    "introduced_in": "PTX ISA version 1.0",
+    "supported_targets": "all target architectures",
+    "classification": "SOURCE_FACT",
+    "evidence_fragment_ids": ["PTX-9.3-SHR-008"]
+  },
+
+  "design_dependencies": [
+    {
+      "id": "DD-1",
+      "classification": "DESIGN_DEPENDENCY",
+      "statement": "Bounded semantics interprets only the scalar `.b32` specialization of shr.type and excludes sibling forms (`.b16/.b64/.u*/.s*`) from the formalized instruction constructor and signature."
+    },
+    {
+      "id": "DD-2",
+      "classification": "DESIGN_DEPENDENCY",
+      "statement": "Register-state model is used (no memory or flag register side effects), following bounded architecture scope."
+    },
+    {
+      "id": "DD-3",
+      "classification": "DESIGN_DEPENDENCY",
+      "statement": "N in the clamped-amount note is bound to register width 32 by architecture/typing context for this bounded form, while remaining ambiguity is tracked as open question."
+    }
+  ],
+
+  "open_questions": [
+    {
+      "claim_id": "OQ-1",
+      "classification": "OPEN_QUESTION",
+      "statement": "Whether `shr.b32` permits destination `_` is not explicitly proven in shr subsection; only general optional destination rule is available.",
+      "evidence_fragment_ids": ["PTX-9.3-SHR-011", "PTX-9.3-SHR-012"]
+    },
+    {
+      "claim_id": "OQ-2",
+      "classification": "OPEN_QUESTION",
+      "statement": "Exact concrete forms for source operands (`a`, `b`) such as register-only vs immediate forms are not fully specified in shr subsection.",
+      "evidence_fragment_ids": ["PTX-9.3-SHR-003"]
+    },
+    {
+      "claim_id": "OQ-3",
+      "classification": "OPEN_QUESTION",
+      "statement": "Exact symbol N in `Shift amounts greater than register width N are clamped to N` is not defined in captured text for shr subsection (shared family context exists).",
+      "evidence_fragment_ids": ["PTX-9.3-SHR-006"]
+    },
+    {
+      "claim_id": "OQ-4",
+      "classification": "OPEN_QUESTION",
+      "statement": "State-level interpretation of `do nothing` under false guard as strict no-change of all architectural components remains an interpretation of prose wording.",
+      "evidence_fragment_ids": ["PTX-9.3-SHR-011"]
+    }
+  ],
+
+  "semantic_claims": [
+    {"claim_id": "PTX-SHR-SEM1-001", "classification": "SOURCE_FACT", "statement": "Construct `shr` appears in section 9.7.8.9 (Logic and Shift Instructions: shr).", "evidence_fragment_ids": ["PTX-9.3-SHR-001"], "blocking_if_wrong": true},
+    {"claim_id": "PTX-SHR-SEM1-002", "classification": "SOURCE_FACT", "statement": "Shr syntax and type list are `shr.type d, a, b;` with `.type = { .b16, .b32, .b64, .u16, .u32, .u64, .s16, .s32, .s64 }`.", "evidence_fragment_ids": ["PTX-9.3-SHR-003"], "blocking_if_wrong": true},
+    {"claim_id": "PTX-SHR-SEM1-003", "classification": "SOURCE_FACT", "statement": "Shift semantics text says shift right by unsigned 32-bit value in b, sign-fill for signed, zero-fill for unsigned/untype.", "evidence_fragment_ids": ["PTX-9.3-SHR-004"], "blocking_if_wrong": true},
+    {"claim_id": "PTX-SHR-SEM1-004", "classification": "SOURCE_FACT", "statement": "Semantics assignment line is `d = a >> b;`.", "evidence_fragment_ids": ["PTX-9.3-SHR-005"], "blocking_if_wrong": true},
+    {"claim_id": "PTX-SHR-SEM1-005", "classification": "SOURCE_FACT", "statement": "Shift notes specify amount greater than register width N is clamped to N, sizes of d and a must match, and b is 32-bit regardless of instruction type.", "evidence_fragment_ids": ["PTX-9.3-SHR-006"], "blocking_if_wrong": true},
+    {"claim_id": "PTX-SHR-SEM1-006", "classification": "SOURCE_FACT", "statement": "Notes include `Bit-size types are included for symmetry with shl`.", "evidence_fragment_ids": ["PTX-9.3-SHR-007"], "blocking_if_wrong": true},
+    {"claim_id": "PTX-SHR-SEM1-007", "classification": "SOURCE_FACT", "statement": "Introduced in PTX ISA 1.0; supported on all target architectures.", "evidence_fragment_ids": ["PTX-9.3-SHR-008"], "blocking_if_wrong": true},
+    {"claim_id": "PTX-SHR-SEM1-008", "classification": "SOURCE_FACT", "statement": "General predication syntax applies: instructions may be optional guarded via @{!}p; unguarded execute unconditionally.", "evidence_fragment_ids": ["PTX-9.3-SHR-010"], "blocking_if_wrong": true},
+    {"claim_id": "PTX-SHR-SEM1-009", "classification": "SOURCE_FACT", "statement": "Control-flow predication rule explicitly says threads with false predicate do nothing.", "evidence_fragment_ids": ["PTX-9.3-SHR-011"], "blocking_if_wrong": true},
+    {"claim_id": "PTX-SHR-SEM1-010", "classification": "DERIVED_INTERPRETATION", "statement": "Bounded form is shr.b32 d, a, b; and its guarded variants @p/ @!p forms are the in-scope instruction shape.", "evidence_fragment_ids": ["PTX-9.3-SHR-003", "PTX-9.3-SHR-010"], "blocking_if_wrong": true},
+    {"claim_id": "PTX-SHR-SEM1-011", "classification": "DERIVED_INTERPRETATION", "statement": "On execute, destination update is `d = a >> clamp(b, 32)` with fill policy from shr type family (sign-fill for signed families, zero-fill otherwise).", "evidence_fragment_ids": ["PTX-9.3-SHR-004", "PTX-9.3-SHR-005", "PTX-9.3-SHR-006", "PTX-9.3-SHR-007", "PTX-9.3-SHR-012"], "blocking_if_wrong": true},
+    {"claim_id": "PTX-SHR-SEM1-012", "classification": "DERIVED_INTERPRETATION", "statement": "When the complete guard expression evaluates false, bounded state is unchanged (no update).", "evidence_fragment_ids": ["PTX-9.3-SHR-010", "PTX-9.3-SHR-011"], "blocking_if_wrong": true},
+    {"claim_id": "PTX-SHR-SEM1-013", "classification": "OPEN_QUESTION", "statement": "Whether destination `_` is accepted specifically by shr syntax is unresolved.", "evidence_fragment_ids": ["PTX-9.3-SHR-011"], "blocking_if_wrong": false},
+    {"claim_id": "PTX-SHR-SEM1-014", "classification": "OPEN_QUESTION", "statement": "Whether `b` may be immediate and whether signedness of .s32 form is in scope are not explicitly resolved by shr subsection.", "evidence_fragment_ids": ["PTX-9.3-SHR-003", "PTX-9.3-SHR-004"], "blocking_if_wrong": false},
+    {"claim_id": "PTX-SHR-SEM1-015", "classification": "OPEN_QUESTION", "statement": "No explicit exceptional/undefined/implementation-defined behavior is quoted in captured shr fragments.", "evidence_fragment_ids": ["PTX-9.3-SHR-004", "PTX-9.3-SHR-005", "PTX-9.3-SHR-006"], "blocking_if_wrong": false}
+  ]
+}

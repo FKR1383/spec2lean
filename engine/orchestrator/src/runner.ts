@@ -28,7 +28,7 @@ import {
   type ProofTarget,
 } from "./proof-plan.js"
 import { reconcileProofStageResult } from "./proof-stage-result.js"
-import { REPO_ROOT } from "./repo.js"
+import { loadAgentModel, REPO_ROOT } from "./repo.js"
 import { loadRun, saveRun } from "./run-store.js"
 import {
   markSemanticV2Fallback,
@@ -408,6 +408,7 @@ async function buildProofPrompt(run: RunState): Promise<ProofPromptContext & { p
           diagnostics,
           "",
           "Repair only these concrete elaboration/proof failures. Do not add new theorem declarations until the file compiles.",
+          "After EVERY candidate_write, immediately run lean_check_file. Never finish after an unchecked write; reserve tool steps for the final compile check.",
         ]
       : target
         ? [
@@ -582,7 +583,17 @@ export async function executeTick(
     const local = await finalizeProofStageLocally(run)
     if (local?.outcome === "SUCCESS") {
       await installProofPackage(run)
-      const next = transitionRun(run, "FINAL_CRITIQUE", `local Lean verification: ${local.summary}`)
+      const manifest = await buildTraceabilityManifest({
+        runId: run.runId,
+        documentRole: "PROOFS",
+      })
+      const issues = await verifyTraceabilityManifest(manifest)
+      if (issues.length > 0) {
+        throw new Error(`Local proof traceability generation failed: ${issues.join(" | ")}`)
+      }
+      const manifestPath = await writeTraceabilityManifest(manifest)
+      const localSummary = `${local.summary} Deterministic theorem-to-source evidence manifest: ${manifestPath}.`
+      const next = transitionRun(run, "FINAL_CRITIQUE", `local Lean verification: ${localSummary}`)
       const saved = {
         ...next,
         activeExecution: undefined,
@@ -595,7 +606,7 @@ export async function executeTick(
             sessionId: "local",
             outcome: local.outcome,
             nextStage: local.nextStage,
-            response: local.summary,
+            response: localSummary,
           },
         ],
       }
@@ -608,7 +619,7 @@ export async function executeTick(
         fromStage: run.stage,
         toStage: saved.stage,
         revision: saved.revision,
-        summary: local.summary,
+        summary: localSummary,
       }, null, 2))
       return
     }
@@ -635,6 +646,7 @@ export async function executeTick(
 
   const runtime = options.runtime ?? await startOpenCode()
   const ownsRuntime = options.runtime === undefined
+  const executionModel = await loadAgentModel(plan.agent)
 
   try {
     const agents = unwrap<Agent[]>(await runtime.runtime.client.app.agents())
@@ -649,7 +661,7 @@ export async function executeTick(
       run.activeExecution !== undefined &&
       run.activeExecution.stage === run.stage &&
       run.activeExecution.agent === plan.agent &&
-      run.activeExecution.model === runtime.model.full
+      run.activeExecution.model === executionModel.full
 
     if (run.activeExecution !== undefined && !resumableActiveExecution) {
       const stale = run.activeExecution
@@ -657,7 +669,7 @@ export async function executeTick(
       console.log(
         `[spec2lean] abandoning stale active session=${stale.sessionId} ` +
         `agent=${stale.agent} model=${stale.model ?? "unrecorded"}; ` +
-        `current-agent=${plan.agent} current-model=${runtime.model.full}`,
+        `current-agent=${plan.agent} current-model=${executionModel.full}`,
       )
       run = {
         ...run,
@@ -685,7 +697,7 @@ export async function executeTick(
           startedAt: new Date().toISOString(),
           stage: run.stage,
           agent: plan.agent,
-          model: runtime.model.full,
+          model: executionModel.full,
           sessionId,
           expectedArtifact: artifact.outputPath,
         },
@@ -696,8 +708,8 @@ export async function executeTick(
       await sendPromptAsync(runtime.runtime.server.url, sessionId, {
         agent: plan.agent,
         model: {
-          providerID: runtime.model.providerID,
-          modelID: runtime.model.modelID,
+          providerID: executionModel.providerID,
+          modelID: executionModel.modelID,
         },
         parts: [{ type: "text", text: prompt }],
       })
@@ -772,6 +784,25 @@ export async function executeTick(
       result = reconcileProofStageResult(result, local)
       if (result.outcome === "SUCCESS") {
         await installProofPackage(run)
+        try {
+          const manifest = await buildTraceabilityManifest({
+            runId: run.runId,
+            documentRole: "PROOFS",
+          })
+          const issues = await verifyTraceabilityManifest(manifest)
+          if (issues.length > 0) throw new Error(issues.join(" | "))
+          const manifestPath = await writeTraceabilityManifest(manifest)
+          result = {
+            ...result,
+            summary: `${result.summary} Deterministic theorem-to-source evidence manifest: ${manifestPath}.`,
+          }
+        } catch (error) {
+          result = {
+            outcome: "RETRY",
+            nextStage: run.stage,
+            summary: `Proof artifact passed verification, but deterministic traceability generation failed: ${error instanceof Error ? error.message : String(error)}`,
+          }
+        }
       }
     } else if (result.outcome === "SUCCESS") {
       const verification = await verifyExpectedArtifact(run)
@@ -879,7 +910,7 @@ export async function executeTick(
           at: new Date().toISOString(),
           stage: run.stage,
           agent: plan.agent,
-          model: runtime.model.full,
+          model: executionModel.full,
           sessionId,
           outcome: result.outcome,
           nextStage,

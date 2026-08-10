@@ -8,14 +8,17 @@
   "engines": {
     "vscode": "^1.95.0"
   },
-  "categories": ["Other", "Programming Languages"],
+  "categories": [
+    "Other",
+    "Programming Languages"
+  ],
   "activationEvents": [
     "onLanguage:lean4",
     "onCommand:spec2lean.showEvidence",
     "onCommand:spec2lean.buildEvidenceManifest",
     "onCommand:spec2lean.refreshEvidence"
   ],
-  "main": "./dist/extension.cjs",
+  "main": "./dist/extension.js",
   "files": [
     "dist/**",
     "README.md",
@@ -23,6 +26,7 @@
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
+    "package:vsix": "npm run build && vsce package --no-dependencies --allow-missing-repository --out spec2lean-vscode.vsix",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm run build"
   },
@@ -32,8 +36,13 @@
   "devDependencies": {
     "@types/node": "^22.10.5",
     "@types/vscode": "^1.95.0",
+    "@vscode/vsce": "2.24.0",
+    "cheerio": "1.0.0-rc.12",
     "esbuild": "^0.25.0",
     "typescript": "^5.7.2"
+  },
+  "overrides": {
+    "cheerio": "1.0.0-rc.12"
   },
   "contributes": {
     "commands": [

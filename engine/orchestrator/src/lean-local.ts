@@ -79,9 +79,15 @@ export async function verifyLeanFile(
 }
 
 export async function buildLeanPackage(
+  target?: string,
   timeoutMs = 120_000,
 ): Promise<LeanCheckResult> {
-  return await runProcess("lake", ["build"], LEAN_ROOT, timeoutMs)
+  return await runProcess(
+    "lake",
+    target === undefined ? ["build"] : ["build", target],
+    LEAN_ROOT,
+    timeoutMs,
+  )
 }
 
 function stripLeanCommentsAndStrings(source: string): string {

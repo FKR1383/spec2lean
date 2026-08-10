@@ -1,0 +1,612 @@
+{
+  "schemaVersion": 2,
+  "manifestType": "spec2lean_evidence_manifest",
+  "generator": "spec2lean-traceability-v2",
+  "runId": "ptx-9.3-not.b32-5e83de43",
+  "language": "ptx",
+  "specificationVersion": "9.3",
+  "unit": "not.b32",
+  "documentRole": "SEMANTICS",
+  "sourceManifest": {
+    "path": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+    "sha256": "622e6ce0d3114a909a62726530955993b5f2b98d2f60e45ae1ceb429512208f2"
+  },
+  "leanDocument": {
+    "path": "candidates/ptx/9.3/units/not-b32/lean/NotB32-v1.lean",
+    "sha256": "d73332a9ce0ce44b6b4d7981266d5c79c0adfd2a9a63d53353583a8ed2f46d8f"
+  },
+  "semanticDocument": {
+    "path": "candidates/ptx/9.3/units/not-b32/semantics/semantics-v1.json",
+    "sha256": "477f9408b1a1c43e2d5e1a7f71795954fa58eff1cc28efe53a4d9a4b4210d4f0"
+  },
+  "sourceBundles": [
+    {
+      "path": "candidates/ptx/9.3/units/not-b32/source-bundles/source-bundle-v1.json",
+      "sha256": "25a7d338dbfcc5cfa199ab1795c170b3a601d1c9359e54c53f5bc58cba3db65a"
+    }
+  ],
+  "entries": [
+    {
+      "entryId": "def:b32Bits:78",
+      "declarationKind": "def",
+      "declarationName": "b32Bits",
+      "leanRange": {
+        "startLine": 78,
+        "endLine": 82
+      },
+      "semanticIds": [
+        "PTX-NOT-SEM1-013",
+        "PTX-NOT-SEM1-015"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-NOT-SEM1-013",
+          "classification": "SOURCE_FACT",
+          "statement": ".b32 is a fundamental type specifier of basic type 'Bits (untyped)'; Table 8 lists .b8, .b16, .b32, .b64, .b128 under 'Bits (untyped)'.",
+          "evidenceIds": [
+            "PTX-9.3-NOT-021"
+          ]
+        },
+        {
+          "semanticId": "PTX-NOT-SEM1-015",
+          "classification": "SOURCE_FACT",
+          "statement": "Registers (.reg state space) are fast storage locations; aside from 1-bit predicate registers, scalar registers have a width of 8-, 16-, 32-, 64-, or 128-bits (32-bit width is therefore possible for .b32 registers); registers are not fully addressable.",
+          "evidenceIds": [
+            "PTX-9.3-NOT-023"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-NOT-021",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.2.1",
+            "heading": "Fundamental Types",
+            "anchor": "fundamental-types-fundamental-type-specifiers",
+            "startLine": 3053,
+            "endLine": 3054,
+            "page": 53
+          },
+          "quotation": "Bits (untyped): .b8, .b16, .b32, .b64, .b128"
+        },
+        {
+          "evidenceId": "PTX-9.3-NOT-023",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.1.1",
+            "heading": "Register State Space",
+            "anchor": "register-state-space",
+            "startLine": 2613,
+            "endLine": 2631,
+            "page": 46
+          },
+          "quotation": "5.1.1. Register State Space\nRegisters (.reg state space) are fast storage locations. The number of registers is limited, and will vary from platform to platform. When the limit is exceeded, register variables will be spilled to memory, causing changes in performance. For each architecture, there is a recommended maximum number of registers to use (see the CUDA Programming Guide for details).\nRegisters may be typed (signed integer, unsigned integer, floating point, predicate) or untyped. Register size is restricted; aside from predicate registers which are 1-bit, scalar registers have a width of 8-, 16-, 32-, 64-, or 128-bits, and vector registers have a width of 16-, 32-, 64-, or 128-bits. The most common use of 8-bit registers is with ld, st, and cvt instructions, or as elements of vector tuples.\nRegisters differ from the other state spaces in that they are not fully addressable, i.e., it is not possible to refer to the address of a register. When compiling to use the Application Binary Interface (ABI), register variables are restricted to function scope and may not be declared at module scope. When compiling legacy PTX code (ISA versions prior to 3.0) containing module-scoped .reg variables, the compiler silently disables use of the ABI. Registers may have alignment boundaries required by multi-word loads and stores."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:b32DomainSize:83",
+      "declarationKind": "def",
+      "declarationName": "b32DomainSize",
+      "leanRange": {
+        "startLine": 83,
+        "endLine": 94
+      },
+      "semanticIds": [
+        "PTX-NOT-SEM1-062"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-NOT-SEM1-062",
+          "classification": "DESIGN_DEPENDENCY",
+          "statement": "Value domain design (architecture D-11, D-3): the value domain for .b32 is proposed as a fixed-width 32-bit untyped bit-value domain, because .b32 is the 'Bits (untyped)' basic type and the logic/shift family is described as fundamentally untyped, performing bit-wise operations on operands of any type of the same size.",
+          "evidenceIds": [
+            "PTX-9.3-NOT-010",
+            "PTX-9.3-NOT-021"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-NOT-010",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8",
+            "heading": "Logic and Shift Instructions",
+            "anchor": "logic-and-shift-instructions",
+            "startLine": 14236,
+            "endLine": 14255,
+            "page": 254
+          },
+          "quotation": "9.7.8. Logic and Shift Instructions\nThe logic and shift instructions are fundamentally untyped, performing bit-wise operations on operands of any type, provided the operands are of the same size. This permits bit-wise operations on floating point values without having to define a union to access the bits. Instructions and, or, xor, and not also operate on predicates.\nThe logical shift instructions are:\nand\nor\nxor\nnot\ncnot\nlop3\nshf\nshl\nshr"
+        },
+        {
+          "evidenceId": "PTX-9.3-NOT-010#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8",
+            "heading": "Logic and Shift Instructions",
+            "page": 254,
+            "bbox": [
+              0.11764705882352941,
+              0.24196113636363636,
+              0.7647109444444444,
+              0.32628995580808084
+            ]
+          },
+          "quotation": "9.7.8. Logic and Shift Instructions\nThe logic and shift instructions are fundamentally untyped, performing bit-wise operations on operands of any type, provided the operands are of the same size. This permits bit-wise operations on floating point values without having to define a union to access the bits. Instructions and, or, xor, and not also operate on predicates.\nThe logical shift instructions are:\nand\nor\nxor\nnot\ncnot\nlop3\nshf\nshl\nshr",
+          "alignedFromEvidenceId": "PTX-9.3-NOT-010",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-NOT-021",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.2.1",
+            "heading": "Fundamental Types",
+            "anchor": "fundamental-types-fundamental-type-specifiers",
+            "startLine": 3053,
+            "endLine": 3054,
+            "page": 53
+          },
+          "quotation": "Bits (untyped): .b8, .b16, .b32, .b64, .b128"
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "structure:B32:95",
+      "declarationKind": "structure",
+      "declarationName": "B32",
+      "leanRange": {
+        "startLine": 95,
+        "endLine": 108
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "structure:RegId:109",
+      "declarationKind": "structure",
+      "declarationName": "RegId",
+      "leanRange": {
+        "startLine": 109,
+        "endLine": 119
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "structure:PredId:120",
+      "declarationKind": "structure",
+      "declarationName": "PredId",
+      "leanRange": {
+        "startLine": 120,
+        "endLine": 135
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:SourceOperand:136",
+      "declarationKind": "inductive",
+      "declarationName": "SourceOperand",
+      "leanRange": {
+        "startLine": 136,
+        "endLine": 147
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:Destination:148",
+      "declarationKind": "inductive",
+      "declarationName": "Destination",
+      "leanRange": {
+        "startLine": 148,
+        "endLine": 159
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:Guard:160",
+      "declarationKind": "inductive",
+      "declarationName": "Guard",
+      "leanRange": {
+        "startLine": 160,
+        "endLine": 171
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:NotTypeSpecifier:172",
+      "declarationKind": "inductive",
+      "declarationName": "NotTypeSpecifier",
+      "leanRange": {
+        "startLine": 172,
+        "endLine": 184
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "structure:MachineState:185",
+      "declarationKind": "structure",
+      "declarationName": "MachineState",
+      "leanRange": {
+        "startLine": 185,
+        "endLine": 193
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "structure:NotB32Instruction:194",
+      "declarationKind": "structure",
+      "declarationName": "NotB32Instruction",
+      "leanRange": {
+        "startLine": 194,
+        "endLine": 207
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:evalSource:208",
+      "declarationKind": "def",
+      "declarationName": "evalSource",
+      "leanRange": {
+        "startLine": 208,
+        "endLine": 218
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:evalGuard:219",
+      "declarationKind": "def",
+      "declarationName": "evalGuard",
+      "leanRange": {
+        "startLine": 219,
+        "endLine": 241
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:complementValue:242",
+      "declarationKind": "def",
+      "declarationName": "complementValue",
+      "leanRange": {
+        "startLine": 242,
+        "endLine": 257
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:updateDestination:258",
+      "declarationKind": "def",
+      "declarationName": "updateDestination",
+      "leanRange": {
+        "startLine": 258,
+        "endLine": 268
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:ExecOutcome:269",
+      "declarationKind": "inductive",
+      "declarationName": "ExecOutcome",
+      "leanRange": {
+        "startLine": 269,
+        "endLine": 289
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:execNotB32:290",
+      "declarationKind": "def",
+      "declarationName": "execNotB32",
+      "leanRange": {
+        "startLine": 290,
+        "endLine": 311
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:NotB32Step:312",
+      "declarationKind": "inductive",
+      "declarationName": "NotB32Step",
+      "leanRange": {
+        "startLine": 312,
+        "endLine": 323
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:mkB32:324",
+      "declarationKind": "def",
+      "declarationName": "mkB32",
+      "leanRange": {
+        "startLine": 324,
+        "endLine": 328
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:mkState:329",
+      "declarationKind": "def",
+      "declarationName": "mkState",
+      "leanRange": {
+        "startLine": 329,
+        "endLine": 333
+      },
+      "semanticIds": [
+        "PTX-NOT-SEM1-060"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-NOT-SEM1-060",
+          "classification": "DESIGN_DEPENDENCY",
+          "statement": "Minimal machine state design (architecture D-5, D-14): the state for the bounded base not.b32 is the pair (value-register file, predicate-register file); no memory, special-register, or concurrency state is required by the base form's syntax and description.",
+          "evidenceIds": [
+            "PTX-9.3-NOT-003",
+            "PTX-9.3-NOT-004",
+            "PTX-9.3-NOT-023"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-NOT-003",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.4",
+            "heading": "Logic and Shift Instructions: not",
+            "anchor": "logic-and-shift-instructions-not",
+            "startLine": 14365,
+            "endLine": 14370,
+            "page": 257
+          },
+          "quotation": "not.type d, a;\n\n.type = { .pred, .b16, .b32, .b64 };"
+        },
+        {
+          "evidenceId": "PTX-9.3-NOT-003#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.4",
+            "heading": "Logic and Shift Instructions: not",
+            "page": 257,
+            "bbox": [
+              0.11764705882352941,
+              0.7447452184343434,
+              0.31646117647058825,
+              0.04260692045454547
+            ]
+          },
+          "quotation": "not.type d, a;\n\n.type = { .pred, .b16, .b32, .b64 };",
+          "alignedFromEvidenceId": "PTX-9.3-NOT-003",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-NOT-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.4",
+            "heading": "Logic and Shift Instructions: not",
+            "anchor": "logic-and-shift-instructions-not",
+            "startLine": 14371,
+            "endLine": 14372,
+            "page": 258
+          },
+          "quotation": "Invert the bits in a."
+        },
+        {
+          "evidenceId": "PTX-9.3-NOT-004#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.4",
+            "heading": "Logic and Shift Instructions: not",
+            "page": 258,
+            "bbox": [
+              0.11764705882352941,
+              0.12255201388888888,
+              0.1428162549019608,
+              0.01659175505050505
+            ]
+          },
+          "quotation": "Invert the bits in a.",
+          "alignedFromEvidenceId": "PTX-9.3-NOT-004",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-NOT-023",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.1.1",
+            "heading": "Register State Space",
+            "anchor": "register-state-space",
+            "startLine": 2613,
+            "endLine": 2631,
+            "page": 46
+          },
+          "quotation": "5.1.1. Register State Space\nRegisters (.reg state space) are fast storage locations. The number of registers is limited, and will vary from platform to platform. When the limit is exceeded, register variables will be spilled to memory, causing changes in performance. For each architecture, there is a recommended maximum number of registers to use (see the CUDA Programming Guide for details).\nRegisters may be typed (signed integer, unsigned integer, floating point, predicate) or untyped. Register size is restricted; aside from predicate registers which are 1-bit, scalar registers have a width of 8-, 16-, 32-, 64-, or 128-bits, and vector registers have a width of 16-, 32-, 64-, or 128-bits. The most common use of 8-bit registers is with ld, st, and cvt instructions, or as elements of vector tuples.\nRegisters differ from the other state spaces in that they are not fully addressable, i.e., it is not possible to refer to the address of a register. When compiling to use the Application Binary Interface (ABI), register variables are restricted to function scope and may not be declared at module scope. When compiling legacy PTX code (ISA versions prior to 3.0) containing module-scoped .reg variables, the compiler silently disables use of the ABI. Registers may have alignment boundaries required by multi-word loads and stores."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:exR1:334",
+      "declarationKind": "def",
+      "declarationName": "exR1",
+      "leanRange": {
+        "startLine": 334,
+        "endLine": 334
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:exR2:335",
+      "declarationKind": "def",
+      "declarationName": "exR2",
+      "leanRange": {
+        "startLine": 335,
+        "endLine": 335
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:exP1:336",
+      "declarationKind": "def",
+      "declarationName": "exP1",
+      "leanRange": {
+        "startLine": 336,
+        "endLine": 414
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    }
+  ],
+  "diagnostics": {
+    "declarationsWithoutReferences": [
+      "B32",
+      "RegId",
+      "PredId",
+      "SourceOperand",
+      "Destination",
+      "Guard",
+      "NotTypeSpecifier",
+      "MachineState",
+      "NotB32Instruction",
+      "evalSource",
+      "evalGuard",
+      "complementValue",
+      "updateDestination",
+      "ExecOutcome",
+      "execNotB32",
+      "NotB32Step",
+      "mkB32",
+      "exR1",
+      "exR2",
+      "exP1"
+    ],
+    "unresolvedReferences": [],
+    "pdfAlignment": {
+      "matched": 18,
+      "ambiguous": [
+        "PTX-9.3-NOT-007",
+        "PTX-9.3-NOT-008"
+      ],
+      "unmatched": [
+        "PTX-9.3-NOT-001",
+        "PTX-9.3-NOT-012",
+        "PTX-9.3-NOT-014",
+        "PTX-9.3-NOT-016",
+        "PTX-9.3-NOT-018",
+        "PTX-9.3-NOT-019",
+        "PTX-9.3-NOT-021",
+        "PTX-9.3-NOT-023",
+        "PTX-9.3-NOT-026",
+        "PTX-9.3-NOT-030",
+        "PTX-9.3-NOT-031",
+        "PTX-9.3-NOT-032",
+        "PTX-9.3-NOT-033"
+      ]
+    }
+  }
+}

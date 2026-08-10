@@ -9,17 +9,19 @@ Generate and verify a manifest for an existing run:
 
 ```bash
 ./spec2lean traceability build --run <run-id> --pdf-boxes
+./spec2lean traceability build --run <run-id> --document proofs --pdf-boxes
 ./spec2lean traceability validate \
   --manifest runs/<run-id>/traceability/evidence-<manifest-sha256>.json
+./spec2lean traceability audit
 ```
 
-The v1 generator reads the structured claim and evidence IDs already emitted
-by the pipeline and the traceability comments immediately preceding Lean
-declarations. Missing or unknown references remain explicit diagnostics. The
-orchestrator invokes it automatically after a verified Lean-formalization
-success. Content-addressed manifest paths preserve every reviewed Lean
-revision and every optional PDF rendition instead of overwriting an earlier
-mapping.
+The v2 generator reads the structured claim, evidence, and theorem-obligation
+IDs already emitted by the pipeline. Missing or unknown references remain
+explicit diagnostics. The orchestrator emits a semantics manifest after
+verified Lean formalization and a proof manifest after verified proof
+generation. Opening a CodeLens never launches an agent or repeats source
+research. Content-addressed paths preserve every reviewed Lean revision and
+every optional PDF rendition instead of overwriting an earlier mapping.
 
 Human feedback records are immutable, hash-bound review artifacts. They never
 approve a gate or promote an artifact:

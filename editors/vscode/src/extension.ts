@@ -79,7 +79,7 @@ class ManifestIndex {
     for (const uri of files) {
       try {
         const manifest = JSON.parse(await readFile(uri.fsPath, "utf8")) as EvidenceManifest
-        if (manifest.schemaVersion === 1 && manifest.manifestType === "spec2lean_evidence_manifest") {
+        if ((manifest.schemaVersion === 1 || manifest.schemaVersion === 2) && manifest.manifestType === "spec2lean_evidence_manifest") {
           loaded.push({
             manifestPath: relative(root, uri.fsPath).split(sep).join("/"),
             manifest,
@@ -98,11 +98,14 @@ class ManifestIndex {
   forDocument(document: vscode.TextDocument): IndexedManifest | undefined {
     if (this.root === undefined || !inside(this.root, document.uri.fsPath)) return undefined
     const documentPath = relative(this.root, document.uri.fsPath).split(sep).join("/")
+    const documentSha256 = sha256(Buffer.from(document.getText(), "utf8"))
     const rank = (indexed: IndexedManifest): number =>
       (indexed.manifest.diagnostics.pdfAlignment?.matched ?? 0) * 1_000_000 +
       indexed.manifest.entries.reduce((sum, entry) => sum + entry.evidence.length, 0)
     const preferred = (matches: IndexedManifest[]): IndexedManifest | undefined =>
-      matches.sort((left, right) => rank(right) - rank(left))[0]
+      matches
+        .filter(({ manifest }) => manifest.leanDocument.sha256 === documentSha256)
+        .sort((left, right) => rank(right) - rank(left))[0]
     return preferred(this.manifests.filter(({ manifest }) => manifest.leanDocument.path === documentPath))
       ?? preferred(this.manifests.filter(({ manifest }) =>
         documentPath.endsWith(`/lean/${manifest.leanDocument.path.split("/").at(-1) ?? ""}`),
@@ -258,7 +261,12 @@ class EvidencePanel {
       const evidence = this.current.entry.evidence.find((item) => item.evidenceId === value.evidenceId)
       const root = await repositoryRoot()
       if (evidence === undefined || root === undefined) return
-      const uri = vscode.Uri.file(resolve(root, evidence.documentPath))
+      const absolute = resolve(root, evidence.documentPath)
+      if (!inside(root, absolute)) {
+        await vscode.window.showErrorMessage("The evidence path escapes the Spec2Lean repository.")
+        return
+      }
+      const uri = vscode.Uri.file(absolute)
       if (evidence.sourceKind === "HTML" && evidence.locator.startLine !== undefined) {
         const document = await vscode.workspace.openTextDocument(uri)
         const editor = await vscode.window.showTextDocument(document, vscode.ViewColumn.Beside)
@@ -475,7 +483,9 @@ async function runForDocument(root: string, document: vscode.TextDocument): Prom
         typeof run.artifactRoot === "string" &&
         typeof run.leanModuleName === "string" &&
         documentPath.startsWith(`${run.artifactRoot}/lean/`) &&
-        documentPath.split("/").at(-1)?.startsWith(`${run.leanModuleName}-v`) === true
+        new RegExp(
+          `^${run.leanModuleName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:Proofs)?-v\\d+\\.lean$`,
+        ).test(documentPath.split("/").at(-1) ?? "")
       ) return run.runId
     } catch {
       // Ignore malformed or unrelated run records.
@@ -508,7 +518,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         if (manifestPath !== undefined && entryId !== undefined) {
           const root = await repositoryRoot()
           if (root === undefined) return
-          const manifest = JSON.parse(await readFile(resolve(root, manifestPath), "utf8")) as EvidenceManifest
+          const absolute = resolve(root, manifestPath)
+          if (!inside(root, absolute)) {
+            await vscode.window.showErrorMessage("The evidence manifest path escapes the Spec2Lean repository.")
+            return
+          }
+          const manifest = JSON.parse(await readFile(absolute, "utf8")) as EvidenceManifest
           const entry = manifest.entries.find((candidate) => candidate.entryId === entryId)
           if (entry !== undefined) await panel.show({ manifestPath, manifest }, entry)
           return
@@ -540,10 +555,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         location: vscode.ProgressLocation.Notification,
         title: `Building evidence manifest for ${runId}`,
       }, async () => {
+        const documentArgs = /Proofs(?:-v\d+)?\.lean$/.test(editor.document.fileName)
+          ? ["--document", "proofs"]
+          : []
         try {
-          await runCli(root, ["traceability", "build", "--run", runId, "--pdf-boxes"])
+          await runCli(root, ["traceability", "build", "--run", runId, ...documentArgs, "--pdf-boxes"])
         } catch (error) {
-          await runCli(root, ["traceability", "build", "--run", runId])
+          await runCli(root, ["traceability", "build", "--run", runId, ...documentArgs])
           await vscode.window.showWarningMessage(
             `PDF box extraction was unavailable; the HTML evidence manifest was still built. ${String(error)}`,
           )

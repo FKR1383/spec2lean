@@ -20,6 +20,7 @@ import {
 import { REPO_ROOT } from "./repo.js"
 import { loadRun } from "./run-store.js"
 import { alignEvidenceToOfficialPdf } from "./pdf-alignment.js"
+import { verifiedProofArtifactPath } from "./proof-plan.js"
 
 export type TraceabilityClassification =
   | "SOURCE_FACT"
@@ -65,6 +66,7 @@ export type TraceabilityEntry = {
     endLine: number
   }
   semanticIds: string[]
+  theoremObligationIds: string[]
   claims: TraceabilityClaim[]
   evidence: TraceabilityEvidence[]
   unresolvedReferences: string[]
@@ -76,17 +78,19 @@ export type ArtifactFingerprint = {
 }
 
 export type TraceabilityManifest = {
-  schemaVersion: 1
+  schemaVersion: 2
   manifestType: "spec2lean_evidence_manifest"
-  generator: "spec2lean-traceability-v1"
+  generator: "spec2lean-traceability-v2"
   runId: string
   language: string
   specificationVersion: string
   unit: string
+  documentRole: "SEMANTICS" | "PROOFS"
   sourceManifest: ArtifactFingerprint
   leanDocument: ArtifactFingerprint
   semanticDocument: ArtifactFingerprint
-  sourceBundle: ArtifactFingerprint
+  sourceBundles: ArtifactFingerprint[]
+  theoremDocument?: ArtifactFingerprint
   entries: TraceabilityEntry[]
   diagnostics: {
     declarationsWithoutReferences: string[]
@@ -192,7 +196,9 @@ function collectClaims(value: unknown, claims: Map<string, TraceabilityClaim>): 
     ? value.semanticId
     : typeof value.claim_id === "string"
       ? value.claim_id
-      : undefined
+      : typeof value.id === "string"
+        ? value.id
+        : undefined
   const claimClassification = classification(value.classification)
   const statement = typeof value.statement === "string" ? value.statement : undefined
   if (semanticId !== undefined && claimClassification !== undefined && statement !== undefined) {
@@ -239,6 +245,71 @@ function collectEvidence(value: unknown): Map<string, TraceabilityEvidence> {
       documents.set(document.document_id, document)
     }
   }
+  const firstDocument = (kind: "HTML" | "PDF"): UnknownRecord | undefined =>
+    sourceDocuments.find((document) => isRecord(document) &&
+      String(document.kind ?? document.source_kind ?? "").toUpperCase() === kind) as UnknownRecord | undefined
+  const legacyEvidence = (
+    evidenceId: string,
+    fragment: UnknownRecord,
+    preferredKind: "HTML" | "PDF" = "HTML",
+  ): void => {
+    const document = firstDocument(preferredKind)
+    const documentPath = typeof fragment.source_file === "string"
+      ? fragment.source_file
+      : typeof document?.local_path === "string"
+        ? document.local_path
+        : undefined
+    const documentSha256 = typeof fragment.source_sha256 === "string"
+      ? fragment.source_sha256
+      : typeof document?.sha256 === "string"
+        ? document.sha256
+        : undefined
+    if (documentPath === undefined || documentSha256 === undefined) return
+    const lines = Array.isArray(fragment.lines)
+      ? fragment.lines.filter((item): item is number => typeof item === "number")
+      : []
+    result.set(evidenceId, {
+      evidenceId,
+      sourceKind: preferredKind,
+      documentPath,
+      documentSha256,
+      locator: {
+        section: typeof fragment.section_number === "string" ? fragment.section_number : undefined,
+        heading: typeof fragment.heading === "string" ? fragment.heading : undefined,
+        anchor: typeof fragment.anchor === "string" ? fragment.anchor : undefined,
+        startLine: number(fragment.start_line) ?? lines[0],
+        endLine: number(fragment.end_line) ?? lines.at(-1),
+        page: number(fragment.page),
+      },
+      quotation: typeof fragment.quote === "string"
+        ? fragment.quote
+        : typeof fragment.quote_excerpt === "string"
+          ? fragment.quote_excerpt
+          : typeof fragment.quotation_rendered_text === "string"
+            ? fragment.quotation_rendered_text
+            : typeof fragment.snippet === "string"
+              ? fragment.snippet
+              : undefined,
+    })
+  }
+
+  const coverage = Array.isArray(value.coverage) ? value.coverage : []
+  for (const fragment of coverage) {
+    if (isRecord(fragment) && typeof fragment.fact_id === "string") {
+      legacyEvidence(fragment.fact_id, fragment)
+    }
+  }
+  const sharedContexts = Array.isArray(value.shared_contexts) ? value.shared_contexts : []
+  sharedContexts.forEach((fragment, index) => {
+    if (!isRecord(fragment)) return
+    const evidenceId = typeof fragment.fragment_id === "string"
+      ? fragment.fragment_id
+      : `CTX-${String(index + 1).padStart(2, "0")}`
+    legacyEvidence(evidenceId, fragment)
+  })
+  if (isRecord(value.pdf_corroboration)) {
+    legacyEvidence("PDF_CORROBORATION", value.pdf_corroboration, "PDF")
+  }
 
   const fragments = Array.isArray(value.fragments) ? value.fragments : []
   for (const fragment of fragments) {
@@ -261,6 +332,8 @@ function collectEvidence(value: unknown): Map<string, TraceabilityEvidence> {
       ? fragment.source_kind.toUpperCase()
       : typeof document?.source_kind === "string"
         ? document.source_kind.toUpperCase()
+        : typeof document?.kind === "string"
+          ? document.kind.toUpperCase()
         : "ARTIFACT"
     const sourceKind = rawKind === "HTML" || rawKind === "PDF" ? rawKind : "ARTIFACT"
     result.set(fragment.fragment_id, {
@@ -321,6 +394,65 @@ type LeanDeclaration = {
   comment: string
 }
 
+type TheoremBinding = {
+  obligationId: string
+  semanticIds: string[]
+}
+
+function collectTheoremBindings(value: unknown): Map<string, TheoremBinding> {
+  const bindings = new Map<string, TheoremBinding>()
+  const visit = (nested: unknown): void => {
+    if (Array.isArray(nested)) {
+      for (const item of nested) visit(item)
+      return
+    }
+    if (!isRecord(nested)) return
+    const obligationId = typeof nested.obligation_id === "string"
+      ? nested.obligation_id
+      : typeof nested.obligationId === "string"
+        ? nested.obligationId
+        : undefined
+    const semanticIds = [
+      ...stringArray(nested.semantic_claim_ids),
+      ...stringArray(nested.semanticClaimIds),
+    ]
+    if (obligationId !== undefined && semanticIds.length > 0) {
+      const names = new Set<string>()
+      if (typeof nested.proposed_name === "string") {
+        const unqualifiedName = nested.proposed_name.split(".").at(-1)
+        if (unqualifiedName !== undefined && /^[A-Za-z_][A-Za-z0-9_']*$/.test(unqualifiedName)) {
+          names.add(unqualifiedName)
+        }
+      }
+      const collectNames = (item: unknown): void => {
+        if (typeof item === "string") {
+          for (const match of item.matchAll(/\btheorem\s+([A-Za-z_][A-Za-z0-9_']*)/g)) {
+            if (match[1] !== undefined) names.add(match[1])
+          }
+          return
+        }
+        if (Array.isArray(item)) {
+          for (const child of item) collectNames(child)
+          return
+        }
+        if (isRecord(item)) {
+          for (const child of Object.values(item)) collectNames(child)
+        }
+      }
+      collectNames(nested)
+      for (const name of names) {
+        bindings.set(name, {
+          obligationId,
+          semanticIds: [...new Set(semanticIds)].sort((left, right) => left.localeCompare(right)),
+        })
+      }
+    }
+    for (const item of Object.values(nested)) visit(item)
+  }
+  visit(value)
+  return bindings
+}
+
 function parseLeanDeclarations(source: string): LeanDeclaration[] {
   const lines = source.split(/\r?\n/)
   const declarations: Omit<LeanDeclaration, "endLine">[] = []
@@ -375,9 +507,11 @@ function unresolvedReferenceTokens(comment: string, known: Set<string>): string[
 
 export type BuildTraceabilityInput = {
   runId: string
+  documentRole?: "SEMANTICS" | "PROOFS"
   leanPath?: string
   semanticPath?: string
-  sourceBundlePath?: string
+  sourceBundlePaths?: string[]
+  theoremPath?: string
   includePdfRenditions?: boolean
 }
 
@@ -385,32 +519,58 @@ export async function buildTraceabilityManifest(
   input: BuildTraceabilityInput,
 ): Promise<TraceabilityManifest> {
   const run = await loadRun(input.runId)
-  const leanPath = input.leanPath ?? await latestVersionedFile(
-    `${run.artifactRoot}/lean`,
-    [new RegExp(`^${run.leanModuleName}-v(\\d+)\\.lean$`)],
-  )
+  const documentRole = input.documentRole ?? "SEMANTICS"
+  const leanPath = input.leanPath ?? (documentRole === "PROOFS"
+    ? verifiedProofArtifactPath(run)
+    : await latestVersionedFile(
+        `${run.artifactRoot}/lean`,
+        [new RegExp(`^${run.leanModuleName}-v(\\d+)\\.lean$`)],
+      ))
   const semanticPath = input.semanticPath ?? await latestVersionedFile(
     `${run.artifactRoot}/semantics`,
     [/^semantics-v(\d+)\.json$/, /^materialized-v(\d+)\.json$/],
   )
-  const sourceBundlePath = input.sourceBundlePath ?? await latestVersionedFile(
-    `${run.artifactRoot}/source-bundles`,
-    [/^source-bundle-v(\d+)\.json$/],
-  )
+  const sourceBundlePaths = input.sourceBundlePaths ?? [
+    await latestVersionedFile(
+      `${run.artifactRoot}/source-bundles`,
+      [/^source-bundle-v(\d+)\.json$/],
+    ),
+  ]
+  if (sourceBundlePaths.length === 0) throw new Error("At least one source bundle is required")
+  const theoremPath = documentRole === "PROOFS"
+    ? input.theoremPath ?? await latestVersionedFile(
+        `${run.artifactRoot}/theorems`,
+        [/^obligations-v(\d+)\.json$/],
+      )
+    : undefined
 
-  const [leanData, semanticData, sourceBundleData] = await Promise.all([
+  const [leanData, semanticData, sourceBundleData, theoremData] = await Promise.all([
     readRepositoryFile(leanPath),
     readRepositoryFile(semanticPath),
-    readRepositoryFile(sourceBundlePath),
+    Promise.all(sourceBundlePaths.map(readRepositoryFile)),
+    theoremPath === undefined ? undefined : readRepositoryFile(theoremPath),
   ])
   const semanticDocument: unknown = JSON.parse(semanticData.toString("utf8"))
-  const sourceBundleDocument: unknown = JSON.parse(sourceBundleData.toString("utf8"))
   const claims = new Map<string, TraceabilityClaim>()
   collectClaims(semanticDocument, claims)
-  const evidence = collectEvidence(sourceBundleDocument)
+  const evidence = new Map<string, TraceabilityEvidence>()
+  for (const data of sourceBundleData) {
+    for (const [id, item] of collectEvidence(JSON.parse(data.toString("utf8")) as unknown)) {
+      evidence.set(id, item)
+    }
+  }
+  const theoremBindings = theoremData === undefined
+    ? new Map<string, TheoremBinding>()
+    : collectTheoremBindings(JSON.parse(theoremData.toString("utf8")) as unknown)
   const knownIds = new Set([...claims.keys(), ...evidence.keys()])
 
-  const sourceManifest = await fingerprint(run.sourceManifest)
+  const sourceManifestPath = run.sourceManifest ?? (
+    run.language.toLowerCase() === "ptx"
+      ? `documents/sources/nvidia/ptx/${run.specVersion}/source-manifest.json`
+      : undefined
+  )
+  if (sourceManifestPath === undefined) throw new Error("Run has no source manifest")
+  const sourceManifest = await fingerprint(sourceManifestPath)
   const pdfAlignment = input.includePdfRenditions
     ? await alignEvidenceToOfficialPdf({
         evidence: [...evidence.values()],
@@ -423,7 +583,11 @@ export async function buildTraceabilityManifest(
   )
 
   const entries = parseLeanDeclarations(leanData.toString("utf8")).map((declaration) => {
-    const semanticIds = referencedIds(declaration.comment, claims.keys())
+    const theoremBinding = theoremBindings.get(declaration.name)
+    const semanticIds = [...new Set([
+      ...referencedIds(declaration.comment, claims.keys()),
+      ...(theoremBinding?.semanticIds ?? []).filter((id) => claims.has(id)),
+    ])].sort((left, right) => left.localeCompare(right))
     const directEvidenceIds = referencedIds(declaration.comment, evidence.keys())
     const selectedClaims = semanticIds.flatMap((id) => {
       const claim = claims.get(id)
@@ -448,24 +612,35 @@ export async function buildTraceabilityManifest(
         endLine: declaration.endLine,
       },
       semanticIds,
+      theoremObligationIds: theoremBinding === undefined ? [] : [theoremBinding.obligationId],
       claims: selectedClaims,
       evidence: selectedEvidence,
-      unresolvedReferences: unresolvedReferenceTokens(declaration.comment, knownIds),
+      unresolvedReferences: [...new Set([
+        ...unresolvedReferenceTokens(declaration.comment, knownIds),
+        ...(theoremBinding?.semanticIds ?? []).filter((id) => !claims.has(id)),
+      ])].sort((left, right) => left.localeCompare(right)),
     }
   })
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     manifestType: "spec2lean_evidence_manifest",
-    generator: "spec2lean-traceability-v1",
+    generator: "spec2lean-traceability-v2",
     runId: run.runId,
     language: run.language,
     specificationVersion: run.specVersion,
     unit: run.unit,
+    documentRole,
     sourceManifest,
     leanDocument: { path: leanPath, sha256: sha256(leanData) },
     semanticDocument: { path: semanticPath, sha256: sha256(semanticData) },
-    sourceBundle: { path: sourceBundlePath, sha256: sha256(sourceBundleData) },
+    sourceBundles: sourceBundlePaths.map((path, index) => ({
+      path,
+      sha256: sha256(sourceBundleData[index]!),
+    })),
+    theoremDocument: theoremPath === undefined || theoremData === undefined
+      ? undefined
+      : { path: theoremPath, sha256: sha256(theoremData) },
     entries,
     diagnostics: {
       declarationsWithoutReferences: entries
@@ -528,14 +703,27 @@ export async function verifyTraceabilityManifest(
   manifest: TraceabilityManifest,
 ): Promise<string[]> {
   const issues: string[] = []
-  if (manifest.schemaVersion !== 1 || manifest.manifestType !== "spec2lean_evidence_manifest") {
+  const legacy = manifest as unknown as {
+    schemaVersion?: number
+    generator?: string
+    sourceBundle?: ArtifactFingerprint
+    sourceBundles?: ArtifactFingerprint[]
+    documentRole?: "SEMANTICS" | "PROOFS"
+  }
+  const supportedVersion =
+    (legacy.schemaVersion === 1 && legacy.generator === "spec2lean-traceability-v1") ||
+    (legacy.schemaVersion === 2 && legacy.generator === "spec2lean-traceability-v2")
+  if (!supportedVersion || manifest.manifestType !== "spec2lean_evidence_manifest") {
     issues.push("unsupported traceability manifest schema")
   }
+  const bundles = legacy.sourceBundles ?? (legacy.sourceBundle === undefined ? [] : [legacy.sourceBundle])
+  if (bundles.length === 0) issues.push("traceability manifest has no source bundle")
   for (const artifact of [
     manifest.sourceManifest,
     manifest.leanDocument,
     manifest.semanticDocument,
-    manifest.sourceBundle,
+    ...bundles,
+    ...(manifest.theoremDocument === undefined ? [] : [manifest.theoremDocument]),
   ]) {
     try {
       const actual = sha256(await readRepositoryFile(artifact.path))
@@ -556,6 +744,9 @@ export async function verifyTraceabilityManifest(
         issues.push(`aligned PDF evidence lacks an alignment method: ${item.evidenceId}`)
       }
     }
+  }
+  if (legacy.documentRole === "PROOFS" && manifest.theoremDocument === undefined) {
+    issues.push("proof traceability manifest lacks theorem obligation document")
   }
   return [...new Set(issues)].sort((left, right) => left.localeCompare(right))
 }

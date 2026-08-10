@@ -29,9 +29,13 @@ import {
 } from "./human-decision-record.js"
 import { verifyLeanFile } from "./lean-local.js"
 import { packageTransform } from "./lean-package.js"
-import { proofTargets, theoremDeclarationNames } from "./proof-plan.js"
+import {
+  proofTargets,
+  theoremDeclarationNames,
+  verifiedProofArtifactPath,
+} from "./proof-plan.js"
 import { reconcileProofStageResult } from "./proof-stage-result.js"
-import { loadProjectModel, REPO_ROOT } from "./repo.js"
+import { loadAgentModel, loadProjectModel, REPO_ROOT } from "./repo.js"
 import { withRepositoryLock } from "./repository-lock.js"
 import { runSemanticIrSelfTests } from "./semantic-ir-self-test.js"
 import { runSemanticV2SelfTests } from "./semantic-v2-self-test.js"
@@ -517,8 +521,8 @@ const runnerSource = await readFile(
   "utf8",
 )
 assert(
-  runnerSource.includes("run.activeExecution.model === runtime.model.full") &&
-    runnerSource.match(/model: runtime\.model\.full/g)?.length === 2,
+  runnerSource.includes("run.activeExecution.model === executionModel.full") &&
+    runnerSource.match(/model: executionModel\.full/g)?.length === 2,
   "active-session recovery is pinned to explicit model provenance",
 )
 assert(
@@ -526,6 +530,21 @@ assert(
     runnerSource.includes("buildTraceabilityManifest({ runId: run.runId })") &&
     runnerSource.includes("writeTraceabilityManifest(manifest)"),
   "verified Lean formalization automatically emits its evidence manifest",
+)
+assert(
+  runnerSource.includes('documentRole: "PROOFS"') &&
+    runnerSource.match(/Deterministic theorem-to-source evidence manifest/g)?.length === 2,
+  "verified proof generation automatically emits its theorem evidence manifest",
+)
+const leanPackageSource = await readFile(
+  resolve(REPO_ROOT, "engine/orchestrator/src/lean-package.ts"),
+  "utf8",
+)
+assert(
+  leanPackageSource.includes("const actualSourcePath = proofArtifactPath(run)") &&
+    !leanPackageSource.includes("Proofs-v(\\\\d+)") &&
+    leanPackageSource.includes("await writeFile(rootPath, previousRoot, \"utf8\")"),
+  "proof installation uses the verified canonical artifact rather than the highest filename version",
 )
 
 const projectModel = await loadProjectModel()
@@ -540,14 +559,19 @@ const agentFiles = (await readdir(resolve(REPO_ROOT, ".opencode/agents")))
   .filter((name) => name.endsWith(".md"))
 for (const agentFile of agentFiles) {
   const text = await readFile(resolve(REPO_ROOT, `.opencode/agents/${agentFile}`), "utf8")
+  const agentModel = await loadAgentModel(agentFile.slice(0, -3))
   assert(
-    text.includes(`model: ${projectModel.full}`),
-    `${agentFile} model matches the project model`,
+    projectConfig.enabled_providers?.includes(agentModel.providerID),
+    `${agentFile} model provider is explicitly enabled`,
   )
   assert(!text.includes("# First Formalization Unit"), `${agentFile} obsolete first-unit block removed`)
   assert(!text.includes("Do not formalize another PTX instruction."), `${agentFile} no stale unit lock`)
   assert(!text.includes("Do not prove properties for another PTX instruction."), `${agentFile} no stale proof lock`)
 }
+assert(
+  (await loadAgentModel("proof-engineer")).full === "opencode/deepseek-v4-flash-free",
+  "proof engineer uses the bounded DeepSeek migration route",
+)
 const semanticCriticPrompt = await readFile(
   resolve(REPO_ROOT, ".opencode/agents/semantic-critic.md"),
   "utf8",
@@ -636,6 +660,59 @@ assert(
     orValueEntry.semanticIds.includes("SF-ORB16-003") &&
     orValueEntry.evidence.some((evidence) => evidence.evidenceId === "PTX-9.3-ORB16-005"),
   "traceability generator resolves Lean claim comments to exact source fragments",
+)
+const proofTraceabilityManifest = await buildTraceabilityManifest({
+  runId: "ptx-9.3-or.b16-ab7bd730",
+  documentRole: "PROOFS",
+})
+const proofTraceabilityIssues = await verifyTraceabilityManifest(proofTraceabilityManifest)
+assert(
+  proofTraceabilityIssues.length === 0,
+  `proof traceability manifest verifies: ${proofTraceabilityIssues.join(", ")}`,
+)
+const deterministicTheorem = proofTraceabilityManifest.entries.find(
+  (entry) => entry.declarationName === "OrB16Step_deterministic",
+)
+assert(
+  deterministicTheorem !== undefined &&
+    deterministicTheorem.theoremObligationIds.length === 1 &&
+    deterministicTheorem.semanticIds.length > 0 &&
+    deterministicTheorem.evidence.length > 0,
+  "proof traceability resolves theorem obligations through semantic claims to evidence",
+)
+const compositeProofTraceabilityManifest = await buildTraceabilityManifest({
+  runId: "ptx-9.3-shr.b32-ad159e51",
+  documentRole: "PROOFS",
+})
+assert(
+  compositeProofTraceabilityManifest.leanDocument.path ===
+    "candidates/ptx/9.3/units/shr-b32/lean/ShrB32Proofs-v1.lean",
+  "proof traceability selects the completed artifact contract, not a higher stale candidate version",
+)
+for (const declarationName of [
+  "execShrB32_sound_executed",
+  "execShrB32_sound_malformed",
+  "shrB32Step_to_exec_correspondence",
+]) {
+  const entry = compositeProofTraceabilityManifest.entries.find(
+    (candidate) => candidate.declarationName === declarationName,
+  )
+  assert(
+    entry !== undefined &&
+      entry.theoremObligationIds.includes("PTX-SHR-THM-002") &&
+      entry.semanticIds.length > 0 &&
+      entry.evidence.length > 0,
+    `proof traceability resolves every declaration in a composite theorem obligation: ${declarationName}`,
+  )
+}
+const completedShrRun = JSON.parse(await readFile(
+  resolve(REPO_ROOT, "runs/ptx-9.3-shr.b32-ad159e51/run.json"),
+  "utf8",
+)) as RunState
+assert(
+  verifiedProofArtifactPath(completedShrRun) ===
+    "candidates/ptx/9.3/units/shr-b32/lean/ShrB32Proofs-v1.lean",
+  "completed proof artifact path is derived from successful proof-stage history",
 )
 assert(
   orValueEntry !== undefined &&

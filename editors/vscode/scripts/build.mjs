@@ -1,4 +1,4 @@
-import { copyFile, mkdir } from "node:fs/promises"
+import { copyFile, mkdir, rm } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -8,10 +8,11 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const dist = resolve(root, "dist")
 const vendor = resolve(dist, "vendor")
 
+await rm(dist, { recursive: true, force: true })
 await mkdir(vendor, { recursive: true })
 await build({
   entryPoints: [resolve(root, "src/extension.ts")],
-  outfile: resolve(dist, "extension.cjs"),
+  outfile: resolve(dist, "extension.js"),
   bundle: true,
   platform: "node",
   format: "cjs",

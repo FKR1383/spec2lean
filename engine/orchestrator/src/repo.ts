@@ -16,6 +16,18 @@ export type ModelRef = {
   modelID: string
 }
 
+function modelRef(full: string): ModelRef {
+  const separator = full.indexOf("/")
+  if (separator <= 0 || separator === full.length - 1) {
+    throw new Error(`Invalid OpenCode model ID: ${full}`)
+  }
+  return {
+    full,
+    providerID: full.slice(0, separator),
+    modelID: full.slice(separator + 1),
+  }
+}
+
 export async function loadProjectModel(): Promise<ModelRef> {
   const path = resolve(REPO_ROOT, "opencode.json")
 
@@ -27,17 +39,13 @@ export async function loadProjectModel(): Promise<ModelRef> {
     throw new Error("opencode.json has no model field")
   }
 
-  const separator = config.model.indexOf("/")
+  return modelRef(config.model)
+}
 
-  if (separator <= 0 || separator === config.model.length - 1) {
-    throw new Error(
-      `Invalid OpenCode model ID: ${config.model}`,
-    )
-  }
-
-  return {
-    full: config.model,
-    providerID: config.model.slice(0, separator),
-    modelID: config.model.slice(separator + 1),
-  }
+export async function loadAgentModel(agent: string): Promise<ModelRef> {
+  if (!/^[a-z0-9-]+$/.test(agent)) throw new Error(`Unsafe agent name: ${agent}`)
+  const source = await readFile(resolve(REPO_ROOT, `.opencode/agents/${agent}.md`), "utf8")
+  const match = source.match(/^model:\s*(\S+)\s*$/m)
+  if (match?.[1] === undefined) throw new Error(`Agent ${agent} has no model field`)
+  return modelRef(match[1])
 }

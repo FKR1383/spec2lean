@@ -1,7 +1,7 @@
 import { access, readFile, readdir } from "node:fs/promises"
 import { resolve } from "node:path"
 
-import { artifactContractForRun } from "./artifact-contract.js"
+import { artifactContractForRun, stageAttempt } from "./artifact-contract.js"
 import { REPO_ROOT } from "./repo.js"
 import type { RunState } from "./workflow.js"
 
@@ -85,6 +85,15 @@ export async function proofTargets(run: RunState): Promise<ProofTarget[]> {
 
 export function proofArtifactPath(run: RunState): string {
   return artifactContractForRun(run).outputPath
+}
+
+export function verifiedProofArtifactPath(run: RunState): string {
+  if (run.stage === "PROOF_GENERATION") return proofArtifactPath(run)
+  const completedAttempt = stageAttempt(run, "PROOF_GENERATION") - 1
+  if (completedAttempt < 1) {
+    throw new Error(`Run ${run.runId} has no completed proof-generation attempt`)
+  }
+  return `${run.artifactRoot}/lean/${run.leanModuleName}Proofs-v${completedAttempt}.lean`
 }
 
 async function fileExists(repoRelativePath: string): Promise<boolean> {

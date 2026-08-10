@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises"
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path"
 
 import { REPO_ROOT } from "./repo.js"
@@ -14,6 +14,16 @@ import {
 function argument(name: string): string | undefined {
   const index = process.argv.indexOf(name)
   return index === -1 ? undefined : process.argv[index + 1]
+}
+
+function argumentsFor(name: string): string[] {
+  const values: string[] = []
+  for (let index = 0; index < process.argv.length; index += 1) {
+    if (process.argv[index] === name && process.argv[index + 1] !== undefined) {
+      values.push(process.argv[index + 1]!)
+    }
+  }
+  return values
 }
 
 function required(name: string): string {
@@ -40,11 +50,18 @@ async function loadManifest(path: string): Promise<TraceabilityManifest> {
 
 async function build(): Promise<void> {
   const runId = required("--run")
+  const requestedDocument = argument("--document") ?? "semantics"
+  if (requestedDocument !== "semantics" && requestedDocument !== "proofs") {
+    throw new Error("--document must be semantics or proofs")
+  }
+  const sourceBundlePaths = argumentsFor("--source-bundle")
   const manifest = await buildTraceabilityManifest({
     runId,
+    documentRole: requestedDocument === "proofs" ? "PROOFS" : "SEMANTICS",
     leanPath: argument("--lean"),
     semanticPath: argument("--semantics"),
-    sourceBundlePath: argument("--source-bundle"),
+    sourceBundlePaths: sourceBundlePaths.length === 0 ? undefined : sourceBundlePaths,
+    theoremPath: argument("--theorems"),
     includePdfRenditions: process.argv.includes("--pdf-boxes"),
   })
   const outputPath = argument("--output") ?? traceabilityManifestPath(manifest)
@@ -67,6 +84,63 @@ async function validate(): Promise<void> {
   const issues = await verifyTraceabilityManifest(manifest)
   console.log(JSON.stringify({ ok: issues.length === 0, path, issues }, null, 2))
   if (issues.length > 0) process.exitCode = 1
+}
+
+async function audit(): Promise<void> {
+  const runEntries = await readdir(resolve(REPO_ROOT, "runs"), { withFileTypes: true })
+  const rows: Array<{
+    runId: string
+    semantics: number
+    proofs: number
+    entries: number
+    linkedEntries: number
+    invalidManifests: number
+    missing: string[]
+  }> = []
+  for (const runEntry of runEntries.filter((entry) => entry.isDirectory())) {
+    const runId = runEntry.name
+    try {
+      await readFile(resolve(REPO_ROOT, "runs", runId, "run.json"))
+    } catch {
+      continue
+    }
+    let names: string[] = []
+    try {
+      names = (await readdir(resolve(REPO_ROOT, "runs", runId, "traceability")))
+        .filter((name) => /^evidence-[a-f0-9]{64}\.json$/.test(name))
+    } catch {
+      // A run without a traceability directory is reported as missing both roles.
+    }
+    let semantics = 0
+    let proofs = 0
+    let entries = 0
+    let linkedEntries = 0
+    let invalidManifests = 0
+    for (const name of names) {
+      const manifest = await loadManifest(`runs/${runId}/traceability/${name}`)
+      const issues = await verifyTraceabilityManifest(manifest)
+      if (issues.length > 0) {
+        invalidManifests += 1
+        continue
+      }
+      const role = manifest.documentRole ?? "SEMANTICS"
+      if (role === "PROOFS") proofs += 1
+      else semantics += 1
+      entries += manifest.entries.length
+      linkedEntries += manifest.entries.filter((entry) =>
+        entry.semanticIds.length > 0 || entry.evidence.length > 0,
+      ).length
+    }
+    const missing = [
+      ...(semantics === 0 ? ["SEMANTICS"] : []),
+      ...(proofs === 0 ? ["PROOFS"] : []),
+    ]
+    rows.push({ runId, semantics, proofs, entries, linkedEntries, invalidManifests, missing })
+  }
+  rows.sort((left, right) => left.runId.localeCompare(right.runId))
+  const ok = rows.length > 0 && rows.every((row) => row.missing.length === 0 && row.invalidManifests === 0)
+  console.log(JSON.stringify({ ok, runs: rows.length, coverage: rows }, null, 2))
+  if (!ok) process.exitCode = 1
 }
 
 type FeedbackDecision = "CONFIRM_MAPPING" | "REQUEST_CHANGE" | "QUESTION"
@@ -140,14 +214,18 @@ switch (process.argv[2]) {
   case "validate":
     await validate()
     break
+  case "audit":
+    await audit()
+    break
   case "feedback":
     await feedback()
     break
   default:
     throw new Error([
       "Usage:",
-      "  traceability build --run <run-id> [--pdf-boxes] [--lean <path>] [--semantics <path>] [--source-bundle <path>] [--output <path>]",
+      "  traceability build --run <run-id> [--document semantics|proofs] [--pdf-boxes] [--lean <path>] [--semantics <path>] [--source-bundle <path>]... [--theorems <path>] [--output <path>]",
       "  traceability validate --manifest <path>",
+      "  traceability audit",
       "  traceability feedback --manifest <path> --entry <entry-id> --decision CONFIRM_MAPPING|REQUEST_CHANGE|QUESTION --reviewer <name> --comment <text>",
     ].join("\n"))
 }

@@ -1,7 +1,7 @@
 ---
 description: Produces a typed instruction-specific semantic delta against an approved shared environment
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: opencode/deepseek-v4-flash-free
 temperature: 0
 steps: 32
 permission:

@@ -42,23 +42,27 @@ export type EvidenceEntry = {
   declarationName: string
   leanRange: { startLine: number; endLine: number }
   semanticIds: string[]
+  theoremObligationIds?: string[]
   claims: Claim[]
   evidence: Evidence[]
   unresolvedReferences: string[]
 }
 
 export type EvidenceManifest = {
-  schemaVersion: 1
+  schemaVersion: 1 | 2
   manifestType: "spec2lean_evidence_manifest"
   generator: string
   runId: string
   language: string
   specificationVersion: string
   unit: string
+  documentRole?: "SEMANTICS" | "PROOFS"
   sourceManifest: ArtifactFingerprint
   leanDocument: ArtifactFingerprint
   semanticDocument: ArtifactFingerprint
-  sourceBundle: ArtifactFingerprint
+  sourceBundle?: ArtifactFingerprint
+  sourceBundles?: ArtifactFingerprint[]
+  theoremDocument?: ArtifactFingerprint
   entries: EvidenceEntry[]
   diagnostics: {
     declarationsWithoutReferences: string[]

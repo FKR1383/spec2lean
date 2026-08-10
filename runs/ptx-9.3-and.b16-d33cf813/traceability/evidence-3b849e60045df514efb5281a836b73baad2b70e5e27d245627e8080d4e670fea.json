@@ -1,0 +1,1057 @@
+{
+  "schemaVersion": 2,
+  "manifestType": "spec2lean_evidence_manifest",
+  "generator": "spec2lean-traceability-v2",
+  "runId": "ptx-9.3-and.b16-d33cf813",
+  "language": "ptx",
+  "specificationVersion": "9.3",
+  "unit": "and.b16",
+  "documentRole": "SEMANTICS",
+  "sourceManifest": {
+    "path": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+    "sha256": "622e6ce0d3114a909a62726530955993b5f2b98d2f60e45ae1ceb429512208f2"
+  },
+  "leanDocument": {
+    "path": "candidates/ptx/9.3/units/and-b16/lean/AndB16-v1.lean",
+    "sha256": "4abe5059b5d3a2a0803618761dbc50bce8cb0a524791a49b0b2f9cdbddcf3d07"
+  },
+  "semanticDocument": {
+    "path": "candidates/ptx/9.3/units/and-b16/semantics/semantics-v2.json",
+    "sha256": "15bca9dc9b63ba9e507df2634f61443f7c2ef627d4acac8bea88e75b399ca92a"
+  },
+  "sourceBundles": [
+    {
+      "path": "candidates/ptx/9.3/units/and-b16/source-bundles/source-bundle-v4.json",
+      "sha256": "8e68d6496bbc51ab289a5a3673b881bd8516e472133f5203137e1ffb078a9fd5"
+    }
+  ],
+  "entries": [
+    {
+      "entryId": "def:b16Bits:17",
+      "declarationKind": "def",
+      "declarationName": "b16Bits",
+      "leanRange": {
+        "startLine": 17,
+        "endLine": 18
+      },
+      "semanticIds": [
+        "PTX-AND16-SEM2-003"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-AND16-SEM2-003",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "In this run, and.b16 has arity d,a,b and result width 16 bits.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-001",
+            "PTX-9.3-AND16-010"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-AND16-001",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.1",
+            "heading": "Logic and Shift Instructions: and",
+            "anchor": "logic-and-shift-instructions-and",
+            "startLine": 14256,
+            "endLine": 14266,
+            "page": 255
+          },
+          "quotation": "Logic and Shift Instructions: and\nBitwise AND.\nSyntax\nand.type d, a, b;\n.type = { .pred, .b16, .b32, .b64 };"
+        },
+        {
+          "evidenceId": "PTX-9.3-AND16-010",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.1",
+            "heading": "Format and Semantics of Instruction Descriptions",
+            "anchor": "format-and-semantics-of-instruction-descriptions",
+            "startLine": 7509,
+            "endLine": 7511,
+            "page": 129
+          },
+          "quotation": "This section describes each PTX instruction. In addition to the name and the format of the instruction, the semantics are described, followed by examples that attempt to show several possible instantiations of the instruction."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:b16DomainSize:19",
+      "declarationKind": "def",
+      "declarationName": "b16DomainSize",
+      "leanRange": {
+        "startLine": 19,
+        "endLine": 21
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "structure:B16:22",
+      "declarationKind": "structure",
+      "declarationName": "B16",
+      "leanRange": {
+        "startLine": 22,
+        "endLine": 29
+      },
+      "semanticIds": [
+        "PTX-AND16-SEM2-003"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-AND16-SEM2-003",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "In this run, and.b16 has arity d,a,b and result width 16 bits.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-001",
+            "PTX-9.3-AND16-010"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-AND16-001",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.1",
+            "heading": "Logic and Shift Instructions: and",
+            "anchor": "logic-and-shift-instructions-and",
+            "startLine": 14256,
+            "endLine": 14266,
+            "page": 255
+          },
+          "quotation": "Logic and Shift Instructions: and\nBitwise AND.\nSyntax\nand.type d, a, b;\n.type = { .pred, .b16, .b32, .b64 };"
+        },
+        {
+          "evidenceId": "PTX-9.3-AND16-010",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.1",
+            "heading": "Format and Semantics of Instruction Descriptions",
+            "anchor": "format-and-semantics-of-instruction-descriptions",
+            "startLine": 7509,
+            "endLine": 7511,
+            "page": 129
+          },
+          "quotation": "This section describes each PTX instruction. In addition to the name and the format of the instruction, the semantics are described, followed by examples that attempt to show several possible instantiations of the instruction."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "structure:RegId:30",
+      "declarationKind": "structure",
+      "declarationName": "RegId",
+      "leanRange": {
+        "startLine": 30,
+        "endLine": 34
+      },
+      "semanticIds": [
+        "PTX-AND16-SEM2-001"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-AND16-SEM2-001",
+          "classification": "SOURCE_FACT",
+          "statement": "and.b16 belongs to the and instruction family and is specified by Syntax 'and.type d, a, b;' with .type including .b16.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-001"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-AND16-001",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.1",
+            "heading": "Logic and Shift Instructions: and",
+            "anchor": "logic-and-shift-instructions-and",
+            "startLine": 14256,
+            "endLine": 14266,
+            "page": 255
+          },
+          "quotation": "Logic and Shift Instructions: and\nBitwise AND.\nSyntax\nand.type d, a, b;\n.type = { .pred, .b16, .b32, .b64 };"
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "structure:PredId:35",
+      "declarationKind": "structure",
+      "declarationName": "PredId",
+      "leanRange": {
+        "startLine": 35,
+        "endLine": 40
+      },
+      "semanticIds": [
+        "PTX-AND16-SEM2-004"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-AND16-SEM2-004",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "Predicated execution: @p executes when p true, @!p when p false; unguarded executes always.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-006",
+            "PTX-9.3-AND16-007"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-AND16-006",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.3",
+            "heading": "Predicated Execution",
+            "anchor": "predicated-execution",
+            "startLine": 7547,
+            "endLine": 7550,
+            "page": 132
+          },
+          "quotation": "All instructions have an optional guard predicate which controls conditional execution of the instruction. The syntax to specify conditional execution is to prefix an instruction with @{!}p, where p is a predicate variable, optionally negated. Instructions without a guard predicate are executed unconditionally."
+        },
+        {
+          "evidenceId": "PTX-9.3-AND16-007",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "anchor": "control-flow-instructions-at",
+            "startLine": 21834,
+            "endLine": 21841,
+            "page": 400
+          },
+          "quotation": "@{!}p    instruction;\n\nDescription\nExecute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:Destination:41",
+      "declarationKind": "inductive",
+      "declarationName": "Destination",
+      "leanRange": {
+        "startLine": 41,
+        "endLine": 45
+      },
+      "semanticIds": [
+        "PTX-AND16-SEM2-001",
+        "PTX-AND16-SEM2-006",
+        "PTX-AND16-SEM2-008"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-AND16-SEM2-001",
+          "classification": "SOURCE_FACT",
+          "statement": "and.b16 belongs to the and instruction family and is specified by Syntax 'and.type d, a, b;' with .type including .b16.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-001"
+          ]
+        },
+        {
+          "semanticId": "PTX-AND16-SEM2-006",
+          "classification": "OPEN_QUESTION",
+          "statement": "Whether source operand a can be immediate for and.b16 is not evidenced.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-004"
+          ]
+        },
+        {
+          "semanticId": "PTX-AND16-SEM2-008",
+          "classification": "OPEN_QUESTION",
+          "statement": "Whether '_' bit-bucket destination is legal for and.b16 is not explicitly confirmed in this bounded source slice.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-005"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-AND16-001",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.1",
+            "heading": "Logic and Shift Instructions: and",
+            "anchor": "logic-and-shift-instructions-and",
+            "startLine": 14256,
+            "endLine": 14266,
+            "page": 255
+          },
+          "quotation": "Logic and Shift Instructions: and\nBitwise AND.\nSyntax\nand.type d, a, b;\n.type = { .pred, .b16, .b32, .b64 };"
+        },
+        {
+          "evidenceId": "PTX-9.3-AND16-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.1",
+            "heading": "Logic and Shift Instructions: and",
+            "anchor": "logic-and-shift-instructions-and",
+            "startLine": 14285,
+            "endLine": 14286,
+            "page": 255
+          },
+          "quotation": "and.b32  x,q,r;\nand.b32  sign,fpvalue,0x80000000;"
+        },
+        {
+          "evidenceId": "PTX-9.3-AND16-005",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.2",
+            "heading": "PTX Instructions",
+            "anchor": "ptx-instructions",
+            "startLine": 7526,
+            "endLine": 7535,
+            "page": 131
+          },
+          "quotation": "For instructions that create a result value, the d operand is the destination operand, while a, b, and c are source operands.\nFor some instructions the destination operand is optional. A bit bucket operand denoted with an underscore (_) may be used in place of a destination register."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:Guard:46",
+      "declarationKind": "inductive",
+      "declarationName": "Guard",
+      "leanRange": {
+        "startLine": 46,
+        "endLine": 53
+      },
+      "semanticIds": [
+        "PTX-AND16-SEM2-004"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-AND16-SEM2-004",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "Predicated execution: @p executes when p true, @!p when p false; unguarded executes always.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-006",
+            "PTX-9.3-AND16-007"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-AND16-006",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.3",
+            "heading": "Predicated Execution",
+            "anchor": "predicated-execution",
+            "startLine": 7547,
+            "endLine": 7550,
+            "page": 132
+          },
+          "quotation": "All instructions have an optional guard predicate which controls conditional execution of the instruction. The syntax to specify conditional execution is to prefix an instruction with @{!}p, where p is a predicate variable, optionally negated. Instructions without a guard predicate are executed unconditionally."
+        },
+        {
+          "evidenceId": "PTX-9.3-AND16-007",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "anchor": "control-flow-instructions-at",
+            "startLine": 21834,
+            "endLine": 21841,
+            "page": 400
+          },
+          "quotation": "@{!}p    instruction;\n\nDescription\nExecute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "abbrev:SourceA:54",
+      "declarationKind": "abbrev",
+      "declarationName": "SourceA",
+      "leanRange": {
+        "startLine": 54,
+        "endLine": 54
+      },
+      "semanticIds": [
+        "PTX-AND16-SEM2-006",
+        "PTX-AND16-SEM2-007"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-AND16-SEM2-006",
+          "classification": "OPEN_QUESTION",
+          "statement": "Whether source operand a can be immediate for and.b16 is not evidenced.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-004"
+          ]
+        },
+        {
+          "semanticId": "PTX-AND16-SEM2-007",
+          "classification": "OPEN_QUESTION",
+          "statement": "Whether source operand b can be immediate for and.b16 is not evidenced in .b16-specific examples.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-004"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-AND16-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.1",
+            "heading": "Logic and Shift Instructions: and",
+            "anchor": "logic-and-shift-instructions-and",
+            "startLine": 14285,
+            "endLine": 14286,
+            "page": 255
+          },
+          "quotation": "and.b32  x,q,r;\nand.b32  sign,fpvalue,0x80000000;"
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "abbrev:SourceB:55",
+      "declarationKind": "abbrev",
+      "declarationName": "SourceB",
+      "leanRange": {
+        "startLine": 55,
+        "endLine": 57
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "structure:AndB16Instruction:58",
+      "declarationKind": "structure",
+      "declarationName": "AndB16Instruction",
+      "leanRange": {
+        "startLine": 58,
+        "endLine": 66
+      },
+      "semanticIds": [
+        "PTX-AND16-SEM2-001",
+        "PTX-AND16-SEM2-003"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-AND16-SEM2-001",
+          "classification": "SOURCE_FACT",
+          "statement": "and.b16 belongs to the and instruction family and is specified by Syntax 'and.type d, a, b;' with .type including .b16.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-001"
+          ]
+        },
+        {
+          "semanticId": "PTX-AND16-SEM2-003",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "In this run, and.b16 has arity d,a,b and result width 16 bits.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-001",
+            "PTX-9.3-AND16-010"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-AND16-001",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.1",
+            "heading": "Logic and Shift Instructions: and",
+            "anchor": "logic-and-shift-instructions-and",
+            "startLine": 14256,
+            "endLine": 14266,
+            "page": 255
+          },
+          "quotation": "Logic and Shift Instructions: and\nBitwise AND.\nSyntax\nand.type d, a, b;\n.type = { .pred, .b16, .b32, .b64 };"
+        },
+        {
+          "evidenceId": "PTX-9.3-AND16-010",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.1",
+            "heading": "Format and Semantics of Instruction Descriptions",
+            "anchor": "format-and-semantics-of-instruction-descriptions",
+            "startLine": 7509,
+            "endLine": 7511,
+            "page": 129
+          },
+          "quotation": "This section describes each PTX instruction. In addition to the name and the format of the instruction, the semantics are described, followed by examples that attempt to show several possible instantiations of the instruction."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "structure:MachineState:67",
+      "declarationKind": "structure",
+      "declarationName": "MachineState",
+      "leanRange": {
+        "startLine": 67,
+        "endLine": 71
+      },
+      "semanticIds": [
+        "PTX-AND16-SEM2-002",
+        "PTX-AND16-SEM2-005",
+        "PTX-AND16-SEM2-008"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-AND16-SEM2-002",
+          "classification": "SOURCE_FACT",
+          "statement": "and execution computes bitwise AND with semantics d = a & b.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-002"
+          ]
+        },
+        {
+          "semanticId": "PTX-AND16-SEM2-005",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "False-guard behavior is no-op/unmodified state, via explicit section 9.7.13.2 semantics.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-007",
+            "PTX-9.3-AND16-008"
+          ]
+        },
+        {
+          "semanticId": "PTX-AND16-SEM2-008",
+          "classification": "OPEN_QUESTION",
+          "statement": "Whether '_' bit-bucket destination is legal for and.b16 is not explicitly confirmed in this bounded source slice.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-005"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-AND16-002",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.1",
+            "heading": "Logic and Shift Instructions: and",
+            "anchor": "logic-and-shift-instructions-and",
+            "startLine": 14270,
+            "endLine": 14274,
+            "page": 255
+          },
+          "quotation": "Compute the bit-wise and operation for the bits in a and b.\nSemantics\nd = a & b;"
+        },
+        {
+          "evidenceId": "PTX-9.3-AND16-005",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.2",
+            "heading": "PTX Instructions",
+            "anchor": "ptx-instructions",
+            "startLine": 7526,
+            "endLine": 7535,
+            "page": 131
+          },
+          "quotation": "For instructions that create a result value, the d operand is the destination operand, while a, b, and c are source operands.\nFor some instructions the destination operand is optional. A bit bucket operand denoted with an underscore (_) may be used in place of a destination register."
+        },
+        {
+          "evidenceId": "PTX-9.3-AND16-007",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "anchor": "control-flow-instructions-at",
+            "startLine": 21834,
+            "endLine": 21841,
+            "page": 400
+          },
+          "quotation": "@{!}p    instruction;\n\nDescription\nExecute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing."
+        },
+        {
+          "evidenceId": "PTX-9.3-AND16-008",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "anchor": "control-flow-instructions-at",
+            "startLine": 21840,
+            "endLine": 21841,
+            "page": 400
+          },
+          "quotation": "Semantics\nIf {!}p then instruction"
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:evalSourceA:72",
+      "declarationKind": "def",
+      "declarationName": "evalSourceA",
+      "leanRange": {
+        "startLine": 72,
+        "endLine": 75
+      },
+      "semanticIds": [
+        "PTX-AND16-SEM2-002"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-AND16-SEM2-002",
+          "classification": "SOURCE_FACT",
+          "statement": "and execution computes bitwise AND with semantics d = a & b.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-002"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-AND16-002",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.1",
+            "heading": "Logic and Shift Instructions: and",
+            "anchor": "logic-and-shift-instructions-and",
+            "startLine": 14270,
+            "endLine": 14274,
+            "page": 255
+          },
+          "quotation": "Compute the bit-wise and operation for the bits in a and b.\nSemantics\nd = a & b;"
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:evalSourceB:76",
+      "declarationKind": "def",
+      "declarationName": "evalSourceB",
+      "leanRange": {
+        "startLine": 76,
+        "endLine": 79
+      },
+      "semanticIds": [
+        "PTX-AND16-SEM2-002"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-AND16-SEM2-002",
+          "classification": "SOURCE_FACT",
+          "statement": "and execution computes bitwise AND with semantics d = a & b.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-002"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-AND16-002",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.1",
+            "heading": "Logic and Shift Instructions: and",
+            "anchor": "logic-and-shift-instructions-and",
+            "startLine": 14270,
+            "endLine": 14274,
+            "page": 255
+          },
+          "quotation": "Compute the bit-wise and operation for the bits in a and b.\nSemantics\nd = a & b;"
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:evalGuard:80",
+      "declarationKind": "def",
+      "declarationName": "evalGuard",
+      "leanRange": {
+        "startLine": 80,
+        "endLine": 88
+      },
+      "semanticIds": [
+        "PTX-AND16-SEM2-004",
+        "PTX-AND16-SEM2-005"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-AND16-SEM2-004",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "Predicated execution: @p executes when p true, @!p when p false; unguarded executes always.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-006",
+            "PTX-9.3-AND16-007"
+          ]
+        },
+        {
+          "semanticId": "PTX-AND16-SEM2-005",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "False-guard behavior is no-op/unmodified state, via explicit section 9.7.13.2 semantics.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-007",
+            "PTX-9.3-AND16-008"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-AND16-006",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.3",
+            "heading": "Predicated Execution",
+            "anchor": "predicated-execution",
+            "startLine": 7547,
+            "endLine": 7550,
+            "page": 132
+          },
+          "quotation": "All instructions have an optional guard predicate which controls conditional execution of the instruction. The syntax to specify conditional execution is to prefix an instruction with @{!}p, where p is a predicate variable, optionally negated. Instructions without a guard predicate are executed unconditionally."
+        },
+        {
+          "evidenceId": "PTX-9.3-AND16-007",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "anchor": "control-flow-instructions-at",
+            "startLine": 21834,
+            "endLine": 21841,
+            "page": 400
+          },
+          "quotation": "@{!}p    instruction;\n\nDescription\nExecute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing."
+        },
+        {
+          "evidenceId": "PTX-9.3-AND16-008",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "anchor": "control-flow-instructions-at",
+            "startLine": 21840,
+            "endLine": 21841,
+            "page": 400
+          },
+          "quotation": "Semantics\nIf {!}p then instruction"
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:andValue:89",
+      "declarationKind": "def",
+      "declarationName": "andValue",
+      "leanRange": {
+        "startLine": 89,
+        "endLine": 94
+      },
+      "semanticIds": [
+        "PTX-AND16-SEM2-002"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-AND16-SEM2-002",
+          "classification": "SOURCE_FACT",
+          "statement": "and execution computes bitwise AND with semantics d = a & b.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-002"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-AND16-002",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.1",
+            "heading": "Logic and Shift Instructions: and",
+            "anchor": "logic-and-shift-instructions-and",
+            "startLine": 14270,
+            "endLine": 14274,
+            "page": 255
+          },
+          "quotation": "Compute the bit-wise and operation for the bits in a and b.\nSemantics\nd = a & b;"
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:updateDestination:95",
+      "declarationKind": "def",
+      "declarationName": "updateDestination",
+      "leanRange": {
+        "startLine": 95,
+        "endLine": 102
+      },
+      "semanticIds": [
+        "PTX-AND16-SEM2-002",
+        "PTX-AND16-SEM2-008"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-AND16-SEM2-002",
+          "classification": "SOURCE_FACT",
+          "statement": "and execution computes bitwise AND with semantics d = a & b.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-002"
+          ]
+        },
+        {
+          "semanticId": "PTX-AND16-SEM2-008",
+          "classification": "OPEN_QUESTION",
+          "statement": "Whether '_' bit-bucket destination is legal for and.b16 is not explicitly confirmed in this bounded source slice.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-005"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-AND16-002",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.1",
+            "heading": "Logic and Shift Instructions: and",
+            "anchor": "logic-and-shift-instructions-and",
+            "startLine": 14270,
+            "endLine": 14274,
+            "page": 255
+          },
+          "quotation": "Compute the bit-wise and operation for the bits in a and b.\nSemantics\nd = a & b;"
+        },
+        {
+          "evidenceId": "PTX-9.3-AND16-005",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.2",
+            "heading": "PTX Instructions",
+            "anchor": "ptx-instructions",
+            "startLine": 7526,
+            "endLine": 7535,
+            "page": 131
+          },
+          "quotation": "For instructions that create a result value, the d operand is the destination operand, while a, b, and c are source operands.\nFor some instructions the destination operand is optional. A bit bucket operand denoted with an underscore (_) may be used in place of a destination register."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:ExecOutcome:103",
+      "declarationKind": "inductive",
+      "declarationName": "ExecOutcome",
+      "leanRange": {
+        "startLine": 103,
+        "endLine": 106
+      },
+      "semanticIds": [
+        "PTX-AND16-SEM2-005"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-AND16-SEM2-005",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "False-guard behavior is no-op/unmodified state, via explicit section 9.7.13.2 semantics.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-007",
+            "PTX-9.3-AND16-008"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-AND16-007",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "anchor": "control-flow-instructions-at",
+            "startLine": 21834,
+            "endLine": 21841,
+            "page": 400
+          },
+          "quotation": "@{!}p    instruction;\n\nDescription\nExecute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing."
+        },
+        {
+          "evidenceId": "PTX-9.3-AND16-008",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "anchor": "control-flow-instructions-at",
+            "startLine": 21840,
+            "endLine": 21841,
+            "page": 400
+          },
+          "quotation": "Semantics\nIf {!}p then instruction"
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:mkB16:107",
+      "declarationKind": "def",
+      "declarationName": "mkB16",
+      "leanRange": {
+        "startLine": 107,
+        "endLine": 109
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:mkState:110",
+      "declarationKind": "def",
+      "declarationName": "mkState",
+      "leanRange": {
+        "startLine": 110,
+        "endLine": 116
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:execAndB16:117",
+      "declarationKind": "def",
+      "declarationName": "execAndB16",
+      "leanRange": {
+        "startLine": 117,
+        "endLine": 128
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:AndB16Step:129",
+      "declarationKind": "inductive",
+      "declarationName": "AndB16Step",
+      "leanRange": {
+        "startLine": 129,
+        "endLine": 141
+      },
+      "semanticIds": [
+        "PTX-AND16-SEM2-002"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-AND16-SEM2-002",
+          "classification": "SOURCE_FACT",
+          "statement": "and execution computes bitwise AND with semantics d = a & b.",
+          "evidenceIds": [
+            "PTX-9.3-AND16-002"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-AND16-002",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.1",
+            "heading": "Logic and Shift Instructions: and",
+            "anchor": "logic-and-shift-instructions-and",
+            "startLine": 14270,
+            "endLine": 14274,
+            "page": 255
+          },
+          "quotation": "Compute the bit-wise and operation for the bits in a and b.\nSemantics\nd = a & b;"
+        }
+      ],
+      "unresolvedReferences": []
+    }
+  ],
+  "diagnostics": {
+    "declarationsWithoutReferences": [
+      "b16DomainSize",
+      "SourceB",
+      "mkB16",
+      "mkState",
+      "execAndB16"
+    ],
+    "unresolvedReferences": []
+  }
+}

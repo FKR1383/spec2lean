@@ -1,0 +1,898 @@
+{
+  "schemaVersion": 2,
+  "manifestType": "spec2lean_evidence_manifest",
+  "generator": "spec2lean-traceability-v2",
+  "runId": "ptx-9.3-add.u32-574d03c0",
+  "language": "ptx",
+  "specificationVersion": "9.3",
+  "unit": "add.u32",
+  "documentRole": "PROOFS",
+  "sourceManifest": {
+    "path": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+    "sha256": "622e6ce0d3114a909a62726530955993b5f2b98d2f60e45ae1ceb429512208f2"
+  },
+  "leanDocument": {
+    "path": "accepted/ptx/9.3/add-u32/lean/AddU32Proofs.lean",
+    "sha256": "b2a0e076725c1e25112ff1d9433936165bb4dfd98ec9665f63a4c750bd21149d"
+  },
+  "semanticDocument": {
+    "path": "accepted/ptx/9.3/add-u32/semantics/add-u32-v2.json",
+    "sha256": "76499344dc8767c7acca596a8b8bcb8aad671779b581e74bf94d57dd52f9bbb6"
+  },
+  "sourceBundles": [
+    {
+      "path": "accepted/ptx/9.3/add-u32/source-bundles/add-u32-v1.json",
+      "sha256": "c137078da5e8e0a475a090ae16409cd89d6ee7b93911f0b78a9a36f94d2a4924"
+    },
+    {
+      "path": "accepted/ptx/9.3/add-u32/source-bundles/add-u32-blockers-supplement-v2.json",
+      "sha256": "a74ab1167e4a20d5aa37360713aec8a28ee219763c93f28e3a47c57ae81c1fec"
+    }
+  ],
+  "theoremDocument": {
+    "path": "accepted/ptx/9.3/add-u32/theorems/add-u32-obligations-v1.json",
+    "sha256": "411cdd55fcd2551a4850a31987d52453b4d5f4f92457d22b115a39040b143a70"
+  },
+  "entries": [
+    {
+      "entryId": "theorem:execAddU32_total_on_well_formed_lookup_domain:47",
+      "declarationKind": "theorem",
+      "declarationName": "execAddU32_total_on_well_formed_lookup_domain",
+      "leanRange": {
+        "startLine": 47,
+        "endLine": 82
+      },
+      "semanticIds": [
+        "PTX-ADD-SEM2-038",
+        "PTX-ADD-SEM2-044",
+        "PTX-ADD-SEM2-045",
+        "PTX-ADD-SEM2-046",
+        "PTX-ADD-SEM2-049",
+        "PTX-ADD-SEM2-050"
+      ],
+      "theoremObligationIds": [
+        "PTX-ADD-THM-001"
+      ],
+      "claims": [
+        {
+          "semanticId": "PTX-ADD-SEM2-038",
+          "classification": "OPEN_QUESTION",
+          "statement": "No dynamic precondition is stated in the evidence for add.u32 (for example, no requirement on the values held by source operands, and no carry-flag or status-register requirement). None is asserted.",
+          "evidenceIds": [
+            "PTX-9.3-ADD-004",
+            "PTX-9.3-ADD-006"
+          ]
+        },
+        {
+          "semanticId": "PTX-ADD-SEM2-044",
+          "classification": "OPEN_QUESTION",
+          "statement": "No explicit error, trap, or exceptional-behavior clause for add (or add.u32) was found in the evidence (bundle coverage area 17 NOT_FOUND; GAP-4). The absence is not asserted as a positive source fact; no error or trap behavior is invented.",
+          "evidenceIds": [
+            "PTX-9.3-ADD-004",
+            "PTX-9.3-ADD-006"
+          ]
+        },
+        {
+          "semanticId": "PTX-ADD-SEM2-045",
+          "classification": "OPEN_QUESTION",
+          "statement": "No explicit undefined-behavior clause for add (or add.u32) was found in the evidence (GAP-4). No undefined-behavior claim is made.",
+          "evidenceIds": [
+            "PTX-9.3-ADD-004",
+            "PTX-9.3-ADD-006"
+          ]
+        },
+        {
+          "semanticId": "PTX-ADD-SEM2-046",
+          "classification": "OPEN_QUESTION",
+          "statement": "No explicit implementation-defined-behavior clause for add (or add.u32) was found in the evidence. No implementation-defined-behavior claim is made.",
+          "evidenceIds": [
+            "PTX-9.3-ADD-004"
+          ]
+        },
+        {
+          "semanticId": "PTX-ADD-SEM2-049",
+          "classification": "DESIGN_DEPENDENCY",
+          "statement": "Minimal machine state design (architecture D-5, D-14): the state for base add.u32 is the pair (value-register file, predicate-register file); no memory, shared, special-register, or concurrency state is required by the add.u32 syntax and description.",
+          "evidenceIds": [
+            "PTX-9.3-ADD-003",
+            "PTX-9.3-ADD-004",
+            "PTX-9.3-ADD-022"
+          ]
+        },
+        {
+          "semanticId": "PTX-ADD-SEM2-050",
+          "classification": "DESIGN_DEPENDENCY",
+          "statement": "Execution-result representation design (architecture D-8): an instruction-local outcome has at least two cases, executed (with updated destination) and guard-false (thread does nothing; no state change); no error constructor is proposed because no explicit exceptional behavior for base add is evidenced.",
+          "evidenceIds": [
+            "PTX-9.3-ADD-004",
+            "PTX-9.3-ADD-016",
+            "PTX-9.3-ADD-SUP2-006"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-ADD-003",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.1.1",
+            "heading": "Integer Arithmetic Instructions: add",
+            "anchor": "integer-arithmetic-instructions-add",
+            "startLine": 8763,
+            "endLine": 8774
+          },
+          "quotation": "add.type1        d, a, b;\nadd{.sat}.type2  d, a, b;\n\n.type1 = { .u16, .u64,\n           .s16, .s64 };\n\n.type2 = { .u32, .u16x2, .u8x4,\n           .s32, .s16x2, .s8x4 };"
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.1.1",
+            "heading": "Integer Arithmetic Instructions: add",
+            "anchor": "integer-arithmetic-instructions-add",
+            "startLine": 8775,
+            "endLine": 8776
+          },
+          "quotation": "Performs addition and writes the resulting value into a destination register."
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-006",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.1.1",
+            "heading": "Integer Arithmetic Instructions: add",
+            "anchor": "integer-arithmetic-instructions-add",
+            "startLine": 8785,
+            "endLine": 8811
+          },
+          "quotation": "if (type == u16x2 || type == s16x2) {\n    iA[0] = a[0:15];\n    iA[1] = a[16:31];\n    iB[0] = b[0:15];\n    iB[1] = b[16:31];\n    for (i = 0; i < 2; i++) {\n         d[i] = iA[i] + iB[i];\n    }\n} else if (type == u8x4 || type == s8x4) {\n    iA[0] = a[0:7];\n    iA[1] = a[8:15];\n    iA[2] = a[16:23];\n    iA[3] = a[24:31];\n    iB[0] = b[0:7];\n    iB[1] = b[8:15];\n    iB[2] = b[16:23];\n    iB[3] = b[24:31];\n    for (i = 0; i < 4; i++) {\n         d[i] = iA[i] + iB[i];\n    }\n} else {\n    d = a + b;\n}"
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-016",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.3",
+            "heading": "Predicated Execution",
+            "anchor": "predicated-execution",
+            "startLine": 7547,
+            "endLine": 7550
+          },
+          "quotation": "All instructions have an optional guard predicate which controls conditional execution of the instruction. The syntax to specify conditional execution is to prefix an instruction with @{!}p, where p is a predicate variable, optionally negated. Instructions without a guard predicate are executed unconditionally."
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-022",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.1.1",
+            "heading": "Register State Space",
+            "anchor": "register-state-space",
+            "startLine": 2617,
+            "endLine": 2631
+          },
+          "quotation": "Registers (.reg state space) are fast storage locations. The number of registers is limited, and will vary from platform to platform. When the limit is exceeded, register variables will be spilled to memory, causing changes in performance. For each architecture, there is a recommended maximum number of registers to use (see the CUDA Programming Guide for details).\nRegisters may be typed (signed integer, unsigned integer, floating point, predicate) or untyped. Register size is restricted; aside from predicate registers which are 1-bit, scalar registers have a width of 8-, 16-, 32-, 64-, or 128-bits, and vector registers have a width of 16-, 32-, 64-, or 128-bits. The most common use of 8-bit registers is with ld, st, and cvt instructions, or as elements of vector tuples.\nRegisters differ from the other state spaces in that they are not fully addressable, i.e., it is not possible to refer to the address of a register. When compiling to use the Application Binary Interface (ABI), register variables are restricted to function scope and may not be declared at module scope. When compiling legacy PTX code (ISA versions prior to 3.0) containing module-scoped .reg variables, the compiler silently disables use of the ABI. Registers may have alignment boundaries required by multi-word loads and stores."
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-SUP2-006",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "anchor": "control-flow-instructions-at"
+          },
+          "quotation": "Execute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "theorem:execAddU32_result_conforms_modulo_with_read_before_write:83",
+      "declarationKind": "theorem",
+      "declarationName": "execAddU32_result_conforms_modulo_with_read_before_write",
+      "leanRange": {
+        "startLine": 83,
+        "endLine": 111
+      },
+      "semanticIds": [
+        "PTX-ADD-SEM2-016",
+        "PTX-ADD-SEM2-025",
+        "PTX-ADD-SEM2-026",
+        "PTX-ADD-SEM2-029",
+        "PTX-ADD-SEM2-043"
+      ],
+      "theoremObligationIds": [
+        "PTX-ADD-THM-002"
+      ],
+      "claims": [
+        {
+          "semanticId": "PTX-ADD-SEM2-016",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "Given the human-approved result rule, the destination update on execution is fully determined for all .u32 source operand pairs: when the complete guard expression evaluates true and d is a register, d is updated with (a + b) mod 2^32.",
+          "evidenceIds": [
+            "PTX-9.3-ADD-004",
+            "PTX-9.3-ADD-006"
+          ]
+        },
+        {
+          "semanticId": "PTX-ADD-SEM2-025",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "State read: the instruction reads source operand a. When a is a register, its current (pre-instruction) value is read from the value-register file; when a is a constant immediate, the immediate value is used.",
+          "evidenceIds": [
+            "PTX-9.3-ADD-004",
+            "PTX-9.3-ADD-006",
+            "PTX-9.3-ADD-012"
+          ]
+        },
+        {
+          "semanticId": "PTX-ADD-SEM2-026",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "State read: the instruction reads source operand b. When b is a register, its current (pre-instruction) value is read from the value-register file; when b is a constant immediate, the immediate value is used.",
+          "evidenceIds": [
+            "PTX-9.3-ADD-004",
+            "PTX-9.3-ADD-006",
+            "PTX-9.3-ADD-012"
+          ]
+        },
+        {
+          "semanticId": "PTX-ADD-SEM2-029",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "State write detail: when executing with a real destination register, only the destination update required by the bounded semantics is proposed, and the update value is (a + b) mod 2^32 under the human-approved assumption (PTX-ADD-SEM2-015). No other state write is proposed.",
+          "evidenceIds": [
+            "PTX-9.3-ADD-004",
+            "PTX-9.3-ADD-006"
+          ]
+        },
+        {
+          "semanticId": "PTX-ADD-SEM2-043",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "Aliasing/read-before-write: the destination register may also appear as a source operand (official example 'add.u32 %r, %r, 4;' has d == a). The result is computed from the source values read before the destination update, so a destination that aliases a source does not corrupt the source value used.",
+          "evidenceIds": [
+            "PTX-9.3-ADD-004",
+            "PTX-9.3-ADD-006",
+            "PTX-9.3-ADD-025"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-ADD-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.1.1",
+            "heading": "Integer Arithmetic Instructions: add",
+            "anchor": "integer-arithmetic-instructions-add",
+            "startLine": 8775,
+            "endLine": 8776
+          },
+          "quotation": "Performs addition and writes the resulting value into a destination register."
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-006",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.1.1",
+            "heading": "Integer Arithmetic Instructions: add",
+            "anchor": "integer-arithmetic-instructions-add",
+            "startLine": 8785,
+            "endLine": 8811
+          },
+          "quotation": "if (type == u16x2 || type == s16x2) {\n    iA[0] = a[0:15];\n    iA[1] = a[16:31];\n    iB[0] = b[0:15];\n    iB[1] = b[16:31];\n    for (i = 0; i < 2; i++) {\n         d[i] = iA[i] + iB[i];\n    }\n} else if (type == u8x4 || type == s8x4) {\n    iA[0] = a[0:7];\n    iA[1] = a[8:15];\n    iA[2] = a[16:23];\n    iA[3] = a[24:31];\n    iB[0] = b[0:7];\n    iB[1] = b[8:15];\n    iB[2] = b[16:23];\n    iB[3] = b[24:31];\n    for (i = 0; i < 4; i++) {\n         d[i] = iA[i] + iB[i];\n    }\n} else {\n    d = a + b;\n}"
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-012",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.1",
+            "heading": "Integer Arithmetic Instructions",
+            "anchor": "integer-arithmetic-instructions",
+            "startLine": 8728,
+            "endLine": 8729
+          },
+          "quotation": "Integer arithmetic instructions operate on the integer types in register and constant immediate forms. The integer arithmetic instructions are:"
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-025",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.1.6.4",
+            "heading": "Device Function Parameters",
+            "anchor": "device-function-parameters",
+            "startLine": 2888,
+            "endLine": 2907
+          },
+          "quotation": "// pass array of up to eight floating-point values in buffer\n.func foo ( .param .b32 N, .param .b32 buffer[32] )\n{\n    .reg .u32  %n, %r;\n    .reg .f32  %f;\n    .reg .pred %p;\n\n    ld.param.u32 %n, [N];\n    mov.u32      %r, buffer;  // forces buffer to .local state space\nLoop:\n    setp.eq.u32  %p, %n, 0;\n@%p bra         Done;\n    ld.local.f32 %f, [%r];\n    ...\n    add.u32      %r, %r, 4;\n    sub.u32      %n, %n, 1;\n    bra          Loop;\nDone:\n    ...\n}"
+        }
+      ],
+      "unresolvedReferences": [
+        "PTX-ADD-SEM2-015"
+      ]
+    },
+    {
+      "entryId": "theorem:execAddU32_guard_false_preserves_state:112",
+      "declarationKind": "theorem",
+      "declarationName": "execAddU32_guard_false_preserves_state",
+      "leanRange": {
+        "startLine": 112,
+        "endLine": 131
+      },
+      "semanticIds": [
+        "PTX-ADD-SEM2-022",
+        "PTX-ADD-SEM2-023",
+        "PTX-ADD-SEM2-024",
+        "PTX-ADD-SEM2-031"
+      ],
+      "theoremObligationIds": [
+        "PTX-ADD-THM-003"
+      ],
+      "claims": [
+        {
+          "semanticId": "PTX-ADD-SEM2-022",
+          "classification": "SOURCE_FACT",
+          "statement": "The predication construct section 9.7.13.2 (Control Flow Instructions: @) explicitly states: 'Execute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing.' with Semantics 'If {!}p then instruction'. The clause exists in both the official PDF (page 400) and the official HTML (anchor control-flow-instructions-at, lines 21826-21841).",
+          "evidenceIds": [
+            "PTX-9.3-ADD-SUP2-006",
+            "PTX-9.3-ADD-SUP2-007"
+          ]
+        },
+        {
+          "semanticId": "PTX-ADD-SEM2-023",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "Complete guard-expression evaluation model: no guard -> the complete guard expression is true (unconditional execution); @p -> the complete guard expression is the value of predicate register p; @!p -> the complete guard expression is the logical negation of the value of predicate register p. The instruction executes if and only if the complete guard expression evaluates true. The underlying predicate value is not confused with the evaluated guard expression.",
+          "evidenceIds": [
+            "PTX-9.3-ADD-011",
+            "PTX-9.3-ADD-014",
+            "PTX-9.3-ADD-016",
+            "PTX-9.3-ADD-018",
+            "PTX-9.3-ADD-SUP2-005"
+          ]
+        },
+        {
+          "semanticId": "PTX-ADD-SEM2-024",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "When the complete guard expression evaluates false for add.u32, the thread does nothing: the instruction is not executed and no machine-state component changes (the destination register d is not updated, source operands are not modified, the guard predicate register is not modified, and no other value-register or predicate-register component changes). This is derived from the explicit predication clause (section 9.7.13.2; PDF page 400; HTML lines 21826-21841) applied to add.u32 via universal predication ('All PTX instructions may be predicated') and the official guarded add example '@p add.u32 x,y,z;'. BLOCK-2 is resolved by official specification evidence, not by a human assumption.",
+          "evidenceIds": [
+            "PTX-9.3-ADD-010",
+            "PTX-9.3-ADD-011",
+            "PTX-9.3-ADD-SUP2-005",
+            "PTX-9.3-ADD-SUP2-006",
+            "PTX-9.3-ADD-SUP2-007"
+          ]
+        },
+        {
+          "semanticId": "PTX-ADD-SEM2-031",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "State write when the complete guard expression evaluates false: no state write occurs; the thread does nothing and the machine state is unchanged (source-supported via section 9.7.13.2).",
+          "evidenceIds": [
+            "PTX-9.3-ADD-010",
+            "PTX-9.3-ADD-011",
+            "PTX-9.3-ADD-SUP2-005",
+            "PTX-9.3-ADD-SUP2-006",
+            "PTX-9.3-ADD-SUP2-007"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-ADD-010",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.1.1",
+            "heading": "Integer Arithmetic Instructions: add",
+            "anchor": "integer-arithmetic-instructions-add",
+            "startLine": 8834,
+            "endLine": 8841
+          },
+          "quotation": "@p  add.u32     x,y,z;\n    add.sat.s32 c,c,1;\n    add.u16x2   u,v,w;\n    add.s8x4.sat p, q, r;"
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-011",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7",
+            "heading": "Instructions",
+            "anchor": "instructions",
+            "startLine": 8722,
+            "endLine": 8723
+          },
+          "quotation": "All PTX instructions may be predicated. In the following descriptions, the optional guard predicate is omitted from the syntax."
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-014",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.2",
+            "heading": "PTX Instructions",
+            "anchor": "ptx-instructions",
+            "startLine": 7517,
+            "endLine": 7527
+          },
+          "quotation": "PTX instructions generally have from zero to four operands, plus an optional guard predicate appearing after an @ symbol to the left of the opcode:\n@p   opcode;\n@p   opcode a;\n@p   opcode d, a;\n@p   opcode d, a, b;\n@p   opcode d, a, b, c;\nFor instructions that create a result value, the d operand is the destination operand, while a, b, and c are source operands."
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-016",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.3",
+            "heading": "Predicated Execution",
+            "anchor": "predicated-execution",
+            "startLine": 7547,
+            "endLine": 7550
+          },
+          "quotation": "All instructions have an optional guard predicate which controls conditional execution of the instruction. The syntax to specify conditional execution is to prefix an instruction with @{!}p, where p is a predicate variable, optionally negated. Instructions without a guard predicate are executed unconditionally."
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-018",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.3",
+            "heading": "Predicated Execution",
+            "anchor": "predicated-execution",
+            "startLine": 7561,
+            "endLine": 7572
+          },
+          "quotation": "      setp.lt.s32  p, i, n;    // p = (i < n)\n@p    add.s32      j, j, 1;    // if i < n, add 1 to j\n\n      setp.lt.s32  p, i, n;    // compare i to n\n@!p   bra  L1;                 // if False, branch over\n      add.s32      j, j, 1;\nL1:     ..."
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-SUP2-005",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.3",
+            "heading": "Predicated Execution",
+            "anchor": "predicated-execution"
+          },
+          "quotation": "All instructions have an optional guard predicate which controls conditional execution of the instruction. The syntax to specify conditional execution is to prefix an instruction with @{!}p, where p is a predicate variable, optionally negated. Instructions without a guard predicate are executed unconditionally."
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-SUP2-006",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "anchor": "control-flow-instructions-at"
+          },
+          "quotation": "Execute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing."
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-SUP2-007",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "anchor": "control-flow-instructions-at",
+            "startLine": 21826,
+            "endLine": 21841
+          },
+          "quotation": "Execute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "theorem:execAddU32_destination_only_frame:132",
+      "declarationKind": "theorem",
+      "declarationName": "execAddU32_destination_only_frame",
+      "leanRange": {
+        "startLine": 132,
+        "endLine": 176
+      },
+      "semanticIds": [
+        "PTX-ADD-SEM2-007",
+        "PTX-ADD-SEM2-028",
+        "PTX-ADD-SEM2-029",
+        "PTX-ADD-SEM2-049"
+      ],
+      "theoremObligationIds": [
+        "PTX-ADD-THM-004"
+      ],
+      "claims": [
+        {
+          "semanticId": "PTX-ADD-SEM2-007",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "d is the destination operand, and a and b are source operands, for base add.u32. When executing with a real destination register, the only state write proposed by the bounded semantics is the destination update; no other value register, predicate register, carry flag, or status/condition-code component is proposed to be written because the source states no such write for base add.",
+          "evidenceIds": [
+            "PTX-9.3-ADD-003",
+            "PTX-9.3-ADD-004",
+            "PTX-9.3-ADD-006",
+            "PTX-9.3-ADD-014"
+          ]
+        },
+        {
+          "semanticId": "PTX-ADD-SEM2-028",
+          "classification": "SOURCE_FACT",
+          "statement": "State write: when the instruction executes, the destination register d is updated with the resulting value. The source states no other register write for base add.u32 (no carry flag, status register, or condition-code component).",
+          "evidenceIds": [
+            "PTX-9.3-ADD-004",
+            "PTX-9.3-ADD-006"
+          ]
+        },
+        {
+          "semanticId": "PTX-ADD-SEM2-029",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "State write detail: when executing with a real destination register, only the destination update required by the bounded semantics is proposed, and the update value is (a + b) mod 2^32 under the human-approved assumption (PTX-ADD-SEM2-015). No other state write is proposed.",
+          "evidenceIds": [
+            "PTX-9.3-ADD-004",
+            "PTX-9.3-ADD-006"
+          ]
+        },
+        {
+          "semanticId": "PTX-ADD-SEM2-049",
+          "classification": "DESIGN_DEPENDENCY",
+          "statement": "Minimal machine state design (architecture D-5, D-14): the state for base add.u32 is the pair (value-register file, predicate-register file); no memory, shared, special-register, or concurrency state is required by the add.u32 syntax and description.",
+          "evidenceIds": [
+            "PTX-9.3-ADD-003",
+            "PTX-9.3-ADD-004",
+            "PTX-9.3-ADD-022"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-ADD-003",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.1.1",
+            "heading": "Integer Arithmetic Instructions: add",
+            "anchor": "integer-arithmetic-instructions-add",
+            "startLine": 8763,
+            "endLine": 8774
+          },
+          "quotation": "add.type1        d, a, b;\nadd{.sat}.type2  d, a, b;\n\n.type1 = { .u16, .u64,\n           .s16, .s64 };\n\n.type2 = { .u32, .u16x2, .u8x4,\n           .s32, .s16x2, .s8x4 };"
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.1.1",
+            "heading": "Integer Arithmetic Instructions: add",
+            "anchor": "integer-arithmetic-instructions-add",
+            "startLine": 8775,
+            "endLine": 8776
+          },
+          "quotation": "Performs addition and writes the resulting value into a destination register."
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-006",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.1.1",
+            "heading": "Integer Arithmetic Instructions: add",
+            "anchor": "integer-arithmetic-instructions-add",
+            "startLine": 8785,
+            "endLine": 8811
+          },
+          "quotation": "if (type == u16x2 || type == s16x2) {\n    iA[0] = a[0:15];\n    iA[1] = a[16:31];\n    iB[0] = b[0:15];\n    iB[1] = b[16:31];\n    for (i = 0; i < 2; i++) {\n         d[i] = iA[i] + iB[i];\n    }\n} else if (type == u8x4 || type == s8x4) {\n    iA[0] = a[0:7];\n    iA[1] = a[8:15];\n    iA[2] = a[16:23];\n    iA[3] = a[24:31];\n    iB[0] = b[0:7];\n    iB[1] = b[8:15];\n    iB[2] = b[16:23];\n    iB[3] = b[24:31];\n    for (i = 0; i < 4; i++) {\n         d[i] = iA[i] + iB[i];\n    }\n} else {\n    d = a + b;\n}"
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-014",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.2",
+            "heading": "PTX Instructions",
+            "anchor": "ptx-instructions",
+            "startLine": 7517,
+            "endLine": 7527
+          },
+          "quotation": "PTX instructions generally have from zero to four operands, plus an optional guard predicate appearing after an @ symbol to the left of the opcode:\n@p   opcode;\n@p   opcode a;\n@p   opcode d, a;\n@p   opcode d, a, b;\n@p   opcode d, a, b, c;\nFor instructions that create a result value, the d operand is the destination operand, while a, b, and c are source operands."
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-022",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.1.1",
+            "heading": "Register State Space",
+            "anchor": "register-state-space",
+            "startLine": 2617,
+            "endLine": 2631
+          },
+          "quotation": "Registers (.reg state space) are fast storage locations. The number of registers is limited, and will vary from platform to platform. When the limit is exceeded, register variables will be spilled to memory, causing changes in performance. For each architecture, there is a recommended maximum number of registers to use (see the CUDA Programming Guide for details).\nRegisters may be typed (signed integer, unsigned integer, floating point, predicate) or untyped. Register size is restricted; aside from predicate registers which are 1-bit, scalar registers have a width of 8-, 16-, 32-, 64-, or 128-bits, and vector registers have a width of 16-, 32-, 64-, or 128-bits. The most common use of 8-bit registers is with ld, st, and cvt instructions, or as elements of vector tuples.\nRegisters differ from the other state spaces in that they are not fully addressable, i.e., it is not possible to refer to the address of a register. When compiling to use the Application Binary Interface (ABI), register variables are restricted to function scope and may not be declared at module scope. When compiling legacy PTX code (ISA versions prior to 3.0) containing module-scoped .reg variables, the compiler silently disables use of the ABI. Registers may have alignment boundaries required by multi-word loads and stores."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "theorem:execAddU32_bit_bucket_preserves_state:177",
+      "declarationKind": "theorem",
+      "declarationName": "execAddU32_bit_bucket_preserves_state",
+      "leanRange": {
+        "startLine": 177,
+        "endLine": 206
+      },
+      "semanticIds": [
+        "PTX-ADD-SEM2-030",
+        "PTX-ADD-SEM2-047",
+        "PTX-ADD-SEM2-054"
+      ],
+      "theoremObligationIds": [
+        "PTX-ADD-THM-005"
+      ],
+      "claims": [
+        {
+          "semanticId": "PTX-ADD-SEM2-030",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "Bit-bucket destination: per the general section 9.2 rule, an underscore '_' may be used in place of a destination register. The represented consequence for add.u32 is that when d is '_', execution performs no register write (the result is discarded). This consequence is supported only to the strength of the general rule; the add section does not demonstrate the bit-bucket form (AMB-1).",
+          "evidenceIds": [
+            "PTX-9.3-ADD-015"
+          ]
+        },
+        {
+          "semanticId": "PTX-ADD-SEM2-047",
+          "classification": "SOURCE_FACT",
+          "statement": "For some instructions the destination operand is optional; a bit bucket operand denoted with an underscore (_) may be used in place of a destination register (general section 9.2 rule).",
+          "evidenceIds": [
+            "PTX-9.3-ADD-015"
+          ]
+        },
+        {
+          "semanticId": "PTX-ADD-SEM2-054",
+          "classification": "OPEN_QUESTION",
+          "statement": "Add-specific bit-bucket destination behavior is not explicitly stated; the general section 9.2 rule supports the '_' destination form, but the add section does not demonstrate it (bundle gap GAP-6; AMB-1).",
+          "evidenceIds": [
+            "PTX-9.3-ADD-015"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-ADD-015",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.2",
+            "heading": "PTX Instructions",
+            "anchor": "ptx-instructions",
+            "startLine": 7534,
+            "endLine": 7535
+          },
+          "quotation": "For some instructions the destination operand is optional. A bit bucket operand denoted with an underscore (_) may be used in place of a destination register."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "theorem:execAddU32_executes_iff_guard_true:207",
+      "declarationKind": "theorem",
+      "declarationName": "execAddU32_executes_iff_guard_true",
+      "leanRange": {
+        "startLine": 207,
+        "endLine": 254
+      },
+      "semanticIds": [
+        "PTX-ADD-SEM2-023",
+        "PTX-ADD-SEM2-024",
+        "PTX-ADD-SEM2-050"
+      ],
+      "theoremObligationIds": [
+        "PTX-ADD-THM-006"
+      ],
+      "claims": [
+        {
+          "semanticId": "PTX-ADD-SEM2-023",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "Complete guard-expression evaluation model: no guard -> the complete guard expression is true (unconditional execution); @p -> the complete guard expression is the value of predicate register p; @!p -> the complete guard expression is the logical negation of the value of predicate register p. The instruction executes if and only if the complete guard expression evaluates true. The underlying predicate value is not confused with the evaluated guard expression.",
+          "evidenceIds": [
+            "PTX-9.3-ADD-011",
+            "PTX-9.3-ADD-014",
+            "PTX-9.3-ADD-016",
+            "PTX-9.3-ADD-018",
+            "PTX-9.3-ADD-SUP2-005"
+          ]
+        },
+        {
+          "semanticId": "PTX-ADD-SEM2-024",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "When the complete guard expression evaluates false for add.u32, the thread does nothing: the instruction is not executed and no machine-state component changes (the destination register d is not updated, source operands are not modified, the guard predicate register is not modified, and no other value-register or predicate-register component changes). This is derived from the explicit predication clause (section 9.7.13.2; PDF page 400; HTML lines 21826-21841) applied to add.u32 via universal predication ('All PTX instructions may be predicated') and the official guarded add example '@p add.u32 x,y,z;'. BLOCK-2 is resolved by official specification evidence, not by a human assumption.",
+          "evidenceIds": [
+            "PTX-9.3-ADD-010",
+            "PTX-9.3-ADD-011",
+            "PTX-9.3-ADD-SUP2-005",
+            "PTX-9.3-ADD-SUP2-006",
+            "PTX-9.3-ADD-SUP2-007"
+          ]
+        },
+        {
+          "semanticId": "PTX-ADD-SEM2-050",
+          "classification": "DESIGN_DEPENDENCY",
+          "statement": "Execution-result representation design (architecture D-8): an instruction-local outcome has at least two cases, executed (with updated destination) and guard-false (thread does nothing; no state change); no error constructor is proposed because no explicit exceptional behavior for base add is evidenced.",
+          "evidenceIds": [
+            "PTX-9.3-ADD-004",
+            "PTX-9.3-ADD-016",
+            "PTX-9.3-ADD-SUP2-006"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-ADD-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.1.1",
+            "heading": "Integer Arithmetic Instructions: add",
+            "anchor": "integer-arithmetic-instructions-add",
+            "startLine": 8775,
+            "endLine": 8776
+          },
+          "quotation": "Performs addition and writes the resulting value into a destination register."
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-010",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.1.1",
+            "heading": "Integer Arithmetic Instructions: add",
+            "anchor": "integer-arithmetic-instructions-add",
+            "startLine": 8834,
+            "endLine": 8841
+          },
+          "quotation": "@p  add.u32     x,y,z;\n    add.sat.s32 c,c,1;\n    add.u16x2   u,v,w;\n    add.s8x4.sat p, q, r;"
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-011",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7",
+            "heading": "Instructions",
+            "anchor": "instructions",
+            "startLine": 8722,
+            "endLine": 8723
+          },
+          "quotation": "All PTX instructions may be predicated. In the following descriptions, the optional guard predicate is omitted from the syntax."
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-014",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.2",
+            "heading": "PTX Instructions",
+            "anchor": "ptx-instructions",
+            "startLine": 7517,
+            "endLine": 7527
+          },
+          "quotation": "PTX instructions generally have from zero to four operands, plus an optional guard predicate appearing after an @ symbol to the left of the opcode:\n@p   opcode;\n@p   opcode a;\n@p   opcode d, a;\n@p   opcode d, a, b;\n@p   opcode d, a, b, c;\nFor instructions that create a result value, the d operand is the destination operand, while a, b, and c are source operands."
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-016",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.3",
+            "heading": "Predicated Execution",
+            "anchor": "predicated-execution",
+            "startLine": 7547,
+            "endLine": 7550
+          },
+          "quotation": "All instructions have an optional guard predicate which controls conditional execution of the instruction. The syntax to specify conditional execution is to prefix an instruction with @{!}p, where p is a predicate variable, optionally negated. Instructions without a guard predicate are executed unconditionally."
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-018",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.3",
+            "heading": "Predicated Execution",
+            "anchor": "predicated-execution",
+            "startLine": 7561,
+            "endLine": 7572
+          },
+          "quotation": "      setp.lt.s32  p, i, n;    // p = (i < n)\n@p    add.s32      j, j, 1;    // if i < n, add 1 to j\n\n      setp.lt.s32  p, i, n;    // compare i to n\n@!p   bra  L1;                 // if False, branch over\n      add.s32      j, j, 1;\nL1:     ..."
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-SUP2-005",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.3",
+            "heading": "Predicated Execution",
+            "anchor": "predicated-execution"
+          },
+          "quotation": "All instructions have an optional guard predicate which controls conditional execution of the instruction. The syntax to specify conditional execution is to prefix an instruction with @{!}p, where p is a predicate variable, optionally negated. Instructions without a guard predicate are executed unconditionally."
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-SUP2-006",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "anchor": "control-flow-instructions-at"
+          },
+          "quotation": "Execute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing."
+        },
+        {
+          "evidenceId": "PTX-9.3-ADD-SUP2-007",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "anchor": "control-flow-instructions-at",
+            "startLine": 21826,
+            "endLine": 21841
+          },
+          "quotation": "Execute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "theorem:execAddU32_alias_source_a_uses_pre_state_value:255",
+      "declarationKind": "theorem",
+      "declarationName": "execAddU32_alias_source_a_uses_pre_state_value",
+      "leanRange": {
+        "startLine": 255,
+        "endLine": 274
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    }
+  ],
+  "diagnostics": {
+    "declarationsWithoutReferences": [
+      "execAddU32_alias_source_a_uses_pre_state_value"
+    ],
+    "unresolvedReferences": [
+      "PTX-ADD-SEM2-015"
+    ]
+  }
+}

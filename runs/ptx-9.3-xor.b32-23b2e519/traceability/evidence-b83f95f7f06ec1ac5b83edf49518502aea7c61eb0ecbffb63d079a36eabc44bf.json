@@ -1,0 +1,629 @@
+{
+  "schemaVersion": 2,
+  "manifestType": "spec2lean_evidence_manifest",
+  "generator": "spec2lean-traceability-v2",
+  "runId": "ptx-9.3-xor.b32-23b2e519",
+  "language": "ptx",
+  "specificationVersion": "9.3",
+  "unit": "xor.b32",
+  "documentRole": "SEMANTICS",
+  "sourceManifest": {
+    "path": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+    "sha256": "622e6ce0d3114a909a62726530955993b5f2b98d2f60e45ae1ceb429512208f2"
+  },
+  "leanDocument": {
+    "path": "candidates/ptx/9.3/units/xor-b32/lean/XorB32-v1.lean",
+    "sha256": "e2694a8894d49307ce1050f835478a7963361318d5510465e5ee166df528fa0a"
+  },
+  "semanticDocument": {
+    "path": "candidates/ptx/9.3/units/xor-b32/semantics/semantics-v1.json",
+    "sha256": "815eaf68ff62e6e047f82b5ddf422cdd007e44463ba5ed33ec921bd95f702098"
+  },
+  "sourceBundles": [
+    {
+      "path": "candidates/ptx/9.3/units/xor-b32/source-bundles/source-bundle-v1.json",
+      "sha256": "67c15b8628159b33b355b0ba05f4e022f65d9f2edc41a4e27fa8e53eedc1c4cb"
+    }
+  ],
+  "entries": [
+    {
+      "entryId": "def:b32Bits:79",
+      "declarationKind": "def",
+      "declarationName": "b32Bits",
+      "leanRange": {
+        "startLine": 79,
+        "endLine": 83
+      },
+      "semanticIds": [
+        "PTX-XOR-SEM1-013",
+        "PTX-XOR-SEM1-015"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-XOR-SEM1-013",
+          "classification": "SOURCE_FACT",
+          "statement": ".b32 is a fundamental type specifier of basic type 'Bits (untyped)'; Table 8 lists .b8, .b16, .b32, .b64, .b128 under 'Bits (untyped)'.",
+          "evidenceIds": [
+            "PTX-9.3-XOR-021"
+          ]
+        },
+        {
+          "semanticId": "PTX-XOR-SEM1-015",
+          "classification": "SOURCE_FACT",
+          "statement": "Registers (.reg state space) are fast storage locations; aside from 1-bit predicate registers, scalar registers have a width of 8-, 16-, 32-, 64-, or 128-bits (32-bit width is therefore possible for .b32 registers); registers are not fully addressable.",
+          "evidenceIds": [
+            "PTX-9.3-XOR-023"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-XOR-021",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.2.1",
+            "heading": "Fundamental Types",
+            "anchor": "fundamental-types-fundamental-type-specifiers",
+            "startLine": 3053,
+            "endLine": 3054,
+            "page": 54
+          },
+          "quotation": "Bits (untyped): .b8, .b16, .b32, .b64, .b128"
+        },
+        {
+          "evidenceId": "PTX-9.3-XOR-023",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.1.1",
+            "heading": "Register State Space",
+            "anchor": "register-state-space",
+            "startLine": 2613,
+            "endLine": 2631,
+            "page": 46
+          },
+          "quotation": "5.1.1. Register State Space\nRegisters (.reg state space) are fast storage locations. The number of registers is limited, and will vary from platform to platform. When the limit is exceeded, register variables will be spilled to memory, causing changes in performance. For each architecture, there is a recommended maximum number of registers to use (see the CUDA Programming Guide for details).\nRegisters may be typed (signed integer, unsigned integer, floating point, predicate) or untyped. Register size is restricted; aside from predicate registers which are 1-bit, scalar registers have a width of 8-, 16-, 32-, 64-, or 128-bits, and vector registers have a width of 16-, 32-, 64-, or 128-bits. The most common use of 8-bit registers is with ld, st, and cvt instructions, or as elements of vector tuples.\nRegisters differ from the other state spaces in that they are not fully addressable, i.e., it is not possible to refer to the address of a register. When compiling to use the Application Binary Interface (ABI), register variables are restricted to function scope and may not be declared at module scope. When compiling legacy PTX code (ISA versions prior to 3.0) containing module-scoped .reg variables, the compiler silently disables use of the ABI. Registers may have alignment boundaries required by multi-word loads and stores."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:b32DomainSize:84",
+      "declarationKind": "def",
+      "declarationName": "b32DomainSize",
+      "leanRange": {
+        "startLine": 84,
+        "endLine": 95
+      },
+      "semanticIds": [
+        "PTX-XOR-SEM1-062"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-XOR-SEM1-062",
+          "classification": "DESIGN_DEPENDENCY",
+          "statement": "Value domain design (architecture D-11, D-3): the value domain for .b32 is proposed as a fixed-width 32-bit untyped bit-value domain, because .b32 is the 'Bits (untyped)' basic type and the logic/shift family is described as fundamentally untyped, performing bit-wise operations on operands of any type of the same size.",
+          "evidenceIds": [
+            "PTX-9.3-XOR-010",
+            "PTX-9.3-XOR-021"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-XOR-010",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8",
+            "heading": "Logic and Shift Instructions",
+            "anchor": "logic-and-shift-instructions",
+            "startLine": 14236,
+            "endLine": 14255,
+            "page": 254
+          },
+          "quotation": "9.7.8. Logic and Shift Instructions\nThe logic and shift instructions are fundamentally untyped, performing bit-wise operations on operands of any type, provided the operands are of the same size. This permits bit-wise operations on floating point values without having to define a union to access the bits. Instructions and, or, xor, and not also operate on predicates.\nThe logical shift instructions are:\nand\nor\nxor\nnot\ncnot\nlop3\nshf\nshl\nshr"
+        },
+        {
+          "evidenceId": "PTX-9.3-XOR-010#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8",
+            "heading": "Logic and Shift Instructions",
+            "page": 254,
+            "bbox": [
+              0.11764705882352941,
+              0.24196113636363636,
+              0.7647109444444444,
+              0.32628995580808084
+            ]
+          },
+          "quotation": "9.7.8. Logic and Shift Instructions\nThe logic and shift instructions are fundamentally untyped, performing bit-wise operations on operands of any type, provided the operands are of the same size. This permits bit-wise operations on floating point values without having to define a union to access the bits. Instructions and, or, xor, and not also operate on predicates.\nThe logical shift instructions are:\nand\nor\nxor\nnot\ncnot\nlop3\nshf\nshl\nshr",
+          "alignedFromEvidenceId": "PTX-9.3-XOR-010",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-XOR-021",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.2.1",
+            "heading": "Fundamental Types",
+            "anchor": "fundamental-types-fundamental-type-specifiers",
+            "startLine": 3053,
+            "endLine": 3054,
+            "page": 54
+          },
+          "quotation": "Bits (untyped): .b8, .b16, .b32, .b64, .b128"
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "structure:B32:96",
+      "declarationKind": "structure",
+      "declarationName": "B32",
+      "leanRange": {
+        "startLine": 96,
+        "endLine": 109
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "structure:RegId:110",
+      "declarationKind": "structure",
+      "declarationName": "RegId",
+      "leanRange": {
+        "startLine": 110,
+        "endLine": 120
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "structure:PredId:121",
+      "declarationKind": "structure",
+      "declarationName": "PredId",
+      "leanRange": {
+        "startLine": 121,
+        "endLine": 136
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:SourceOperand:137",
+      "declarationKind": "inductive",
+      "declarationName": "SourceOperand",
+      "leanRange": {
+        "startLine": 137,
+        "endLine": 148
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:Destination:149",
+      "declarationKind": "inductive",
+      "declarationName": "Destination",
+      "leanRange": {
+        "startLine": 149,
+        "endLine": 160
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:Guard:161",
+      "declarationKind": "inductive",
+      "declarationName": "Guard",
+      "leanRange": {
+        "startLine": 161,
+        "endLine": 172
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:XorTypeSpecifier:173",
+      "declarationKind": "inductive",
+      "declarationName": "XorTypeSpecifier",
+      "leanRange": {
+        "startLine": 173,
+        "endLine": 185
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "structure:MachineState:186",
+      "declarationKind": "structure",
+      "declarationName": "MachineState",
+      "leanRange": {
+        "startLine": 186,
+        "endLine": 194
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "structure:XorB32Instruction:195",
+      "declarationKind": "structure",
+      "declarationName": "XorB32Instruction",
+      "leanRange": {
+        "startLine": 195,
+        "endLine": 209
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:evalSource:210",
+      "declarationKind": "def",
+      "declarationName": "evalSource",
+      "leanRange": {
+        "startLine": 210,
+        "endLine": 220
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:evalGuard:221",
+      "declarationKind": "def",
+      "declarationName": "evalGuard",
+      "leanRange": {
+        "startLine": 221,
+        "endLine": 244
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:xorValue:245",
+      "declarationKind": "def",
+      "declarationName": "xorValue",
+      "leanRange": {
+        "startLine": 245,
+        "endLine": 260
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:updateDestination:261",
+      "declarationKind": "def",
+      "declarationName": "updateDestination",
+      "leanRange": {
+        "startLine": 261,
+        "endLine": 271
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:ExecOutcome:272",
+      "declarationKind": "inductive",
+      "declarationName": "ExecOutcome",
+      "leanRange": {
+        "startLine": 272,
+        "endLine": 292
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:execXorB32:293",
+      "declarationKind": "def",
+      "declarationName": "execXorB32",
+      "leanRange": {
+        "startLine": 293,
+        "endLine": 317
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:XorB32Step:318",
+      "declarationKind": "inductive",
+      "declarationName": "XorB32Step",
+      "leanRange": {
+        "startLine": 318,
+        "endLine": 330
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:mkB32:331",
+      "declarationKind": "def",
+      "declarationName": "mkB32",
+      "leanRange": {
+        "startLine": 331,
+        "endLine": 335
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:mkState:336",
+      "declarationKind": "def",
+      "declarationName": "mkState",
+      "leanRange": {
+        "startLine": 336,
+        "endLine": 340
+      },
+      "semanticIds": [
+        "PTX-XOR-SEM1-060"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-XOR-SEM1-060",
+          "classification": "DESIGN_DEPENDENCY",
+          "statement": "Minimal machine state design (architecture D-5, D-14): the state for the bounded base xor.b32 is the pair (value-register file, predicate-register file); no memory, special-register, or concurrency state is required by the base form's syntax and description.",
+          "evidenceIds": [
+            "PTX-9.3-XOR-003",
+            "PTX-9.3-XOR-004",
+            "PTX-9.3-XOR-023"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-XOR-003",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.3",
+            "heading": "Logic and Shift Instructions: xor",
+            "anchor": "logic-and-shift-instructions-xor",
+            "startLine": 14330,
+            "endLine": 14336,
+            "page": 256
+          },
+          "quotation": "xor.type d, a, b;\n\n.type = { .pred, .b16, .b32, .b64 };"
+        },
+        {
+          "evidenceId": "PTX-9.3-XOR-003#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.3",
+            "heading": "Logic and Shift Instructions: xor",
+            "page": 256,
+            "bbox": [
+              0.11764705882352941,
+              0.7447452184343434,
+              0.31646117647058825,
+              0.04260692045454547
+            ]
+          },
+          "quotation": "xor.type d, a, b;\n\n.type = { .pred, .b16, .b32, .b64 };",
+          "alignedFromEvidenceId": "PTX-9.3-XOR-003",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-XOR-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.3",
+            "heading": "Logic and Shift Instructions: xor",
+            "anchor": "logic-and-shift-instructions-xor",
+            "startLine": 14337,
+            "endLine": 14338,
+            "page": 257
+          },
+          "quotation": "Compute the bit-wise exclusive-or operation for the bits in a and b."
+        },
+        {
+          "evidenceId": "PTX-9.3-XOR-004#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.3",
+            "heading": "Logic and Shift Instructions: xor",
+            "page": 257,
+            "bbox": [
+              0.11764705882352941,
+              0.12255201388888888,
+              0.5079355359477123,
+              0.01659175505050505
+            ]
+          },
+          "quotation": "Compute the bit-wise exclusive-or operation for the bits in a and b.",
+          "alignedFromEvidenceId": "PTX-9.3-XOR-004",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-XOR-023",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.1.1",
+            "heading": "Register State Space",
+            "anchor": "register-state-space",
+            "startLine": 2613,
+            "endLine": 2631,
+            "page": 46
+          },
+          "quotation": "5.1.1. Register State Space\nRegisters (.reg state space) are fast storage locations. The number of registers is limited, and will vary from platform to platform. When the limit is exceeded, register variables will be spilled to memory, causing changes in performance. For each architecture, there is a recommended maximum number of registers to use (see the CUDA Programming Guide for details).\nRegisters may be typed (signed integer, unsigned integer, floating point, predicate) or untyped. Register size is restricted; aside from predicate registers which are 1-bit, scalar registers have a width of 8-, 16-, 32-, 64-, or 128-bits, and vector registers have a width of 16-, 32-, 64-, or 128-bits. The most common use of 8-bit registers is with ld, st, and cvt instructions, or as elements of vector tuples.\nRegisters differ from the other state spaces in that they are not fully addressable, i.e., it is not possible to refer to the address of a register. When compiling to use the Application Binary Interface (ABI), register variables are restricted to function scope and may not be declared at module scope. When compiling legacy PTX code (ISA versions prior to 3.0) containing module-scoped .reg variables, the compiler silently disables use of the ABI. Registers may have alignment boundaries required by multi-word loads and stores."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:exR1:341",
+      "declarationKind": "def",
+      "declarationName": "exR1",
+      "leanRange": {
+        "startLine": 341,
+        "endLine": 341
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:exR2:342",
+      "declarationKind": "def",
+      "declarationName": "exR2",
+      "leanRange": {
+        "startLine": 342,
+        "endLine": 342
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:exR3:343",
+      "declarationKind": "def",
+      "declarationName": "exR3",
+      "leanRange": {
+        "startLine": 343,
+        "endLine": 343
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:exP1:344",
+      "declarationKind": "def",
+      "declarationName": "exP1",
+      "leanRange": {
+        "startLine": 344,
+        "endLine": 438
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    }
+  ],
+  "diagnostics": {
+    "declarationsWithoutReferences": [
+      "B32",
+      "RegId",
+      "PredId",
+      "SourceOperand",
+      "Destination",
+      "Guard",
+      "XorTypeSpecifier",
+      "MachineState",
+      "XorB32Instruction",
+      "evalSource",
+      "evalGuard",
+      "xorValue",
+      "updateDestination",
+      "ExecOutcome",
+      "execXorB32",
+      "XorB32Step",
+      "mkB32",
+      "exR1",
+      "exR2",
+      "exR3",
+      "exP1"
+    ],
+    "unresolvedReferences": [],
+    "pdfAlignment": {
+      "matched": 16,
+      "ambiguous": [
+        "PTX-9.3-XOR-006",
+        "PTX-9.3-XOR-007",
+        "PTX-9.3-XOR-008"
+      ],
+      "unmatched": [
+        "PTX-9.3-XOR-001",
+        "PTX-9.3-XOR-009",
+        "PTX-9.3-XOR-012",
+        "PTX-9.3-XOR-014",
+        "PTX-9.3-XOR-016",
+        "PTX-9.3-XOR-018",
+        "PTX-9.3-XOR-019",
+        "PTX-9.3-XOR-021",
+        "PTX-9.3-XOR-023",
+        "PTX-9.3-XOR-026",
+        "PTX-9.3-XOR-030",
+        "PTX-9.3-XOR-031",
+        "PTX-9.3-XOR-032",
+        "PTX-9.3-XOR-033"
+      ]
+    }
+  }
+}

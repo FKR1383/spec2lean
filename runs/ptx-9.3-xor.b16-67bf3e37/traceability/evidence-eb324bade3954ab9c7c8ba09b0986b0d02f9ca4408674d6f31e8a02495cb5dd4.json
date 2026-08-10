@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 2,
+  "manifestType": "spec2lean_evidence_manifest",
+  "generator": "spec2lean-traceability-v2",
+  "runId": "ptx-9.3-xor.b16-67bf3e37",
+  "language": "ptx",
+  "specificationVersion": "9.3",
+  "unit": "xor.b16",
+  "documentRole": "PROOFS",
+  "sourceManifest": {
+    "path": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+    "sha256": "622e6ce0d3114a909a62726530955993b5f2b98d2f60e45ae1ceb429512208f2"
+  },
+  "leanDocument": {
+    "path": "candidates/ptx/9.3/units/xor-b16/lean/XorB16Proofs-v1.lean",
+    "sha256": "af8cc86937d2f24f584423a1e7e88dcc40e5dc1461eeab4b39813731811e02d6"
+  },
+  "semanticDocument": {
+    "path": "candidates/ptx/9.3/units/xor-b16/semantics/semantics-v1.json",
+    "sha256": "cf378f9652408114c6a4d33924f585b57b5db37f8782b09b1eb2cda356a9a8a2"
+  },
+  "sourceBundles": [
+    {
+      "path": "candidates/ptx/9.3/units/xor-b16/source-bundles/source-bundle-v1.json",
+      "sha256": "841c06e3fe2b9c33cc3985b9cab1fc80517cc8fc61452d44352264e5bd7709fe"
+    }
+  ],
+  "theoremDocument": {
+    "path": "candidates/ptx/9.3/units/xor-b16/theorems/obligations-v1.json",
+    "sha256": "af400344ef9a393c4f1ac95d309b4db576ef13fcd9f893e31d215bd827da6f55"
+  },
+  "entries": [
+    {
+      "entryId": "theorem:XorB16Step_deterministic:6",
+      "declarationKind": "theorem",
+      "declarationName": "XorB16Step_deterministic",
+      "leanRange": {
+        "startLine": 6,
+        "endLine": 34
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [
+        "PTX-XORB16-THM-001"
+      ],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-004",
+        "PTX-XORB16-SEM-005"
+      ]
+    },
+    {
+      "entryId": "theorem:execXorB16_xor_result:35",
+      "declarationKind": "theorem",
+      "declarationName": "execXorB16_xor_result",
+      "leanRange": {
+        "startLine": 35,
+        "endLine": 48
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [
+        "PTX-XORB16-THM-003"
+      ],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-003",
+        "PTX-XORB16-SEM-004",
+        "PTX-XORB16-SEM-005"
+      ]
+    },
+    {
+      "entryId": "theorem:XorB16Step_predicate_file_frame:49",
+      "declarationKind": "theorem",
+      "declarationName": "XorB16Step_predicate_file_frame",
+      "leanRange": {
+        "startLine": 49,
+        "endLine": 69
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [
+        "PTX-XORB16-THM-004"
+      ],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": [
+        "PTX-XORB16-SEM-004",
+        "PTX-XORB16-SEM-005"
+      ]
+    }
+  ],
+  "diagnostics": {
+    "declarationsWithoutReferences": [
+      "XorB16Step_deterministic",
+      "execXorB16_xor_result",
+      "XorB16Step_predicate_file_frame"
+    ],
+    "unresolvedReferences": [
+      "PTX-XORB16-SEM-003",
+      "PTX-XORB16-SEM-004",
+      "PTX-XORB16-SEM-005"
+    ]
+  }
+}

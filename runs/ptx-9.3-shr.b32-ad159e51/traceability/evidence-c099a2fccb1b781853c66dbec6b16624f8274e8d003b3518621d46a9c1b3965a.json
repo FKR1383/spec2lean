@@ -1,0 +1,1965 @@
+{
+  "schemaVersion": 2,
+  "manifestType": "spec2lean_evidence_manifest",
+  "generator": "spec2lean-traceability-v2",
+  "runId": "ptx-9.3-shr.b32-ad159e51",
+  "language": "ptx",
+  "specificationVersion": "9.3",
+  "unit": "shr.b32",
+  "documentRole": "PROOFS",
+  "sourceManifest": {
+    "path": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+    "sha256": "622e6ce0d3114a909a62726530955993b5f2b98d2f60e45ae1ceb429512208f2"
+  },
+  "leanDocument": {
+    "path": "candidates/ptx/9.3/units/shr-b32/lean/ShrB32Proofs-v1.lean",
+    "sha256": "2bfc1406bc972e900df62dea122d86212ed307c2266eb3c78879bf6e0c42d2cf"
+  },
+  "semanticDocument": {
+    "path": "candidates/ptx/9.3/units/shr-b32/semantics/semantics-v1.json",
+    "sha256": "5e806b32a30215d61cdb1c4bfaa70e0bdac6bf8cfb93f4588cfa79b3fca850f1"
+  },
+  "sourceBundles": [
+    {
+      "path": "candidates/ptx/9.3/units/shr-b32/source-bundles/source-bundle-v1.json",
+      "sha256": "589c6db349ee2806f4364142066c98dfdc098ba8dfe726573e3d6407236778b6"
+    }
+  ],
+  "theoremDocument": {
+    "path": "candidates/ptx/9.3/units/shr-b32/theorems/obligations-v3.json",
+    "sha256": "68390a3a1c3041518feea9c538b18fdf9713752f1c69650f285c44e44984e801"
+  },
+  "entries": [
+    {
+      "entryId": "theorem:shrB32Step_deterministic:5",
+      "declarationKind": "theorem",
+      "declarationName": "shrB32Step_deterministic",
+      "leanRange": {
+        "startLine": 5,
+        "endLine": 69
+      },
+      "semanticIds": [
+        "PTX-SHR-SEM1-003",
+        "PTX-SHR-SEM1-008",
+        "PTX-SHR-SEM1-012",
+        "PTX-SHR-SEM1-013"
+      ],
+      "theoremObligationIds": [
+        "PTX-SHR-THM-001"
+      ],
+      "claims": [
+        {
+          "semanticId": "PTX-SHR-SEM1-003",
+          "classification": "SOURCE_FACT",
+          "statement": "Shift semantics text says shift right by unsigned 32-bit value in b, sign-fill for signed, zero-fill for unsigned/untype.",
+          "evidenceIds": [
+            "PTX-9.3-SHR-004"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-008",
+          "classification": "SOURCE_FACT",
+          "statement": "General predication syntax applies: instructions may be optional guarded via @{!}p; unguarded execute unconditionally.",
+          "evidenceIds": [
+            "PTX-9.3-SHR-010"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-012",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "When the complete guard expression evaluates false, bounded state is unchanged (no update).",
+          "evidenceIds": [
+            "PTX-9.3-SHR-010",
+            "PTX-9.3-SHR-011"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-013",
+          "classification": "OPEN_QUESTION",
+          "statement": "Whether destination `_` is accepted specifically by shr syntax is unresolved.",
+          "evidenceIds": [
+            "PTX-9.3-SHR-011"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-SHR-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14747,
+            "endLine": 14748
+          },
+          "quotation": "Shift a right by the amount specified by unsigned 32-bit value in b. Signed shifts fill with the sign bit, unsigned and untyped shifts fill with 0."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-004#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.12255201388888888,
+              0.7647065065359476,
+              0.03168645202020202
+            ]
+          },
+          "quotation": "Shift a right by the amount specified by unsigned 32-bit value in b. Signed shifts fill with the sign bit, unsigned and untyped shifts fill with 0.",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-004",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-010",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.3",
+            "heading": "Predicated Execution",
+            "anchor": "predicated-execution",
+            "startLine": 7537,
+            "endLine": 7549
+          },
+          "quotation": "All instructions have an optional guard predicate which controls conditional execution of the instruction. The syntax to specify conditional execution is to prefix an instruction with @{!}p, where p is a predicate variable, optionally negated. Instructions without a guard predicate are executed unconditionally."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-011",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "anchor": "control-flow-instructions-at",
+            "startLine": 21838,
+            "endLine": 21840
+          },
+          "quotation": "Execute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-011#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "page": 400,
+            "bbox": [
+              0.11764705882352941,
+              0.4777161553030303,
+              0.7647167565359477,
+              0.031686452020202004
+            ]
+          },
+          "quotation": "Execute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing.",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-011",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "theorem:execShrB32_sound_guardFalse:70",
+      "declarationKind": "theorem",
+      "declarationName": "execShrB32_sound_guardFalse",
+      "leanRange": {
+        "startLine": 70,
+        "endLine": 99
+      },
+      "semanticIds": [
+        "PTX-SHR-SEM1-011",
+        "PTX-SHR-SEM1-012",
+        "PTX-SHR-SEM1-013",
+        "PTX-SHR-SEM1-014",
+        "PTX-SHR-SEM1-015"
+      ],
+      "theoremObligationIds": [
+        "PTX-SHR-THM-002"
+      ],
+      "claims": [
+        {
+          "semanticId": "PTX-SHR-SEM1-011",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "On execute, destination update is `d = a >> clamp(b, 32)` with fill policy from shr type family (sign-fill for signed families, zero-fill otherwise).",
+          "evidenceIds": [
+            "PTX-9.3-SHR-004",
+            "PTX-9.3-SHR-005",
+            "PTX-9.3-SHR-006",
+            "PTX-9.3-SHR-007",
+            "PTX-9.3-SHR-012"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-012",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "When the complete guard expression evaluates false, bounded state is unchanged (no update).",
+          "evidenceIds": [
+            "PTX-9.3-SHR-010",
+            "PTX-9.3-SHR-011"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-013",
+          "classification": "OPEN_QUESTION",
+          "statement": "Whether destination `_` is accepted specifically by shr syntax is unresolved.",
+          "evidenceIds": [
+            "PTX-9.3-SHR-011"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-014",
+          "classification": "OPEN_QUESTION",
+          "statement": "Whether `b` may be immediate and whether signedness of .s32 form is in scope are not explicitly resolved by shr subsection.",
+          "evidenceIds": [
+            "PTX-9.3-SHR-003",
+            "PTX-9.3-SHR-004"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-015",
+          "classification": "OPEN_QUESTION",
+          "statement": "No explicit exceptional/undefined/implementation-defined behavior is quoted in captured shr fragments.",
+          "evidenceIds": [
+            "PTX-9.3-SHR-004",
+            "PTX-9.3-SHR-005",
+            "PTX-9.3-SHR-006"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-SHR-003",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14739,
+            "endLine": 14743
+          },
+          "quotation": "shr.type d, a, b;\n\n.type = { .b16, .b32, .b64,\n           .u16, .u32, .u64,\n           .s16, .s32, .s64 };"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-003#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 264,
+            "bbox": [
+              0.11764705882352941,
+              0.6703058244949495,
+              0.2549411111111111,
+              0.07027990025252531
+            ]
+          },
+          "quotation": "shr.type d, a, b;\n\n.type = { .b16, .b32, .b64,\n           .u16, .u32, .u64,\n           .s16, .s32, .s64 };",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-003",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14747,
+            "endLine": 14748
+          },
+          "quotation": "Shift a right by the amount specified by unsigned 32-bit value in b. Signed shifts fill with the sign bit, unsigned and untyped shifts fill with 0."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-004#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.12255201388888888,
+              0.7647065065359476,
+              0.03168645202020202
+            ]
+          },
+          "quotation": "Shift a right by the amount specified by unsigned 32-bit value in b. Signed shifts fill with the sign bit, unsigned and untyped shifts fill with 0.",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-004",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-005",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14750,
+            "endLine": 14752
+          },
+          "quotation": "d = a >> b;"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-005#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.21680077398989897,
+              0.09669647058823527,
+              0.014932678030303041
+            ]
+          },
+          "quotation": "d = a >> b;",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-005",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-006",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14755,
+            "endLine": 14757
+          },
+          "quotation": "Shift amounts greater than the register width N are clamped to N.\nThe sizes of the destination and first source operand must match, but not necessarily the type. The b operand must be a 32-bit value, regardless of the instruction type."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-007",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14758,
+            "endLine": 14758
+          },
+          "quotation": "Bit-size types are included for symmetry with shl."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-007#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.3594850946969697,
+              0.38197148366013073,
+              0.01659175505050505
+            ]
+          },
+          "quotation": "Bit-size types are included for symmetry with shl.",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-007",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-010",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.3",
+            "heading": "Predicated Execution",
+            "anchor": "predicated-execution",
+            "startLine": 7537,
+            "endLine": 7549
+          },
+          "quotation": "All instructions have an optional guard predicate which controls conditional execution of the instruction. The syntax to specify conditional execution is to prefix an instruction with @{!}p, where p is a predicate variable, optionally negated. Instructions without a guard predicate are executed unconditionally."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-011",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "anchor": "control-flow-instructions-at",
+            "startLine": 21838,
+            "endLine": 21840
+          },
+          "quotation": "Execute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-011#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "page": 400,
+            "bbox": [
+              0.11764705882352941,
+              0.4777161553030303,
+              0.7647167565359477,
+              0.031686452020202004
+            ]
+          },
+          "quotation": "Execute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing.",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-011",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-012",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.2.1",
+            "heading": "Fundamental Types",
+            "anchor": "fundamental-types",
+            "startLine": 3053,
+            "endLine": 3054
+          },
+          "quotation": "Bits (untyped): .b8, .b16, .b32, .b64, .b128"
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "theorem:execShrB32_sound_executed:100",
+      "declarationKind": "theorem",
+      "declarationName": "execShrB32_sound_executed",
+      "leanRange": {
+        "startLine": 100,
+        "endLine": 126
+      },
+      "semanticIds": [
+        "PTX-SHR-SEM1-011",
+        "PTX-SHR-SEM1-012",
+        "PTX-SHR-SEM1-013",
+        "PTX-SHR-SEM1-014",
+        "PTX-SHR-SEM1-015"
+      ],
+      "theoremObligationIds": [
+        "PTX-SHR-THM-002"
+      ],
+      "claims": [
+        {
+          "semanticId": "PTX-SHR-SEM1-011",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "On execute, destination update is `d = a >> clamp(b, 32)` with fill policy from shr type family (sign-fill for signed families, zero-fill otherwise).",
+          "evidenceIds": [
+            "PTX-9.3-SHR-004",
+            "PTX-9.3-SHR-005",
+            "PTX-9.3-SHR-006",
+            "PTX-9.3-SHR-007",
+            "PTX-9.3-SHR-012"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-012",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "When the complete guard expression evaluates false, bounded state is unchanged (no update).",
+          "evidenceIds": [
+            "PTX-9.3-SHR-010",
+            "PTX-9.3-SHR-011"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-013",
+          "classification": "OPEN_QUESTION",
+          "statement": "Whether destination `_` is accepted specifically by shr syntax is unresolved.",
+          "evidenceIds": [
+            "PTX-9.3-SHR-011"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-014",
+          "classification": "OPEN_QUESTION",
+          "statement": "Whether `b` may be immediate and whether signedness of .s32 form is in scope are not explicitly resolved by shr subsection.",
+          "evidenceIds": [
+            "PTX-9.3-SHR-003",
+            "PTX-9.3-SHR-004"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-015",
+          "classification": "OPEN_QUESTION",
+          "statement": "No explicit exceptional/undefined/implementation-defined behavior is quoted in captured shr fragments.",
+          "evidenceIds": [
+            "PTX-9.3-SHR-004",
+            "PTX-9.3-SHR-005",
+            "PTX-9.3-SHR-006"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-SHR-003",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14739,
+            "endLine": 14743
+          },
+          "quotation": "shr.type d, a, b;\n\n.type = { .b16, .b32, .b64,\n           .u16, .u32, .u64,\n           .s16, .s32, .s64 };"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-003#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 264,
+            "bbox": [
+              0.11764705882352941,
+              0.6703058244949495,
+              0.2549411111111111,
+              0.07027990025252531
+            ]
+          },
+          "quotation": "shr.type d, a, b;\n\n.type = { .b16, .b32, .b64,\n           .u16, .u32, .u64,\n           .s16, .s32, .s64 };",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-003",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14747,
+            "endLine": 14748
+          },
+          "quotation": "Shift a right by the amount specified by unsigned 32-bit value in b. Signed shifts fill with the sign bit, unsigned and untyped shifts fill with 0."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-004#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.12255201388888888,
+              0.7647065065359476,
+              0.03168645202020202
+            ]
+          },
+          "quotation": "Shift a right by the amount specified by unsigned 32-bit value in b. Signed shifts fill with the sign bit, unsigned and untyped shifts fill with 0.",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-004",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-005",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14750,
+            "endLine": 14752
+          },
+          "quotation": "d = a >> b;"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-005#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.21680077398989897,
+              0.09669647058823527,
+              0.014932678030303041
+            ]
+          },
+          "quotation": "d = a >> b;",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-005",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-006",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14755,
+            "endLine": 14757
+          },
+          "quotation": "Shift amounts greater than the register width N are clamped to N.\nThe sizes of the destination and first source operand must match, but not necessarily the type. The b operand must be a 32-bit value, regardless of the instruction type."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-007",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14758,
+            "endLine": 14758
+          },
+          "quotation": "Bit-size types are included for symmetry with shl."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-007#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.3594850946969697,
+              0.38197148366013073,
+              0.01659175505050505
+            ]
+          },
+          "quotation": "Bit-size types are included for symmetry with shl.",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-007",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-010",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.3",
+            "heading": "Predicated Execution",
+            "anchor": "predicated-execution",
+            "startLine": 7537,
+            "endLine": 7549
+          },
+          "quotation": "All instructions have an optional guard predicate which controls conditional execution of the instruction. The syntax to specify conditional execution is to prefix an instruction with @{!}p, where p is a predicate variable, optionally negated. Instructions without a guard predicate are executed unconditionally."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-011",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "anchor": "control-flow-instructions-at",
+            "startLine": 21838,
+            "endLine": 21840
+          },
+          "quotation": "Execute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-011#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "page": 400,
+            "bbox": [
+              0.11764705882352941,
+              0.4777161553030303,
+              0.7647167565359477,
+              0.031686452020202004
+            ]
+          },
+          "quotation": "Execute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing.",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-011",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-012",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.2.1",
+            "heading": "Fundamental Types",
+            "anchor": "fundamental-types",
+            "startLine": 3053,
+            "endLine": 3054
+          },
+          "quotation": "Bits (untyped): .b8, .b16, .b32, .b64, .b128"
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "theorem:execShrB32_sound_malformed:127",
+      "declarationKind": "theorem",
+      "declarationName": "execShrB32_sound_malformed",
+      "leanRange": {
+        "startLine": 127,
+        "endLine": 178
+      },
+      "semanticIds": [
+        "PTX-SHR-SEM1-011",
+        "PTX-SHR-SEM1-012",
+        "PTX-SHR-SEM1-013",
+        "PTX-SHR-SEM1-014",
+        "PTX-SHR-SEM1-015"
+      ],
+      "theoremObligationIds": [
+        "PTX-SHR-THM-002"
+      ],
+      "claims": [
+        {
+          "semanticId": "PTX-SHR-SEM1-011",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "On execute, destination update is `d = a >> clamp(b, 32)` with fill policy from shr type family (sign-fill for signed families, zero-fill otherwise).",
+          "evidenceIds": [
+            "PTX-9.3-SHR-004",
+            "PTX-9.3-SHR-005",
+            "PTX-9.3-SHR-006",
+            "PTX-9.3-SHR-007",
+            "PTX-9.3-SHR-012"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-012",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "When the complete guard expression evaluates false, bounded state is unchanged (no update).",
+          "evidenceIds": [
+            "PTX-9.3-SHR-010",
+            "PTX-9.3-SHR-011"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-013",
+          "classification": "OPEN_QUESTION",
+          "statement": "Whether destination `_` is accepted specifically by shr syntax is unresolved.",
+          "evidenceIds": [
+            "PTX-9.3-SHR-011"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-014",
+          "classification": "OPEN_QUESTION",
+          "statement": "Whether `b` may be immediate and whether signedness of .s32 form is in scope are not explicitly resolved by shr subsection.",
+          "evidenceIds": [
+            "PTX-9.3-SHR-003",
+            "PTX-9.3-SHR-004"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-015",
+          "classification": "OPEN_QUESTION",
+          "statement": "No explicit exceptional/undefined/implementation-defined behavior is quoted in captured shr fragments.",
+          "evidenceIds": [
+            "PTX-9.3-SHR-004",
+            "PTX-9.3-SHR-005",
+            "PTX-9.3-SHR-006"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-SHR-003",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14739,
+            "endLine": 14743
+          },
+          "quotation": "shr.type d, a, b;\n\n.type = { .b16, .b32, .b64,\n           .u16, .u32, .u64,\n           .s16, .s32, .s64 };"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-003#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 264,
+            "bbox": [
+              0.11764705882352941,
+              0.6703058244949495,
+              0.2549411111111111,
+              0.07027990025252531
+            ]
+          },
+          "quotation": "shr.type d, a, b;\n\n.type = { .b16, .b32, .b64,\n           .u16, .u32, .u64,\n           .s16, .s32, .s64 };",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-003",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14747,
+            "endLine": 14748
+          },
+          "quotation": "Shift a right by the amount specified by unsigned 32-bit value in b. Signed shifts fill with the sign bit, unsigned and untyped shifts fill with 0."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-004#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.12255201388888888,
+              0.7647065065359476,
+              0.03168645202020202
+            ]
+          },
+          "quotation": "Shift a right by the amount specified by unsigned 32-bit value in b. Signed shifts fill with the sign bit, unsigned and untyped shifts fill with 0.",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-004",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-005",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14750,
+            "endLine": 14752
+          },
+          "quotation": "d = a >> b;"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-005#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.21680077398989897,
+              0.09669647058823527,
+              0.014932678030303041
+            ]
+          },
+          "quotation": "d = a >> b;",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-005",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-006",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14755,
+            "endLine": 14757
+          },
+          "quotation": "Shift amounts greater than the register width N are clamped to N.\nThe sizes of the destination and first source operand must match, but not necessarily the type. The b operand must be a 32-bit value, regardless of the instruction type."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-007",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14758,
+            "endLine": 14758
+          },
+          "quotation": "Bit-size types are included for symmetry with shl."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-007#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.3594850946969697,
+              0.38197148366013073,
+              0.01659175505050505
+            ]
+          },
+          "quotation": "Bit-size types are included for symmetry with shl.",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-007",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-010",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.3",
+            "heading": "Predicated Execution",
+            "anchor": "predicated-execution",
+            "startLine": 7537,
+            "endLine": 7549
+          },
+          "quotation": "All instructions have an optional guard predicate which controls conditional execution of the instruction. The syntax to specify conditional execution is to prefix an instruction with @{!}p, where p is a predicate variable, optionally negated. Instructions without a guard predicate are executed unconditionally."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-011",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "anchor": "control-flow-instructions-at",
+            "startLine": 21838,
+            "endLine": 21840
+          },
+          "quotation": "Execute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-011#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "page": 400,
+            "bbox": [
+              0.11764705882352941,
+              0.4777161553030303,
+              0.7647167565359477,
+              0.031686452020202004
+            ]
+          },
+          "quotation": "Execute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing.",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-011",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-012",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.2.1",
+            "heading": "Fundamental Types",
+            "anchor": "fundamental-types",
+            "startLine": 3053,
+            "endLine": 3054
+          },
+          "quotation": "Bits (untyped): .b8, .b16, .b32, .b64, .b128"
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "theorem:shrB32Step_to_exec_correspondence:179",
+      "declarationKind": "theorem",
+      "declarationName": "shrB32Step_to_exec_correspondence",
+      "leanRange": {
+        "startLine": 179,
+        "endLine": 216
+      },
+      "semanticIds": [
+        "PTX-SHR-SEM1-011",
+        "PTX-SHR-SEM1-012",
+        "PTX-SHR-SEM1-013",
+        "PTX-SHR-SEM1-014",
+        "PTX-SHR-SEM1-015"
+      ],
+      "theoremObligationIds": [
+        "PTX-SHR-THM-002"
+      ],
+      "claims": [
+        {
+          "semanticId": "PTX-SHR-SEM1-011",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "On execute, destination update is `d = a >> clamp(b, 32)` with fill policy from shr type family (sign-fill for signed families, zero-fill otherwise).",
+          "evidenceIds": [
+            "PTX-9.3-SHR-004",
+            "PTX-9.3-SHR-005",
+            "PTX-9.3-SHR-006",
+            "PTX-9.3-SHR-007",
+            "PTX-9.3-SHR-012"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-012",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "When the complete guard expression evaluates false, bounded state is unchanged (no update).",
+          "evidenceIds": [
+            "PTX-9.3-SHR-010",
+            "PTX-9.3-SHR-011"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-013",
+          "classification": "OPEN_QUESTION",
+          "statement": "Whether destination `_` is accepted specifically by shr syntax is unresolved.",
+          "evidenceIds": [
+            "PTX-9.3-SHR-011"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-014",
+          "classification": "OPEN_QUESTION",
+          "statement": "Whether `b` may be immediate and whether signedness of .s32 form is in scope are not explicitly resolved by shr subsection.",
+          "evidenceIds": [
+            "PTX-9.3-SHR-003",
+            "PTX-9.3-SHR-004"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-015",
+          "classification": "OPEN_QUESTION",
+          "statement": "No explicit exceptional/undefined/implementation-defined behavior is quoted in captured shr fragments.",
+          "evidenceIds": [
+            "PTX-9.3-SHR-004",
+            "PTX-9.3-SHR-005",
+            "PTX-9.3-SHR-006"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-SHR-003",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14739,
+            "endLine": 14743
+          },
+          "quotation": "shr.type d, a, b;\n\n.type = { .b16, .b32, .b64,\n           .u16, .u32, .u64,\n           .s16, .s32, .s64 };"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-003#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 264,
+            "bbox": [
+              0.11764705882352941,
+              0.6703058244949495,
+              0.2549411111111111,
+              0.07027990025252531
+            ]
+          },
+          "quotation": "shr.type d, a, b;\n\n.type = { .b16, .b32, .b64,\n           .u16, .u32, .u64,\n           .s16, .s32, .s64 };",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-003",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14747,
+            "endLine": 14748
+          },
+          "quotation": "Shift a right by the amount specified by unsigned 32-bit value in b. Signed shifts fill with the sign bit, unsigned and untyped shifts fill with 0."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-004#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.12255201388888888,
+              0.7647065065359476,
+              0.03168645202020202
+            ]
+          },
+          "quotation": "Shift a right by the amount specified by unsigned 32-bit value in b. Signed shifts fill with the sign bit, unsigned and untyped shifts fill with 0.",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-004",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-005",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14750,
+            "endLine": 14752
+          },
+          "quotation": "d = a >> b;"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-005#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.21680077398989897,
+              0.09669647058823527,
+              0.014932678030303041
+            ]
+          },
+          "quotation": "d = a >> b;",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-005",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-006",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14755,
+            "endLine": 14757
+          },
+          "quotation": "Shift amounts greater than the register width N are clamped to N.\nThe sizes of the destination and first source operand must match, but not necessarily the type. The b operand must be a 32-bit value, regardless of the instruction type."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-007",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14758,
+            "endLine": 14758
+          },
+          "quotation": "Bit-size types are included for symmetry with shl."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-007#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.3594850946969697,
+              0.38197148366013073,
+              0.01659175505050505
+            ]
+          },
+          "quotation": "Bit-size types are included for symmetry with shl.",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-007",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-010",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.3",
+            "heading": "Predicated Execution",
+            "anchor": "predicated-execution",
+            "startLine": 7537,
+            "endLine": 7549
+          },
+          "quotation": "All instructions have an optional guard predicate which controls conditional execution of the instruction. The syntax to specify conditional execution is to prefix an instruction with @{!}p, where p is a predicate variable, optionally negated. Instructions without a guard predicate are executed unconditionally."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-011",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "anchor": "control-flow-instructions-at",
+            "startLine": 21838,
+            "endLine": 21840
+          },
+          "quotation": "Execute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-011#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "page": 400,
+            "bbox": [
+              0.11764705882352941,
+              0.4777161553030303,
+              0.7647167565359477,
+              0.031686452020202004
+            ]
+          },
+          "quotation": "Execute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing.",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-011",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-012",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.2.1",
+            "heading": "Fundamental Types",
+            "anchor": "fundamental-types",
+            "startLine": 3053,
+            "endLine": 3054
+          },
+          "quotation": "Bits (untyped): .b8, .b16, .b32, .b64, .b128"
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "theorem:execShrB32_malformed_iff_malformed_condition:217",
+      "declarationKind": "theorem",
+      "declarationName": "execShrB32_malformed_iff_malformed_condition",
+      "leanRange": {
+        "startLine": 217,
+        "endLine": 256
+      },
+      "semanticIds": [
+        "PTX-SHR-SEM1-011",
+        "PTX-SHR-SEM1-014",
+        "PTX-SHR-SEM1-015"
+      ],
+      "theoremObligationIds": [
+        "PTX-SHR-THM-003"
+      ],
+      "claims": [
+        {
+          "semanticId": "PTX-SHR-SEM1-011",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "On execute, destination update is `d = a >> clamp(b, 32)` with fill policy from shr type family (sign-fill for signed families, zero-fill otherwise).",
+          "evidenceIds": [
+            "PTX-9.3-SHR-004",
+            "PTX-9.3-SHR-005",
+            "PTX-9.3-SHR-006",
+            "PTX-9.3-SHR-007",
+            "PTX-9.3-SHR-012"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-014",
+          "classification": "OPEN_QUESTION",
+          "statement": "Whether `b` may be immediate and whether signedness of .s32 form is in scope are not explicitly resolved by shr subsection.",
+          "evidenceIds": [
+            "PTX-9.3-SHR-003",
+            "PTX-9.3-SHR-004"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-015",
+          "classification": "OPEN_QUESTION",
+          "statement": "No explicit exceptional/undefined/implementation-defined behavior is quoted in captured shr fragments.",
+          "evidenceIds": [
+            "PTX-9.3-SHR-004",
+            "PTX-9.3-SHR-005",
+            "PTX-9.3-SHR-006"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-SHR-003",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14739,
+            "endLine": 14743
+          },
+          "quotation": "shr.type d, a, b;\n\n.type = { .b16, .b32, .b64,\n           .u16, .u32, .u64,\n           .s16, .s32, .s64 };"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-003#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 264,
+            "bbox": [
+              0.11764705882352941,
+              0.6703058244949495,
+              0.2549411111111111,
+              0.07027990025252531
+            ]
+          },
+          "quotation": "shr.type d, a, b;\n\n.type = { .b16, .b32, .b64,\n           .u16, .u32, .u64,\n           .s16, .s32, .s64 };",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-003",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14747,
+            "endLine": 14748
+          },
+          "quotation": "Shift a right by the amount specified by unsigned 32-bit value in b. Signed shifts fill with the sign bit, unsigned and untyped shifts fill with 0."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-004#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.12255201388888888,
+              0.7647065065359476,
+              0.03168645202020202
+            ]
+          },
+          "quotation": "Shift a right by the amount specified by unsigned 32-bit value in b. Signed shifts fill with the sign bit, unsigned and untyped shifts fill with 0.",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-004",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-005",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14750,
+            "endLine": 14752
+          },
+          "quotation": "d = a >> b;"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-005#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.21680077398989897,
+              0.09669647058823527,
+              0.014932678030303041
+            ]
+          },
+          "quotation": "d = a >> b;",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-005",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-006",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14755,
+            "endLine": 14757
+          },
+          "quotation": "Shift amounts greater than the register width N are clamped to N.\nThe sizes of the destination and first source operand must match, but not necessarily the type. The b operand must be a 32-bit value, regardless of the instruction type."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-007",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14758,
+            "endLine": 14758
+          },
+          "quotation": "Bit-size types are included for symmetry with shl."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-007#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.3594850946969697,
+              0.38197148366013073,
+              0.01659175505050505
+            ]
+          },
+          "quotation": "Bit-size types are included for symmetry with shl.",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-007",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-012",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.2.1",
+            "heading": "Fundamental Types",
+            "anchor": "fundamental-types",
+            "startLine": 3053,
+            "endLine": 3054
+          },
+          "quotation": "Bits (untyped): .b8, .b16, .b32, .b64, .b128"
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "theorem:execShrB32_shr_fidelity:257",
+      "declarationKind": "theorem",
+      "declarationName": "execShrB32_shr_fidelity",
+      "leanRange": {
+        "startLine": 257,
+        "endLine": 268
+      },
+      "semanticIds": [
+        "DD-3",
+        "PTX-SHR-SEM1-003",
+        "PTX-SHR-SEM1-004",
+        "PTX-SHR-SEM1-005",
+        "PTX-SHR-SEM1-011"
+      ],
+      "theoremObligationIds": [
+        "PTX-SHR-THM-004"
+      ],
+      "claims": [
+        {
+          "semanticId": "DD-3",
+          "classification": "DESIGN_DEPENDENCY",
+          "statement": "N in the clamped-amount note is bound to register width 32 by architecture/typing context for this bounded form, while remaining ambiguity is tracked as open question.",
+          "evidenceIds": []
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-003",
+          "classification": "SOURCE_FACT",
+          "statement": "Shift semantics text says shift right by unsigned 32-bit value in b, sign-fill for signed, zero-fill for unsigned/untype.",
+          "evidenceIds": [
+            "PTX-9.3-SHR-004"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-004",
+          "classification": "SOURCE_FACT",
+          "statement": "Semantics assignment line is `d = a >> b;`.",
+          "evidenceIds": [
+            "PTX-9.3-SHR-005"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-005",
+          "classification": "SOURCE_FACT",
+          "statement": "Shift notes specify amount greater than register width N is clamped to N, sizes of d and a must match, and b is 32-bit regardless of instruction type.",
+          "evidenceIds": [
+            "PTX-9.3-SHR-006"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-011",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "On execute, destination update is `d = a >> clamp(b, 32)` with fill policy from shr type family (sign-fill for signed families, zero-fill otherwise).",
+          "evidenceIds": [
+            "PTX-9.3-SHR-004",
+            "PTX-9.3-SHR-005",
+            "PTX-9.3-SHR-006",
+            "PTX-9.3-SHR-007",
+            "PTX-9.3-SHR-012"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-SHR-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14747,
+            "endLine": 14748
+          },
+          "quotation": "Shift a right by the amount specified by unsigned 32-bit value in b. Signed shifts fill with the sign bit, unsigned and untyped shifts fill with 0."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-004#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.12255201388888888,
+              0.7647065065359476,
+              0.03168645202020202
+            ]
+          },
+          "quotation": "Shift a right by the amount specified by unsigned 32-bit value in b. Signed shifts fill with the sign bit, unsigned and untyped shifts fill with 0.",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-004",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-005",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14750,
+            "endLine": 14752
+          },
+          "quotation": "d = a >> b;"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-005#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.21680077398989897,
+              0.09669647058823527,
+              0.014932678030303041
+            ]
+          },
+          "quotation": "d = a >> b;",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-005",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-006",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14755,
+            "endLine": 14757
+          },
+          "quotation": "Shift amounts greater than the register width N are clamped to N.\nThe sizes of the destination and first source operand must match, but not necessarily the type. The b operand must be a 32-bit value, regardless of the instruction type."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-007",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14758,
+            "endLine": 14758
+          },
+          "quotation": "Bit-size types are included for symmetry with shl."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-007#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.3594850946969697,
+              0.38197148366013073,
+              0.01659175505050505
+            ]
+          },
+          "quotation": "Bit-size types are included for symmetry with shl.",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-007",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-012",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.2.1",
+            "heading": "Fundamental Types",
+            "anchor": "fundamental-types",
+            "startLine": 3053,
+            "endLine": 3054
+          },
+          "quotation": "Bits (untyped): .b8, .b16, .b32, .b64, .b128"
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "theorem:shrB32Step_destination_only_frame:269",
+      "declarationKind": "theorem",
+      "declarationName": "shrB32Step_destination_only_frame",
+      "leanRange": {
+        "startLine": 269,
+        "endLine": 297
+      },
+      "semanticIds": [
+        "DD-2",
+        "PTX-SHR-SEM1-011",
+        "PTX-SHR-SEM1-012"
+      ],
+      "theoremObligationIds": [
+        "PTX-SHR-THM-005"
+      ],
+      "claims": [
+        {
+          "semanticId": "DD-2",
+          "classification": "DESIGN_DEPENDENCY",
+          "statement": "Register-state model is used (no memory or flag register side effects), following bounded architecture scope.",
+          "evidenceIds": []
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-011",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "On execute, destination update is `d = a >> clamp(b, 32)` with fill policy from shr type family (sign-fill for signed families, zero-fill otherwise).",
+          "evidenceIds": [
+            "PTX-9.3-SHR-004",
+            "PTX-9.3-SHR-005",
+            "PTX-9.3-SHR-006",
+            "PTX-9.3-SHR-007",
+            "PTX-9.3-SHR-012"
+          ]
+        },
+        {
+          "semanticId": "PTX-SHR-SEM1-012",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "When the complete guard expression evaluates false, bounded state is unchanged (no update).",
+          "evidenceIds": [
+            "PTX-9.3-SHR-010",
+            "PTX-9.3-SHR-011"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-SHR-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14747,
+            "endLine": 14748
+          },
+          "quotation": "Shift a right by the amount specified by unsigned 32-bit value in b. Signed shifts fill with the sign bit, unsigned and untyped shifts fill with 0."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-004#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.12255201388888888,
+              0.7647065065359476,
+              0.03168645202020202
+            ]
+          },
+          "quotation": "Shift a right by the amount specified by unsigned 32-bit value in b. Signed shifts fill with the sign bit, unsigned and untyped shifts fill with 0.",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-004",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-005",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14750,
+            "endLine": 14752
+          },
+          "quotation": "d = a >> b;"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-005#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.21680077398989897,
+              0.09669647058823527,
+              0.014932678030303041
+            ]
+          },
+          "quotation": "d = a >> b;",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-005",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-006",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14755,
+            "endLine": 14757
+          },
+          "quotation": "Shift amounts greater than the register width N are clamped to N.\nThe sizes of the destination and first source operand must match, but not necessarily the type. The b operand must be a 32-bit value, regardless of the instruction type."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-007",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "anchor": "logic-and-shift-instructions-shr",
+            "startLine": 14758,
+            "endLine": 14758
+          },
+          "quotation": "Bit-size types are included for symmetry with shl."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-007#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.8.9",
+            "heading": "Logic and Shift Instructions: shr",
+            "page": 265,
+            "bbox": [
+              0.11764705882352941,
+              0.3594850946969697,
+              0.38197148366013073,
+              0.01659175505050505
+            ]
+          },
+          "quotation": "Bit-size types are included for symmetry with shl.",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-007",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-010",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.3",
+            "heading": "Predicated Execution",
+            "anchor": "predicated-execution",
+            "startLine": 7537,
+            "endLine": 7549
+          },
+          "quotation": "All instructions have an optional guard predicate which controls conditional execution of the instruction. The syntax to specify conditional execution is to prefix an instruction with @{!}p, where p is a predicate variable, optionally negated. Instructions without a guard predicate are executed unconditionally."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-011",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "anchor": "control-flow-instructions-at",
+            "startLine": 21838,
+            "endLine": 21840
+          },
+          "quotation": "Execute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing."
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-011#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.13.2",
+            "heading": "Control Flow Instructions: @",
+            "page": 400,
+            "bbox": [
+              0.11764705882352941,
+              0.4777161553030303,
+              0.7647167565359477,
+              0.031686452020202004
+            ]
+          },
+          "quotation": "Execute an instruction or instruction block for threads that have the guard predicate True. Threads with a False guard predicate do nothing.",
+          "alignedFromEvidenceId": "PTX-9.3-SHR-011",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-SHR-012",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.2.1",
+            "heading": "Fundamental Types",
+            "anchor": "fundamental-types",
+            "startLine": 3053,
+            "endLine": 3054
+          },
+          "quotation": "Bits (untyped): .b8, .b16, .b32, .b64, .b128"
+        }
+      ],
+      "unresolvedReferences": []
+    }
+  ],
+  "diagnostics": {
+    "declarationsWithoutReferences": [],
+    "unresolvedReferences": [],
+    "pdfAlignment": {
+      "matched": 6,
+      "ambiguous": [
+        "PTX-9.3-SHR-006",
+        "PTX-9.3-SHR-008"
+      ],
+      "unmatched": [
+        "PTX-9.3-SHR-001",
+        "PTX-9.3-SHR-009",
+        "PTX-9.3-SHR-010",
+        "PTX-9.3-SHR-012"
+      ]
+    }
+  }
+}

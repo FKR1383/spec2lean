@@ -1,0 +1,669 @@
+{
+  "schemaVersion": 2,
+  "manifestType": "spec2lean_evidence_manifest",
+  "generator": "spec2lean-traceability-v2",
+  "runId": "ptx-9.3-mov.b32-f910feea",
+  "language": "ptx",
+  "specificationVersion": "9.3",
+  "unit": "mov.b32",
+  "documentRole": "SEMANTICS",
+  "sourceManifest": {
+    "path": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+    "sha256": "622e6ce0d3114a909a62726530955993b5f2b98d2f60e45ae1ceb429512208f2"
+  },
+  "leanDocument": {
+    "path": "candidates/ptx/9.3/units/mov-b32/lean/MovB32-v1.lean",
+    "sha256": "c1ddad160a64c52e9f0ec8781d11236ed23f9dfd4e45595d287db9d74c7b8876"
+  },
+  "semanticDocument": {
+    "path": "candidates/ptx/9.3/units/mov-b32/semantics/semantics-v2.json",
+    "sha256": "904e10e14e06547c90e1efab4d84401c87fdbd9640c758c60bf17efb2a0bbcb8"
+  },
+  "sourceBundles": [
+    {
+      "path": "candidates/ptx/9.3/units/mov-b32/source-bundles/source-bundle-v2.json",
+      "sha256": "69b4560df180a5629e73fa4ff93ec175cd935acd9fa3ae381ef4dc2af5abcaeb"
+    }
+  ],
+  "entries": [
+    {
+      "entryId": "def:b32Bits:71",
+      "declarationKind": "def",
+      "declarationName": "b32Bits",
+      "leanRange": {
+        "startLine": 71,
+        "endLine": 75
+      },
+      "semanticIds": [
+        "PTX-MOV-SEM2-016",
+        "PTX-MOV-SEM2-018"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-MOV-SEM2-016",
+          "classification": "SOURCE_FACT",
+          "statement": ".b32 is a fundamental type specifier of basic type 'Bits (untyped)'; Table 8 lists .b8, .b16, .b32, .b64, .b128 under 'Bits (untyped)'.",
+          "evidenceIds": [
+            "PTX-9.3-MOV-023",
+            "PTX-9.3-MOV-024"
+          ]
+        },
+        {
+          "semanticId": "PTX-MOV-SEM2-018",
+          "classification": "SOURCE_FACT",
+          "statement": "Registers (.reg state space) are fast storage locations; aside from 1-bit predicate registers, scalar registers have a width of 8-, 16-, 32-, 64-, or 128-bits (32-bit width is therefore possible for .b32 registers); registers are not fully addressable.",
+          "evidenceIds": [
+            "PTX-9.3-MOV-026"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-MOV-023",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.2.1",
+            "heading": "Fundamental Types",
+            "anchor": "fundamental-types",
+            "startLine": 3019,
+            "endLine": 3022,
+            "page": 53
+          },
+          "quotation": "In PTX, the fundamental types reflect the native data types supported by the target architectures. A fundamental type specifies both a basic type and a size. Register variables are always of a fundamental type, and instructions operate on these types. The same type-size specifiers are used for both variable definitions and for typing instructions, so their names are intentionally short."
+        },
+        {
+          "evidenceId": "PTX-9.3-MOV-023#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "5.2.1",
+            "heading": "Fundamental Types",
+            "page": 53,
+            "bbox": [
+              0.11764705882352941,
+              0.8349863383838384,
+              0.7647109444444444,
+              0.056606489898989955
+            ]
+          },
+          "quotation": "In PTX, the fundamental types reflect the native data types supported by the target architectures. A fundamental type specifies both a basic type and a size. Register variables are always of a fundamental type, and instructions operate on these types. The same type-size specifiers are used for both variable definitions and for typing instructions, so their names are intentionally short.",
+          "alignedFromEvidenceId": "PTX-9.3-MOV-023",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-MOV-024",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.2.1",
+            "heading": "Fundamental Types",
+            "anchor": "fundamental-types-fundamental-type-specifiers",
+            "startLine": 3053,
+            "endLine": 3054,
+            "page": 53
+          },
+          "quotation": "Bits (untyped): .b8, .b16, .b32, .b64, .b128"
+        },
+        {
+          "evidenceId": "PTX-9.3-MOV-026",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.1.1",
+            "heading": "Register State Space",
+            "anchor": "register-state-space",
+            "startLine": 2617,
+            "endLine": 2631,
+            "page": 46
+          },
+          "quotation": "Registers (.reg state space) are fast storage locations. The number of registers is limited, and will vary from platform to platform. When the limit is exceeded, register variables will be spilled to memory, causing changes in performance. For each architecture, there is a recommended maximum number of registers to use (see the CUDA Programming Guide for details).\nRegisters may be typed (signed integer, unsigned integer, floating point, predicate) or untyped. Register size is restricted; aside from predicate registers which are 1-bit, scalar registers have a width of 8-, 16-, 32-, 64-, or 128-bits, and vector registers have a width of 16-, 32-, 64-, or 128-bits. The most common use of 8-bit registers is with ld, st, and cvt instructions, or as elements of vector tuples.\nRegisters differ from the other state spaces in that they are not fully addressable, i.e., it is not possible to refer to the address of a register. When compiling to use the Application Binary Interface (ABI), register variables are restricted to function scope and may not be declared at module scope. When compiling legacy PTX code (ISA versions prior to 3.0) containing module-scoped .reg variables, the compiler silently disables use of the ABI. Registers may have alignment boundaries required by multi-word loads and stores."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:b32DomainSize:76",
+      "declarationKind": "def",
+      "declarationName": "b32DomainSize",
+      "leanRange": {
+        "startLine": 76,
+        "endLine": 87
+      },
+      "semanticIds": [
+        "PTX-MOV-SEM2-060"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-MOV-SEM2-060",
+          "classification": "DESIGN_DEPENDENCY",
+          "statement": "Value domain design (architecture D-11, D-3): the value domain for .b32 is proposed as a fixed-width 32-bit untyped bit-value domain, because .b32 is the 'Bits (untyped)' basic type and mov Notes state bit-size types are required by mov.",
+          "evidenceIds": [
+            "PTX-9.3-MOV-007",
+            "PTX-9.3-MOV-023",
+            "PTX-9.3-MOV-024"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-MOV-007",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.9.3",
+            "heading": "Data Movement and Conversion Instructions: mov",
+            "anchor": "data-movement-and-conversion-instructions-mov",
+            "startLine": 15047,
+            "endLine": 15052,
+            "page": 270
+          },
+          "quotation": "Although only predicate and bit-size types are required, we include the arithmetic types for the programmer’s convenience: their use enhances program readability and allows additional type checking.\nWhen moving address of a kernel or a device function, only .u32 or .u64 instruction types are allowed. However, if a signed type is used, it is not treated as a compilation error. The compiler issues a warning in this case."
+        },
+        {
+          "evidenceId": "PTX-9.3-MOV-007#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.9.3",
+            "heading": "Data Movement and Conversion Instructions: mov",
+            "page": 270,
+            "bbox": [
+              0.15834477124183005,
+              0.1269295202020202,
+              0.7240140490196079,
+              0.09434260101010102
+            ]
+          },
+          "quotation": "Although only predicate and bit-size types are required, we include the arithmetic types for the programmer’s convenience: their use enhances program readability and allows additional type checking.\nWhen moving address of a kernel or a device function, only .u32 or .u64 instruction types are allowed. However, if a signed type is used, it is not treated as a compilation error. The compiler issues a warning in this case.",
+          "alignedFromEvidenceId": "PTX-9.3-MOV-007",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-MOV-023",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.2.1",
+            "heading": "Fundamental Types",
+            "anchor": "fundamental-types",
+            "startLine": 3019,
+            "endLine": 3022,
+            "page": 53
+          },
+          "quotation": "In PTX, the fundamental types reflect the native data types supported by the target architectures. A fundamental type specifies both a basic type and a size. Register variables are always of a fundamental type, and instructions operate on these types. The same type-size specifiers are used for both variable definitions and for typing instructions, so their names are intentionally short."
+        },
+        {
+          "evidenceId": "PTX-9.3-MOV-023#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "5.2.1",
+            "heading": "Fundamental Types",
+            "page": 53,
+            "bbox": [
+              0.11764705882352941,
+              0.8349863383838384,
+              0.7647109444444444,
+              0.056606489898989955
+            ]
+          },
+          "quotation": "In PTX, the fundamental types reflect the native data types supported by the target architectures. A fundamental type specifies both a basic type and a size. Register variables are always of a fundamental type, and instructions operate on these types. The same type-size specifiers are used for both variable definitions and for typing instructions, so their names are intentionally short.",
+          "alignedFromEvidenceId": "PTX-9.3-MOV-023",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-MOV-024",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.2.1",
+            "heading": "Fundamental Types",
+            "anchor": "fundamental-types-fundamental-type-specifiers",
+            "startLine": 3053,
+            "endLine": 3054,
+            "page": 53
+          },
+          "quotation": "Bits (untyped): .b8, .b16, .b32, .b64, .b128"
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "structure:B32:88",
+      "declarationKind": "structure",
+      "declarationName": "B32",
+      "leanRange": {
+        "startLine": 88,
+        "endLine": 101
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "structure:RegId:102",
+      "declarationKind": "structure",
+      "declarationName": "RegId",
+      "leanRange": {
+        "startLine": 102,
+        "endLine": 112
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "structure:PredId:113",
+      "declarationKind": "structure",
+      "declarationName": "PredId",
+      "leanRange": {
+        "startLine": 113,
+        "endLine": 123
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:SourceOperand:124",
+      "declarationKind": "inductive",
+      "declarationName": "SourceOperand",
+      "leanRange": {
+        "startLine": 124,
+        "endLine": 136
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:Destination:137",
+      "declarationKind": "inductive",
+      "declarationName": "Destination",
+      "leanRange": {
+        "startLine": 137,
+        "endLine": 148
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:Guard:149",
+      "declarationKind": "inductive",
+      "declarationName": "Guard",
+      "leanRange": {
+        "startLine": 149,
+        "endLine": 160
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:MovTypeSpecifier:161",
+      "declarationKind": "inductive",
+      "declarationName": "MovTypeSpecifier",
+      "leanRange": {
+        "startLine": 161,
+        "endLine": 173
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "structure:MachineState:174",
+      "declarationKind": "structure",
+      "declarationName": "MachineState",
+      "leanRange": {
+        "startLine": 174,
+        "endLine": 182
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "structure:MovB32Instruction:183",
+      "declarationKind": "structure",
+      "declarationName": "MovB32Instruction",
+      "leanRange": {
+        "startLine": 183,
+        "endLine": 196
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:evalSource:197",
+      "declarationKind": "def",
+      "declarationName": "evalSource",
+      "leanRange": {
+        "startLine": 197,
+        "endLine": 208
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:evalGuard:209",
+      "declarationKind": "def",
+      "declarationName": "evalGuard",
+      "leanRange": {
+        "startLine": 209,
+        "endLine": 224
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:copyValue:225",
+      "declarationKind": "def",
+      "declarationName": "copyValue",
+      "leanRange": {
+        "startLine": 225,
+        "endLine": 239
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:updateDestination:240",
+      "declarationKind": "def",
+      "declarationName": "updateDestination",
+      "leanRange": {
+        "startLine": 240,
+        "endLine": 250
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:ExecOutcome:251",
+      "declarationKind": "inductive",
+      "declarationName": "ExecOutcome",
+      "leanRange": {
+        "startLine": 251,
+        "endLine": 270
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:execMovB32:271",
+      "declarationKind": "def",
+      "declarationName": "execMovB32",
+      "leanRange": {
+        "startLine": 271,
+        "endLine": 292
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:MovB32Step:293",
+      "declarationKind": "inductive",
+      "declarationName": "MovB32Step",
+      "leanRange": {
+        "startLine": 293,
+        "endLine": 304
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:mkB32:305",
+      "declarationKind": "def",
+      "declarationName": "mkB32",
+      "leanRange": {
+        "startLine": 305,
+        "endLine": 309
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:mkState:310",
+      "declarationKind": "def",
+      "declarationName": "mkState",
+      "leanRange": {
+        "startLine": 310,
+        "endLine": 314
+      },
+      "semanticIds": [
+        "PTX-MOV-SEM2-058"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "PTX-MOV-SEM2-058",
+          "classification": "DESIGN_DEPENDENCY",
+          "statement": "Minimal machine state design (architecture D-5, D-14): the state for the bounded base mov.b32 is the pair (value-register file, predicate-register file); no memory, shared, special-register, or concurrency state is required by the base form's syntax and description.",
+          "evidenceIds": [
+            "PTX-9.3-MOV-003",
+            "PTX-9.3-MOV-004",
+            "PTX-9.3-MOV-026"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "PTX-9.3-MOV-003",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.9.3",
+            "heading": "Data Movement and Conversion Instructions: mov",
+            "anchor": "data-movement-and-conversion-instructions-mov",
+            "startLine": 15008,
+            "endLine": 15021,
+            "page": 269
+          },
+          "quotation": "mov.type  d, a;\nmov.type  d, sreg;\nmov.type  d, avar;       // get address of variable\nmov.type  d, avar+imm;   // get address of variable with offset\nmov.u32   d, fname;      // get address of device function\nmov.u64   d, fname;      // get address of device function\nmov.u32   d, kernel;     // get address of entry function\nmov.u64   d, kernel;     // get address of entry function\n\n.type = { .pred,\n          .b16, .b32, .b64,\n          .u16, .u32, .u64,\n          .s16, .s32, .s64,\n                .f32, .f64 };"
+        },
+        {
+          "evidenceId": "PTX-9.3-MOV-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "9.7.9.3",
+            "heading": "Data Movement and Conversion Instructions: mov",
+            "anchor": "data-movement-and-conversion-instructions-mov",
+            "startLine": 15025,
+            "endLine": 15027,
+            "page": 269
+          },
+          "quotation": "Write register d with the value of a.\nOperand a may be a register, special register, variable with optional offset in an addressable memory space, or function name."
+        },
+        {
+          "evidenceId": "PTX-9.3-MOV-004#pdf-exact-match",
+          "sourceKind": "PDF",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.pdf",
+          "documentSha256": "769cc12e363e7bb9cd311464f2a42edbdaf4c74ca18575de8c358e93223434fc",
+          "locator": {
+            "section": "9.7.9.3",
+            "heading": "Data Movement and Conversion Instructions: mov",
+            "page": 269,
+            "bbox": [
+              0.11764705882352941,
+              0.5112325694444444,
+              0.7646940441176471,
+              0.05343601641414142
+            ]
+          },
+          "quotation": "Write register d with the value of a.\nOperand a may be a register, special register, variable with optional offset in an addressable memory space, or function name.",
+          "alignedFromEvidenceId": "PTX-9.3-MOV-004",
+          "alignmentMethod": "EXACT_QUOTE_TOKEN_MATCH"
+        },
+        {
+          "evidenceId": "PTX-9.3-MOV-026",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html",
+          "documentSha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
+          "locator": {
+            "section": "5.1.1",
+            "heading": "Register State Space",
+            "anchor": "register-state-space",
+            "startLine": 2617,
+            "endLine": 2631,
+            "page": 46
+          },
+          "quotation": "Registers (.reg state space) are fast storage locations. The number of registers is limited, and will vary from platform to platform. When the limit is exceeded, register variables will be spilled to memory, causing changes in performance. For each architecture, there is a recommended maximum number of registers to use (see the CUDA Programming Guide for details).\nRegisters may be typed (signed integer, unsigned integer, floating point, predicate) or untyped. Register size is restricted; aside from predicate registers which are 1-bit, scalar registers have a width of 8-, 16-, 32-, 64-, or 128-bits, and vector registers have a width of 16-, 32-, 64-, or 128-bits. The most common use of 8-bit registers is with ld, st, and cvt instructions, or as elements of vector tuples.\nRegisters differ from the other state spaces in that they are not fully addressable, i.e., it is not possible to refer to the address of a register. When compiling to use the Application Binary Interface (ABI), register variables are restricted to function scope and may not be declared at module scope. When compiling legacy PTX code (ISA versions prior to 3.0) containing module-scoped .reg variables, the compiler silently disables use of the ABI. Registers may have alignment boundaries required by multi-word loads and stores."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:exR1:315",
+      "declarationKind": "def",
+      "declarationName": "exR1",
+      "leanRange": {
+        "startLine": 315,
+        "endLine": 315
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:exR2:316",
+      "declarationKind": "def",
+      "declarationName": "exR2",
+      "leanRange": {
+        "startLine": 316,
+        "endLine": 316
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:exP1:317",
+      "declarationKind": "def",
+      "declarationName": "exP1",
+      "leanRange": {
+        "startLine": 317,
+        "endLine": 388
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [],
+      "unresolvedReferences": []
+    }
+  ],
+  "diagnostics": {
+    "declarationsWithoutReferences": [
+      "B32",
+      "RegId",
+      "PredId",
+      "SourceOperand",
+      "Destination",
+      "Guard",
+      "MovTypeSpecifier",
+      "MachineState",
+      "MovB32Instruction",
+      "evalSource",
+      "evalGuard",
+      "copyValue",
+      "updateDestination",
+      "ExecOutcome",
+      "execMovB32",
+      "MovB32Step",
+      "mkB32",
+      "exR1",
+      "exR2",
+      "exP1"
+    ],
+    "unresolvedReferences": [],
+    "pdfAlignment": {
+      "matched": 17,
+      "ambiguous": [],
+      "unmatched": [
+        "PTX-9.3-MOV-001",
+        "PTX-9.3-MOV-003",
+        "PTX-9.3-MOV-006",
+        "PTX-9.3-MOV-010",
+        "PTX-9.3-MOV-011",
+        "PTX-9.3-MOV-013",
+        "PTX-9.3-MOV-014",
+        "PTX-9.3-MOV-015",
+        "PTX-9.3-MOV-017",
+        "PTX-9.3-MOV-019",
+        "PTX-9.3-MOV-021",
+        "PTX-9.3-MOV-022",
+        "PTX-9.3-MOV-024",
+        "PTX-9.3-MOV-026",
+        "PTX-9.3-MOV-029",
+        "PTX-9.3-MOV-030",
+        "PTX-9.3-MOV-034",
+        "PTX-9.3-MOV-035",
+        "PTX-9.3-MOV-036",
+        "PTX-9.3-MOV-037",
+        "PTX-9.3-MOV-038"
+      ]
+    }
+  }
+}

@@ -1,9 +1,31 @@
 # Spec2Lean Evidence for VS Code
 
+From the repository root, the simplest development launch is:
+
+```bash
+./spec2lean gui candidates/ptx/9.3/units/or-b16/lean/OrB16-v2.lean
+```
+
+This packages and force-installs the local extension as a VSIX on the active
+VS Code server, then opens the repository plus the requested Lean file in a
+normal new window. It works with Remote VS Code CLIs that do not support
+`--extensionDevelopmentPath`.
+
+Run that command in the environment where the repository lives. In a local
+checkout it installs into local VS Code; in an SSH/container checkout it
+installs into that active VS Code Server. The VSIX is platform-independent and
+contains no native runtime dependency. The launcher requires the `code` CLI,
+Node/npm dependencies already installed under `editors/vscode`, and VS Code
+1.95 or newer.
+
 This extension keeps the normal Lean editor intact and opens a synchronized
 evidence panel beside it. CodeLens links above mapped declarations show the
 semantic claims and hash-verified official source fragments used by the
 Spec2Lean run.
+
+CodeLens is deliberately hidden if the open Lean buffer no longer matches the
+SHA-256 recorded in the manifest. Refresh or rebuild the manifest instead of
+reviewing stale evidence.
 
 ## Development
 

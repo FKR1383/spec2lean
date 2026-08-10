@@ -22,3 +22,5 @@ import Spec2Lean.PTX.AndB16Proofs
 import Spec2Lean.PTX.OrB16
 import Spec2Lean.PTX.OrB16Proofs
 import Spec2Lean.PTX.XorB16
+import Spec2Lean.PTX.ShrB32
+import Spec2Lean.PTX.ShrB32Proofs

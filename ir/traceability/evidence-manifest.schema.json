@@ -148,6 +148,7 @@
           }
         },
         "semanticIds": { "$ref": "#/$defs/stringArray" },
+        "theoremObligationIds": { "$ref": "#/$defs/stringArray" },
         "claims": { "type": "array", "items": { "$ref": "#/$defs/claim" } },
         "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } },
         "unresolvedReferences": { "$ref": "#/$defs/stringArray" }
