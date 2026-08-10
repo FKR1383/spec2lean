@@ -90,6 +90,17 @@ uses a separate persisted session, and the standalone `tick` command still
 owns and closes its own runtime, so crash recovery and bounded diagnostics do
 not depend on an in-memory session object.
 
+Completed non-proof retries advance to a fresh immutable artifact revision.
+Malformed JSON is rejected before atomic candidate publication, so a partial
+artifact cannot poison later retries. Proof generation intentionally retains
+its checked progress file. `formalize` also verifies every file, size, and
+SHA-256 pinned by the selected source manifest before creating a run.
+
+Only a terminal assistant turn may supply `SPEC2LEAN_RESULT`; tool-call and
+compaction turns are ignored. Invalid outcome/target combinations become a
+bounded same-stage `RETRY`, and no second model call is used merely to guess or
+repair protocol intent.
+
 ## PTX source retrieval profile
 
 PTX 9.3 deterministic retrieval policy is versioned in
@@ -118,12 +129,12 @@ full-view fallback.
 ./spec2lean semantic-ir review-packet <environment.json> <delta.json>
 ```
 
-The PTX 9.3 language pack keeps its production pointer on the empty `DRAFT`
-shell while the first bounded scalar `.b32` shared-environment candidate is at
-human review. Accepted per-unit decisions support that candidate but do not
-constitute shared approval.
+The PTX 9.3 language pack points to the first explicitly human-approved shared
+environment for the bounded scalar `.b32` register/predicate core. Its approval
+record remains distinct from the supporting per-unit approvals, and units
+outside its declared capability envelope fall back to full semantic review.
 
-Review and, only after an explicit human decision, approve with:
+The immutable review packet and deterministic approval command are:
 
 ```bash
 less reviews/shared-semantics/ptx-9.3/shared-environment-first-human-review-v1.md

@@ -47,13 +47,11 @@ let enteredAt = Date.parse(run.createdAt)
 
 for (const event of run.history) {
   const at = Date.parse(event.at)
-
   if (event.from !== null) {
     const m = metric(event.from)
     m.milliseconds += Math.max(0, at - enteredAt)
     m.transitions += 1
   }
-
   enteredAt = at
 }
 
@@ -113,5 +111,15 @@ console.log(JSON.stringify({
     .filter((execution) => execution.failureClass === "PROVIDER_RETRY_BUDGET_EXCEEDED")
     .length,
   semanticV2: semanticV2Telemetry(run),
+  executionModels: Object.fromEntries(
+    [...new Set((run.executions ?? []).map((execution) => execution.model ?? "unrecorded"))]
+      .sort()
+      .map((model) => [
+        model,
+        (run.executions ?? []).filter(
+          (execution) => (execution.model ?? "unrecorded") === model,
+        ).length,
+      ]),
+  ),
   stages,
 }, null, 2))

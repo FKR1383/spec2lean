@@ -4,7 +4,7 @@ type MessagePart = {
   reason?: string
 }
 
-type SessionMessage = {
+export type SessionMessage = {
   info?: {
     role?: string
   }
@@ -134,9 +134,20 @@ function textOfMessage(message: SessionMessage): string {
     .trim()
 }
 
-function findCompletedResponse(messages: SessionMessage[]): string | undefined {
+function messageFinishReason(message: SessionMessage): string | undefined {
+  for (const part of [...(message.parts ?? [])].reverse()) {
+    if (part.type === "step-finish" && typeof part.reason === "string") {
+      return part.reason
+    }
+  }
+  return undefined
+}
+
+export function findCompletedResponse(messages: SessionMessage[]): string | undefined {
   for (const message of [...messages].reverse()) {
     if (message.info?.role !== "assistant") continue
+    const finishReason = messageFinishReason(message)
+    if (finishReason === undefined || finishReason === "tool-calls") continue
     const text = textOfMessage(message)
     if (text.includes("SPEC2LEAN_RESULT")) return text
   }
@@ -155,11 +166,8 @@ function latestAssistantResponse(messages: SessionMessage[]): string | undefined
 function latestFinishReason(messages: SessionMessage[]): string | undefined {
   for (const message of [...messages].reverse()) {
     if (message.info?.role !== "assistant") continue
-    for (const part of [...(message.parts ?? [])].reverse()) {
-      if (part.type === "step-finish" && typeof part.reason === "string") {
-        return part.reason
-      }
-    }
+    const reason = messageFinishReason(message)
+    if (reason !== undefined) return reason
   }
   return undefined
 }

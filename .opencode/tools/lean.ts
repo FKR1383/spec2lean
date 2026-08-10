@@ -11,9 +11,10 @@ import {
   sep,
 } from "node:path"
 
-const TOOL_VERSION = 1
+const TOOL_VERSION = 2
 const MAX_FILE_BYTES = 2 * 1024 * 1024
 const MAX_PROCESS_OUTPUT_BYTES = 256 * 1024
+const LEAN_CANDIDATE_BASE_TARGET = "Spec2Lean.Basic"
 
 const ALLOWED_ROOTS = [
   "lean",
@@ -163,9 +164,9 @@ function safeChildEnvironment(): Record<string, string> {
   return environment
 }
 
-async function runLean(
+async function runLake(
   worktree: string,
-  absolutePath: string,
+  args: string[],
   timeoutSeconds: number,
 ): Promise<ProcessResult> {
   const projectRoot = await realpath(worktree)
@@ -175,7 +176,7 @@ async function runLean(
   return await new Promise<ProcessResult>((resolveResult, reject) => {
     const child = spawn(
       "lake",
-      ["env", "lean", absolutePath],
+      args,
       {
         cwd: leanRoot,
         env: safeChildEnvironment(),
@@ -270,6 +271,34 @@ async function runLean(
       child.kill("SIGKILL")
     }, timeoutSeconds * 1000)
   })
+}
+
+async function runLean(
+  worktree: string,
+  absolutePath: string,
+  timeoutSeconds: number,
+): Promise<ProcessResult> {
+  // `lake env lean` configures the module search path but does not compile
+  // project imports in a fresh worktree. Prepare the shared candidate import
+  // first so agents receive diagnostics for their file, not a missing .olean.
+  const baseBuild = await runLake(
+    worktree,
+    ["build", LEAN_CANDIDATE_BASE_TARGET],
+    timeoutSeconds,
+  )
+  if (
+    baseBuild.exitCode !== 0 ||
+    baseBuild.timedOut ||
+    baseBuild.outputLimitExceeded
+  ) {
+    return baseBuild
+  }
+
+  return await runLake(
+    worktree,
+    ["env", "lean", absolutePath],
+    timeoutSeconds,
+  )
 }
 
 function parseDiagnostics(

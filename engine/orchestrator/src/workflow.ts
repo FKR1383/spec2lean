@@ -59,6 +59,7 @@ export type AgentExecution = {
   at: string
   stage: FormalizationStage
   agent: string
+  model?: string
   sessionId: string
   outcome: string
   nextStage: FormalizationStage

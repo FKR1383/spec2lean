@@ -6,26 +6,21 @@
   "gate": "A",
   "decision": "rejected",
   "reviewer": "Human reviewer",
-  "rationale": "Revise foundation-v4: do not admit the bit-bucket destination without or.b32-specific legality evidence; the shared bit-bucket entry is only a general source rule. Reuse ptx.9.3.predication.false-guard-noop-derived as the approved bounded-core derivation rather than reopening it as a local assumption. Make guard-false execution return unchanged state without requiring source lookup.",
-  "submittedAtUtc": "2026-08-09T23:46:09.851Z",
+  "rationale": "Gate A modification required: foundation-v3 defines both src1 and src2 as RegisterRef | Immediate, but the cited or.b32 evidence only demonstrates an immediate in operand b. Constrain src1 to RegisterRef; keep src2 immediate support and literal typing explicit and bounded. Do not generalize immediate legality across operand positions.",
+  "submittedAtUtc": "2026-08-10T00:42:35.545Z",
   "artifacts": [
     {
-      "relativePath": "candidates/ptx/9.3/units/or-b32/architecture/foundation-v4.md",
-      "sha256": "24136862b6310d9e143a4a39749c52aed2d038b5f7ff08dd656f12def64c48ec",
-      "sizeBytes": 9923
-    },
-    {
-      "relativePath": "candidates/ptx/9.3/units/or-b32/reviews/architecture-critic-v4.md",
-      "sha256": "7957e9bac11b304521aede1c0f8ea67b972e8b139603637de60be0fd25261d1f",
-      "sizeBytes": 2109
+      "relativePath": "candidates/ptx/9.3/units/or-b32/architecture/foundation-v3.md",
+      "sha256": "948e1b7871dac5b7cd0727d2bec1f0cfef283c3c0bfb88b46cb22006c1c2d91f",
+      "sizeBytes": 11134
     }
   ],
   "humanConfirmationRecorded": true,
   "gateApprovalPerformed": false,
   "promotionPerformed": false,
   "provenance": {
-    "controller": "spec2lean-cli",
-    "runId": "ptx-9.3-or.b32-a1e12839",
-    "command": "reject"
+    "agent": "spec-manager",
+    "sessionID": "ses_016e1002cffeXxFHJG0NLgbRYv",
+    "messageID": "msg_fe91f0e06001etCNPZQ3sIyiYv"
   }
 }

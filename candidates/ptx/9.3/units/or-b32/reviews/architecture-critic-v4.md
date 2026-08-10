@@ -1,38 +1,29 @@
-# Architecture Critique: `or.b32` (Review v4)
+# Independent Architecture Critique — or.b32 (v4)
 
-## 1) Status
-- Reviewed artifact: `candidates/ptx/9.3/units/or-b32/architecture/foundation-v4.md`
-- Stage: `ARCHITECTURE_CRITIQUE`
-- Required source: `documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html`
-- Review decision: **SUCCESS**
-- Next human stage: **Gate A readiness**
+## 1) Reviewed artifact
+- `candidates/ptx/9.3/units/or-b32/architecture/foundation-v4.md` (DRAFT)
+- Source evidence consulted:
+  - `documents/sources/nvidia/ptx/9.3/raw/ptx_isa_9.3.html`
+  - `documents/sources/nvidia/ptx/9.3/source-manifest.json`
+- Run state consulted:
+  - `runs/ptx-9.3-or.b32-b870f055/run.json`
 
-## 2) Findings
+## 2) Verdict
+**SUCCESS** (no additional architecture defects identified in this revision beyond prior resolved issues)
 
-### ARC-401 (NOTE)
-- **Affected artifact:** `candidates/ptx/9.3/units/or-b32/architecture/foundation-v4.md`
-- **Location:** `Section 6 / assumptions A-3, AM-1` lines 79-83
-- **Evidence references:**
-  - `logic-and-shift-instructions-or` lines 14298–14321
-  - `source-operands` lines 5331–5334
-- **Description:**
-  Immediate support remains an explicit design restriction (only for `srcB`) backed by an example and bounded by `A-3`; this is appropriate, but still not normatively grounded as a full per-position operand rule from a single specification subsection.
-- **Consequence:**
-  The implementation must keep this as a project design assumption and avoid claiming it as full PTX semantics outside this bounded unit.
-- **Required owner for revision:** Spec Architect + Gate A reviewers
-- **Human review required:** yes
+## 3) Findings
+No new findings are identified in v4.
 
-### ARC-402 (NOTE)
-- **Affected artifact:** `candidates/ptx/9.3/units/or-b32/architecture/foundation-v4.md`
-- **Location:** `Section 7 / AM-2` lines 84-85
-- **Evidence references:**
-  - `predicated-execution` lines 7547–7550
-- **Description:**
-  Guard-false behavior is correctly modeled by assumption `A-1`, but the formal “disabled = unchanged state” clause is an inferred operational choice (not explicitly spelled out in the cited lines).
-- **Consequence:**
-  Lean mapping should treat this as an explicit local semantics choice, not a proven normative consequence.
-- **Required owner for revision:** Spec Architect + Lean mapping reviewer
-- **Human review required:** yes
+Previously identified `.pred` scope admission issue (v2) remains resolved by scoping active typing to `.b32` only (lines 44–47, 140).
 
-## 3) Overall recommendation
-No MAJOR blocking defects were found in v4 relative to this bounded evidence slice. The architecture is **ready for Human Gate A**, with the above two notes to be carried forward as explicit assumptions/non-proof obligations.
+## 4) Specific check notes
+- Fact/claim separation is present: facts are in §2, design in §3, assumptions/ambiguities/open questions clearly separated.
+- Unit scoping to `or.b32` is explicit and traceable.
+- The new source-1 register-only restriction is explicitly documented as a unit-bound decision (`D-3`), and unresolved operand-order typing question is still called out in `AMB-1`/`OQ-1` (lines 92, 99), so no hidden broad acceptance.
+- Evidence mapping and line references are present for each source fragment used (`SF-*` entries in §2/§10), and mapping in §4.
+- Proposed proof/validation obligations remain local and non-vacuous.
+
+## 5) Readiness for Human Gate A
+This critique does **not** approve Gate A, but deems the architecture candidate `foundation-v4.md` suitable to proceed to Human Gate A review.
+
+- `next`: Human Gate A human decision required.

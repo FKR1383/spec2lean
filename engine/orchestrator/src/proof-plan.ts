@@ -37,13 +37,23 @@ async function latestObligationPath(run: RunState): Promise<string> {
 }
 
 function splitTheoremSketch(sketch: string): Array<{ name: string; statement: string }> {
-  const matches = [...sketch.matchAll(/^theorem\s+([A-Za-z0-9_']+)/gm)]
+  const matches = [...sketch.matchAll(/^[ \t]*theorem\s+([A-Za-z0-9_']+)/gm)]
   return matches.map((match, index) => {
     const start = match.index ?? 0
     const end = index + 1 < matches.length ? (matches[index + 1]!.index ?? sketch.length) : sketch.length
     const statement = sketch.slice(start, end).trim().replace(/\n-- supporting[\s\S]*$/i, "").trim()
     return { name: match[1]!, statement }
   })
+}
+
+export function theoremDeclarationNames(source: string): Set<string> {
+  return new Set(
+    [...source.matchAll(/^[ \t]*theorem\s+([A-Za-z0-9_']+)/gm)]
+      .flatMap((match) => {
+        const name = match[1]
+        return name === undefined ? [] : [name]
+      }),
+  )
 }
 
 export async function proofTargets(run: RunState): Promise<ProofTarget[]> {
@@ -90,13 +100,7 @@ export async function declaredProofNames(run: RunState): Promise<Set<string>> {
   const path = proofArtifactPath(run)
   if (!(await fileExists(path))) return new Set()
   const text = await readFile(resolve(REPO_ROOT, path), "utf8")
-  return new Set(
-    [...text.matchAll(/^theorem\s+([A-Za-z0-9_']+)/gm)]
-      .flatMap((match) => {
-        const name = match[1]
-        return name === undefined ? [] : [name]
-      }),
-  )
+  return theoremDeclarationNames(text)
 }
 
 export async function nextProofTarget(run: RunState): Promise<ProofTarget | undefined> {

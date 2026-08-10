@@ -11,3 +11,5 @@ import Spec2Lean.PTX.XorB32
 import Spec2Lean.PTX.XorB32Proofs
 import Spec2Lean.PTX.AndB32
 import Spec2Lean.PTX.AndB32Proofs
+import Spec2Lean.PTX.OrB32
+import Spec2Lean.PTX.OrB32Proofs

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "recordType": "human_gate_decision",
+  "reviewId": "ptx-or-b32-final-approval-v1",
+  "unitId": "ptx-or-b32",
+  "gate": "FINAL",
+  "decision": "approved",
+  "reviewer": "Human reviewer",
+  "rationale": "The human operator explicitly approved Gate FINAL for run ptx-9.3-or.b32-b870f055 after the automated workflow reached its human-review boundary. This authorizes only the next workflow stage and is not final acceptance unless gate=FINAL.",
+  "submittedAtUtc": "2026-08-10T01:59:55.256Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ptx/9.3/units/or-b32/lean/OrB32Proofs-v1.lean",
+      "sha256": "59c1b0a8f8c8fdd870c47d592abb9d4589fc9c985da9b94f540e33b7ce6380da",
+      "sizeBytes": 5661
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/or-b32/reviews/final-critic-v1.md",
+      "sha256": "88b797cf18ab8bb7ccfc9d77d9bdb28fcd1d4e4951dfebe59dfcacf70bf5af12",
+      "sizeBytes": 4717
+    }
+  ],
+  "humanConfirmationRecorded": true,
+  "gateApprovalPerformed": true,
+  "promotionPerformed": false,
+  "provenance": {
+    "agent": "spec-manager",
+    "sessionID": "ses_0169a40b1ffedjQ7qGyyv2Lymw",
+    "messageID": "msg_fe965d972001aVaCibMNkjANNN"
+  }
+}

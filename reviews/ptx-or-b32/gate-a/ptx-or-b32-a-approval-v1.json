@@ -6,26 +6,26 @@
   "gate": "A",
   "decision": "approved",
   "reviewer": "Human reviewer",
-  "rationale": "The human operator explicitly approved Gate A for run ptx-9.3-or.b32-a1e12839 after the automated workflow reached its human-review boundary. This deterministic record authorizes only the next workflow stage and is not final acceptance unless gate=FINAL.",
-  "submittedAtUtc": "2026-08-09T23:47:52.332Z",
+  "rationale": "The human operator explicitly approved Gate A for run ptx-9.3-or.b32-b870f055 after the automated workflow reached its human-review boundary. This authorizes only the next workflow stage and is not final acceptance unless gate=FINAL.",
+  "submittedAtUtc": "2026-08-10T00:49:54.028Z",
   "artifacts": [
     {
-      "relativePath": "candidates/ptx/9.3/units/or-b32/architecture/foundation-v5.md",
-      "sha256": "e7614a6337a94ab1500a4db6f8ce1767d978d92789cfe3d618d75733a4ae09e5",
-      "sizeBytes": 10406
+      "relativePath": "candidates/ptx/9.3/units/or-b32/architecture/foundation-v4.md",
+      "sha256": "3a8d1906cdfafd55d80112784b6080a0c7e58b139a1abb5fd4cf2d0a4f35e065",
+      "sizeBytes": 10842
     },
     {
-      "relativePath": "candidates/ptx/9.3/units/or-b32/reviews/architecture-critic-v5.md",
-      "sha256": "fd1e05e31eee419ab04feffac477e9bff777654393d5b09d7915168ee4e7323f",
-      "sizeBytes": 2609
+      "relativePath": "candidates/ptx/9.3/units/or-b32/reviews/architecture-critic-v4.md",
+      "sha256": "d8eeca25bf32f5a3930b723b0bce70c3cce9009a5285f36a7dc067953bd952ef",
+      "sizeBytes": 1550
     }
   ],
   "humanConfirmationRecorded": true,
   "gateApprovalPerformed": true,
   "promotionPerformed": false,
   "provenance": {
-    "controller": "spec2lean-cli",
-    "runId": "ptx-9.3-or.b32-a1e12839",
-    "command": "approve"
+    "agent": "spec-manager",
+    "sessionID": "ses_016da4e03ffefeDhN6mwCP18E0",
+    "messageID": "msg_fe925bce9001I0mbryDSKVA4r7"
   }
 }

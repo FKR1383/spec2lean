@@ -1,0 +1,340 @@
+{
+  "schema_version": 1,
+  "obligation_set_id": "ptx-9.3-or-b32-obligations-v4",
+  "run_id": "ptx-9.3-or.b32-b870f055",
+  "stage": "THEOREM_GENERATION",
+  "stage_attempt": 4,
+  "run_revision": 35,
+  "status": "READY_FOR_STRENGTH_REVIEW",
+  "status_rationale": "Revised theorem set addresses prior human theorem-strength findings by splitting correspondence obligations into complete declarations and adding explicit false-guard/state-frame lemmas, with valid claim IDs and updated semantic claim_counts.",
+  "unit": {
+    "language": "PTX",
+    "specification_version": "9.3",
+    "construct": "or.b32",
+    "instruction_family": "or",
+    "bounded_unit": "PTX ISA 9.3 bounded unit `or.b32 d, a, b;` with optional predication",
+    "scope_boundary": "Only .b32 with optional predication is formalized. Source1 is register-only by architecture restriction, source2 is register-or-immediate in bounded scope, destination supports register or `_`; no malformed/exception behavior is added."
+  },
+  "gate_c_reference": {
+    "path": "reviews/ptx-or-b32/gate-c/ptx-or-b32-c-approval-v1.json",
+    "record_path": "reviews/ptx-or-b32/gate-c/ptx-or-b32-c-approval-v1.json",
+    "review_id": "ptx-or-b32-c-approval-v1",
+    "gate": "C",
+    "decision": "approved",
+    "humanConfirmationRecorded": true,
+    "gateApprovalPerformed": true,
+    "submittedAtUtc": "2026-08-10T01:19:46.238Z"
+  },
+  "gate_b_reference": {
+    "path": "reviews/ptx-or-b32/gate-b/ptx-or-b32-b-approval-v1.json",
+    "record_path": "reviews/ptx-or-b32/gate-b/ptx-or-b32-b-approval-v1.json",
+    "review_id": "ptx-or-b32-b-approval-v1",
+    "gate": "B",
+    "decision": "approved",
+    "humanConfirmationRecorded": true,
+    "gateApprovalPerformed": true,
+    "submittedAtUtc": "2026-08-10T00:56:36.807Z"
+  },
+  "gate_a_reference": {
+    "path": "reviews/ptx-or-b32/gate-a/ptx-or-b32-a-approval-v1.json",
+    "record_path": "reviews/ptx-or-b32/gate-a/ptx-or-b32-a-approval-v1.json",
+    "review_id": "ptx-or-b32-a-approval-v1",
+    "gate": "A",
+    "decision": "approved",
+    "humanConfirmationRecorded": true,
+    "gateApprovalPerformed": true,
+    "submittedAtUtc": "2026-08-10T00:49:54.028Z"
+  },
+  "semantics_reference": {
+    "path": "candidates/ptx/9.3/units/or-b32/semantics/semantics-v1.json",
+    "interpretation_id": "ptx-9.3-or-b32-semantics-v1",
+    "claim_count": 8,
+    "claim_counts": {
+      "total": 8,
+      "SOURCE_FACT": 2,
+      "DERIVED_INTERPRETATION": 4,
+      "DESIGN_DEPENDENCY": 1,
+      "ASSUMPTION": 0,
+      "OPEN_QUESTION": 1
+    }
+  },
+  "source_bundle_reference": {
+    "path": "candidates/ptx/9.3/units/or-b32/source-bundles/source-bundle-v2.json",
+    "bundle_id": "ptx-9.3-or-b32-source-bundle-v2",
+    "fragment_ids": [
+      "PTX-9.3-OR-001",
+      "PTX-9.3-OR-002",
+      "PTX-9.3-OR-003",
+      "PTX-9.3-OR-004",
+      "PTX-9.3-OR-005",
+      "PTX-9.3-OR-006",
+      "PTX-9.3-OR-007",
+      "PTX-9.3-OR-008",
+      "PTX-9.3-OR-009",
+      "PTX-9.3-OR-010",
+      "PTX-9.3-OR-011",
+      "PTX-9.3-OR-012",
+      "PTX-9.3-OR-013",
+      "PTX-9.3-OR-014",
+      "PTX-9.3-OR-015",
+      "PTX-9.3-OR-016"
+    ]
+  },
+  "lean_mapping_reference": {
+    "path": "candidates/ptx/9.3/units/or-b32/lean/OrB32-v7.lean",
+    "namespace": "Spec2Lean.PTX.OrB32"
+  },
+  "architecture_reference": {
+    "path": "candidates/ptx/9.3/units/or-b32/architecture/foundation-v4.md"
+  },
+  "compliance_notes": [
+    "No proofs are included in this stage.",
+    "No vacuous functional-determinism claims; determinism is stated over relation constructors.",
+    "No circular or imported-semantics claims from unrelated units."
+  ],
+  "validation_obligations": [
+    {
+      "obligation_id": "PTX-OR-VAL-401",
+      "title": "Bounded instruction shape and operand ordering",
+      "description": "OrB32Instruction fields are (guard, d, a, b) with source1 register-only and source2 register-or-immediate, matching bounded or syntax and architecture restriction.",
+      "check_type": "static definitional check",
+      "status": "SATISFIED_IN_CANDIDATE",
+      "semantic_claim_ids": [
+        "PTX-OR-SEM1-003",
+        "PTX-OR-SEM1-004",
+        "PRE-3",
+        "ASS-OR-1",
+        "D-3"
+      ],
+      "lean_declarations_used": [
+        "OrB32Instruction",
+        "Source1",
+        "Source2",
+        "Destination",
+        "Guard"
+      ]
+    },
+    {
+      "obligation_id": "PTX-OR-VAL-402",
+      "title": "32-bit value and minimal machine state",
+      "description": "B32 uses a 2^32 domain and MachineState contains value predicate files with partial lookup via Option.",
+      "check_type": "representation/invariant check",
+      "status": "SATISFIED_IN_CANDIDATE",
+      "semantic_claim_ids": [
+        "D-4",
+        "D-7",
+        "PTX-OR-SEM1-005"
+      ],
+      "lean_declarations_used": [
+        "B32",
+        "b32Bits",
+        "b32DomainSize",
+        "MachineState"
+      ]
+    },
+    {
+      "obligation_id": "PTX-OR-VAL-403",
+      "title": "No bypass constructs or axioms",
+      "description": "Lean declarations are executable, definitionally transparent, and contain no sorry/admit/axiom/unsafe usage.",
+      "check_type": "static verification check",
+      "status": "SATISFIED_IN_CANDIDATE",
+      "semantic_claim_ids": [],
+      "lean_declarations_used": []
+    }
+  ],
+  "theorem_obligations": [
+    {
+      "obligation_id": "PTX-OR-THM-401",
+      "proposed_name": "OrB32_OrB32Step_deterministic",
+      "category": "relational determinism",
+      "intent": "For fixed state and instruction, OrB32Step determines at most one post-state.",
+      "precise_statement_in_words": "If OrB32Step relates s to both s1 and s2, then s1 and s2 are equal.",
+      "lean_statement_sketch": "theorem OrB32_OrB32Step_deterministic (s : MachineState) (i : OrB32Instruction) (s1 s2 : MachineState) (h1 : OrB32Step s i s1) (h2 : OrB32Step s i s2) : s1 = s2",
+      "hypotheses": [
+        "h1 : OrB32Step s i s1",
+        "h2 : OrB32Step s i s2"
+      ],
+      "conclusion": "s1 = s2",
+      "semantic_claim_ids": [
+        "PTX-OR-SEM1-006",
+        "PTX-OR-SEM1-005"
+      ],
+      "lean_declarations_used": [
+        "OrB32Step",
+        "MachineState",
+        "OrB32Instruction"
+      ],
+      "strength_risks": [
+        "Both constructors are syntactically disjoint; proof must handle constructor mismatch with inconsistent guard equations."
+      ],
+      "non_vacuity_argument": "The relation has both constructors in well-formed non-total states, so this is a substantive uniqueness theorem for the operational relation.",
+      "proof_strategy_hint": "Split on h1 and h2; constructor mismatch contradicts guard equalities, same constructor reduces to constructor-level equality."
+    },
+    {
+      "obligation_id": "PTX-OR-THM-402",
+      "proposed_name": "OrB32_execOrB32_executed_soundness",
+      "category": "function/relation correspondence",
+      "intent": "Executed outcomes from execOrB32 are exactly represented by executed transitions in OrB32Step.",
+      "precise_statement_in_words": "If execOrB32 returns executed state s', then OrB32Step s i s' holds.",
+      "lean_statement_sketch": "theorem OrB32_execOrB32_executed_soundness (s : MachineState) (i : OrB32Instruction) (s' : MachineState) : execOrB32 s i = some (ExecOutcome.executed s') -> OrB32Step s i s'",
+      "hypotheses": [],
+      "conclusion": "execOrB32 s i = some (ExecOutcome.executed s') -> OrB32Step s i s'",
+      "semantic_claim_ids": [
+        "PTX-OR-SEM1-005",
+        "PTX-OR-SEM1-006"
+      ],
+      "lean_declarations_used": [
+        "execOrB32",
+        "ExecOutcome",
+        "OrB32Step",
+        "evalGuard",
+        "readSource1",
+        "readSource2",
+        "orValue",
+        "updateDestination"
+      ],
+      "non_vacuity_argument": "The executed branch is partial but real in guarded well-defined states, so this links concrete execution output to the relation constructor.",
+      "proof_strategy_hint": "Unfold execOrB32 and extract constructor premises on guard/source reads."
+    },
+    {
+      "obligation_id": "PTX-OR-THM-403",
+      "proposed_name": "OrB32_execOrB32_notExecuted_iff_false_guard",
+      "category": "function/relation correspondence",
+      "intent": "Characterize notExecuted function outcomes by false predicate and unchanged post-state.",
+      "precise_statement_in_words": "For any s, i, and post-state s', execOrB32 returns notExecuted s' exactly when predication evaluates false and s' = s.",
+      "lean_statement_sketch": "theorem OrB32_execOrB32_notExecuted_iff_false_guard (s : MachineState) (i : OrB32Instruction) (s' : MachineState) : execOrB32 s i = some (ExecOutcome.notExecuted s') ↔ (evalGuard s i.guard = some false ∧ s' = s)",
+      "hypotheses": [],
+      "conclusion": "execOrB32 s i = some (ExecOutcome.notExecuted s') ↔ (evalGuard s i.guard = some false ∧ s' = s)",
+      "semantic_claim_ids": [
+        "PTX-OR-SEM1-006"
+      ],
+      "lean_declarations_used": [
+        "execOrB32",
+        "ExecOutcome",
+        "evalGuard",
+        "MachineState"
+      ],
+      "non_vacuity_argument": "The false-guard branch is explicit in the bounded semantics and produces a concrete state-preserving outcome, so this is non-trivial.",
+      "proof_strategy_hint": "Unfold execOrB32; cases on evalGuard and simplify impossible branches."
+    },
+    {
+      "obligation_id": "PTX-OR-THM-404",
+      "proposed_name": "OrB32_OrB32Step_implies_execOrB32_or_notExecuted",
+      "category": "function/relation completeness",
+      "intent": "Every step result is represented by execOrB32 with either executed or notExecuted outcome for the same post-state.",
+      "precise_statement_in_words": "If OrB32Step s i s' holds, then execOrB32 s i is some outcome and that outcome is either executed s' or notExecuted s'.",
+      "lean_statement_sketch": "theorem OrB32_OrB32Step_implies_execOrB32_or_notExecuted (s : MachineState) (i : OrB32Instruction) (s' : MachineState) (h : OrB32Step s i s') : ∃ out, execOrB32 s i = some out ∧ (out = ExecOutcome.executed s' ∨ out = ExecOutcome.notExecuted s')",
+      "hypotheses": [
+        "h : OrB32Step s i s'"
+      ],
+      "conclusion": "∃ out, execOrB32 s i = some out ∧ (out = ExecOutcome.executed s' ∨ out = ExecOutcome.notExecuted s')",
+      "semantic_claim_ids": [
+        "PTX-OR-SEM1-005",
+        "PTX-OR-SEM1-006"
+      ],
+      "lean_declarations_used": [
+        "OrB32Step",
+        "execOrB32",
+        "ExecOutcome",
+        "OrB32Instruction"
+      ],
+      "non_vacuity_argument": "Partial semantics may return none, executed, or notExecuted; this lemma precisely covers both realizable relation outcomes.",
+      "proof_strategy_hint": "Split the OrB32Step constructor cases; choose out from the matching execOrB32 branch."
+    },
+    {
+      "obligation_id": "PTX-OR-THM-405",
+      "proposed_name": "OrB32_execOrB32_none_iff_no_step",
+      "category": "function/relation correspondence",
+      "intent": "When execOrB32 returns none, there is no valid one-step transition, and vice versa.",
+      "precise_statement_in_words": "execOrB32 s i = none if and only if there is no MachineState s' with OrB32Step s i s'.",
+      "lean_statement_sketch": "theorem OrB32_execOrB32_none_iff_no_step (s : MachineState) (i : OrB32Instruction) : execOrB32 s i = none ↔ ¬ ∃ s', OrB32Step s i s'",
+      "hypotheses": [],
+      "conclusion": "execOrB32 s i = none ↔ ¬ ∃ s', OrB32Step s i s'",
+      "semantic_claim_ids": [
+        "PTX-OR-SEM1-005",
+        "PTX-OR-SEM1-006",
+        "PTX-OR-SEM1-008"
+      ],
+      "lean_declarations_used": [
+        "execOrB32",
+        "OrB32Step",
+        "evalGuard",
+        "readSource1",
+        "readSource2"
+      ],
+      "non_vacuity_argument": "This captures malformed-state partiality exactly for missing predicate/source inputs, which exists by construction of the bounded model.",
+      "proof_strategy_hint": "Forward/backward by unfolding execOrB32 and inverting constructor premises."
+    },
+    {
+      "obligation_id": "PTX-OR-THM-406",
+      "proposed_name": "OrB32_OrB32Step_false_guard_no_change",
+      "category": "frame/locality",
+      "intent": "False predication leaves the machine state unchanged in the relation transition.",
+      "precise_statement_in_words": "If a one-step relation uses post-state s' and predication is false, then s' equals s.",
+      "lean_statement_sketch": "theorem OrB32_OrB32Step_false_guard_no_change (s : MachineState) (i : OrB32Instruction) (s' : MachineState) (h : OrB32Step s i s') (hfalse : evalGuard s i.guard = some false) : s' = s",
+      "hypotheses": [
+        "h : OrB32Step s i s'",
+        "hfalse : evalGuard s i.guard = some false"
+      ],
+      "conclusion": "s' = s",
+      "semantic_claim_ids": [
+        "PTX-OR-SEM1-006"
+      ],
+      "lean_declarations_used": [
+        "OrB32Step",
+        "MachineState",
+        "evalGuard"
+      ],
+      "non_vacuity_argument": "This is a concrete property for the no-op branch and depends on predication semantics, not a generic relation tautology.",
+      "proof_strategy_hint": "Use h to show the constructor must be notExecuted and conclude by constructor index equality."
+    },
+    {
+      "obligation_id": "PTX-OR-THM-407",
+      "proposed_name": "OrB32_OrB32Step_preserves_predicates",
+      "category": "frame property",
+      "intent": "Predicates are never modified by this unit across both relation constructors.",
+      "precise_statement_in_words": "For any OrB32Step, every predicate register maps to the same value before and after the step.",
+      "lean_statement_sketch": "theorem OrB32_OrB32Step_preserves_predicates (s : MachineState) (i : OrB32Instruction) (s' : MachineState) (h : OrB32Step s i s') : ∀ p, s'.predRegs p = s.predRegs p",
+      "hypotheses": [
+        "h : OrB32Step s i s'"
+      ],
+      "conclusion": "∀ p, s'.predRegs p = s.predRegs p",
+      "semantic_claim_ids": [
+        "PTX-OR-SEM1-006",
+        "D-6"
+      ],
+      "lean_declarations_used": [
+        "OrB32Step",
+        "MachineState",
+        "updateDestination"
+      ],
+      "non_vacuity_argument": "Predicate-register maps are explicit state fields in the bounded model, so this checks that the transition has no hidden predicate writes.",
+      "proof_strategy_hint": "Split h into constructors; notExecuted is reflexive, executed reduces through updateDestination which only touches valueRegs."
+    },
+    {
+      "obligation_id": "PTX-OR-THM-408",
+      "proposed_name": "OrB32_OrB32Step_value_reg_frame_nonDest",
+      "category": "frame property",
+      "intent": "Only the destination register may change; any other value register preserves its mapping.",
+      "precise_statement_in_words": "Given OrB32Step and register r not equal to destination register (if destination is a register), valueRegs r is unchanged.",
+      "lean_statement_sketch": "theorem OrB32_OrB32Step_value_reg_frame_nonDest (s : MachineState) (i : OrB32Instruction) (s' : MachineState) (r : RegId) (h : OrB32Step s i s') (hd : i.d ≠ Destination.reg r) : s'.valueRegs r = s.valueRegs r",
+      "hypotheses": [
+        "h : OrB32Step s i s'",
+        "hd : i.d ≠ Destination.reg r"
+      ],
+      "conclusion": "s'.valueRegs r = s.valueRegs r",
+      "semantic_claim_ids": [
+        "PTX-OR-SEM1-005",
+        "D-2"
+      ],
+      "lean_declarations_used": [
+        "OrB32Step",
+        "MachineState",
+        "Destination",
+        "updateDestination"
+      ],
+      "non_vacuity_argument": "The update function writes only through destination; this excludes unintended writes to unrelated value registers while permitting destination replacement.",
+      "proof_strategy_hint": "Split h into notExecuted/executed cases and unfold updateDestination."
+    }
+  ]
+}

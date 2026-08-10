@@ -6,6 +6,10 @@ import {
   parseAgentResult,
   type AgentResult,
 } from "./agent-result.js"
+import {
+  normalizeAgentDecision,
+  validateAgentDecision,
+} from "./agent-decision.js"
 import { artifactContractForRun } from "./artifact-contract.js"
 import { verifyExpectedArtifact } from "./artifact-verify.js"
 import {
@@ -32,7 +36,6 @@ import {
 } from "./semantic-v2.js"
 import { planForRun } from "./stage-plan.js"
 import {
-  canTransition,
   retryRun,
   transitionRun,
   type FormalizationStage,
@@ -372,77 +375,6 @@ async function buildProofPrompt(run: RunState): Promise<ProofPromptContext & { p
   }
 }
 
-function validateDecision(run: RunState, result: AgentResult): FormalizationStage {
-  const plan = planForRun(run)
-  const next = result.nextStage
-
-  if (result.outcome === "SUCCESS" && next !== plan.successStage) {
-    throw new Error(`Agent attempted invalid SUCCESS target: ${next}; expected ${plan.successStage}`)
-  }
-
-  if (result.outcome === "REVISE" && !plan.revisionStages.includes(next)) {
-    throw new Error(`Agent attempted invalid REVISE target: ${next}`)
-  }
-
-  if (result.outcome === "RETRY") {
-    if (next !== run.stage) throw new Error(`RETRY must remain at current stage: ${run.stage}`)
-    return next
-  }
-
-  if (result.outcome === "BLOCKED" && next !== "BLOCKED") {
-    throw new Error("BLOCKED outcome must target BLOCKED")
-  }
-
-  if (!canTransition(run.stage, next)) {
-    throw new Error(`Workflow rejects transition ${run.stage} -> ${next}`)
-  }
-
-  return next
-}
-
-async function recoverProtocolFresh(
-  runtime: Awaited<ReturnType<typeof startOpenCode>>,
-  run: RunState,
-  response: string,
-): Promise<AgentResult> {
-  const plan = planForRun(run)
-  const recovery = unwrap<Session>(
-    await runtime.runtime.client.session.create({
-      body: { title: `Spec2Lean protocol recovery ${run.runId} ${run.stage}` },
-    }),
-  )
-
-  const revisionTargets = plan.revisionStages.length === 0 ? "(none)" : plan.revisionStages.join(", ")
-  const text = [
-    "Classify the completed prior agent attempt. Do not call tools or modify files.",
-    `Current stage: ${run.stage}`,
-    `SUCCESS target: ${plan.successStage}`,
-    `Allowed REVISE targets: ${revisionTargets}`,
-    `RETRY target: ${run.stage}`,
-    "Prior assistant text:",
-    response.slice(-12_000),
-    "",
-    "Return exactly one line:",
-    'SPEC2LEAN_RESULT {"outcome":"SUCCESS|REVISE|RETRY|BLOCKED","nextStage":"STAGE","summary":"short factual summary"}',
-  ].join("\n")
-
-  await sendPromptAsync(runtime.runtime.server.url, recovery.id, {
-    agent: plan.agent,
-    model: {
-      providerID: runtime.model.providerID,
-      modelID: runtime.model.modelID,
-    },
-    parts: [{ type: "text", text }],
-  })
-
-  const recovered = await waitForAgentResult(runtime.runtime.server.url, recovery.id, {
-    pollMs: 1_000,
-    maxWaitMs: 3 * 60 * 1000,
-  })
-
-  return parseAgentResult(recovered)
-}
-
 async function finalizeProofStageLocally(run: RunState): Promise<AgentResult | undefined> {
   const proofPath = proofArtifactPath(run)
   if (!(await fileExists(proofPath))) return undefined
@@ -712,8 +644,14 @@ export async function executeTick(
       })
       try {
         result = parseAgentResult(response)
-      } catch {
-        result = await recoverProtocolFresh(runtime, run, response)
+      } catch (error) {
+        result = {
+          outcome: "RETRY",
+          nextStage: run.stage,
+          summary:
+            `Agent response did not contain a valid terminal protocol result; ` +
+            `no model-based recovery was attempted: ${error instanceof Error ? error.message : String(error)}`,
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -821,7 +759,8 @@ export async function executeTick(
       }
     }
 
-    const nextStage = validateDecision(run, result)
+    result = normalizeAgentDecision(run, result)
+    const nextStage = validateAgentDecision(run, result)
     let nextRun = result.outcome === "RETRY"
       ? retryRun(run, `${plan.agent} retry: ${result.summary}`)
       : transitionRun(run, nextStage, `${plan.agent}: ${result.summary}`)
@@ -836,6 +775,7 @@ export async function executeTick(
           at: new Date().toISOString(),
           stage: run.stage,
           agent: plan.agent,
+          model: runtime.model.full,
           sessionId,
           outcome: result.outcome,
           nextStage,
