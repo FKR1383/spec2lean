@@ -1,0 +1,263 @@
+{
+  "schema_version": 2,
+  "interpretation_id": "ptx-9.3-shl-b32-semantics-v1",
+  "revision_of": null,
+  "revision_reason": "Initial bounded semantic interpretation for shl.b32 in run ptx-9.3-shl.b32-1fe9973c.",
+  "status": "READY_FOR_CRITIQUE",
+  "status_rationale": "All claims are evidence-sourced from source-bundle-v1; unresolved items are classified as OPEN_QUESTION/AMBIGUITY.",
+  "language": "PTX",
+  "specification_version": "9.3",
+  "construct": "shl.b32",
+  "instruction_family": "shl",
+  "architecture_reference": {
+    "path": "candidates/ptx/9.3/units/shl-b32/architecture/foundation-v5.md",
+    "sha256": null,
+    "status_note": "Stage input only; not human-approved at Gate A in this run context.",
+    "source_document": "documents/sources/nvidia/ptx/9.3/source-manifest.json"
+  },
+  "source_bundle_references": [
+    {
+      "path": "candidates/ptx/9.3/units/shl-b32/source-bundles/source-bundle-v1.json",
+      "bundle_id": "ptx-9.3-shl-b32-source-bundle-v1",
+      "role": "primary official-source bundle",
+      "evidence_fragments": [
+        "PTX-9.3-SHL-001",
+        "PTX-9.3-SHL-002",
+        "PTX-9.3-SHL-003",
+        "PTX-9.3-SHL-004",
+        "PTX-9.3-SHL-005",
+        "PTX-9.3-SHL-006",
+        "PTX-9.3-SHL-007",
+        "PTX-9.3-SHL-008",
+        "PTX-9.3-SHL-009",
+        "PTX-9.3-SHL-010",
+        "PTX-9.3-SHL-011",
+        "PTX-9.3-SHL-012",
+        "PTX-9.3-SHL-013",
+        "PTX-9.3-SHL-014"
+      ]
+    }
+  ],
+  "human_assumption_references": {
+    "note": "No human-approved assumption record exists for shl.b32 in this run context."
+  },
+  "syntax": {
+    "bounded_form": "shl.b32 d, a, b;",
+    "guarded_forms": ["shl.b32 d, a, b;", "@p shl.b32 d, a, b;", "@!p shl.b32 d, a, b;"],
+    "source_syntax_quote": "shl.type  d, a, b;\n.type = { .b16, .b32, .b64 };\nShift bits left, zero-fill on right."
+  },
+  "operands": {
+    "order": "d, a, b",
+    "roles": {
+      "d": "destination",
+      "a": "first source",
+      "b": "second source (shift amount)"
+    },
+    "notes": [
+      "For result-producing instructions, d is destination while a,b are sources (PTX construction).",
+      "Applicability of '_' bit-bucket destination is not explicitly shown for shl.b32 subsection." 
+    ]
+  },
+  "types": {
+    "instruction_type": ".b32",
+    "basic_type": "Bits (untyped)",
+    "width_bits": 32,
+    "typing_rule": "The section states size of destination and first source must match; b is a 32-bit value regardless of instruction type."
+  },
+  "state_reads": [
+    {
+      "component": "source a",
+      "description": "Reads value of source a to compute shifted result.",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-SHL-005", "PTX-9.3-SHL-007"]
+    },
+    {
+      "component": "source b",
+      "description": "Reads value of source b as the shift amount operand.",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-SHL-004", "PTX-9.3-SHL-005", "PTX-9.3-SHL-007"]
+    },
+    {
+      "component": "predicate (optional)",
+      "description": "Reads predicate register if guard is present and evaluates it (or its negation for @!p).",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-SHL-011", "PTX-9.3-SHL-012", "PTX-9.3-SHL-013"]
+    }
+  ],
+  "state_writes": [
+    {
+      "component": "destination d",
+      "description": "On executed path, updates d with shifted value d = a << clamp(b, 32) under bounded-shift interpretation.",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-SHL-005", "PTX-9.3-SHL-006", "PTX-9.3-SHL-007"]
+    },
+    {
+      "component": "no-state update when guard false",
+      "description": "When false-guard path is taken, instruction performs no state updates.",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-SHL-011", "PTX-9.3-SHL-013"]
+    }
+  ],
+  "guard_semantics": {
+    "guard_forms": ["(none)", "@p", "@!p"],
+    "execution_condition": "No guard -> execute unconditionally; @p -> execute if p true; @!p -> execute if p false.",
+    "guard_false_behavior": "False complete guard means no-op/threads do nothing.",
+    "predication_exception": "No shl-specific exception for predication in gathered evidence.",
+    "evidence_fragment_ids": ["PTX-9.3-SHL-012", "PTX-9.3-SHL-013", "PTX-9.3-SHL-010", "PTX-9.3-SHL-011"]
+  },
+  "behavior": {
+    "pseudocode": "d = a << clamp(b, N)",
+    "pseudocode_source": "PTX-9.3-SHL-005 and PTX-9.3-SHL-006",
+    "zero_fill": "The section says shift left, zero-fill on right (zero-fill applies to vacated low-order bits).",
+    "determinism": {
+      "statement": "Deterministic under given source values, guard condition, and declared clamp operation.",
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": ["PTX-9.3-SHL-005", "PTX-9.3-SHL-006", "PTX-9.3-SHL-013", "PTX-9.3-SHL-014"]
+    },
+    "aliasing": "Read-before-write semantics are assumed for source reads and destination write in a bounded-register model."
+  },
+  "typing": {
+    "static_preconditions": [
+      {
+        "id": "TYP-1",
+        "description": "Instruction instance is bound to .b32.",
+        "classification": "DESIGN_DEPENDENCY",
+        "evidence_fragment_ids": ["PTX-9.3-SHL-003", "PTX-9.3-SHL-007"]
+      },
+      {
+        "id": "TYP-2",
+        "description": "Operands d and a are size-matched (32-bit in this bounded unit).",
+        "classification": "DERIVED_INTERPRETATION",
+        "evidence_fragment_ids": ["PTX-9.3-SHL-007", "PTX-9.3-SHL-006"]
+      },
+      {
+        "id": "TYP-3",
+        "description": "Operand b is 32-bit width regardless of instruction type.",
+        "classification": "SOURCE_FACT",
+        "evidence_fragment_ids": ["PTX-9.3-SHL-007"]
+      }
+    ],
+    "dynamic_preconditions": [
+      {
+        "id": "TYP-4",
+        "description": "No explicit dynamic value restrictions are stated for shl.b32 source values.",
+        "classification": "OPEN_QUESTION",
+        "evidence_fragment_ids": ["PTX-9.3-SHL-004", "PTX-9.3-SHL-005"]
+      }
+    ]
+  },
+  "exceptions_and_ambiguities": {
+    "exceptional_behavior": {
+      "statement": "No explicit exception/trap/undefinedness clause was found in the gathered shl subsection.",
+      "classification": "OPEN_QUESTION",
+      "evidence_fragment_ids": ["PTX-9.3-SHL-004", "PTX-9.3-SHL-005", "PTX-9.3-SHL-006", "PTX-9.3-SHL-007"]
+    },
+    "implementation_defined_behavior": {
+      "statement": "No implementation-defined behavior clause was captured for shl.b32 in this bounded evidence.",
+      "classification": "OPEN_QUESTION",
+      "evidence_fragment_ids": ["PTX-9.3-SHL-002", "PTX-9.3-SHL-005"]
+    },
+    "undefined_behavior": {
+      "statement": "No explicit undefined behavior clause was captured for shl.b32.",
+      "classification": "OPEN_QUESTION",
+      "evidence_fragment_ids": ["PTX-9.3-SHL-004", "PTX-9.3-SHL-005"]
+    },
+    "ambiguities": [
+      {
+        "id": "AMB-1",
+        "statement": "The symbol N in clamp-to-N is not expanded in the captured shl text.",
+        "classification": "OPEN_QUESTION",
+        "evidence_fragment_ids": ["PTX-9.3-SHL-006"]
+      },
+      {
+        "id": "AMB-2",
+        "statement": "Applicability of optional bit-bucket '_' destination for shl.b32 is not explicit in shl syntax line.",
+        "classification": "OPEN_QUESTION",
+        "evidence_fragment_ids": ["PTX-9.3-SHL-010", "PTX-9.3-SHL-003"]
+      },
+      {
+        "id": "AMB-3",
+        "statement": "Negative shift amount behavior is not explicit; amount is described as unsigned 32-bit via syntax rule and clamp note.",
+        "classification": "OPEN_QUESTION",
+        "evidence_fragment_ids": ["PTX-9.3-SHL-004", "PTX-9.3-SHL-006"]
+      }
+    ]
+  },
+  "version_and_target": {
+    "introduced": "PTX ISA version 1.0",
+    "target": "Supported on all target architectures (shl notes).",
+    "evidence_fragment_ids": ["PTX-9.3-SHL-008"]
+  },
+  "semantic_claims": [
+    {
+      "claim_id": "PTX-SHL-SEM1-001",
+      "classification": "SOURCE_FACT",
+      "statement": "shl is defined in section 'Logic and Shift Instructions: shl'.",
+      "evidence_fragment_ids": ["PTX-9.3-SHL-001"],
+      "confidence": "high"
+    },
+    {
+      "claim_id": "PTX-SHL-SEM1-002",
+      "classification": "SOURCE_FACT",
+      "statement": "Section text states that shl performs left shift with zero-fill on right and lists form shl.type d, a, b.",
+      "evidence_fragment_ids": ["PTX-9.3-SHL-002", "PTX-9.3-SHL-003", "PTX-9.3-SHL-004"],
+      "confidence": "high"
+    },
+    {
+      "claim_id": "PTX-SHL-SEM1-003",
+      "classification": "SOURCE_FACT",
+      "statement": "The semantics line in section is 'd = a << b;'.",
+      "evidence_fragment_ids": ["PTX-9.3-SHL-005"],
+      "confidence": "high"
+    },
+    {
+      "claim_id": "PTX-SHL-SEM1-004",
+      "classification": "DERIVED_INTERPRETATION",
+      "statement": "Bounded unit form is shl.b32 d, a, b;.",
+      "evidence_fragment_ids": ["PTX-9.3-SHL-003", "PTX-9.3-SHL-007"],
+      "confidence": "high"
+    },
+    {
+      "claim_id": "PTX-SHL-SEM1-005",
+      "classification": "DERIVED_INTERPRETATION",
+      "statement": "Shift amount is taken from b and is considered unsigned-32 according to section note that b operand is 32-bit regardless of type.",
+      "evidence_fragment_ids": ["PTX-9.3-SHL-004", "PTX-9.3-SHL-007"],
+      "confidence": "high"
+    },
+    {
+      "claim_id": "PTX-SHL-SEM1-006",
+      "classification": "DERIVED_INTERPRETATION",
+      "statement": "When b > N, the amount is clamped to N; bounded execution uses clamp(b,32) for shl.b32 pending explicit N expansion.",
+      "evidence_fragment_ids": ["PTX-9.3-SHL-006", "PTX-9.3-SHL-007"],
+      "confidence": "medium"
+    },
+    {
+      "claim_id": "PTX-SHL-SEM1-007",
+      "classification": "DERIVED_INTERPRETATION",
+      "statement": "Destination and first source sizes must match.",
+      "evidence_fragment_ids": ["PTX-9.3-SHL-007"],
+      "confidence": "high"
+    },
+    {
+      "claim_id": "PTX-SHL-SEM1-008",
+      "classification": "DERIVED_INTERPRETATION",
+      "statement": "Guard forms and behavior: optional @p/@!p predication; false guard performs no action.",
+      "evidence_fragment_ids": ["PTX-9.3-SHL-010", "PTX-9.3-SHL-011", "PTX-9.3-SHL-012", "PTX-9.3-SHL-013"],
+      "confidence": "high"
+    },
+    {
+      "claim_id": "PTX-SHL-SEM1-009",
+      "classification": "DESIGN_DEPENDENCY",
+      "statement": "This bounded semantics interprets only scalar .b32 form, excluding .b16/.b64 alternatives and out-of-scope source-form variants.",
+      "evidence_fragment_ids": ["PTX-9.3-SHL-003", "PTX-9.3-SHL-007", "PTX-9.3-SHL-002"],
+      "confidence": "high"
+    },
+    {
+      "claim_id": "PTX-SHL-SEM1-010",
+      "classification": "OPEN_QUESTION",
+      "statement": "No explicit exception/UB/implementation-defined behavior is captured in the bounded shl evidence.",
+      "evidence_fragment_ids": ["PTX-9.3-SHL-004", "PTX-9.3-SHL-005", "PTX-9.3-SHL-006", "PTX-9.3-SHL-007"],
+      "confidence": "n/a"
+    }
+  ]
+}

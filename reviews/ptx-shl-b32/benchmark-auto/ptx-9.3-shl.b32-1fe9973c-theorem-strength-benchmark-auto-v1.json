@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "recordType": "benchmark_gate_auto_advance",
+  "reviewId": "ptx-9.3-shl.b32-1fe9973c-theorem-strength-benchmark-auto-v1",
+  "unitId": "ptx-shl-b32",
+  "runId": "ptx-9.3-shl.b32-1fe9973c",
+  "gate": "THEOREM_STRENGTH",
+  "decision": "auto_advanced",
+  "controller": "Spec2Lean benchmark controller",
+  "rationale": "Benchmark-only unattended execution advanced this review boundary. This is not a human semantic approval and cannot authorize promotion.",
+  "submittedAtUtc": "2026-08-10T11:16:18.894Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ptx/9.3/units/shl-b32/theorems/obligations-v4.json",
+      "sha256": "ab6d1d3d2504fcb3d56ac87681f65e4427c90a3e7c4eb50bc393c19e0c2b9379",
+      "sizeBytes": 12663
+    },
+    {
+      "relativePath": "candidates/ptx/9.3/units/shl-b32/reviews/theorem-strength-critic-v2.md",
+      "sha256": "3fc278bebed23cf21825fd5ee8967f747fc26e6888f0ed45a392f36f182ba263",
+      "sizeBytes": 994
+    }
+  ],
+  "humanConfirmationRecorded": false,
+  "gateApprovalPerformed": false,
+  "promotionPerformed": false,
+  "provenance": {
+    "controller": "spec2lean-cli",
+    "command": "formalize --auto-approve"
+  }
+}

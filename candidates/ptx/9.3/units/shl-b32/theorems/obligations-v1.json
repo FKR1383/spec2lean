@@ -1,0 +1,255 @@
+{
+  "schema_version": 1,
+  "obligation_set_id": "ptx-9.3-shl-b32-obligations-v1",
+  "run_id": "ptx-9.3-shl.b32-1fe9973c",
+  "stage": "THEOREM_GENERATION",
+  "stage_attempt": 1,
+  "run_revision": 20,
+  "status": "READY_FOR_STRENGTH_REVIEW",
+  "status_rationale": "Gate C is benchmark-auto approved (reviews/ptx-shl-b32/benchmark-auto/ptx-9.3-shl.b32-1fe9973c-c-benchmark-auto-v1.json: gate C, decision auto_advanced, humanConfirmationRecorded false, gateApprovalPerformed false). The Lean candidate compiles independently (lean_check_file success at obligation-generation time: exit 0, 0 errors, 0 warnings; sha256 bd5f11cb...). A compact set of theorem and validation obligations is proposed for independent theorem-strength review. No proofs are included in this stage.",
+  "unit": {
+    "language": "PTX",
+    "specification_version": "9.3",
+    "construct": "shl.b32",
+    "instruction_family": "shl",
+    "bounded_unit": "Bounded scalar form shl.b32 d, a, b; with optional guard predicate {none, @p, @!p}; .b32 type in scope.",
+    "scope_boundary": "Only the scalar .b32 form is modeled. Source form of a and b is limited to register operands via SourceOperand.reg in this Lean mapping; predicate-file and register-file state only. No exceptions/traps/UB/implementation-defined behavior is introduced; predication false behavior is interpreted from shared predication sections."
+  },
+  "gate_c_reference": {
+    "record_path": "reviews/ptx-shl-b32/benchmark-auto/ptx-9.3-shl.b32-1fe9973c-c-benchmark-auto-v1.json",
+    "review_id": "ptx-9.3-shl.b32-1fe9973c-c-benchmark-auto-v1",
+    "gate": "C",
+    "decision": "auto_advanced",
+    "humanConfirmationRecorded": false,
+    "gateApprovalPerformed": false,
+    "submittedAtUtc": "2026-08-10T11:12:28.320Z",
+    "note": "Lean mapping artifact ShlB32-v1.lean approved by benchmark auto-advance for next-stage progression."
+  },
+  "gate_b_reference": {
+    "record_path": "reviews/ptx-shl-b32/benchmark-auto/ptx-9.3-shl.b32-1fe9973c-b-benchmark-auto-v1.json",
+    "review_id": "ptx-9.3-shl.b32-1fe9973c-b-benchmark-auto-v1",
+    "gate": "B",
+    "decision": "auto_advanced",
+    "humanConfirmationRecorded": false,
+    "gateApprovalPerformed": false,
+    "submittedAtUtc": "2026-08-10T11:10:52.506Z",
+    "note": "Semantics v1 reviewed and auto-advanced."
+  },
+  "gate_a_reference": {
+    "record_path": "reviews/ptx-shl-b32/benchmark-auto/ptx-9.3-shl.b32-1fe9973c-a-benchmark-auto-v1.json",
+    "review_id": "ptx-9.3-shl.b32-1fe9973c-a-benchmark-auto-v1",
+    "gate": "A",
+    "decision": "auto_advanced",
+    "humanConfirmationRecorded": false,
+    "gateApprovalPerformed": false,
+    "submittedAtUtc": "2026-08-10T11:08:47.398Z",
+    "note": "Architecture v5 was auto-advanced in this benchmark run."
+  },
+  "semantics_reference": {
+    "path": "candidates/ptx/9.3/units/shl-b32/semantics/semantics-v1.json",
+    "sha256": "e968fb41e947879cc77fdd2f982a05dd71838496b16c75f1e4e8768078c8b88f",
+    "interpretation_id": "ptx-9.3-shl-b32-semantics-v1",
+    "claim_count": 10,
+    "claim_counts": {
+      "total": 10,
+      "SOURCE_FACT": 2,
+      "DERIVED_INTERPRETATION": 7,
+      "DESIGN_DEPENDENCY": 1,
+      "ASSUMPTION": 0,
+      "OPEN_QUESTION": 3
+    },
+    "future_theorem_obligation_topics": ["PRF-1", "PRF-2", "PRF-3", "PRF-4", "PRF-5"]
+  },
+  "source_bundle_reference": {
+    "path": "candidates/ptx/9.3/units/shl-b32/source-bundles/source-bundle-v1.json",
+    "bundle_id": "ptx-9.3-shl-b32-source-bundle-v1",
+    "fragment_ids": [
+      "PTX-9.3-SHL-001",
+      "PTX-9.3-SHL-002",
+      "PTX-9.3-SHL-003",
+      "PTX-9.3-SHL-004",
+      "PTX-9.3-SHL-005",
+      "PTX-9.3-SHL-006",
+      "PTX-9.3-SHL-007",
+      "PTX-9.3-SHL-008",
+      "PTX-9.3-SHL-009",
+      "PTX-9.3-SHL-010",
+      "PTX-9.3-SHL-011",
+      "PTX-9.3-SHL-012",
+      "PTX-9.3-SHL-013",
+      "PTX-9.3-SHL-014"
+    ]
+  },
+  "lean_mapping_reference": {
+    "path": "candidates/ptx/9.3/units/shl-b32/lean/ShlB32-v1.lean",
+    "sha256": "bd5f11cb053f36a63d123dd1ea0a407884fda6f6f06611f784f7903a65e47042",
+    "size_bytes": 5283,
+    "namespace": "Spec2Lean.PTX.ShlB32",
+    "lean_check": {
+      "independently_run_at_obligation_generation": true,
+      "success": true,
+      "exitCode": 0,
+      "errorCount": 0,
+      "warningCount": 0
+    },
+    "critic_reference": {
+      "path": "candidates/ptx/9.3/units/shl-b32/reviews/lean-mapping-critic-v1.md",
+      "sha256": "eaddf92a29c7f07f6d6953698a4d8623c8bdc29f35fe255858391522b1ad80f5",
+      "verdict": "SUITABLE for Human Gate C presentation",
+      "blocker_count": 0,
+      "minor_count": 0,
+      "note_count": 0
+    }
+  },
+  "architecture_reference": {
+    "path": "candidates/ptx/9.3/units/shl-b32/architecture/foundation-v5.md",
+    "sha256": null,
+    "status_note": "Architectural artifact is approved only by benchmark auto-advance in this run context."
+  },
+  "human_assumption_references": [],
+  "human_assumption_note": "No human-approved assumptions are carried in this run; all assumptions recorded for review are source-anchored interpretations in semantics/architecture artifacts (including predication false-do-nothing and open questions around `_`, N, and negative shift amount).",
+  "compliance_notes": [
+    "No proofs are written in this stage: only theorem-obligation statements, hypotheses, conclusions, non-vacuity arguments, and proof-strategy hints are proposed.",
+    "No vacuous, circular, or trivially functional determinism claims are proposed; determinism is stated over the execution relation `ShlB32Step`, and function/relation correspondence is explicit in a separate obligation.",
+    "Theorems remain within approved scope: .b32 register/register operands, 3-operand syntax, optional predication, and partial-state model with reg/pred lookups.",
+    "No semantics are invented beyond approved evidence + explicit design decisions in `semantics/semantics-v1.json` and `ShlB32-v1.lean`."
+  ],
+  "validation_obligations": [
+    {
+      "obligation_id": "PTX-SHL-VAL-001",
+      "title": "Bounded instruction representation: only shl.b32 is representable",
+      "description": "The bounded Lean form fixes mnemonic `shl` and includes exactly one instruction specifier constructor `.b32`; destination/source operands are fields `d`, `a`, `b` with optional guard. This ensures no other shl type form or arity is represented in the bounded mapping.",
+      "check_type": "static definitional check",
+      "status": "SATISFIED_IN_CANDIDATE",
+      "semantic_claim_ids": ["PTX-SHL-SEM1-004", "PTX-SHL-SEM1-009", "PTX-SHL-SEM1-001", "PTX-SHL-SEM1-002"],
+      "lean_declarations_used": ["ShlB32Instruction", "ShlTypeSpecifier", "SourceOperand", "Destination", "Guard", "MachineState", "execShlB32"],
+      "basis": "Semantics claims PTX-SHL-SEM1-004 (bounded form), PTX-SHL-SEM1-001/002 (shl section form/semantics) and PTX-SHL-SEM1-009 (scalar bounded typing)."
+    },
+    {
+      "obligation_id": "PTX-SHL-VAL-002",
+      "title": "B32 domain representation",
+      "description": "`B32` stores values as `Fin (2^32)`, so every represented value is within the bounded `.b32` domain by construction. This matches the bounded register-width modeling choice for this unit.",
+      "check_type": "representation invariant",
+      "status": "SATISFIED_IN_CANDIDATE",
+      "semantic_claim_ids": ["PTX-SHL-SEM1-003", "PTX-SHL-SEM1-007", "PTX-SHL-SEM1-002"],
+      "lean_declarations_used": ["B32", "b32Bits", "b32DomainSize", "shlValue", "clampShiftAmount"],
+      "basis": "Bounded fixed-width `.b32` modeling in mapping; source typing evidence includes `.b32` and bit-width rule for b from shl section."
+    },
+    {
+      "obligation_id": "PTX-SHL-VAL-003",
+      "title": "MachineState contains exactly the approved minimal runtime state",
+      "description": "MachineState has value register lookup and predicate register lookup only (`RegId -> Option B32`, `PredId -> Option Bool`), matching the bounded model and partial lookup convention used by this run.",
+      "check_type": "static definitional check",
+      "status": "SATISFIED_IN_CANDIDATE",
+      "semantic_claim_ids": ["PTX-SHL-SEM1-010", "PTX-SHL-SEM1-008", "PTX-SHL-SEM1-001"],
+      "lean_declarations_used": ["MachineState", "RegId", "PredId", "execShlB32"],
+      "basis": "Semantics file uses partial Option lookups and registers/predicates only in state. No additional runtime components are introduced in `ShlB32-v1.lean`."
+    },
+    {
+      "obligation_id": "PTX-SHL-VAL-004",
+      "title": "No prohibited proof bypass in Lean candidate",
+      "description": "ShlB32-v1.lean contains no sorry/admit/unsafe/axiom/placeholders. Candidate is a clean declaration file at this stage.",
+      "check_type": "static verification check",
+      "status": "SATISFIED_IN_CANDIDATE",
+      "semantic_claim_ids": [],
+      "lean_declarations_used": [],
+      "basis": "Verified via lean_check_file and mapping critic scan; project restrictions on formalization workflow."
+    },
+    {
+      "obligation_id": "PTX-SHL-VAL-005",
+      "title": "Lean candidate compiles",
+      "description": "`ShlB32-v1.lean` compiles with zero errors and warnings; confirms internal Lean validity of the current declarations and relation/function definitions.",
+      "check_type": "Lean compilation check",
+      "status": "SATISFIED_IN_CANDIDATE",
+      "semantic_claim_ids": [],
+      "lean_declarations_used": [],
+      "basis": "lean_check_file candidates/ptx/9.3/units/shl-b32/lean/ShlB32-v1.lean (success: true, exitCode 0)."
+    }
+  ],
+  "theorem_obligations": [
+    {
+      "obligation_id": "PTX-SHL-THM-001",
+      "proposed_name": "shlB32Step_deterministic",
+      "category": "relational determinism (semantics PRF-1)",
+      "intent": "Show that `ShlB32Step` is deterministic for fixed pre-state and instruction: if two relation steps start from the same (s, i), resulting states must be equal. This is meaningful because the execution semantics is represented as a relation, not as a function.",
+      "precise_statement_in_words": "For every s i and s1 s2, if `ShlB32Step s i s1` and `ShlB32Step s i s2`, then s1 = s2.",
+      "lean_statement_sketch": "theorem shlB32Step_deterministic (s : MachineState) (i : ShlB32Instruction) (s1 s2 : MachineState) (h1 : ShlB32Step s i s1) (h2 : ShlB32Step s i s2) : s1 = s2",
+      "hypotheses": ["h1 : ShlB32Step s i s1", "h2 : ShlB32Step s i s2"],
+      "conclusion": "s1 = s2",
+      "semantic_claim_ids": ["PTX-SHL-SEM1-003", "PTX-SHL-SEM1-008", "PTX-SHL-SEM1-002"],
+      "lean_declarations_used": ["ShlB32Step", "MachineState", "ShlB32Instruction", "evalGuard"],
+      "source_or_assumption_basis": "Derived determinism intent from bounded semantics and relation design. Source fragments include instruction/predication behavior and `d = a << b` formula; relation has two disjoint result constructors.",
+      "human_assumption_dependencies": [],
+      "non_vacuity_argument": "The theorem is relation-based and nontrivial: both constructors of `ShlB32Step` (`guardFalse` and `executed`) are possible depending on guard value and source availability. Existence of a step is not assumed by hypotheses.",
+      "proof_strategy_hint": "Case split on h1 and h2; discharged by constructor mismatch (guard false vs executed) contradiction via different `evalGuard` results, and congruence when both are executed (same stored source values from pattern-premises)."
+    },
+    {
+      "obligation_id": "PTX-SHL-THM-002",
+      "proposed_name": "execShlB32_ShlB32Step_correspondence",
+      "category": "function/relation correspondence (semantics PRF-1 family)",
+      "intent": "Show that the executable function `execShlB32` and the relation `ShlB32Step` agree: every successful function outcome is a relation step, every relation step is realized by a function outcome, and function none means no step exists.",
+      "precise_statement_in_words": "Soundness for both constructors and completeness between function result and relation: (a) function returned `executed s'` implies step to s'; (b) function returned `guardFalse s'` implies step to s'; (c) from a step to s' derive existence of matching function outcome; (d) `execShlB32 s i = none` iff no `ShlB32Step s i s'` exists.",
+      "lean_statement_sketch": "theorem execShlB32_exec_sound_executed (s : MachineState) (i : ShlB32Instruction) (s' : MachineState) (h : execShlB32 s i = some (ExecOutcome.executed s')) : ShlB32Step s i s' ; theorem execShlB32_exec_sound_guardFalse ... ; theorem shlB32step_complete ... ; theorem shlB32_step_partial_complete (s : MachineState) (i : ShlB32Instruction) : execShlB32 s i = none <-> not (Exists fun s' => ShlB32Step s i s')",
+      "hypotheses": ["h : execShlB32 s i = some outcome"],
+      "conclusion": "The four-way correspondence between function and relation.",
+      "semantic_claim_ids": ["PTX-SHL-SEM1-008", "PTX-SHL-SEM1-010", "PTX-SHL-SEM1-003", "PTX-SHL-SEM1-002"],
+      "lean_declarations_used": ["execShlB32", "ShlB32Step", "ExecOutcome", "ShlB32Instruction", "MachineState", "evalGuard", "readSource", "updateDestination"],
+      "source_or_assumption_basis": "Derived interpretation in semantics that false predicate does not execute and guard-true path performs read/evaluate/update as in `shlValue`; no extra error/UB semantics are modeled, so none represents partial-state failure in this bounded model.",
+      "human_assumption_dependencies": [],
+      "non_vacuity_argument": "Each direction requires unfolding both definitions; the function and relation are not definitionally identical. Counterexample would require mismatched constructors or missed outcome branch, not trivial by reflexivity.",
+      "proof_strategy_hint": "Unfold execShlB32 and ShlB32Step; case split on evalGuard and source lookups. For (d), forward direction by cases on constructor outcome; reverse direction by showing each constructor implies a non-none outcome."
+    },
+    {
+      "obligation_id": "PTX-SHL-THM-003",
+      "proposed_name": "execShlB32_shl_fidelity",
+      "category": "behavioral conformance (shift relation; semantics PRF-4)",
+      "intent": "When guard is true and destination is a register r, and both source operands resolve in pre-state, the written value at destination equals `shlValue va vb` where `vb` is the shift amount from b. This captures `d = a << b` with clamp-to-width interpretation used in this bounded model.",
+      "precise_statement_in_words": "For all s i r va vb, if `evalGuard s i.guard = some true`, `i.d = Destination.reg r`, `readSource s i.a = some va`, and `readSource s i.b = some vb`, then there exists s' with `execShlB32 s i = some (ExecOutcome.executed s')` and `s'.valueRegs r = some (shlValue va vb)`.",
+      "lean_statement_sketch": "theorem execShlB32_shl_fidelity (s : MachineState) (i : ShlB32Instruction) (r : RegId) (va vb : B32) (hguard : evalGuard s i.guard = some true) (hd : i.d = Destination.reg r) (ha : readSource s i.a = some va) (hb : readSource s i.b = some vb) : Exists fun s' => execShlB32 s i = some (ExecOutcome.executed s') /\\ (s'.valueRegs r = some (shlValue va vb))",
+      "hypotheses": ["hguard : evalGuard s i.guard = some true", "hd : i.d = Destination.reg r", "ha : readSource s i.a = some va", "hb : readSource s i.b = some vb"],
+      "conclusion": "The executed relation writes `shlValue va vb` to destination register r.",
+      "semantic_claim_ids": ["PTX-SHL-SEM1-002", "PTX-SHL-SEM1-003", "PTX-SHL-SEM1-005", "PTX-SHL-SEM1-006", "PTX-SHL-SEM1-007", "PTX-SHL-SEM1-008"],
+      "lean_declarations_used": ["execShlB32", "shlValue", "readSource", "Destination.reg", "updateDestination", "MachineState.valueRegs", "clampShiftAmount"],
+      "source_or_assumption_basis": "Source semantics `d = a << b` and shift amount note + clamp-to-width behavior (bounded with N=32 in this unit). Derived mapping note: pre-state reads and destination write shape from function definition.",
+      "human_assumption_dependencies": [],
+      "non_vacuity_argument": "The theorem constrains the written value to the computed shift result; it is not derivable from constructor existence alone and distinguishes correct shift semantics from copy or identity updates.",
+      "proof_strategy_hint": "From hguard, unfold execShlB32 to executed branch and instantiate ha/hb to produce read values. Simplify the update to the register r branch and rewrite by hd. The output equals `shlValue va vb` definitionally by computation."
+    },
+    {
+      "obligation_id": "PTX-SHL-THM-004",
+      "proposed_name": "shlB32Step_destination_only_frame",
+      "category": "frame property (semantics PRF-2/PRF-3)",
+      "intent": "Establish that `shl` execution only changes the destination register and leaves predicate state unchanged in the executed relation (in both executed and guard-false cases), matching the relational update design and bounded state model.",
+      "precise_statement_in_words": "For any step `ShlB32Step s i s'` with `i.d = Destination.reg r`, every other value register preserves its pre-state and every predicate register is unchanged.",
+      "lean_statement_sketch": "theorem shlB32Step_destination_only_frame (s : MachineState) (i : ShlB32Instruction) (s' : MachineState) (r : RegId) (hstep : ShlB32Step s i s') (hd : i.d = Destination.reg r) : (forall r', r' != r -> s'.valueRegs r' = s.valueRegs r') /\\ (forall p, s'.predRegs p = s.predRegs p)",
+      "hypotheses": ["hstep : ShlB32Step s i s'", "hd : i.d = Destination.reg r"],
+      "conclusion": "Frame result: only destination register may change and predicate file is preserved.",
+      "semantic_claim_ids": ["PTX-SHL-SEM1-003", "PTX-SHL-SEM1-008"],
+      "lean_declarations_used": ["ShlB32Step", "updateDestination", "MachineState.valueRegs", "MachineState.predRegs", "Destination.reg"],
+      "source_or_assumption_basis": "Bounded state write model updates only value destination register in executed case and returns unchanged state in guard-false case.",
+      "human_assumption_dependencies": [],
+      "non_vacuity_argument": "The relation includes both no-write (guard-false) and write cases, so preserving only r and predicates is a meaningful frame claim about allowed write locality.",
+      "proof_strategy_hint": "By cases on hstep: guardFalse gives equality of states; executed gives function update on only one destination with predicate field unchanged by record update. Use by_cases on `r' = r`.",
+      "strength_risks": [
+        "This claim is over the bounded state model only; no memory/special-status components are modeled in the Lean state.",
+        "The theorem should not be strengthened to stronger architectural components absent from this unit's state model."
+      ]
+    },
+    {
+      "obligation_id": "PTX-SHL-THM-005",
+      "proposed_name": "execShlB32_guard_false_preserves_state",
+      "category": "guard behavior (semantics PRF-5)",
+      "intent": "When the complete guard evaluates false, prove no state change: `execShlB32` returns `ExecOutcome.guardFalse s` and relation, where present, lands exactly at s.",
+      "precise_statement_in_words": "If `evalGuard s i.guard = some false` then `execShlB32 s i = some (ExecOutcome.guardFalse s)`; and if `ShlB32Step s i s'` plus `evalGuard s i.guard = some false` then `s' = s`.",
+      "lean_statement_sketch": "theorem execShlB32_guard_false_preserves_state (s : MachineState) (i : ShlB32Instruction) (hguard : evalGuard s i.guard = some false) : execShlB32 s i = some (ExecOutcome.guardFalse s) ; theorem shlB32Step_guard_false_frame (s : MachineState) (i : ShlB32Instruction) (s' : MachineState) (hstep : ShlB32Step s i s') (hguard : evalGuard s i.guard = some false) : s' = s",
+      "hypotheses": ["hguard : evalGuard s i.guard = some false", "hstep : ShlB32Step s i s'"],
+      "conclusion": "The false-guard branch is a no-op over the bounded model state.",
+      "semantic_claim_ids": ["PTX-SHL-SEM1-008", "PTX-SHL-SEM1-002"],
+      "lean_declarations_used": ["execShlB32", "ShlB32Step", "ExecOutcome", "evalGuard"],
+      "source_or_assumption_basis": "Predication clause from PTX control-flow section (threads with false guard predicate do nothing) applied to shl by approved mapping design; function/relational definitions in `ShlB32-v1.lean` implement this path first-class.",
+      "human_assumption_dependencies": [],
+      "non_vacuity_argument": "The theorem rules out accidental state writes under false guard; source lookups are not required in hypothesis and should not be assumed. The conclusion is independent of source values and asserts explicit unchanged state.",
+      "proof_strategy_hint": "Unfold execShlB32 with hguard for functional part; for relation part, contradiction eliminates executed constructor (which requires `evalGuard = some true`), leaving only guardFalse constructor giving s' = s."
+    }
+  ]
+}

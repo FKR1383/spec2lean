@@ -1,0 +1,10 @@
+{
+  "sourcePath": "candidates/ptx/9.3/units/shl-b32/lean/ShlB32-v1.lean",
+  "packagePath": "lean/Spec2Lean/PTX/ShlB32.lean",
+  "moduleImport": "Spec2Lean.PTX.ShlB32",
+  "declarationNamespace": "Spec2Lean.PTX.ShlB32",
+  "sourceSha256": "bd5f11cb053f36a63d123dd1ea0a407884fda6f6f06611f784f7903a65e47042",
+  "packageSha256": "bd5f11cb053f36a63d123dd1ea0a407884fda6f6f06611f784f7903a65e47042",
+  "isolatedNamespace": false,
+  "importAdjusted": false
+}

@@ -1,0 +1,513 @@
+{
+  "schemaVersion": 1,
+  "runId": "ptx-9.3-shl.b32-1fe9973c",
+  "mode": "formalization",
+  "language": "ptx",
+  "specVersion": "9.3",
+  "unit": "shl.b32",
+  "unitSlug": "shl-b32",
+  "leanModuleName": "ShlB32",
+  "sourceManifest": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+  "artifactRoot": "candidates/ptx/9.3/units/shl-b32",
+  "stage": "BENCHMARK_COMPLETE",
+  "createdAt": "2026-08-10T10:55:20.969Z",
+  "updatedAt": "2026-08-10T11:20:19.683Z",
+  "revision": 31,
+  "gates": {
+    "A": "benchmark_auto_advanced",
+    "B": "benchmark_auto_advanced",
+    "C": "benchmark_auto_advanced",
+    "THEOREM_STRENGTH": "benchmark_auto_advanced",
+    "FINAL": "benchmark_auto_advanced"
+  },
+  "history": [
+    {
+      "at": "2026-08-10T10:55:20.969Z",
+      "from": null,
+      "to": "CREATED",
+      "reason": "run initialized"
+    },
+    {
+      "at": "2026-08-10T10:55:20.971Z",
+      "from": "CREATED",
+      "to": "ARCHITECTURE",
+      "reason": "one-command formalization start"
+    },
+    {
+      "at": "2026-08-10T10:56:41.729Z",
+      "from": "ARCHITECTURE",
+      "to": "ARCHITECTURE_CRITIQUE",
+      "reason": "spec-architect: Created new immutable artifact `candidates/ptx/9.3/units/shl-b32/architecture/foundation-v1.md` with PTX `shl.b32` architecture foundation (scope, source facts, design, mapping, dependencies, assumptions, ambiguities, open questions, theorem obligations, evidence index, and Gate A checklist) grounded in PTX 9.3 HTML evidence."
+    },
+    {
+      "at": "2026-08-10T10:58:23.898Z",
+      "from": "ARCHITECTURE_CRITIQUE",
+      "to": "ARCHITECTURE_CRITIQUE",
+      "reason": "semantic-critic retry: Agent execution ended without a usable stage result (Agent session terminated without textual result; reason=tool-calls). The same stage is safely resumable; any written artifact will be verified before another agent is started."
+    },
+    {
+      "at": "2026-08-10T10:58:56.758Z",
+      "from": "ARCHITECTURE_CRITIQUE",
+      "to": "ARCHITECTURE",
+      "reason": "semantic-critic: Architecture has source-traceability and scope issues; requires revision before Gate A, especially optional destination semantics and shift-domain modeling."
+    },
+    {
+      "at": "2026-08-10T10:59:55.577Z",
+      "from": "ARCHITECTURE",
+      "to": "ARCHITECTURE_CRITIQUE",
+      "reason": "spec-architect: Created immutable `candidates/ptx/9.3/units/shl-b32/architecture/foundation-v2.md` with revised PTX 9.3 `shl.b32` architecture: fixed `_` destination over-claim, removed over-specified shift-domain commitments, clarified unit vs family typing scope, and added explicit assumptions/ambiguities/open questions with evidence-indexed source mapping."
+    },
+    {
+      "at": "2026-08-10T11:00:11.763Z",
+      "from": "ARCHITECTURE_CRITIQUE",
+      "to": "ARCHITECTURE",
+      "reason": "semantic-critic: Blocking issues found: unsourced bit-bucket `_` destination support, and overcommitment of fixed-domain shift semantics beyond `shl` source prose; minor ambiguity in unit-vs-family type-scope remains."
+    },
+    {
+      "at": "2026-08-10T11:05:46.859Z",
+      "from": "ARCHITECTURE",
+      "to": "ARCHITECTURE_CRITIQUE",
+      "reason": "spec-architect: Created immutable foundation-v3 architecture artifact for shl.b32 with source-indexed facts, bounded design, explicit assumptions/ambiguities, and Gate A checklist."
+    },
+    {
+      "at": "2026-08-10T11:06:05.065Z",
+      "from": "ARCHITECTURE_CRITIQUE",
+      "to": "ARCHITECTURE",
+      "reason": "semantic-critic: Wrote architecture-critic-v4 with non-blocking findings: clarify numeric-operator abstraction in proofs and keep family-level shl type context constrained for this .b32 bounded unit."
+    },
+    {
+      "at": "2026-08-10T11:06:46.110Z",
+      "from": "ARCHITECTURE",
+      "to": "ARCHITECTURE_CRITIQUE",
+      "reason": "spec-architect: Created immutable foundation-v4 architecture for shl.b32 with source-backed scope, design mapping, parser/safety constraints, and unresolved items explicitly tracked."
+    },
+    {
+      "at": "2026-08-10T11:07:38.641Z",
+      "from": "ARCHITECTURE_CRITIQUE",
+      "to": "ARCHITECTURE",
+      "reason": "semantic-critic: Created review artifact v5 with 2 non-blocking findings: `srcA` register-form assumption lacks explicit source grounding, and guard-false no-op mapping should be explicitly marked as interpretation from control-flow section. Routing to Spec Architect for revision."
+    },
+    {
+      "at": "2026-08-10T11:08:15.160Z",
+      "from": "ARCHITECTURE",
+      "to": "ARCHITECTURE_CRITIQUE",
+      "reason": "spec-architect: Wrote foundation-v5.md for shl.b32 with source-backed facts, source-design mapping, unresolved points, and formal architecture obligations for Gate A review."
+    },
+    {
+      "at": "2026-08-10T11:08:47.393Z",
+      "from": "ARCHITECTURE_CRITIQUE",
+      "to": "WAITING_GATE_A",
+      "reason": "semantic-critic: Created candidates/ptx/9.3/units/shl-b32/reviews/architecture-critic-v6.md; no blocking findings, only a non-blocking note confirming predication no-op is explicitly an interpretation. Artifact appears ready for human Gate A."
+    },
+    {
+      "at": "2026-08-10T11:08:47.400Z",
+      "from": "WAITING_GATE_A",
+      "to": "SOURCE_CURATION",
+      "reason": "Recorded benchmark-only A auto-advance; review=reviews/ptx-shl-b32/benchmark-auto/ptx-9.3-shl.b32-1fe9973c-a-benchmark-auto-v1.json; humanConfirmationRecorded=false"
+    },
+    {
+      "at": "2026-08-10T11:09:35.817Z",
+      "from": "SOURCE_CURATION",
+      "to": "SEMANTIC_EXTRACTION",
+      "reason": "source-curator-fast: Created immutable source-bundle v1 for ptx-9.3/shl-b32 with hash-verified HTML evidence, stable fragments, coverage map, and explicit evidence gaps; no semantic inference performed."
+    },
+    {
+      "at": "2026-08-10T11:10:10.176Z",
+      "from": "SEMANTIC_EXTRACTION",
+      "to": "SEMANTIC_CRITIQUE",
+      "reason": "semantic-extractor-fast: Wrote semantics-v1 for shl.b32 from source-bundle-v1 with explicit evidence-classified claims and unresolved points marked open."
+    },
+    {
+      "at": "2026-08-10T11:10:52.503Z",
+      "from": "SEMANTIC_CRITIQUE",
+      "to": "WAITING_GATE_B",
+      "reason": "semantic-critic: Created semantics-critic-v1.md with independent review; found no blocking semantic issues and marked unit ready for Human Gate B."
+    },
+    {
+      "at": "2026-08-10T11:10:52.507Z",
+      "from": "WAITING_GATE_B",
+      "to": "LEAN_FORMALIZATION",
+      "reason": "Recorded benchmark-only B auto-advance; review=reviews/ptx-shl-b32/benchmark-auto/ptx-9.3-shl.b32-1fe9973c-b-benchmark-auto-v1.json; humanConfirmationRecorded=false"
+    },
+    {
+      "at": "2026-08-10T11:11:56.020Z",
+      "from": "LEAN_FORMALIZATION",
+      "to": "LEAN_MAPPING_CRITIQUE",
+      "reason": "lean-formalizer: Created candidates/ptx/9.3/units/shl-b32/lean/ShlB32-v1.lean with bounded Gate-B Lean semantics (b32 operands, guard handling, clamp-to-32 shift, partial state lookups, and relational step form) and verified it with Lean (success)."
+    },
+    {
+      "at": "2026-08-10T11:12:28.317Z",
+      "from": "LEAN_MAPPING_CRITIQUE",
+      "to": "WAITING_GATE_C",
+      "reason": "semantic-critic: Lean mapping for shl.b32 matches approved semantics; no mapping defects identified."
+    },
+    {
+      "at": "2026-08-10T11:12:28.321Z",
+      "from": "WAITING_GATE_C",
+      "to": "THEOREM_GENERATION",
+      "reason": "Recorded benchmark-only C auto-advance; review=reviews/ptx-shl-b32/benchmark-auto/ptx-9.3-shl.b32-1fe9973c-c-benchmark-auto-v1.json; humanConfirmationRecorded=false"
+    },
+    {
+      "at": "2026-08-10T11:13:41.307Z",
+      "from": "THEOREM_GENERATION",
+      "to": "THEOREM_GENERATION",
+      "reason": "lean-formalizer retry: Agent response did not contain a valid terminal protocol result; no model-based recovery was attempted: Agent response has no parseable SPEC2LEAN_RESULT payload"
+    },
+    {
+      "at": "2026-08-10T11:14:11.645Z",
+      "from": "THEOREM_GENERATION",
+      "to": "THEOREM_GENERATION",
+      "reason": "lean-formalizer retry: Agent returned an invalid workflow decision; no transition was trusted: Agent attempted invalid SUCCESS target: THEOREM_STRENGTH_REVIEW; expected THEOREM_STRENGTH_CRITIQUE"
+    },
+    {
+      "at": "2026-08-10T11:14:54.016Z",
+      "from": "THEOREM_GENERATION",
+      "to": "THEOREM_STRENGTH_CRITIQUE",
+      "reason": "lean-formalizer: Created immutable obligations-v3.json with a compact non-vacuous theorem/validation set for Spec2Lean.PTX.ShlB32 at run revision 22; stage THEOREM_GENERATION complete."
+    },
+    {
+      "at": "2026-08-10T11:15:24.306Z",
+      "from": "THEOREM_STRENGTH_CRITIQUE",
+      "to": "THEOREM_GENERATION",
+      "reason": "semantic-critic: Found MAJOR mismatch in THM-302: claimed function/relation correspondence is not aligned with false-guard branch; theorem is not provable as written."
+    },
+    {
+      "at": "2026-08-10T11:15:54.650Z",
+      "from": "THEOREM_GENERATION",
+      "to": "THEOREM_STRENGTH_CRITIQUE",
+      "reason": "lean-formalizer: Wrote obligations-v4.json with unit-specific non-vacuous validation and theorem obligations, including corrected relation/function correspondence split across executed, false-guard, and none cases."
+    },
+    {
+      "at": "2026-08-10T11:16:18.889Z",
+      "from": "THEOREM_STRENGTH_CRITIQUE",
+      "to": "WAITING_THEOREM_STRENGTH_APPROVAL",
+      "reason": "semantic-critic: Reviewed obligations-v4; no theorem-strength issues found; new v2 review artifact created and stage is ready for human theorem-strength approval."
+    },
+    {
+      "at": "2026-08-10T11:16:18.895Z",
+      "from": "WAITING_THEOREM_STRENGTH_APPROVAL",
+      "to": "PROOF_GENERATION",
+      "reason": "Recorded benchmark-only THEOREM_STRENGTH auto-advance; review=reviews/ptx-shl-b32/benchmark-auto/ptx-9.3-shl.b32-1fe9973c-theorem-strength-benchmark-auto-v1.json; humanConfirmationRecorded=false"
+    },
+    {
+      "at": "2026-08-10T11:18:50.239Z",
+      "from": "PROOF_GENERATION",
+      "to": "PROOF_GENERATION",
+      "reason": "proof-engineer retry: Proof artifact exists but Lean still reports errors; 0 theorem declarations remain or need repair."
+    },
+    {
+      "at": "2026-08-10T11:19:27.083Z",
+      "from": "PROOF_GENERATION",
+      "to": "FINAL_CRITIQUE",
+      "reason": "proof-engineer: All 4 approved theorem declarations are present and the proof artifact compiles cleanly with no prohibited verification bypass."
+    },
+    {
+      "at": "2026-08-10T11:20:19.677Z",
+      "from": "FINAL_CRITIQUE",
+      "to": "WAITING_FINAL_APPROVAL",
+      "reason": "semantic-critic: Final critique produced with 0 blockers/0 majors, 2 non-blocking minors; Lean artifacts compile and no proof bypasses detected; ready for human final approval review."
+    },
+    {
+      "at": "2026-08-10T11:20:19.683Z",
+      "from": "WAITING_FINAL_APPROVAL",
+      "to": "BENCHMARK_COMPLETE",
+      "reason": "Recorded benchmark-only FINAL auto-advance; review=reviews/ptx-shl-b32/benchmark-auto/ptx-9.3-shl.b32-1fe9973c-final-benchmark-auto-v1.json; humanConfirmationRecorded=false"
+    }
+  ],
+  "benchmark": {
+    "autoApprove": true,
+    "startedAtUtc": "2026-08-10T10:55:20.969Z"
+  },
+  "executions": [
+    {
+      "startedAt": "2026-08-10T10:55:23.834Z",
+      "at": "2026-08-10T10:56:41.729Z",
+      "stage": "ARCHITECTURE",
+      "agent": "spec-architect",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_014afe34fffe1A30XNM4K9bjV6",
+      "outcome": "SUCCESS",
+      "nextStage": "ARCHITECTURE_CRITIQUE",
+      "response": "SPEC2LEAN_RESULT {\"outcome\":\"SUCCESS\",\"nextStage\":\"ARCHITECTURE_CRITIQUE\",\"summary\":\"Created new immutable artifact `candidates/ptx/9.3/units/shl-b32/architecture/foundation-v1.md` with PTX `shl.b32` architecture foundation (scope, source facts, design, mapping, dependencies, assumptions, ambiguities, open questions, theorem obligations, evidence index, and Gate A checklist) grounded in PTX 9.3 HTML evidence.\"}"
+    },
+    {
+      "startedAt": "2026-08-10T10:56:41.758Z",
+      "at": "2026-08-10T10:58:23.898Z",
+      "stage": "ARCHITECTURE_CRITIQUE",
+      "agent": "semantic-critic",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_014aeb2e4ffeHlSx5iNROBaY4Z",
+      "outcome": "RETRY",
+      "nextStage": "ARCHITECTURE_CRITIQUE",
+      "response": "[ORCHESTRATOR_RECOVERY] Agent session terminated without textual result; reason=tool-calls"
+    },
+    {
+      "startedAt": "2026-08-10T10:58:23.942Z",
+      "at": "2026-08-10T10:58:56.758Z",
+      "stage": "ARCHITECTURE_CRITIQUE",
+      "agent": "semantic-critic",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_014ad23c3ffeJ7ec3y02GYD7jX",
+      "outcome": "REVISE",
+      "nextStage": "ARCHITECTURE",
+      "response": "Created `candidates/ptx/9.3/units/shl-b32/reviews/architecture-critic-v2.md` with 3 findings (MAJOR/MAJOR/MINOR), including two substantive blockers for this stage: (1) unsupported assumption that `shl` supports `_` destination, and (2) over-specified shift-domain behavior not directly sourced from the `shl` instruction text.\n\nSPEC2LEAN_RESULT {\"outcome\":\"REVISE\",\"nextStage\":\"ARCHITECTURE\",\"summary\":\"Architecture has source-traceability and scope issues; requires revision before Gate A, especially optional destination semantics and shift-domain modeling.\"}"
+    },
+    {
+      "startedAt": "2026-08-10T10:58:56.785Z",
+      "at": "2026-08-10T10:59:55.577Z",
+      "stage": "ARCHITECTURE",
+      "agent": "spec-architect",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_014aca372ffe16MslmrIIJX65J",
+      "outcome": "SUCCESS",
+      "nextStage": "ARCHITECTURE_CRITIQUE",
+      "response": "SPEC2LEAN_RESULT {\"outcome\":\"SUCCESS\",\"nextStage\":\"ARCHITECTURE_CRITIQUE\",\"summary\":\"Created immutable `candidates/ptx/9.3/units/shl-b32/architecture/foundation-v2.md` with revised PTX 9.3 `shl.b32` architecture: fixed `_` destination over-claim, removed over-specified shift-domain commitments, clarified unit vs family typing scope, and added explicit assumptions/ambiguities/open questions with evidence-indexed source mapping.\"}"
+    },
+    {
+      "startedAt": "2026-08-10T10:59:55.603Z",
+      "at": "2026-08-10T11:00:11.763Z",
+      "stage": "ARCHITECTURE_CRITIQUE",
+      "agent": "semantic-critic",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_014abbdb0ffe0eHq2GxD8eisEC",
+      "outcome": "REVISE",
+      "nextStage": "ARCHITECTURE",
+      "response": "Completed `candidates/ptx/9.3/units/shl-b32/reviews/architecture-critic-v3.md` with new findings and revision requirements.\n\nSPEC2LEAN_RESULT {\"outcome\":\"REVISE\",\"nextStage\":\"ARCHITECTURE\",\"summary\":\"Blocking issues found: unsourced bit-bucket `_` destination support, and overcommitment of fixed-domain shift semantics beyond `shl` source prose; minor ambiguity in unit-vs-family type-scope remains.\"}"
+    },
+    {
+      "startedAt": "2026-08-10T11:00:11.791Z",
+      "at": "2026-08-10T11:05:46.859Z",
+      "stage": "ARCHITECTURE",
+      "agent": "spec-architect",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_014ab7e74ffeuhKBGVstBTwh4a",
+      "outcome": "SUCCESS",
+      "nextStage": "ARCHITECTURE_CRITIQUE",
+      "response": "Created `candidates/ptx/9.3/units/shl-b32/architecture/foundation-v3.md` with an immutable, evidence-anchored architecture revision that removes prior blocker issues (`_` destination over-claim and overcommitted shift-domain semantics) and carries explicit ambiguities/open questions for unresolved details.\n\nSPEC2LEAN_RESULT {\"outcome\":\"SUCCESS\",\"nextStage\":\"ARCHITECTURE_CRITIQUE\",\"summary\":\"Created immutable foundation-v3 architecture artifact for shl.b32 with source-indexed facts, bounded design, explicit assumptions/ambiguities, and Gate A checklist.\"}"
+    },
+    {
+      "startedAt": "2026-08-10T11:05:46.887Z",
+      "at": "2026-08-10T11:06:05.065Z",
+      "stage": "ARCHITECTURE_CRITIQUE",
+      "agent": "semantic-critic",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_014a6617cffegqqOmNTOWKnGjV",
+      "outcome": "REVISE",
+      "nextStage": "ARCHITECTURE",
+      "response": "Created `candidates/ptx/9.3/units/shl-b32/reviews/architecture-critic-v4.md` with two findings:\n- **ARC4-1 (MINOR, human review required)**: caution against over-committing bit-level shift result behavior in proof-family wording before Lean mapping.\n- **ARC4-2 (NOTE)**: family-level type context should be consistently constrained in parser/typing docs to avoid accidental family-wide enablement.\n\nI did not find a blocker; changes requested are non-blocking but should be addressed before Gate A.\n\nSPEC2LEAN_RESULT {\"outcome\":\"REVISE\",\"nextStage\":\"ARCHITECTURE\",\"summary\":\"Wrote architecture-critic-v4 with non-blocking findings: clarify numeric-operator abstraction in proofs and keep family-level shl type context constrained for this .b32 bounded unit.\"}"
+    },
+    {
+      "startedAt": "2026-08-10T11:06:05.090Z",
+      "at": "2026-08-10T11:06:46.111Z",
+      "stage": "ARCHITECTURE",
+      "agent": "spec-architect",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_014a61a60ffe7HkXZyVr9fhkfP",
+      "outcome": "SUCCESS",
+      "nextStage": "ARCHITECTURE_CRITIQUE",
+      "response": "Created `candidates/ptx/9.3/units/shl-b32/architecture/foundation-v4.md` with a new immutable v4 architecture artifact for `shl.b32`, including source-traceable facts, bounded design decisions, mapping/dependency graph, assumptions/ambiguities/open questions, theorem-obligation families, evidence index, and Gate A checklist; no Lean code added.\n\nSPEC2LEAN_RESULT {\"outcome\":\"SUCCESS\",\"nextStage\":\"ARCHITECTURE_CRITIQUE\",\"summary\":\"Created immutable foundation-v4 architecture for shl.b32 with source-backed scope, design mapping, parser/safety constraints, and unresolved items explicitly tracked.\"}"
+    },
+    {
+      "startedAt": "2026-08-10T11:06:46.145Z",
+      "at": "2026-08-10T11:07:38.642Z",
+      "stage": "ARCHITECTURE_CRITIQUE",
+      "agent": "semantic-critic",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_014a57a01ffetRoCXpWDtFT8TV",
+      "outcome": "REVISE",
+      "nextStage": "ARCHITECTURE",
+      "response": "SPEC2LEAN_RESULT {\"outcome\":\"REVISE\",\"nextStage\":\"ARCHITECTURE\",\"summary\":\"Created review artifact v5 with 2 non-blocking findings: `srcA` register-form assumption lacks explicit source grounding, and guard-false no-op mapping should be explicitly marked as interpretation from control-flow section. Routing to Spec Architect for revision.\"}"
+    },
+    {
+      "startedAt": "2026-08-10T11:07:38.666Z",
+      "at": "2026-08-10T11:08:15.160Z",
+      "stage": "ARCHITECTURE",
+      "agent": "spec-architect",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_014a4acd8ffewubuRALiqTPQbI",
+      "outcome": "SUCCESS",
+      "nextStage": "ARCHITECTURE_CRITIQUE",
+      "response": "Created `candidates/ptx/9.3/units/shl-b32/architecture/foundation-v5.md` (new immutable revision) with bounded architecture covering source-backed PTX 9.3 evidence, Lean-design mapping, dependencies, assumptions/ambiguities/open questions, theorem obligations, and Gate A checklist items.\n\nSPEC2LEAN_RESULT {\"outcome\":\"SUCCESS\",\"nextStage\":\"ARCHITECTURE_CRITIQUE\",\"summary\":\"Wrote foundation-v5.md for shl.b32 with source-backed facts, source-design mapping, unresolved points, and formal architecture obligations for Gate A review.\"}"
+    },
+    {
+      "startedAt": "2026-08-10T11:08:15.183Z",
+      "at": "2026-08-10T11:08:47.393Z",
+      "stage": "ARCHITECTURE_CRITIQUE",
+      "agent": "semantic-critic",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_014a41e33ffes2fiVpQtlqIsWA",
+      "outcome": "SUCCESS",
+      "nextStage": "WAITING_GATE_A",
+      "response": "SPEC2LEAN_RESULT {\"outcome\":\"SUCCESS\",\"nextStage\":\"WAITING_GATE_A\",\"summary\":\"Created candidates/ptx/9.3/units/shl-b32/reviews/architecture-critic-v6.md; no blocking findings, only a non-blocking note confirming predication no-op is explicitly an interpretation. Artifact appears ready for human Gate A.\"}"
+    },
+    {
+      "startedAt": "2026-08-10T11:08:47.422Z",
+      "at": "2026-08-10T11:09:35.817Z",
+      "stage": "SOURCE_CURATION",
+      "agent": "source-curator-fast",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_014a3a044ffeANqz2NbcUkZyw5",
+      "outcome": "SUCCESS",
+      "nextStage": "SEMANTIC_EXTRACTION",
+      "response": "SPEC2LEAN_RESULT {\"outcome\":\"SUCCESS\",\"nextStage\":\"SEMANTIC_EXTRACTION\",\"summary\":\"Created immutable source-bundle v1 for ptx-9.3/shl-b32 with hash-verified HTML evidence, stable fragments, coverage map, and explicit evidence gaps; no semantic inference performed.\"}"
+    },
+    {
+      "startedAt": "2026-08-10T11:09:35.845Z",
+      "at": "2026-08-10T11:10:10.176Z",
+      "stage": "SEMANTIC_EXTRACTION",
+      "agent": "semantic-extractor-fast",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_014a2e31effegRCIZi83ReLmic",
+      "outcome": "SUCCESS",
+      "nextStage": "SEMANTIC_CRITIQUE",
+      "response": "Created `candidates/ptx/9.3/units/shl-b32/semantics/semantics-v1.json` with bounded semantic extraction for `shl.b32`, including:\n- source facts/derived interpretations/design dependencies/open questions,\n- state read/write behavior, guard semantics, typing, and exception/UB notes,\n- preserved evidence fragment IDs for all evidentiary claims.\n\nSPEC2LEAN_RESULT {\"outcome\":\"SUCCESS\",\"nextStage\":\"SEMANTIC_CRITIQUE\",\"summary\":\"Wrote semantics-v1 for shl.b32 from source-bundle-v1 with explicit evidence-classified claims and unresolved points marked open.\"}"
+    },
+    {
+      "startedAt": "2026-08-10T11:10:10.200Z",
+      "at": "2026-08-10T11:10:52.503Z",
+      "stage": "SEMANTIC_CRITIQUE",
+      "agent": "semantic-critic",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_014a25ceaffeTRkxylWK39NdbD",
+      "outcome": "SUCCESS",
+      "nextStage": "WAITING_GATE_B",
+      "response": "SPEC2LEAN_RESULT {\"outcome\":\"SUCCESS\",\"nextStage\":\"WAITING_GATE_B\",\"summary\":\"Created semantics-critic-v1.md with independent review; found no blocking semantic issues and marked unit ready for Human Gate B.\"}"
+    },
+    {
+      "startedAt": "2026-08-10T11:10:52.533Z",
+      "at": "2026-08-10T11:11:56.020Z",
+      "stage": "LEAN_FORMALIZATION",
+      "agent": "lean-formalizer",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_014a1b78dffeneXoHMkq2a4L3l",
+      "outcome": "SUCCESS",
+      "nextStage": "LEAN_MAPPING_CRITIQUE",
+      "response": "SPEC2LEAN_RESULT {\"outcome\":\"SUCCESS\",\"nextStage\":\"LEAN_MAPPING_CRITIQUE\",\"summary\":\"Created candidates/ptx/9.3/units/shl-b32/lean/ShlB32-v1.lean with bounded Gate-B Lean semantics (b32 operands, guard handling, clamp-to-32 shift, partial state lookups, and relational step form) and verified it with Lean (success).\"}"
+    },
+    {
+      "startedAt": "2026-08-10T11:11:56.041Z",
+      "at": "2026-08-10T11:12:28.317Z",
+      "stage": "LEAN_MAPPING_CRITIQUE",
+      "agent": "semantic-critic",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_014a0bf7affeXrkRjAWM4uogeZ",
+      "outcome": "SUCCESS",
+      "nextStage": "WAITING_GATE_C",
+      "response": "Created: `candidates/ptx/9.3/units/shl-b32/reviews/lean-mapping-critic-v1.md` with a lean mapping review finding no defects; artifact concludes ready for human Gate C review.\n\nSPEC2LEAN_RESULT {\"outcome\":\"SUCCESS\",\"nextStage\":\"WAITING_GATE_C\",\"summary\":\"Lean mapping for shl.b32 matches approved semantics; no mapping defects identified.\"}"
+    },
+    {
+      "startedAt": "2026-08-10T11:12:28.350Z",
+      "at": "2026-08-10T11:13:41.307Z",
+      "stage": "THEOREM_GENERATION",
+      "agent": "lean-formalizer",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_014a0414affeFRhrD0U3dXEnkg",
+      "outcome": "RETRY",
+      "nextStage": "THEOREM_GENERATION",
+      "response": "## Objective\n- Generate `candidates/ptx/9.3/units/shl-b32/theorems/obligations-v1.json` for the `ptx-9.3-shl.b32-1fe9973c` run (rev 20) in `THEOREM_GENERATION` without proofs.\n- Produce compact, non-vacuous theorem and validation obligations aligned to namespace `Spec2Lean.PTX.ShlB32`, bounded `.b32` semantics, and existing architecture/semantics mappings.\n\n## Important Details\n- Run metadata: `run_id=ptx-9.3-shl.b32-1fe9973c`, `stage=THEOREM_GENERATION`, `stage_attempt=1`, `run_revision=20`, unit `shl.b32`, Lean module `ShlB32`.\n- Required output path is immutable and must not be overwritten if already complete; file initially absent, so created then replaced once.\n- Evidence inputs present and used:  \n  - `candidates/ptx/9.3/units/shl-b32/semantics/semantics-v1.json`\n  - `candidates/ptx/9.3/units/shl-b32/lean/ShlB32-v1.lean`\n  - `candidates/ptx/9.3/units/shl-b32/architecture/foundation-v5.md`\n  - `candidates/ptx/9.3/units/shl-b32/source-bundles/source-bundle-v1.json`\n  - Benchmarks auto-advanced for Gates A/B/C (all `humanConfirmationRecorded=false`, `gateApprovalPerformed=false`).\n- `lean_check_file(\"candidates/ptx/9.3/units/shl-b32/lean/ShlB32-v1.lean\")` succeeded (`exitCode 0`, 0 errors, 0 warnings).\n- No proofs were written; only obligations/statements/hints/non-vacuity notes.\n- Existing similar artifact pattern checked in other units (`or-b32`, `and-b32`, `mov-b32`, `xor-b32`, etc.).\n- `AGENTS`/safety constraints honored in workflow: no `sorry`, no axioms, no human gate approvals.\n\n## Work State\n### Completed\n- Verified run state and artifacts via:\n  - `runs/ptx-9.3-shl.b32-1fe9973c/run.json`\n  - review files under `reviews/ptx-shl-b32/benchmark-auto/...`\n  - Lean mapping critique and semantics critique for `shl-b32`.\n- Confirmed `ShlB32-v1.lean` compiles cleanly via `lean_check_file`.\n- Determined no `obligations*.json` existed under `candidates/ptx/9.3/units/shl-b32/theorems` before write.\n- Created `candidates/ptx/9.3/units/shl-b32/theorems/obligations-v1.json` with:\n  - metadata, gate refs, references, compliance notes\n  - 5 validation obligations (`PTX-SHL-VAL-001`..`005`)\n  - 5 theorem obligations (`PTX-SHL-THM-001`..`005`)\n  - names and namespace unit-specific.\n- Replaced artifact once to fix claim-id/details consistency (e.g., `PTX-SHL-SEM1-*` mappings and phrasing).\n- Latest artifact written successfully via `candidate_write` replace:\n  - `sha256`: `f5b69ab0700bd2ed5871f52fcaeebdf6e7d8f6b73f39bb55ce5b5e188bcc0ac0`\n  - `sizeBytes`: `20808`\n\n### Active\n- (none)\n\n### Blocked\n- (none)\n\n## Next Move\n1. Transition to `THEOREM_STRENGTH_CRITIQUE` using `candidates/ptx/9.3/units/shl-b32/theorems/obligations-v1.json` as input.\n2. If needed, cross-check non-vacuity and scope alignment, then return `SPEC2LEAN_RESULT ...` with `SUCCESS` and `nextStage\":\"THEOREM_STRENGTH_CRITIQUE\"`.\n\n## Relevant Files\n- `candidates/ptx/9.3/units/shl-b32/theorems/obligations-v1.json`: required generated theorem obligations artifact (new/recently created, immutable for this revision).\n- `candidates/ptx/9.3/units/shl-b32/lean/ShlB32-v1.lean`: Lean mapping, namespace `Spec2Lean.PTX.ShlB32`, used for declaration names and compilation checks.\n- `candidates/ptx/9.3/units/shl-b32/semantics/semantics-v1.json`: source of semantic claim IDs and interpretation basis.\n- `candidates/ptx/9.3/units/shl-b32/architecture/foundation-v5.md`: bounded architecture scope and facts.\n- `candidates/ptx/9.3/units/shl-b32/source-bundles/source-bundle-v1.json`: official evidence fragments `PTX-9.3-SHL-001..014`.\n- `reviews/ptx-shl-b32/benchmark-auto/ptx-9.3-shl.b32-1fe9973c-c-benchmark-auto-v1.json`: Gate C auto-advance reference.\n- `reviews/ptx-shl-b32/benchmark-auto/ptx-9.3-shl.b32-1fe9973c-b-benchmark-auto-v1.json`: Gate B auto-advance reference.\n- `reviews/ptx-shl-b32/benchmark-auto/ptx-9.3-shl.b32-1fe9973c-a-benchmark-auto-v1.json`: Gate A auto-advance reference."
+    },
+    {
+      "startedAt": "2026-08-10T11:13:41.333Z",
+      "at": "2026-08-10T11:14:11.645Z",
+      "stage": "THEOREM_GENERATION",
+      "agent": "lean-formalizer",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_0149f242effepcx0BE56KbQF5s",
+      "outcome": "RETRY",
+      "nextStage": "THEOREM_GENERATION",
+      "response": "SPEC2LEAN_RESULT {\"outcome\":\"SUCCESS\",\"nextStage\":\"THEOREM_STRENGTH_REVIEW\",\"summary\":\"Required artifact already exists at candidates/ptx/9.3/units/shl-b32/theorems/obligations-v2.json, is complete (stage THEOREM_GENERATION, non-proof theorem/validation obligations present, and ready for theorem-strength review), so no overwrite was performed.\"}"
+    },
+    {
+      "startedAt": "2026-08-10T11:14:11.669Z",
+      "at": "2026-08-10T11:14:54.016Z",
+      "stage": "THEOREM_GENERATION",
+      "agent": "lean-formalizer",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_0149eadadffeejLw46murX3IGj",
+      "outcome": "SUCCESS",
+      "nextStage": "THEOREM_STRENGTH_CRITIQUE",
+      "response": "SPEC2LEAN_RESULT {\"outcome\":\"SUCCESS\",\"nextStage\":\"THEOREM_STRENGTH_CRITIQUE\",\"summary\":\"Created immutable obligations-v3.json with a compact non-vacuous theorem/validation set for Spec2Lean.PTX.ShlB32 at run revision 22; stage THEOREM_GENERATION complete.\"}"
+    },
+    {
+      "startedAt": "2026-08-10T11:14:54.042Z",
+      "at": "2026-08-10T11:15:24.306Z",
+      "stage": "THEOREM_STRENGTH_CRITIQUE",
+      "agent": "semantic-critic",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_0149e0829ffe0NjLP50X5h7NWC",
+      "outcome": "REVISE",
+      "nextStage": "THEOREM_GENERATION",
+      "response": "I reviewed `candidates/ptx/9.3/units/shl-b32/theorems/obligations-v3.json` and found a major theorem-strength issue: the `PTX-SHL-THM-302` statement is inconsistent with its stated correspondence intent and is provably too strong/incorrect in false-guard cases. I created:\n\n`candidates/ptx/9.3/units/shl-b32/reviews/theorem-strength-critic-v1.md`\n\nwith finding **STRG-1** and a concrete revision recommendation.\n\nSPEC2LEAN_RESULT {\"outcome\":\"REVISE\",\"nextStage\":\"THEOREM_GENERATION\",\"summary\":\"Found MAJOR mismatch in THM-302: claimed function/relation correspondence is not aligned with false-guard branch; theorem is not provable as written.\"}"
+    },
+    {
+      "startedAt": "2026-08-10T11:15:24.330Z",
+      "at": "2026-08-10T11:15:54.650Z",
+      "stage": "THEOREM_GENERATION",
+      "agent": "lean-formalizer",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_0149d91d8ffe481q8Xm3jGcofR",
+      "outcome": "SUCCESS",
+      "nextStage": "THEOREM_STRENGTH_CRITIQUE",
+      "response": "Created `candidates/ptx/9.3/units/shl-b32/theorems/obligations-v4.json` with a fresh immutable revision (stage attempt 4, run revision 24), branch-corrected theorem obligations for `Spec2Lean.PTX.ShlB32`, including a fixed guard-false/equivalence set and separate partiality characterization suitable for proof. No proofs were added.\n\nSPEC2LEAN_RESULT {\"outcome\":\"SUCCESS\",\"nextStage\":\"THEOREM_STRENGTH_CRITIQUE\",\"summary\":\"Wrote obligations-v4.json with unit-specific non-vacuous validation and theorem obligations, including corrected relation/function correspondence split across executed, false-guard, and none cases.\"}"
+    },
+    {
+      "startedAt": "2026-08-10T11:15:54.676Z",
+      "at": "2026-08-10T11:16:18.889Z",
+      "stage": "THEOREM_STRENGTH_CRITIQUE",
+      "agent": "semantic-critic",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_0149d1b4effe7hqyV2FXScitKN",
+      "outcome": "SUCCESS",
+      "nextStage": "WAITING_THEOREM_STRENGTH_APPROVAL",
+      "response": "Created the required artifact:\n\n- `candidates/ptx/9.3/units/shl-b32/reviews/theorem-strength-critic-v2.md`\n\nI found no remaining theorem-strength blockers in `theorems/obligations-v4.json`; the branch behavior is now separated correctly (executed / guardFalse / none) and non-vacuity is not violated by an over-conflated correspondence theorem.\n\nSPEC2LEAN_RESULT {\"outcome\":\"SUCCESS\",\"nextStage\":\"WAITING_THEOREM_STRENGTH_APPROVAL\",\"summary\":\"Reviewed obligations-v4; no theorem-strength issues found; new v2 review artifact created and stage is ready for human theorem-strength approval.\"}"
+    },
+    {
+      "startedAt": "2026-08-10T11:16:20.059Z",
+      "at": "2026-08-10T11:18:50.239Z",
+      "stage": "PROOF_GENERATION",
+      "agent": "proof-engineer",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_0149cb828ffebdVBK8NpCnKhj8",
+      "outcome": "RETRY",
+      "nextStage": "PROOF_GENERATION",
+      "response": "## Objective\n- Prove all 4 approved shl.b32 theorems in:\n  - `ShlB32_ShlB32Step_deterministic`\n  - `ShlB32_execShlB32_executed_sound`\n  - `ShlB32_execShlB32_guardFalse_iff`\n  - `ShlB32_ShlB32Step_iff_guardFalse`\n  - `ShlB32_execShlB32_none_iff_no_step`\n- Keep theorem names and statements exactly as approved and keep proof artifact compiling in Lean.\n\n## Important Details\n- Run ID: `ptx-9.3-shl.b32-1fe9973c`, Unit: `shl.b32`, Proof target count: 4 declarations.\n- Hard constraints in force:\n  - Don’t read NVIDIA source/architecture/semantic bundles.\n  - Don’t weaken/alter theorem statements or semantics.\n  - No `sorry`, `admit`, axioms, `unsafe`.\n  - Use iterative `candidate_write` + `lean_check_file` feedback.\n- Import policy: only `Spec2Lean.PTX.ShlB32` plus necessary standard modules; current file uses only that.\n- `ShlB32` semantics source is `lean/Spec2Lean/PTX/ShlB32.lean`; no theorem file existed initially.\n- `candidates/ptx/9.3/units/shl-b32/lean/ShlB32Proofs-v1.lean` had to be created.\n- Target theorem signatures require `execShlB32`/`ShlB32Step` cases consistent with inductive constructors:\n  - `guardFalse` (single payload: guard proof)\n  - `executed` (likely args include source values + proof fields + guard-eq-true)\n- Warnings about `simpa` appear frequently but are non-blocking (`linter.unnecessarySimpa`).\n\n## Work State\n### Completed\n- Located relevant unit paths and compared style with accepted analog (`/accepted/ptx/9.3/or-b32/lean/OrB32Proofs-v1.lean`).\n- Created file at:\n  - `candidates/ptx/9.3/units/shl-b32/lean/ShlB32Proofs-v1.lean`\n- All 4 theorem declarations are present in file.\n- First three theorems were moved toward valid structure:\n  - `ShlB32_ShlB32Step_deterministic`\n  - `ShlB32_execShlB32_executed_sound`\n  - `ShlB32_execShlB32_guardFalse_iff`\n  - `ShlB32_execShlB32_none_iff_no_step`\n- Multiple iterative rewrites via `candidate_write` with exact SHA256 replacement flow succeeded.\n\n### Active\n- Final proof file still fails to compile with a remaining Lean error:\n  - Last observed checks show `errorCount: 1` with many linter warnings only; exact current error location likely in `ShlB32_ShlB32Step_iff_guardFalse` branch for `executed` case.\n- Current file SHA256:\n  - `9de464a9e82eaee13eb52d30c1c96060b80f584e203f772c69043e28b10db933`\n\n### Blocked\n- `(none)` (single theorem-level compile error is blocking completion, not a true external blocker)\n\n## Next Move\n1. Read current full diagnostics for `candidates/ptx/9.3/units/shl-b32/lean/ShlB32Proofs-v1.lean` to pinpoint the single remaining type error.\n2. Fix remaining branch in `ShlB32_ShlB32Step_iff_guardFalse` (executed constructor direction) with a valid contradiction/false-elimination from guard mismatch.\n3. Re-run `lean_check_file` until all obligations in this batch compile.\n\n## Relevant Files\n- `candidates/ptx/9.3/units/shl-b32/lean/ShlB32Proofs-v1.lean` — active proof artifact (currently non-compiling).\n- `lean/Spec2Lean/PTX/ShlB32.lean` — defines `ShlB32Step`, `execShlB32`, `ShlB32Instruction`, etc.\n- `accepted/ptx/9.3/or-b32/lean/OrB32Proofs-v1.lean` — worked example structure for related theorem pattern."
+    },
+    {
+      "startedAt": "2026-08-10T11:18:51.637Z",
+      "at": "2026-08-10T11:19:27.083Z",
+      "stage": "PROOF_GENERATION",
+      "agent": "proof-engineer",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_0149a680dffeyfMByEQX2XW9cM",
+      "outcome": "SUCCESS",
+      "nextStage": "FINAL_CRITIQUE",
+      "response": "SPEC2LEAN_RESULT {\"outcome\":\"RETRY\",\"nextStage\":\"PROOF_GENERATION\",\"summary\":\"Repaired shl.b32 proof file by fixing malformed proof syntax, replacing a wrongly-typed theorem-branch proof in the guardFalse-iff equivalence with a direct `simp` construction, and removing an extraneous stray proof branch. `lean_check_file` now passes with 0 errors (only warnings).\"}"
+    },
+    {
+      "startedAt": "2026-08-10T11:19:27.105Z",
+      "at": "2026-08-10T11:20:19.677Z",
+      "stage": "FINAL_CRITIQUE",
+      "agent": "semantic-critic",
+      "model": "openai/gpt-5.3-codex-spark",
+      "sessionId": "ses_01499dd82ffej2J5ZRnlp65YH7",
+      "outcome": "SUCCESS",
+      "nextStage": "WAITING_FINAL_APPROVAL",
+      "response": "Created artifact: `candidates/ptx/9.3/units/shl-b32/reviews/final-critic-v1.md` (verified to exist via `candidate_read`).\n\n### Final review outcome\n- BLOCKER: 0  \n- MAJOR: 0  \n- MINOR: 2  \n- NOTE: 0  \n- Source-faithfulness status: **mostly acceptable with explicit open questions carried forward**  \n- Unresolved state-affecting gaps: (1) clamp-width symbol `N` not explicitly expanded in cited shl text (`~32` fixed by model), (2) `_` destination/operator source-form variance not fully sourced for `shl.b32` (register-only bounded model)  \n- Theorem weakening status: **No theorem weakening detected**  \n- Proof bypass status: **No `sorry`/`admit`/`axiom`/`unsafe` found**  \n- Lean compilation status: **PASS** for `lean/Spec2Lean/PTX/ShlB32.lean`, `lean/Spec2Lean/PTX/ShlB32Proofs.lean`, and candidate mirrors  \n- Readiness for final human approval: **ready for explicit human final approval**, with minor modeling questions noted for human confirmation.\n\nSPEC2LEAN_RESULT {\"outcome\":\"SUCCESS\",\"nextStage\":\"WAITING_FINAL_APPROVAL\",\"summary\":\"Final critique produced with 0 blockers/0 majors, 2 non-blocking minors; Lean artifacts compile and no proof bypasses detected; ready for human final approval review.\"}"
+    }
+  ],
+  "semanticV2": {
+    "profilePath": "language_packs/ptx/9.3/semantic-profile.json",
+    "sharedEnvironmentPath": "language_packs/ptx/9.3/semantic/shared-environment-approved-v1.json",
+    "mode": "LEGACY_FALLBACK",
+    "missingRequiredSemanticIds": [],
+    "fallbackReason": "UNIT_OUTSIDE_DELTA_CAPABILITY: Unit shl.b32 is outside the explicitly bounded delta fast path",
+    "events": [
+      {
+        "at": "2026-08-10T11:09:35.820Z",
+        "kind": "ELIGIBILITY",
+        "code": "UNIT_OUTSIDE_DELTA_CAPABILITY",
+        "detail": "Unit shl.b32 is outside the explicitly bounded delta fast path"
+      }
+    ]
+  }
+}
