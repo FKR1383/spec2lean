@@ -5,10 +5,15 @@ import {
   parseAgentResult,
   type AgentResult,
 } from "./agent-result.js"
+import {
+  normalizeAgentDecision,
+  validateAgentDecision,
+} from "./agent-decision.js"
 import { artifactContractForRun } from "./artifact-contract.js"
 import { verifyExpectedArtifact } from "./artifact-verify.js"
 import {
   abortSession,
+  ProviderRetryBudgetExceededError,
   sendPromptAsync,
   waitForAgentResult,
 } from "./async-session.js"
@@ -25,10 +30,8 @@ import { REPO_ROOT } from "./repo.js"
 import { loadRun, saveRun } from "./run-store.js"
 import { planForRun } from "./stage-plan.js"
 import {
-  canTransition,
   retryRun,
   transitionRun,
-  type FormalizationStage,
   type RunState,
 } from "./workflow.js"
 
@@ -231,77 +234,6 @@ async function buildProofPrompt(run: RunState): Promise<ProofPromptContext & { p
   }
 }
 
-function validateDecision(run: RunState, result: AgentResult): FormalizationStage {
-  const plan = planForRun(run)
-  const next = result.nextStage
-
-  if (result.outcome === "SUCCESS" && next !== plan.successStage) {
-    throw new Error(`Agent attempted invalid SUCCESS target: ${next}; expected ${plan.successStage}`)
-  }
-
-  if (result.outcome === "REVISE" && !plan.revisionStages.includes(next)) {
-    throw new Error(`Agent attempted invalid REVISE target: ${next}`)
-  }
-
-  if (result.outcome === "RETRY") {
-    if (next !== run.stage) throw new Error(`RETRY must remain at current stage: ${run.stage}`)
-    return next
-  }
-
-  if (result.outcome === "BLOCKED" && next !== "BLOCKED") {
-    throw new Error("BLOCKED outcome must target BLOCKED")
-  }
-
-  if (!canTransition(run.stage, next)) {
-    throw new Error(`Workflow rejects transition ${run.stage} -> ${next}`)
-  }
-
-  return next
-}
-
-async function recoverProtocolFresh(
-  runtime: Awaited<ReturnType<typeof startOpenCode>>,
-  run: RunState,
-  response: string,
-): Promise<AgentResult> {
-  const plan = planForRun(run)
-  const recovery = unwrap<Session>(
-    await runtime.runtime.client.session.create({
-      body: { title: `Spec2Lean protocol recovery ${run.runId} ${run.stage}` },
-    }),
-  )
-
-  const revisionTargets = plan.revisionStages.length === 0 ? "(none)" : plan.revisionStages.join(", ")
-  const text = [
-    "Classify the completed prior agent attempt. Do not call tools or modify files.",
-    `Current stage: ${run.stage}`,
-    `SUCCESS target: ${plan.successStage}`,
-    `Allowed REVISE targets: ${revisionTargets}`,
-    `RETRY target: ${run.stage}`,
-    "Prior assistant text:",
-    response.slice(-12_000),
-    "",
-    "Return exactly one line:",
-    'SPEC2LEAN_RESULT {"outcome":"SUCCESS|REVISE|RETRY|BLOCKED","nextStage":"STAGE","summary":"short factual summary"}',
-  ].join("\n")
-
-  await sendPromptAsync(runtime.runtime.server.url, recovery.id, {
-    agent: plan.agent,
-    model: {
-      providerID: runtime.model.providerID,
-      modelID: runtime.model.modelID,
-    },
-    parts: [{ type: "text", text }],
-  })
-
-  const recovered = await waitForAgentResult(runtime.runtime.server.url, recovery.id, {
-    pollMs: 1_000,
-    maxWaitMs: 3 * 60 * 1000,
-  })
-
-  return parseAgentResult(recovered)
-}
-
 async function finalizeProofStageLocally(run: RunState): Promise<AgentResult | undefined> {
   const proofPath = proofArtifactPath(run)
   if (!(await fileExists(proofPath))) return undefined
@@ -344,6 +276,14 @@ async function finalizeProofStageLocally(run: RunState): Promise<AgentResult | u
 async function main(): Promise<void> {
   const runId = required("--run")
   const dryRun = process.argv.includes("--dry-run")
+  const providerRetryBudgetSeconds = Number(
+    argument("--provider-retry-budget-seconds") ?? "60",
+  )
+  if (!Number.isFinite(providerRetryBudgetSeconds) || providerRetryBudgetSeconds <= 0) {
+    throw new Error(
+      `Invalid positive number for --provider-retry-budget-seconds: ${providerRetryBudgetSeconds}`,
+    )
+  }
   let run = await loadRun(runId)
   const plan = planForRun(run)
   const artifact = artifactContractForRun(run)
@@ -419,7 +359,28 @@ async function main(): Promise<void> {
     let sessionId: string
     let submitted = false
 
-    if (run.activeExecution && run.activeExecution.stage === run.stage && run.activeExecution.agent === plan.agent) {
+    const resumableActiveExecution =
+      run.activeExecution !== undefined &&
+      run.activeExecution.stage === run.stage &&
+      run.activeExecution.agent === plan.agent &&
+      run.activeExecution.model === runtime.model.full
+
+    if (run.activeExecution !== undefined && !resumableActiveExecution) {
+      const stale = run.activeExecution
+      await abortSession(runtime.runtime.server.url, stale.sessionId).catch(() => {})
+      console.log(
+        `[spec2lean] abandoning stale active session=${stale.sessionId} ` +
+        `agent=${stale.agent} model=${stale.model ?? "unrecorded"}; ` +
+        `current-agent=${plan.agent} current-model=${runtime.model.full}`,
+      )
+      run = {
+        ...run,
+        activeExecution: undefined,
+      }
+      await saveRun(run)
+    }
+
+    if (resumableActiveExecution && run.activeExecution !== undefined) {
       sessionId = run.activeExecution.sessionId
       console.log(`[spec2lean] resuming active session=${sessionId} agent=${plan.agent}`)
     } else {
@@ -438,6 +399,7 @@ async function main(): Promise<void> {
           startedAt: new Date().toISOString(),
           stage: run.stage,
           agent: plan.agent,
+          model: runtime.model.full,
           sessionId,
           expectedArtifact: artifact.outputPath,
         },
@@ -457,21 +419,30 @@ async function main(): Promise<void> {
 
     let response = ""
     let result: AgentResult | undefined
+    let failureClass: "PROVIDER_RETRY_BUDGET_EXCEEDED" | undefined
 
     try {
       response = await waitForAgentResult(runtime.runtime.server.url, sessionId, {
         pollMs: 2_000,
         maxWaitMs: run.stage === "PROOF_GENERATION" ? 15 * 60 * 1000 : 30 * 60 * 1000,
+        providerRetryBudgetMs: providerRetryBudgetSeconds * 1000,
         missingStatusIsTerminal: !submitted,
       })
       try {
         result = parseAgentResult(response)
-      } catch {
-        result = await recoverProtocolFresh(runtime, run, response)
+      } catch (error) {
+        result = {
+          outcome: "RETRY",
+          nextStage: run.stage,
+          summary:
+            `Agent response did not contain a valid terminal protocol result; ` +
+            `no model-based recovery was attempted: ${error instanceof Error ? error.message : String(error)}`,
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       const recoverable =
+        error instanceof ProviderRetryBudgetExceededError ||
         message.includes("timed out") ||
         message.includes("terminated without textual result") ||
         message.includes("reason=length") ||
@@ -481,10 +452,15 @@ async function main(): Promise<void> {
 
       await abortSession(runtime.runtime.server.url, sessionId).catch(() => {})
       response = `[ORCHESTRATOR_RECOVERY] ${message}`
+      if (error instanceof ProviderRetryBudgetExceededError) {
+        failureClass = "PROVIDER_RETRY_BUDGET_EXCEEDED"
+      }
       result = {
         outcome: "RETRY",
         nextStage: run.stage,
-        summary: `Agent execution ended without a usable stage result (${message}). The same stage is safely resumable; any written artifact will be verified before another agent is started.`,
+        summary: error instanceof ProviderRetryBudgetExceededError
+          ? `OpenCode provider retry exceeded the bounded ${error.retryBudgetMs}ms budget: ${error.providerMessage}. The stalled session was aborted; the stage remains safely resumable and no semantic conclusion was inferred from the provider failure.`
+          : `Agent execution ended without a usable stage result (${message}). The same stage is safely resumable; any written artifact will be verified before another agent is started.`,
       }
     }
 
@@ -508,7 +484,8 @@ async function main(): Promise<void> {
       }
     }
 
-    const nextStage = validateDecision(run, result)
+    result = normalizeAgentDecision(run, result)
+    const nextStage = validateAgentDecision(run, result)
     let nextRun = result.outcome === "RETRY"
       ? retryRun(run, `${plan.agent} retry: ${result.summary}`)
       : transitionRun(run, nextStage, `${plan.agent}: ${result.summary}`)
@@ -519,13 +496,16 @@ async function main(): Promise<void> {
       executions: [
         ...(run.executions ?? []),
         {
+          startedAt: run.activeExecution?.startedAt,
           at: new Date().toISOString(),
           stage: run.stage,
           agent: plan.agent,
+          model: runtime.model.full,
           sessionId,
           outcome: result.outcome,
           nextStage,
           response: response || (submitted ? "[no textual response]" : "[resumed session]"),
+          ...(failureClass === undefined ? {} : { failureClass }),
         },
       ],
     }

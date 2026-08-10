@@ -5,6 +5,7 @@ import { runLoopProcess } from "./loop-client.js"
 import { REPO_ROOT } from "./repo.js"
 import { createRun } from "./run-service.js"
 import { saveRun } from "./run-store.js"
+import { verifySourceManifest } from "./source-manifest.js"
 import { transitionRun } from "./workflow.js"
 
 function argument(name: string): string | undefined {
@@ -34,6 +35,7 @@ try {
 } catch {
   throw new Error(`Source manifest does not exist: ${sourceManifest}`)
 }
+await verifySourceManifest(resolve(REPO_ROOT, sourceManifest))
 
 const run = await createRun({
   language,
@@ -55,5 +57,8 @@ console.log(JSON.stringify({
 const code = await runLoopProcess(started.runId, {
   maxTicks: Number(argument("--max-ticks") ?? "50"),
   maxStageRetries: Number(argument("--max-stage-retries") ?? "4"),
+  providerRetryBudgetSeconds: Number(
+    argument("--provider-retry-budget-seconds") ?? "60",
+  ),
 })
 process.exitCode = code

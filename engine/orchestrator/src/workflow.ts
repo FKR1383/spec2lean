@@ -55,19 +55,23 @@ export type RunEvent = {
 }
 
 export type AgentExecution = {
+  startedAt?: string
   at: string
   stage: FormalizationStage
   agent: string
+  model?: string
   sessionId: string
   outcome: string
   nextStage: FormalizationStage
   response: string
+  failureClass?: "PROVIDER_RETRY_BUDGET_EXCEEDED"
 }
 
 export type ActiveExecution = {
   startedAt: string
   stage: FormalizationStage
   agent: string
+  model?: string
   sessionId: string
   expectedArtifact: string
 }

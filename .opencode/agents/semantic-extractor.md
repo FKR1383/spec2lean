@@ -1,7 +1,7 @@
 ---
 description: Converts an approved bounded source bundle into an explicit evidence-backed semantic interpretation without writing Lean
 mode: primary
-model: opencode/deepseek-v4-flash-free
+model: openai/gpt-5.3-codex-spark
 temperature: 0
 steps: 64
 permission:

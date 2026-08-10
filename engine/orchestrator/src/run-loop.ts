@@ -39,11 +39,18 @@ function integerArgument(name: string, fallback: number): number {
   return value
 }
 
-async function runTick(runId: string): Promise<number> {
+async function runTick(
+  runId: string,
+  providerRetryBudgetSeconds: number,
+): Promise<number> {
   return await new Promise((resolve, reject) => {
     const child = spawn(
       "npm",
-      ["run", "tick", "--", "--run", runId],
+      [
+        "run", "tick", "--",
+        "--run", runId,
+        "--provider-retry-budget-seconds", String(providerRetryBudgetSeconds),
+      ],
       { stdio: "inherit", shell: false },
     )
     child.once("error", reject)
@@ -55,6 +62,10 @@ async function main(): Promise<void> {
   const runId = required("--run")
   const maxTicks = integerArgument("--max-ticks", 25)
   const maxStageRetries = integerArgument("--max-stage-retries", 4)
+  const providerRetryBudgetSeconds = integerArgument(
+    "--provider-retry-budget-seconds",
+    60,
+  )
   let ticks = 0
   let consecutiveRetries = 0
   let retryStage: FormalizationStage | undefined
@@ -107,7 +118,7 @@ async function main(): Promise<void> {
         ? (await proofTargetSummary(before)).declared
         : undefined
 
-    const code = await runTick(runId)
+    const code = await runTick(runId, providerRetryBudgetSeconds)
     if (code !== 0) {
       const current = await loadRun(runId)
       console.log(JSON.stringify({

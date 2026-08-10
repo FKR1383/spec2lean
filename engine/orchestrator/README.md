@@ -64,6 +64,37 @@ Session completion uses OpenCode message `step-finish` information as well as
 session status; a terminal `length`/resource outcome is therefore detected
 without waiting for a long artificial timeout.
 
+OpenCode provider backoff is distinct from a Spec2Lean semantic `RETRY`.
+Provider retry waits are bounded to 60 seconds by default; the stalled session
+is then aborted and recorded as `PROVIDER_RETRY_BUDGET_EXCEEDED`. Override the
+bound explicitly when needed:
+
+```bash
+./spec2lean resume --run <run-id> --provider-retry-budget-seconds 90
+```
+
+Completed non-proof retries advance to a fresh immutable artifact revision.
+Malformed JSON is rejected by `candidate_write` before its atomic rename, so a
+bad partial artifact cannot poison every later retry. Proof generation is the
+intentional exception because it incrementally extends one checked proof file.
+
+`formalize` verifies that every source artifact listed in the selected manifest
+exists and matches its pinned SHA-256 and byte size before creating a run. This
+prevents an isolated worktree or incomplete checkout from starting a workflow
+that cannot directly read its official evidence.
+
+Only a terminal assistant turn may supply `SPEC2LEAN_RESULT`; tool-call and
+compaction turns are ignored. Invalid outcome/target combinations become a
+bounded `RETRY` instead of crashing the controller, and no second LLM call is
+used to guess or repair protocol intent.
+
+New executions record active-agent timing and provider failures. Inspect them
+without invoking an agent:
+
+```bash
+./spec2lean perf-report --run <run-id>
+```
+
 ## Lean package integration
 
 New instruction modules are isolated under a unit namespace such as

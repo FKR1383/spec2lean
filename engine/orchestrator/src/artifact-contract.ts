@@ -37,7 +37,7 @@ export function makeLeanModuleName(
     .join("")
 }
 
-function stageAttempt(
+export function stageAttempt(
   run: RunState,
   stage: FormalizationStage,
 ): number {
@@ -48,7 +48,11 @@ function stageAttempt(
           execution.stage === stage &&
           (
             execution.outcome === "SUCCESS" ||
-            execution.outcome === "REVISE"
+            execution.outcome === "REVISE" ||
+            (
+              execution.outcome === "RETRY" &&
+              stage !== "PROOF_GENERATION"
+            )
           ),
       )
       .length + 1

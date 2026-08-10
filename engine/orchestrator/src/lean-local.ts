@@ -5,6 +5,7 @@ import { relative, resolve } from "node:path"
 import { REPO_ROOT } from "./repo.js"
 
 const LEAN_ROOT = resolve(REPO_ROOT, "lean")
+const LEAN_CANDIDATE_BASE_TARGET = "Spec2Lean.Basic"
 
 export type LeanCheckResult = {
   success: boolean
@@ -59,6 +60,19 @@ export async function verifyLeanFile(
   repoRelativePath: string,
   timeoutMs = 60_000,
 ): Promise<LeanCheckResult> {
+  // Candidate modules import Spec2Lean.Basic, but a fresh worktree has no
+  // corresponding .olean yet. `lake env lean` sets the search path; it does
+  // not build imported project modules. Build the small shared target first
+  // so an environment bootstrap failure is not misclassified as an agent
+  // artifact failure and retried with another model invocation.
+  const baseBuild = await runProcess(
+    "lake",
+    ["build", LEAN_CANDIDATE_BASE_TARGET],
+    LEAN_ROOT,
+    timeoutMs,
+  )
+  if (!baseBuild.success) return baseBuild
+
   const absolute = resolve(REPO_ROOT, repoRelativePath)
   const leanRelative = relative(LEAN_ROOT, absolute)
   return await runProcess("lake", ["env", "lean", leanRelative], LEAN_ROOT, timeoutMs)

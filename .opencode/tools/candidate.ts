@@ -490,6 +490,16 @@ export const write = tool({
         )
       }
 
+      if (extname(artifact.relativePath).toLowerCase() === ".json") {
+        try {
+          JSON.parse(args.content)
+        } catch (error) {
+          throw new Error(
+            `invalid JSON; artifact was not written: ${error instanceof Error ? error.message : String(error)}`,
+          )
+        }
+      }
+
       const exists = await pathExists(artifact.absolutePath)
 
       if (args.mode === "create" && exists) {

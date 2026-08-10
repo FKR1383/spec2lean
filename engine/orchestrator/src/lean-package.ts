@@ -28,7 +28,7 @@ async function latestMappingPath(run: RunState): Promise<string> {
   return `${dirRelative}/${matches[0]!.name}`
 }
 
-function packageTransform(source: string, moduleName: string): {
+export function packageTransform(source: string, moduleName: string): {
   text: string
   isolatedNamespace: boolean
   importAdjusted: boolean
@@ -43,9 +43,10 @@ function packageTransform(source: string, moduleName: string): {
   }
 
   const unitHeader = `namespace Spec2Lean\nnamespace PTX\nnamespace ${moduleName}\n`
+  const dottedUnitHeader = `namespace Spec2Lean.PTX.${moduleName}\n`
   const baseHeader = "namespace Spec2Lean\nnamespace PTX\n"
 
-  if (!text.includes(unitHeader)) {
+  if (!text.includes(unitHeader) && !text.includes(dottedUnitHeader)) {
     if (!text.includes(baseHeader)) {
       throw new Error("Lean mapping does not contain the expected Spec2Lean.PTX namespace header")
     }

@@ -19,6 +19,7 @@ Usage:
   ./spec2lean finalize --run <run-id> [--push]
   ./spec2lean self-test
   ./spec2lean typecheck
+  ./spec2lean perf-report --run <run-id>
 TXT
 }
 
@@ -100,6 +101,10 @@ case "$cmd" in
 
   typecheck)
     exec npm --prefix "$ORCH" run typecheck -- "$@"
+    ;;
+
+  perf-report)
+    exec npm --prefix "$ORCH" run perf-report -- "$@"
     ;;
 
   *)
