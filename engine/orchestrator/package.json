@@ -14,6 +14,8 @@
     "approve-shared": "tsx src/approve-shared.ts",
     "reject": "tsx src/reject.ts",
     "formalize": "tsx src/formalize.ts",
+    "formalize-batch": "tsx src/formalize-batch.ts",
+    "batch-report": "tsx src/batch-report.ts",
     "finalize": "tsx src/finalize.ts",
     "inspect-session": "tsx src/inspect-session.ts",
     "brief": "tsx src/gate-brief.ts",

@@ -59,6 +59,7 @@ console.log(JSON.stringify({
 const code = await runLoopProcess(started.runId, {
   maxTicks: Number(argument("--max-ticks") ?? "50"),
   maxStageRetries: Number(argument("--max-stage-retries") ?? "4"),
+  maxStageRevisions: Number(argument("--max-stage-revisions") ?? "3"),
   providerRetryBudgetSeconds: Number(
     argument("--provider-retry-budget-seconds") ?? "60",
   ),

@@ -49,6 +49,7 @@ async function main(): Promise<void> {
   const runId = required("--run")
   const maxTicks = integerArgument("--max-ticks", 25)
   const maxStageRetries = integerArgument("--max-stage-retries", 4)
+  const maxStageRevisions = integerArgument("--max-stage-revisions", 3)
   const providerRetryBudgetSeconds =
     integerArgument("--provider-retry-budget-seconds", 60)
   let ticks = 0
@@ -213,6 +214,28 @@ async function main(): Promise<void> {
       }
 
       console.log(`[spec2lean] transition ${before.stage} -> ${after.stage}`)
+
+      const stageRevisionCount = last?.outcome === "REVISE"
+        ? (after.executions ?? []).filter(
+            (execution) =>
+              execution.stage === last.stage && execution.outcome === "REVISE",
+          ).length
+        : 0
+
+      if (stageRevisionCount >= maxStageRevisions) {
+        console.log(JSON.stringify({
+          ok: false,
+          stopped: true,
+          reason: "STAGE_REVISION_LIMIT_REACHED",
+          runId,
+          criticStage: last?.stage,
+          revisionTarget: after.stage,
+          revisionExecutions: stageRevisionCount,
+          hint: `Inspect the latest critic artifact, then explicitly resume ${runId} if another bounded repair cycle is justified.`,
+        }, null, 2))
+        process.exitCode = 2
+        return
+      }
 
       if (consecutiveRetries >= maxStageRetries) {
         console.log(JSON.stringify({

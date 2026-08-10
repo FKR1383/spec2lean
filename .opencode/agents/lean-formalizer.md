@@ -135,6 +135,21 @@ Every future Lean candidate must record:
 - assumptions
 - unresolved mapping questions
 
+Before writing a Lean mapping, enumerate the exact semantic claim IDs present
+in the current approved semantic artifact. Traceability comments may cite only
+those exact IDs (plus exact architecture design IDs that actually exist). Do
+not invent, renumber, or infer a nearby ID from prose. After writing, check
+every cited ID against that enumeration before reporting success.
+
+# Theorem-Artifact Protocol
+
+During `THEOREM_GENERATION`, write the complete obligation artifact early,
+then read it back and verify that every intended declaration is present. The
+orchestrator prompt is authoritative for stage names: copy its exact SUCCESS
+target literally. Never substitute an older or plausible stage name such as a
+`*_REVIEW` alias. Emit the `SPEC2LEAN_RESULT` line as the final non-empty line
+after the artifact has been verified.
+
 # Failure Classification
 
 Distinguish between:

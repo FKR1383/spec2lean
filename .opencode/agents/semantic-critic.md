@@ -150,6 +150,28 @@ Each future finding must contain:
 - required owner for revision
 - whether human review is required
 
+# Deterministic Disposition Policy
+
+Finding severity and workflow disposition are different fields. Apply this
+policy consistently:
+
+- return `REVISE` only when at least one unresolved `BLOCKER` or `MAJOR`
+  finding requires an artifact change before the next human gate;
+- return `SUCCESS` when there are no `BLOCKER` or `MAJOR` findings, even when
+  `MINOR` or `NOTE` findings remain; carry those non-blocking findings into the
+  review artifact for the human reviewer;
+- a finding that merely requests clearer wording, additional review context,
+  or future investigation is `MINOR`/`NOTE` unless the current artifact would
+  otherwise assert an unsupported state-affecting or source-faithfulness claim;
+- the existence of a human gate is not a reason to return `REVISE`—`SUCCESS`
+  means only "ready for the human gate", never human approval;
+- never describe an artifact as "ready", "suitable", or having "no blocking
+  defects" and then return `REVISE`.
+
+Every review artifact must include a compact disposition block with exact
+`BLOCKER`, `MAJOR`, `MINOR`, and `NOTE` counts and state explicitly whether a
+pre-gate revision is required.
+
 # Workflow Routing
 
 Route problems according to their type:

@@ -4,6 +4,7 @@ import { resolve } from "node:path"
 
 import { buildLeanPackage } from "./lean-local.js"
 import { REPO_ROOT } from "./repo.js"
+import { withRepositoryLock } from "./repository-lock.js"
 import type { RunState } from "./workflow.js"
 
 function sha256(text: string): string {
@@ -84,41 +85,44 @@ export async function prepareLeanPackage(run: RunState): Promise<LeanPackageInfo
   const source = await readFile(resolve(REPO_ROOT, sourcePath), "utf8")
   const transformed = packageTransform(source, run.leanModuleName)
 
-  const packagePath = `lean/Spec2Lean/PTX/${run.leanModuleName}.lean`
-  const packageAbsolute = resolve(REPO_ROOT, packagePath)
-  await mkdir(resolve(REPO_ROOT, "lean/Spec2Lean/PTX"), { recursive: true })
-  await writeFile(packageAbsolute, transformed.text, "utf8")
+  return await withRepositoryLock("lean-package", async () => {
 
-  const rootPath = resolve(REPO_ROOT, "lean/Spec2Lean.lean")
-  let root = await readFile(rootPath, "utf8")
-  const importLine = `import Spec2Lean.PTX.${run.leanModuleName}`
-  if (!root.split(/\r?\n/).includes(importLine)) {
-    if (!root.endsWith("\n")) root += "\n"
-    root += `${importLine}\n`
-    await writeFile(rootPath, root, "utf8")
-  }
+    const packagePath = `lean/Spec2Lean/PTX/${run.leanModuleName}.lean`
+    const packageAbsolute = resolve(REPO_ROOT, packagePath)
+    await mkdir(resolve(REPO_ROOT, "lean/Spec2Lean/PTX"), { recursive: true })
+    await writeFile(packageAbsolute, transformed.text, "utf8")
 
-  const build = await buildLeanPackage()
-  if (!build.success) {
-    throw new Error(
-      `Packaged Lean semantics failed to build:\n${build.output.slice(-8000)}`,
-    )
-  }
+    const rootPath = resolve(REPO_ROOT, "lean/Spec2Lean.lean")
+    let root = await readFile(rootPath, "utf8")
+    const importLine = `import Spec2Lean.PTX.${run.leanModuleName}`
+    if (!root.split(/\r?\n/).includes(importLine)) {
+      if (!root.endsWith("\n")) root += "\n"
+      root += `${importLine}\n`
+      await writeFile(rootPath, root, "utf8")
+    }
 
-  const info: LeanPackageInfo = {
-    sourcePath,
-    packagePath,
-    moduleImport: `Spec2Lean.PTX.${run.leanModuleName}`,
-    declarationNamespace: `Spec2Lean.PTX.${run.leanModuleName}`,
-    sourceSha256: sha256(source),
-    packageSha256: sha256(transformed.text),
-    isolatedNamespace: transformed.isolatedNamespace,
-    importAdjusted: transformed.importAdjusted,
-  }
+    const build = await buildLeanPackage()
+    if (!build.success) {
+      throw new Error(
+        `Packaged Lean semantics failed to build:\n${build.output.slice(-8000)}`,
+      )
+    }
 
-  const recordPath = resolve(REPO_ROOT, `runs/${run.runId}/lean-package.json`)
-  await writeFile(recordPath, `${JSON.stringify(info, null, 2)}\n`, "utf8")
-  return info
+    const info: LeanPackageInfo = {
+      sourcePath,
+      packagePath,
+      moduleImport: `Spec2Lean.PTX.${run.leanModuleName}`,
+      declarationNamespace: `Spec2Lean.PTX.${run.leanModuleName}`,
+      sourceSha256: sha256(source),
+      packageSha256: sha256(transformed.text),
+      isolatedNamespace: transformed.isolatedNamespace,
+      importAdjusted: transformed.importAdjusted,
+    }
+
+    const recordPath = resolve(REPO_ROOT, `runs/${run.runId}/lean-package.json`)
+    await writeFile(recordPath, `${JSON.stringify(info, null, 2)}\n`, "utf8")
+    return info
+  })
 }
 
 export async function installProofPackage(run: RunState): Promise<{
@@ -126,47 +130,49 @@ export async function installProofPackage(run: RunState): Promise<{
   packagePath: string
   sha256: string
 }> {
-  const dirRelative = `${run.artifactRoot}/lean`
-  const files = (await readdir(resolve(REPO_ROOT, dirRelative))) as string[]
-  const pattern = new RegExp(`^${run.leanModuleName}Proofs-v(\\d+)\\.lean$`)
-  const matches = files
-    .map((name) => ({ name, m: name.match(pattern) }))
-    .filter((x): x is { name: string; m: RegExpMatchArray } => x.m !== null)
-    .map((x) => ({ name: x.name, version: Number(x.m[1]!) }))
-    .sort((a, b) => b.version - a.version)
+  return await withRepositoryLock("lean-package", async () => {
+    const dirRelative = `${run.artifactRoot}/lean`
+    const files = (await readdir(resolve(REPO_ROOT, dirRelative))) as string[]
+    const pattern = new RegExp(`^${run.leanModuleName}Proofs-v(\\d+)\\.lean$`)
+    const matches = files
+      .map((name) => ({ name, m: name.match(pattern) }))
+      .filter((x): x is { name: string; m: RegExpMatchArray } => x.m !== null)
+      .map((x) => ({ name: x.name, version: Number(x.m[1]!) }))
+      .sort((a, b) => b.version - a.version)
 
-  if (matches.length === 0) {
-    throw new Error(`No proof candidate found under ${dirRelative}`)
-  }
+    if (matches.length === 0) {
+      throw new Error(`No proof candidate found under ${dirRelative}`)
+    }
 
-  const actualSourcePath = `${dirRelative}/${matches[0]!.name}`
-  const source = await readFile(resolve(REPO_ROOT, actualSourcePath), "utf8")
-  const packagePath = `lean/Spec2Lean/PTX/${run.leanModuleName}Proofs.lean`
-  await writeFile(resolve(REPO_ROOT, packagePath), source, "utf8")
+    const actualSourcePath = `${dirRelative}/${matches[0]!.name}`
+    const source = await readFile(resolve(REPO_ROOT, actualSourcePath), "utf8")
+    const packagePath = `lean/Spec2Lean/PTX/${run.leanModuleName}Proofs.lean`
+    await writeFile(resolve(REPO_ROOT, packagePath), source, "utf8")
 
-  const rootPath = resolve(REPO_ROOT, "lean/Spec2Lean.lean")
-  let root = await readFile(rootPath, "utf8")
-  const importLine = `import Spec2Lean.PTX.${run.leanModuleName}Proofs`
-  if (!root.split(/\r?\n/).includes(importLine)) {
-    if (!root.endsWith("\n")) root += "\n"
-    root += `${importLine}\n`
-    await writeFile(rootPath, root, "utf8")
-  }
+    const rootPath = resolve(REPO_ROOT, "lean/Spec2Lean.lean")
+    let root = await readFile(rootPath, "utf8")
+    const importLine = `import Spec2Lean.PTX.${run.leanModuleName}Proofs`
+    if (!root.split(/\r?\n/).includes(importLine)) {
+      if (!root.endsWith("\n")) root += "\n"
+      root += `${importLine}\n`
+      await writeFile(rootPath, root, "utf8")
+    }
 
-  const build = await buildLeanPackage()
-  if (!build.success) {
-    throw new Error(`Packaged proof module failed to build:\n${build.output.slice(-8000)}`)
-  }
+    const build = await buildLeanPackage()
+    if (!build.success) {
+      throw new Error(`Packaged proof module failed to build:\n${build.output.slice(-8000)}`)
+    }
 
-  const record = {
-    sourcePath: actualSourcePath,
-    packagePath,
-    sha256: sha256(source),
-  }
-  await writeFile(
-    resolve(REPO_ROOT, `runs/${run.runId}/lean-proof-package.json`),
-    `${JSON.stringify(record, null, 2)}\n`,
-    "utf8",
-  )
-  return record
+    const record = {
+      sourcePath: actualSourcePath,
+      packagePath,
+      sha256: sha256(source),
+    }
+    await writeFile(
+      resolve(REPO_ROOT, `runs/${run.runId}/lean-proof-package.json`),
+      `${JSON.stringify(record, null, 2)}\n`,
+      "utf8",
+    )
+    return record
+  })
 }

@@ -30,6 +30,36 @@ hash-bound `benchmark_gate_auto_advance` record with
 `BENCHMARK_COMPLETE` and cannot be finalized or promoted to `accepted/`.
 Normal runs still stop at every human gate.
 
+## Bounded-concurrency batches
+
+Start several independent units together with a bounded worker pool:
+
+```bash
+./spec2lean formalize-batch \
+  --language ptx \
+  --version 9.3 \
+  --units and.b64,or.b64,xor.b64 \
+  --concurrency 2 \
+  --auto-approve
+```
+
+`--auto-approve` retains the same benchmark-only, non-promoting semantics as a
+single run. Every unit has its own persistent `run.json`; the batch manifest
+under `runs/batches/` only coordinates those runs. Output lines are prefixed
+with the unit name. Concurrency defaults to 2 and is capped at 8. Shared Lean
+package installation/build sections use a cross-process repository lock so
+parallel agents cannot overwrite the root import module.
+
+Resume an interrupted/incomplete batch and report aggregate performance with:
+
+```bash
+./spec2lean resume-batch --batch <batch-id> --concurrency 2
+./spec2lean batch-report --batch <batch-id>
+```
+
+Do not put the same unit in a batch twice or start two independent batches for
+the same unit artifact root.
+
 ## Human gates
 
 Prepare a concise read-only brief:
@@ -112,6 +142,14 @@ Only a terminal assistant turn may supply `SPEC2LEAN_RESULT`; tool-call and
 compaction turns are ignored. Invalid outcome/target combinations become a
 bounded same-stage `RETRY`, and no second model call is used merely to guess or
 repair protocol intent.
+
+Critic disposition is severity-bound: unresolved `BLOCKER`/`MAJOR` findings
+request revision, while `MINOR`/`NOTE` findings remain visible in the review
+packet and proceed to the human boundary. The orchestrator deterministically
+normalizes only the internally inconsistent case where a critic explicitly
+labels every finding `MINOR`/`NOTE` but returns `REVISE`. A stage is also
+bounded to three critic-requested revision cycles by default; override with
+`--max-stage-revisions N` only after inspecting the latest review artifact.
 
 ## PTX source retrieval profile
 

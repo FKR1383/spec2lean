@@ -19,6 +19,9 @@ import {
   makeLeanModuleName,
   makeUnitSlug,
 } from "./artifact-contract.js"
+import { mapWithConcurrency } from "./batch-runtime.js"
+import { parseBatchUnits } from "./formalize-batch.js"
+import { normalizeCriticResultFromReview } from "./critic-disposition.js"
 import {
   artifactPathsForGate,
   verifyHumanDecisionRecord,
@@ -28,6 +31,7 @@ import { verifyLeanFile } from "./lean-local.js"
 import { packageTransform } from "./lean-package.js"
 import { proofTargets, theoremDeclarationNames } from "./proof-plan.js"
 import { loadProjectModel, REPO_ROOT } from "./repo.js"
+import { withRepositoryLock } from "./repository-lock.js"
 import { runSemanticIrSelfTests } from "./semantic-ir-self-test.js"
 import { runSemanticV2SelfTests } from "./semantic-v2-self-test.js"
 import {
@@ -70,6 +74,67 @@ const protectedTreesBefore = {
 
 assert(makeUnitSlug("mov.b32") === "mov-b32", "unit slug")
 assert(makeLeanModuleName("mov.b32") === "MovB32", "Lean module name")
+assert(
+  parseBatchUnits(["and.b64, or.b64", "xor.b64"]).join(",") ===
+    "and.b64,or.b64,xor.b64",
+  "batch unit parser accepts comma-separated and repeated groups",
+)
+let batchCollisionRejected = false
+try {
+  parseBatchUnits(["a.b,a-b"])
+} catch {
+  batchCollisionRejected = true
+}
+assert(batchCollisionRejected, "batch unit parser rejects artifact-path collisions")
+
+let activeBatchOperations = 0
+let maximumBatchOperations = 0
+await mapWithConcurrency([1, 2, 3, 4], 2, async (value) => {
+  activeBatchOperations += 1
+  maximumBatchOperations = Math.max(maximumBatchOperations, activeBatchOperations)
+  await new Promise<void>((resolvePromise) => setTimeout(resolvePromise, 2))
+  activeBatchOperations -= 1
+  return value * 2
+})
+assert(maximumBatchOperations === 2, "batch runtime enforces bounded concurrency")
+let activeLockedOperations = 0
+let maximumLockedOperations = 0
+await mapWithConcurrency([1, 2], 2, async () => {
+  await withRepositoryLock("self-test", async () => {
+    activeLockedOperations += 1
+    maximumLockedOperations = Math.max(maximumLockedOperations, activeLockedOperations)
+    await new Promise<void>((resolvePromise) => setTimeout(resolvePromise, 2))
+    activeLockedOperations -= 1
+  })
+})
+assert(maximumLockedOperations === 1, "repository lock serializes shared package work")
+const nonBlockingCriticResult = normalizeCriticResultFromReview(
+  {
+    outcome: "REVISE",
+    nextStage: "ARCHITECTURE",
+    summary: "non-blocking wording changes",
+  },
+  "- **Severity:** MINOR\n- **Severity:** NOTE\n",
+  "WAITING_GATE_A",
+)
+assert(
+  nonBlockingCriticResult.outcome === "SUCCESS" &&
+    nonBlockingCriticResult.nextStage === "WAITING_GATE_A",
+  "MINOR/NOTE-only critic reviews cannot trigger another revision cycle",
+)
+const majorCriticResult = normalizeCriticResultFromReview(
+  {
+    outcome: "REVISE",
+    nextStage: "ARCHITECTURE",
+    summary: "source-faithfulness defect",
+  },
+  "- **Severity:** MAJOR\n",
+  "WAITING_GATE_A",
+)
+assert(
+  majorCriticResult.outcome === "REVISE",
+  "BLOCKER/MAJOR critic reviews still require revision",
+)
 assert(canTransition("ARCHITECTURE_CRITIQUE", "WAITING_GATE_A"), "Gate A transition")
 assert(!canTransition("ARCHITECTURE", "LEAN_FORMALIZATION"), "illegal stage skip rejected")
 assert(
@@ -444,6 +509,24 @@ for (const agentFile of agentFiles) {
   assert(!text.includes("Do not formalize another PTX instruction."), `${agentFile} no stale unit lock`)
   assert(!text.includes("Do not prove properties for another PTX instruction."), `${agentFile} no stale proof lock`)
 }
+const semanticCriticPrompt = await readFile(
+  resolve(REPO_ROOT, ".opencode/agents/semantic-critic.md"),
+  "utf8",
+)
+assert(
+  semanticCriticPrompt.includes("MINOR` or `NOTE` findings remain") &&
+    semanticCriticPrompt.includes("never describe an artifact as \"ready\"") ,
+  "semantic critic has a consistent severity-to-disposition contract",
+)
+const leanFormalizerPrompt = await readFile(
+  resolve(REPO_ROOT, ".opencode/agents/lean-formalizer.md"),
+  "utf8",
+)
+assert(
+  leanFormalizerPrompt.includes("copy its exact SUCCESS") &&
+    leanFormalizerPrompt.includes("exact semantic claim IDs"),
+  "Lean formalizer pins workflow protocol and traceability IDs",
+)
 
 const candidateTool = await readFile(
   resolve(REPO_ROOT, ".opencode/tools/candidate.ts"),

@@ -1,4 +1,4 @@
-import { access } from "node:fs/promises"
+import { access, readFile } from "node:fs/promises"
 import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -12,6 +12,7 @@ import {
 } from "./agent-decision.js"
 import { artifactContractForRun } from "./artifact-contract.js"
 import { verifyExpectedArtifact } from "./artifact-verify.js"
+import { normalizeCriticResultFromReview } from "./critic-disposition.js"
 import {
   abortSession,
   ProviderRetryBudgetExceededError,
@@ -114,6 +115,69 @@ async function fileExists(repoRelativePath: string): Promise<boolean> {
   }
 }
 
+function repairContractLines(run: RunState): string[] {
+  const repairContract: Partial<Record<FormalizationStage, {
+    pattern: string
+    from: readonly FormalizationStage[]
+  }>> = {
+    ARCHITECTURE: {
+      pattern: `${run.artifactRoot}/reviews/architecture-critic-v*.md`,
+      from: ["ARCHITECTURE_CRITIQUE", "WAITING_GATE_A", "BLOCKED"],
+    },
+    SOURCE_CURATION: {
+      pattern: `${run.artifactRoot}/reviews/semantics-critic-v*.md`,
+      from: ["SEMANTIC_EXTRACTION", "SEMANTIC_CRITIQUE", "WAITING_GATE_B", "BLOCKED"],
+    },
+    SEMANTIC_EXTRACTION: {
+      pattern: `${run.artifactRoot}/reviews/semantics-critic-v*.md`,
+      from: ["SEMANTIC_CRITIQUE", "WAITING_GATE_B", "BLOCKED"],
+    },
+    LEAN_FORMALIZATION: {
+      pattern: `${run.artifactRoot}/reviews/lean-mapping-critic-v*.md`,
+      from: ["LEAN_MAPPING_CRITIQUE", "WAITING_GATE_C", "FINAL_CRITIQUE", "BLOCKED"],
+    },
+    THEOREM_GENERATION: {
+      pattern: `${run.artifactRoot}/reviews/theorem-strength-critic-v*.md`,
+      from: [
+        "THEOREM_STRENGTH_CRITIQUE",
+        "WAITING_THEOREM_STRENGTH_APPROVAL",
+        "FINAL_CRITIQUE",
+        "BLOCKED",
+      ],
+    },
+    PROOF_GENERATION: {
+      pattern: `${run.artifactRoot}/reviews/final-critic-v*.md`,
+      from: ["FINAL_CRITIQUE", "BLOCKED"],
+    },
+    FINAL_CRITIQUE: {
+      pattern: `${run.artifactRoot}/reviews/final-critic-v*.md`,
+      from: ["FINAL_CRITIQUE", "WAITING_FINAL_APPROVAL", "BLOCKED"],
+    },
+  }
+  const contract = repairContract[run.stage]
+  const latestEntry = run.history.at(-1)
+
+  if (
+    contract === undefined ||
+    latestEntry?.to !== run.stage ||
+    latestEntry.from === null ||
+    !contract.from.includes(latestEntry.from)
+  ) {
+    return []
+  }
+
+  return [
+    "",
+    "# Exact Repair Contract",
+    "",
+    `This stage was re-entered from ${latestEntry.from}.`,
+    `Read the highest-version existing review matching ${contract.pattern} before editing.`,
+    `Routing summary: ${latestEntry.reason}`,
+    "Resolve every BLOCKER/MAJOR finding in that review, preserve unaffected content, and make no unrelated scope expansion.",
+    "A human rejection reason, when present, is also binding and must not be paraphrased into a broader task.",
+  ]
+}
+
 export function buildGeneralPrompt(run: RunState): string {
   const plan = planForRun(run)
   const artifact = artifactContractForRun(run)
@@ -149,6 +213,7 @@ export function buildGeneralPrompt(run: RunState): string {
     "# Stage Task",
     "",
     plan.task,
+    ...repairContractLines(run),
     ...(run.stage === "SEMANTIC_EXTRACTION" && run.semanticV2?.mode === "DELTA_FAST_PATH"
       ? [
           "",
@@ -241,6 +306,7 @@ export function buildGeneralPrompt(run: RunState): string {
     'SPEC2LEAN_RESULT {"outcome":"SUCCESS|REVISE|RETRY|BLOCKED","nextStage":"STAGE","summary":"short summary"}',
     "",
     `For SUCCESS, nextStage MUST be: ${plan.successStage}`,
+    `Copy that exact SUCCESS stage literal; do not substitute a remembered or plausible alias.`,
     `Allowed REVISE nextStage values: ${revisionTargets}`,
     `For RETRY, nextStage MUST remain: ${run.stage}`,
     "Use RETRY for step/time/tool/context/resource exhaustion or interrupted work.",
@@ -679,6 +745,20 @@ export async function executeTick(
     }
 
     if (!result) throw new Error("No agent result available")
+
+    if (plan.agent === "semantic-critic" && result.outcome === "REVISE") {
+      try {
+        const review = await readFile(resolve(REPO_ROOT, artifact.outputPath), "utf8")
+        result = normalizeCriticResultFromReview(
+          result,
+          review,
+          plan.successStage,
+        )
+      } catch {
+        // Missing/unreadable review artifacts remain REVISE. Artifact
+        // verification must never be bypassed by disposition normalization.
+      }
+    }
 
     // Deterministic artifact verification outranks model self-reporting.
     if (run.stage === "PROOF_GENERATION") {

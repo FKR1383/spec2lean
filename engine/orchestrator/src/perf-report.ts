@@ -104,6 +104,9 @@ console.log(JSON.stringify({
   retryExecutions: (run.executions ?? [])
     .filter((execution) => execution.outcome === "RETRY")
     .length,
+  revisionExecutions: (run.executions ?? [])
+    .filter((execution) => execution.outcome === "REVISE")
+    .length,
   activeAgentSeconds: Number((
     [...metrics.values()].reduce(
       (total, stage) => total + stage.agentMilliseconds,

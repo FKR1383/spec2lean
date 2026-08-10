@@ -22,6 +22,8 @@ export const STAGE_PLANS:
     revisionStages: [],
     task: [
       "Produce or revise the bounded language architecture for the requested unit.",
+      "When approved shared architecture exists, produce an instruction-specific delta instead of rediscovering language-wide background.",
+      "On revision, read the latest critic artifact first and repair every BLOCKER/MAJOR finding without unrelated redesign.",
       "Use only project-approved sources and tools.",
       "Do not approve any human gate.",
     ].join("\n"),
@@ -35,7 +37,8 @@ export const STAGE_PLANS:
     ],
     task: [
       "Independently critique the architecture candidate.",
-      "If substantive changes are required, request revision.",
+      "Request revision only for unresolved BLOCKER/MAJOR findings.",
+      "MINOR/NOTE-only findings are non-blocking: record them and return SUCCESS to the human gate.",
       "If suitable, mark it ready for Human Gate A.",
       "Do not approve Gate A yourself.",
     ].join("\n"),
@@ -75,8 +78,8 @@ export const STAGE_PLANS:
     ],
     task: [
       "Independently critique the semantic interpretation.",
-      "Request source revision when evidence is missing.",
-      "Request semantic revision when interpretation is incorrect.",
+      "Request source or semantic revision only when the problem is BLOCKER/MAJOR.",
+      "MINOR/NOTE-only findings are non-blocking: record them and return SUCCESS to the human gate.",
       "Otherwise mark it ready for Human Gate B.",
       "Do not approve Gate B.",
     ].join("\n"),
@@ -88,6 +91,8 @@ export const STAGE_PLANS:
     revisionStages: [],
     task: [
       "Implement the Gate-B-approved bounded semantics in Lean.",
+      "Enumerate exact approved semantic IDs before writing and validate every traceability citation against them.",
+      "On revision, read the latest Lean-mapping critic artifact first and make only its required BLOCKER/MAJOR repairs.",
       "Place all unit-specific declarations under namespace Spec2Lean.PTX.<LeanModuleName> supplied by the orchestrator.",
       "Import Spec2Lean.Basic, never the Spec2Lean root module, from a module that the root will later import.",
       "Use Lean verification tools.",
@@ -105,6 +110,7 @@ export const STAGE_PLANS:
     task: [
       "Independently compare the Lean mapping with the approved semantics.",
       "Compilation alone is not semantic correctness.",
+      "Request revision only for unresolved BLOCKER/MAJOR findings; MINOR/NOTE-only findings proceed to the human gate.",
       "If faithful, mark it ready for Human Gate C.",
       "Do not approve Gate C.",
     ].join("\n"),
@@ -116,6 +122,9 @@ export const STAGE_PLANS:
     revisionStages: [],
     task: [
       "Generate a small set of meaningful theorem obligations.",
+      "Write and verify the complete obligation artifact before emitting the result protocol.",
+      "Copy the exact orchestrator-supplied SUCCESS stage name; never invent or reuse a *_REVIEW alias.",
+      "On revision, read the latest theorem-strength critic artifact first and repair every BLOCKER/MAJOR finding.",
       "Pin the intended Lean namespace to Spec2Lean.PTX.<LeanModuleName> and make supporting theorem names unit-specific where collision is possible.",
       "Do not write proofs yet.",
       "Avoid vacuous, circular, or trivially functional determinism claims.",
@@ -130,6 +139,7 @@ export const STAGE_PLANS:
     ],
     task: [
       "Independently review theorem strength and non-vacuity.",
+      "Request revision only for unresolved BLOCKER/MAJOR findings; MINOR/NOTE-only findings proceed to the human gate.",
       "If adequate, mark the set ready for human theorem-strength approval.",
       "Do not approve it yourself.",
     ].join("\n"),
@@ -215,6 +225,7 @@ export const STAGE_PLANS:
       "- proof bypass status",
       "- Lean compilation status",
       "- readiness for explicit human final approval.",
+      "Request revision only for unresolved BLOCKER/MAJOR findings; preserve MINOR/NOTE items as non-blocking review notes.",
       "",
       "If everything is acceptable, mark ready for final HUMAN approval.",
       "Never grant final acceptance yourself.",
