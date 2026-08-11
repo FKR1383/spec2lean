@@ -2,9 +2,11 @@ import { access } from "node:fs/promises"
 import { resolve } from "node:path"
 
 import { runLoopProcess } from "./loop-client.js"
+import { buildPerfReport } from "./performance.js"
 import { REPO_ROOT } from "./repo.js"
 import { createRun } from "./run-service.js"
 import { saveRun } from "./run-store.js"
+import { ensureDiscoveredSourceManifest } from "./source-bootstrap.js"
 import { ensureSourceIndex } from "./source-index.js"
 import { transitionRun } from "./workflow.js"
 
@@ -25,10 +27,16 @@ const specVersion = required("--version")
 const inferredManifest = language.toLowerCase() === "ptx"
   ? `documents/sources/nvidia/ptx/${specVersion}/source-manifest.json`
   : undefined
-const sourceManifest = argument("--source-manifest") ?? inferredManifest
-if (!sourceManifest) {
-  throw new Error("--source-manifest is required for this language")
-}
+const unit = required("--unit")
+const suppliedManifest = argument("--source-manifest") ?? inferredManifest
+const discovered = suppliedManifest === undefined
+  ? await ensureDiscoveredSourceManifest({
+    language,
+    specificationVersion: specVersion,
+    unit,
+  })
+  : undefined
+const sourceManifest = suppliedManifest ?? discovered!.path
 
 try {
   await access(resolve(REPO_ROOT, sourceManifest))
@@ -44,9 +52,10 @@ const sourceIndex = await ensureSourceIndex({
 const run = await createRun({
   language,
   specVersion,
-  unit: required("--unit"),
+  unit,
   sourceManifest,
   benchmarkAutoApprove: process.argv.includes("--auto-approve"),
+  sourceAcquisition: discovered?.acquisition,
 })
 
 const started = transitionRun(run, "ARCHITECTURE", "one-command formalization start")
@@ -69,4 +78,7 @@ const code = await runLoopProcess(started.runId, {
     argument("--provider-retry-budget-seconds") ?? "60",
   ),
 })
+if (code === 0 && process.argv.includes("--perf-report")) {
+  console.log(JSON.stringify(await buildPerfReport(started.runId), null, 2))
+}
 process.exitCode = code

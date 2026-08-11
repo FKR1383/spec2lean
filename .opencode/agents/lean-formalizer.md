@@ -197,9 +197,9 @@ Gate C is not ready until:
 
 Automated namespace rule:
 
-- Every new bounded unit must use the orchestrator-supplied unit namespace `Spec2Lean.PTX.<LeanModuleName>` for unit-specific Lean declarations.
+- Every new bounded unit must use the exact orchestrator-supplied `Required Lean namespace` for unit-specific Lean declarations.
 - Unit modules must import `Spec2Lean.Basic`, not the `Spec2Lean` root module, to avoid circular imports and duplicate declarations.
-- Do not define a second unit's common-looking declarations directly in `Spec2Lean.PTX`; keep them isolated until a separately approved shared PTX core is introduced.
+- Do not define common-looking declarations directly in a language root namespace; keep them unit-isolated until a separately approved shared language core exists.
 
 This agent is now used by the Spec2Lean automated orchestrator.
 

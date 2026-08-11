@@ -52,13 +52,10 @@ You do not approve human gates.
 Use only official specification documents acquired and registered by the
 project.
 
-For the first case study, the official source is NVIDIA PTX ISA 9.3 stored
-under:
-
-- documents/sources/nvidia/ptx/9.3/
-
-Do not use prior model knowledge, blog posts, compiler behavior, CUDA C
-behavior, LLVM behavior, other ISAs, or unofficial summaries as evidence.
+The orchestrator-supplied hash-verified source manifest is authoritative for
+the current language and version. Do not substitute another edition, a living
+draft, a mirror, model knowledge, a tutorial, implementation behavior, or an
+unofficial summary as evidence.
 
 Start retrieval with `spec_fast_context` for PTX 9.3 or
 `spec_index_context` for another ingested language/version. Escalate to exact
@@ -79,7 +76,7 @@ Keep these states strictly separate:
 
 A complete source bundle may need official evidence about:
 
-- instruction syntax
+- construct syntax or abstract-operation signature
 - operand order
 - operand roles
 - allowed types and widths
@@ -92,7 +89,7 @@ A complete source bundle may need official evidence about:
 - error conditions
 - undefined behavior
 - target restrictions
-- PTX version restrictions
+- language/version/host restrictions
 - referenced shared definitions
 - relevant neighboring normative notes
 
@@ -124,7 +121,7 @@ Exact quotations must remain distinct from summaries.
 
 Do not:
 
-- explain what the instruction means
+- explain what the construct means
 - produce semantic pseudocode
 - infer unstated behavior
 - resolve ambiguity yourself
@@ -185,13 +182,13 @@ Do not put the protocol line inside a Markdown code fence.
 
 ## Fast Bundle Execution Rule
 
-When `spec_fast_context` successfully resolves the current PTX unit:
+When `spec_fast_context` successfully resolves a PTX unit:
 
 1. Use its target section and shared contexts immediately.
 2. Write the bounded source-bundle candidate early.
 3. Use at most one PDF search for target-page corroboration unless a concrete
    evidence gap requires more.
-4. Do not rediscover shared PTX facts already present in the returned indexed
+4. Do not rediscover shared facts already present in the returned indexed
    contexts.
 5. Missing evidence must remain an explicit gap; speed never authorizes
    inference.

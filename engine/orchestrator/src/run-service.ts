@@ -11,6 +11,7 @@ export type CreateRunInput = {
   unit: string
   sourceManifest: string
   benchmarkAutoApprove?: boolean
+  sourceAcquisition?: RunState["sourceAcquisition"]
 }
 
 export async function createRun(input: CreateRunInput): Promise<RunState> {
@@ -36,6 +37,7 @@ export async function createRun(input: CreateRunInput): Promise<RunState> {
     unitSlug,
     leanModuleName,
     sourceManifest: input.sourceManifest,
+    sourceAcquisition: input.sourceAcquisition,
     artifactRoot,
     stage: "CREATED",
     createdAt: now,

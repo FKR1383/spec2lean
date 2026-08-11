@@ -1,0 +1,181 @@
+{
+  "schema_version": 1,
+  "obligation_set_id": "ecmascript-2025-toboolean-obligations-v3",
+  "run_id": "ecmascript-2025-ToBoolean-d97e001b",
+  "stage": "THEOREM_GENERATION",
+  "stage_attempt": 3,
+  "run_revision": 17,
+  "status": "READY_FOR_STRENGTH_REVIEW",
+  "status_rationale": "Repaired remaining MAJOR blocker by adding boolean false to the false-iff falsy partition while preserving repaired default-branch coverage and total-class partitioning scope.",
+  "unit": {
+    "language": "ecmascript",
+    "specification_version": "2025",
+    "construct": "ToBoolean",
+    "bounded_unit": "abstract operation ToBoolean(argument)",
+    "scope_boundary": "Only ToBoolean value-coercion behavior for ECMAScript language values, including the B.3.6.1 [[IsHTMLDDA]] replacement branch. No runtime/memory/host model state is in scope."
+  },
+  "lean_mapping_reference": {
+    "path": "candidates/ecmascript/2025/units/toboolean/lean/ToBoolean-v1.lean",
+    "namespace": "Spec2Lean.ECMAScript.ToBoolean"
+  },
+  "semantics_reference": {
+    "path": "candidates/ecmascript/2025/units/toboolean/semantics/semantics-v1.json",
+    "interpretation_id": "ecmascript-2025-toboolean-semantics-v1",
+    "claim_count": 9
+  },
+  "source_bundle_reference": {
+    "path": "candidates/ecmascript/2025/units/toboolean/source-bundles/source-bundle-v3.json",
+    "bundle_id": "ecmascript-2025-toboolean-source-bundle-v3",
+    "fragment_ids": [
+      "ECMASCRIPT-2025-TOB-V3-001",
+      "ECMASCRIPT-2025-TOB-V3-002",
+      "ECMASCRIPT-2025-TOB-V3-003",
+      "ECMASCRIPT-2025-TOB-V3-004",
+      "ECMASCRIPT-2025-TOB-V3-005",
+      "ECMASCRIPT-2025-TOB-V3-006",
+      "ECMASCRIPT-2025-TOB-V3-007",
+      "ECMASCRIPT-2025-TOB-V3-008",
+      "ECMASCRIPT-2025-TOB-V3-009",
+      "ECMASCRIPT-2025-TOB-V3-010",
+      "ECMASCRIPT-2025-TOB-V3-011",
+      "ECMASCRIPT-2025-TOB-V3-012",
+      "ECMASCRIPT-2025-TOB-V3-013",
+      "ECMASCRIPT-2025-TOB-V3-014",
+      "ECMASCRIPT-2025-TOB-V3-015"
+    ]
+  },
+  "compliance_notes": [
+    "No proofs are included in this stage.",
+    "All theorem names are unit-specific and tied to namespace Spec2Lean.ECMAScript.ToBoolean.",
+    "The false-iff theorem was strengthened to include the false-Boolean falsy constructor case to match branch semantics."
+  ],
+  "theorem_obligations": [
+    {
+      "obligation_id": "ECMASCRIPT-TOB-THM-001",
+      "proposed_name": "toBoolean_boolean_identity",
+      "category": "boolean identity",
+      "intent": "Boolean inputs are returned unchanged.",
+      "precise_statement_in_words": "For every Boolean value b, ToBoolean on EcmaValue.boolean returns the same boolean bit value.",
+      "lean_statement_sketch": "theorem toBoolean_boolean_identity (b : EcmaBoolean) : ToBoolean (EcmaValue.boolean b) = toBooleanBool b",
+      "hypotheses": [
+        "b : EcmaBoolean"
+      ],
+      "conclusion": "ToBoolean (EcmaValue.boolean b) = toBooleanBool b",
+      "semantic_claim_ids": [
+        "ECMASCRIPT-TOB-SEM-001",
+        "ECMASCRIPT-TOB-SEM-002"
+      ],
+      "lean_declarations_used": [
+        "ToBoolean",
+        "EcmaValue.boolean",
+        "toBooleanBool",
+        "EcmaBoolean"
+      ]
+    },
+    {
+      "obligation_id": "ECMASCRIPT-TOB-THM-002",
+      "proposed_name": "toBoolean_falsy_primitive_cases",
+      "category": "falsy branch",
+      "intent": "Explicit falsy primitive constants are false in ToBoolean.",
+      "precise_statement_in_words": "ToBoolean returns false on undefined, null, +0, -0, NaN, 0n, and empty string, matching the clause-defined falsy literals.",
+      "lean_statement_sketch": "theorem toBoolean_falsy_primitive_cases : ToBoolean EcmaValue.undefined = false ∧ ToBoolean EcmaValue.null = false ∧ ToBoolean (EcmaValue.number EcmaNumber.posZero) = false ∧ ToBoolean (EcmaValue.number EcmaNumber.negZero) = false ∧ ToBoolean (EcmaValue.number EcmaNumber.nan) = false ∧ ToBoolean (EcmaValue.bigInt 0) = false ∧ ToBoolean (EcmaValue.string \"\") = false",
+      "hypotheses": [],
+      "conclusion": "The listed primitive falsy values evaluate to false.",
+      "semantic_claim_ids": [
+        "ECMASCRIPT-TOB-SEM-003",
+        "ECMASCRIPT-TOB-SEM-004"
+      ],
+      "lean_declarations_used": [
+        "ToBoolean",
+        "EcmaValue",
+        "EcmaNumber",
+        "EcmaBigInt",
+        "EcmaString"
+      ]
+    },
+    {
+      "obligation_id": "ECMASCRIPT-TOB-THM-003",
+      "proposed_name": "toBoolean_object_isHTMLDDA_falsey_branch",
+      "category": "web-compat replacement",
+      "intent": "If the object argument has the [[IsHTMLDDA]] slot, ToBoolean returns false per the B.3.6.1 replacement.",
+      "precise_statement_in_words": "For any object value o marked hasIsHTMLDDA, ToBoolean of EcmaValue.object o is false.",
+      "lean_statement_sketch": "theorem toBoolean_object_isHTMLDDA_falsey_branch (o : EcmaObject) (h : o.hasIsHTMLDDA = true) : ToBoolean (EcmaValue.object o) = false",
+      "hypotheses": [
+        "o : EcmaObject",
+        "h : o.hasIsHTMLDDA = true"
+      ],
+      "conclusion": "ToBoolean (EcmaValue.object o) = false",
+      "semantic_claim_ids": [
+        "ECMASCRIPT-TOB-SEM-004",
+        "ECMASCRIPT-TOB-SEM-001",
+        "ECMASCRIPT-TOB-SEM-003"
+      ],
+      "lean_declarations_used": [
+        "ToBoolean",
+        "EcmaValue.object",
+        "EcmaObject.hasIsHTMLDDA"
+      ]
+    },
+    {
+      "obligation_id": "ECMASCRIPT-TOB-THM-004",
+      "proposed_name": "toBoolean_truthy_default_branch",
+      "category": "default true branch",
+      "intent": "Every non-falsy value class reaches the default truthy branch.",
+      "precise_statement_in_words": "If an argument is constructor-wise truthy according to the remaining cases (true boolean, non-falsy number, non-zero BigInt, non-empty string, any symbol, or object with [[IsHTMLDDA]] = false), then ToBoolean returns true.",
+      "lean_statement_sketch": "theorem toBoolean_truthy_default_branch (argument : EcmaValue) : (argument = EcmaValue.boolean EcmaBoolean.true ∨ (∃ n, argument = EcmaValue.number n ∧ numberIsFalsy n = false) ∨ (∃ z, argument = EcmaValue.bigInt z ∧ z ≠ 0) ∨ (∃ s, argument = EcmaValue.string s ∧ stringIsFalsy s = false) ∨ (∃ o, argument = EcmaValue.object o ∧ o.hasIsHTMLDDA = false) ∨ (∃ sym, argument = EcmaValue.symbol sym)) → ToBoolean argument = true",
+      "hypotheses": [
+        "argument : EcmaValue"
+      ],
+      "conclusion": "In all non-falsy classes, ToBoolean argument = true.",
+      "semantic_claim_ids": [
+        "ECMASCRIPT-TOB-SEM-005",
+        "ECMASCRIPT-TOB-SEM-001",
+        "ECMASCRIPT-TOB-SEM-009"
+      ],
+      "lean_declarations_used": [
+        "ToBoolean",
+        "EcmaValue",
+        "EcmaBoolean",
+        "EcmaNumber",
+        "EcmaBigInt",
+        "EcmaString",
+        "EcmaSymbol",
+        "EcmaObject",
+        "numberIsFalsy",
+        "bigintIsFalsy",
+        "stringIsFalsy"
+      ]
+    },
+    {
+      "obligation_id": "ECMASCRIPT-TOB-THM-005",
+      "proposed_name": "toBoolean_false_iff_falsy_cases",
+      "category": "semantic partition",
+      "intent": "Characterize exactly when ToBoolean yields false, using the clause-defined falsy and web-compat cases.",
+      "precise_statement_in_words": "ToBoolean returns false exactly for false, undefined, null, NaN/±0, BigInt 0, empty string, and objects marked [[IsHTMLDDA]].",
+      "lean_statement_sketch": "theorem toBoolean_false_iff_falsy_cases (argument : EcmaValue) : ToBoolean argument = false ↔ (argument = EcmaValue.boolean EcmaBoolean.false ∨ argument = EcmaValue.undefined ∨ argument = EcmaValue.null ∨ (∃ n, argument = EcmaValue.number n ∧ numberIsFalsy n) ∨ (∃ z, argument = EcmaValue.bigInt z ∧ z = 0) ∨ (∃ s, argument = EcmaValue.string s ∧ stringIsFalsy s) ∨ (∃ o, argument = EcmaValue.object o ∧ o.hasIsHTMLDDA = true))",
+      "hypotheses": [
+        "argument : EcmaValue"
+      ],
+      "conclusion": "ToBoolean argument = false exactly on the falsy and [[IsHTMLDDA]] object cases.",
+      "semantic_claim_ids": [
+        "ECMASCRIPT-TOB-SEM-003",
+        "ECMASCRIPT-TOB-SEM-004",
+        "ECMASCRIPT-TOB-SEM-005",
+        "ECMASCRIPT-TOB-SEM-006",
+        "ECMASCRIPT-TOB-SEM-007",
+        "ECMASCRIPT-TOB-SEM-008",
+        "ECMASCRIPT-TOB-SEM-009"
+      ],
+      "lean_declarations_used": [
+        "ToBoolean",
+        "EcmaValue",
+        "EcmaNumber",
+        "EcmaBigInt",
+        "EcmaString",
+        "EcmaObject",
+        "numberIsFalsy",
+        "stringIsFalsy"
+      ]
+    }
+  ]
+}

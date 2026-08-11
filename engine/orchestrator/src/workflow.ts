@@ -133,6 +133,15 @@ export type RunState = {
   unitSlug: string
   leanModuleName: string
   sourceManifest: string
+  sourceAcquisition?: {
+    status: "CACHE_HIT" | "DISCOVERED"
+    startedAtUtc: string
+    finishedAtUtc: string
+    proposalPath?: string
+    agent?: string
+    model?: string
+    sessionId?: string
+  }
   artifactRoot: string
 
   stage: FormalizationStage

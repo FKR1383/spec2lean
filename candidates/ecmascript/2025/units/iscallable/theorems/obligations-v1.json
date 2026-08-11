@@ -1,0 +1,153 @@
+{
+  "schema_version": 1,
+  "obligation_set_id": "ecmascript-2025-iscallable-obligations-v1",
+  "run_id": "ecmascript-2025-IsCallable-1d8d9c52",
+  "stage": "THEOREM_GENERATION",
+  "stage_attempt": 1,
+  "run_revision": 13,
+  "status": "READY_FOR_STRENGTH_REVIEW",
+  "status_rationale": "No prior theorem-strength critic artifact exists for this unit, so there are no BLOCKER/MAJOR findings to repair at this revision. Generated obligations are non-vacuous and directly target IsCallable branch semantics and callability predicate.",
+  "unit": {
+    "language": "ecmascript",
+    "specification_version": "2025",
+    "construct": "IsCallable",
+    "bounded_unit": "abstract operation IsCallable(argument)",
+    "scope_boundary": "Only IsCallable branch behavior over ECMAScript value inputs; no state or completion machinery is introduced in this unit."
+  },
+  "lean_mapping_reference": {
+    "path": "candidates/ecmascript/2025/units/iscallable/lean/IsCallable-v1.lean",
+    "namespace": "Spec2Lean.ECMAScript.IsCallable"
+  },
+  "semantics_reference": {
+    "path": "candidates/ecmascript/2025/units/iscallable/semantics/semantics-v1.json",
+    "interpretation_id": "ecmascript-2025-iscallable-semantics-v1",
+    "claim_count": 6
+  },
+  "source_bundle_reference": {
+    "path": "candidates/ecmascript/2025/units/iscallable/source-bundles/source-bundle-v1.json",
+    "bundle_id": "ecmascript-2025-iscallable-source-bundle-v1",
+    "fragment_ids": [
+      "ECMASCRIPT-2025-ISC-001",
+      "ECMASCRIPT-2025-ISC-002",
+      "ECMASCRIPT-2025-ISC-003",
+      "ECMASCRIPT-2025-ISC-004",
+      "ECMASCRIPT-2025-ISC-005",
+      "ECMASCRIPT-2025-ISC-006",
+      "ECMASCRIPT-2025-ISC-007"
+    ]
+  },
+  "compliance_notes": [
+    "No proofs are included in this stage.",
+    "All theorem names are unit-specific and tied to namespace Spec2Lean.ECMAScript.IsCallable.",
+    "Theorems target the exact three-step branch flow and explicit predicate outcomes, avoiding vacuous totality-only claims."
+  ],
+  "theorem_obligations": [
+    {
+      "obligation_id": "ECMASCRIPT-ISC-THM-001",
+      "proposed_name": "isCallable_non_object_false",
+      "category": "non-object branch",
+      "intent": "If the input is not an Object, IsCallable must return false.",
+      "precise_statement_in_words": "For any argument with isObject argument = false, IsCallable argument evaluates to false.",
+      "lean_statement_sketch": "theorem isCallable_non_object_false (argument : EcmaValue) (h : isObject argument = false) : IsCallable argument = false",
+      "hypotheses": [
+        "argument : EcmaValue",
+        "h : isObject argument = false"
+      ],
+      "conclusion": "IsCallable argument = false",
+      "semantic_claim_ids": [
+        "ECMASCRIPT-ISC-SEM-002"
+      ],
+      "lean_declarations_used": [
+        "IsCallable",
+        "EcmaValue",
+        "isObject"
+      ]
+    },
+    {
+      "obligation_id": "ECMASCRIPT-ISC-THM-002",
+      "proposed_name": "isCallable_object_with_call_true",
+      "category": "call-method branch",
+      "intent": "Object arguments with a [[Call]] internal method evaluate to true.",
+      "precise_statement_in_words": "For any object o whose hasCall field is true, IsCallable (EcmaValue.object o) is true.",
+      "lean_statement_sketch": "theorem isCallable_object_with_call_true (o : EcmaObject) (h : o.hasCall = true) : IsCallable (EcmaValue.object o) = true",
+      "hypotheses": [
+        "o : EcmaObject",
+        "h : o.hasCall = true"
+      ],
+      "conclusion": "IsCallable (EcmaValue.object o) = true",
+      "semantic_claim_ids": [
+        "ECMASCRIPT-ISC-SEM-003"
+      ],
+      "lean_declarations_used": [
+        "IsCallable",
+        "EcmaObject",
+        "EcmaValue.object",
+        "hasCallInternalMethod"
+      ]
+    },
+    {
+      "obligation_id": "ECMASCRIPT-ISC-THM-003",
+      "proposed_name": "isCallable_object_without_call_false",
+      "category": "default false branch",
+      "intent": "Object arguments without [[Call]] still evaluate to false.",
+      "precise_statement_in_words": "For any object o with hasCall false, IsCallable (EcmaValue.object o) is false.",
+      "lean_statement_sketch": "theorem isCallable_object_without_call_false (o : EcmaObject) (h : o.hasCall = false) : IsCallable (EcmaValue.object o) = false",
+      "hypotheses": [
+        "o : EcmaObject",
+        "h : o.hasCall = false"
+      ],
+      "conclusion": "IsCallable (EcmaValue.object o) = false",
+      "semantic_claim_ids": [
+        "ECMASCRIPT-ISC-SEM-004"
+      ],
+      "lean_declarations_used": [
+        "IsCallable",
+        "EcmaObject",
+        "EcmaValue.object",
+        "hasCallInternalMethod"
+      ]
+    },
+    {
+      "obligation_id": "ECMASCRIPT-ISC-THM-004",
+      "proposed_name": "isCallable_equivalent_branch_predicate",
+      "category": "branch equivalence",
+      "intent": "Characterize exactly when IsCallable returns true in terms of object classification and [[Call]] predicate.",
+      "precise_statement_in_words": "IsCallable argument is true exactly when the argument is an object and its [[Call]] predicate is true.",
+      "lean_statement_sketch": "theorem isCallable_equivalent_branch_predicate (argument : EcmaValue) : IsCallable argument = true ↔ isObject argument = true ∧ hasCallInternalMethod argument = true",
+      "hypotheses": [
+        "argument : EcmaValue"
+      ],
+      "conclusion": "IsCallable argument = true ↔ isObject argument = true ∧ hasCallInternalMethod argument = true",
+      "semantic_claim_ids": [
+        "ECMASCRIPT-ISC-SEM-002",
+        "ECMASCRIPT-ISC-SEM-003",
+        "ECMASCRIPT-ISC-SEM-004"
+      ],
+      "lean_declarations_used": [
+        "IsCallable",
+        "EcmaValue",
+        "isObject",
+        "hasCallInternalMethod"
+      ]
+    },
+    {
+      "obligation_id": "ECMASCRIPT-ISC-THM-005",
+      "proposed_name": "isCallable_is_boolean",
+      "category": "result codomain",
+      "intent": "IsCallable always returns either true or false, matching deterministic Boolean completion behavior.",
+      "precise_statement_in_words": "For every argument, the result is a Bool value (true or false), matching the deterministic three-step branch execution.",
+      "lean_statement_sketch": "theorem isCallable_is_boolean (argument : EcmaValue) : IsCallable argument = true ∨ IsCallable argument = false",
+      "hypotheses": [
+        "argument : EcmaValue"
+      ],
+      "conclusion": "IsCallable argument = true ∨ IsCallable argument = false",
+      "semantic_claim_ids": [
+        "ECMASCRIPT-ISC-SEM-005",
+        "ECMASCRIPT-ISC-SEM-006"
+      ],
+      "lean_declarations_used": [
+        "IsCallable"
+      ]
+    }
+  ]
+}

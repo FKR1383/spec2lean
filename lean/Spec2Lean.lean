@@ -24,3 +24,7 @@ import Spec2Lean.PTX.OrB16Proofs
 import Spec2Lean.PTX.XorB16
 import Spec2Lean.PTX.ShrB32
 import Spec2Lean.PTX.ShrB32Proofs
+import Spec2Lean.ECMAScript.ToBoolean
+import Spec2Lean.ECMAScript.ToBooleanProofs
+import Spec2Lean.ECMAScript.IsCallable
+import Spec2Lean.ECMAScript.IsCallableProofs

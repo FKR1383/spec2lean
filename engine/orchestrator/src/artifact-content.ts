@@ -1,4 +1,5 @@
 import { validateTheoremObligationDocument } from "./theorem-contract.js"
+import { leanDeclarationNamespace, leanLanguageName } from "./lean-language.js"
 import type { RunState } from "./workflow.js"
 
 type UnknownRecord = Record<string, unknown>
@@ -138,14 +139,16 @@ function validateArchitectureMarkdown(source: string): string[] {
 }
 
 function validateLeanNamespace(run: RunState, source: string): string[] {
-  const dotted = new RegExp(`\\bnamespace\\s+Spec2Lean\\.PTX\\.${run.leanModuleName}\\b`)
+  const languageName = leanLanguageName(run)
+  const expected = leanDeclarationNamespace(run)
+  const dotted = new RegExp(`\\bnamespace\\s+Spec2Lean\\.${languageName}\\.${run.leanModuleName}\\b`)
   const nested = new RegExp(
-    `\\bnamespace\\s+Spec2Lean\\s+namespace\\s+PTX\\s+namespace\\s+${run.leanModuleName}\\b`,
+    `\\bnamespace\\s+Spec2Lean\\s+namespace\\s+${languageName}\\s+namespace\\s+${run.leanModuleName}\\b`,
     "s",
   )
   return dotted.test(source) || nested.test(source)
     ? []
-    : [`Lean mapping must use namespace Spec2Lean.PTX.${run.leanModuleName}`]
+    : [`Lean mapping must use namespace ${expected}`]
 }
 
 export function validateArtifactContent(

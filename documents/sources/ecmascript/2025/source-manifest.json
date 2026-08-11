@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "publisher": "Ecma International",
+  "document_title": "ECMAScript 2025 Language Specification",
+  "language": "ecmascript",
+  "specification_version": "2025",
+  "source_classification": "official",
+  "retrieved_at_utc": "2026-08-11T14:00:35.505Z",
+  "acquisition": {
+    "method": "opencode_discovery_with_deterministic_fetch",
+    "proposal_path": "candidates/source-discovery/ecmascript/2025/source-proposal-v2.json",
+    "allowed_url_prefixes": [
+      "https://262.ecma-international.org/16.0/",
+      "https://ecma-international.org/wp-content/uploads/ECMA-262_16th_edition_june_2025.pdf"
+    ]
+  },
+  "initial_formalization_unit": {
+    "construct": "ToBoolean"
+  },
+  "artifacts": [
+    {
+      "kind": "html",
+      "url": "https://262.ecma-international.org/16.0/index.html",
+      "local_path": "raw/specification.html",
+      "sha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+      "size_bytes": 8169822
+    }
+  ],
+  "semantic_status": "not_started",
+  "notes": [
+    "OpenCode selected the source from the configured official publisher scope.",
+    "The orchestrator downloaded and hash-pinned the selected artifacts.",
+    "No semantic interpretation was produced during acquisition."
+  ]
+}

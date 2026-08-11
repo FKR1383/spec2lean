@@ -544,7 +544,7 @@ function referencedIds(comment: string, knownIds: Iterable<string>): string[] {
 
 function unresolvedReferenceTokens(comment: string, known: Set<string>): string[] {
   const expanded = expandCompactReferences(comment)
-  const tokens = expanded.match(/\b(?:SF|DI|DD|OQ|A|PTX)-[A-Z0-9.-]+(?:-[A-Z0-9.]+)+\b/g) ?? []
+  const tokens = expanded.match(/\b[A-Z][A-Z0-9]*(?:-[A-Z0-9.]+){2,}\b/g) ?? []
   return [...new Set(tokens.filter((token) => !known.has(token)))].sort((a, b) => a.localeCompare(b))
 }
 

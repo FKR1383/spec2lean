@@ -30,12 +30,23 @@ import {
 import { verifyLeanFile } from "./lean-local.js"
 import { packageTransform } from "./lean-package.js"
 import {
+  leanDeclarationNamespace,
+  leanPackagePath,
+  makeLeanLanguageName,
+} from "./lean-language.js"
+import { validateSourceProposal } from "./source-bootstrap.js"
+import { htmlSections } from "./source-index.js"
+import {
   proofTargets,
   theoremDeclarationNames,
   verifiedProofArtifactPath,
 } from "./proof-plan.js"
 import { reconcileProofStageResult } from "./proof-stage-result.js"
-import { buildTheoremStrengthContractContext } from "./runner.js"
+import {
+  buildGeneralPrompt,
+  buildTheoremStrengthContractContext,
+  executionAgentForRun,
+} from "./runner.js"
 import {
   compareProofWithApprovedTheorems,
   theoremStrengthReviewAuditIssues,
@@ -91,6 +102,55 @@ const protectedTreesBefore = {
 
 assert(makeUnitSlug("mov.b32") === "mov-b32", "unit slug")
 assert(makeLeanModuleName("mov.b32") === "MovB32", "Lean module name")
+assert(makeLeanLanguageName("ecmascript") === "ECMAScript", "ECMAScript Lean namespace")
+const acquisitionProfile = {
+  schemaVersion: 1,
+  language: "ecmascript",
+  specificationVersion: "2025",
+  publisher: "Ecma International",
+  documentTitle: "ECMAScript 2025 Language Specification",
+  allowedUrlPrefixes: ["https://262.ecma-international.org/16.0/"],
+  requiredKinds: ["html"],
+  maxArtifacts: 2,
+} as Parameters<typeof validateSourceProposal>[1]
+const sourceProposal = {
+  schema_version: 1,
+  language: "ecmascript",
+  specification_version: "2025",
+  publisher: "Ecma International",
+  document_title: "ECMAScript 2025 Language Specification",
+  sources: [{
+    kind: "html",
+    url: "https://262.ecma-international.org/16.0/",
+    authority_reason: "Versioned specification on the publisher-owned ECMA-262 host.",
+  }],
+} as Parameters<typeof validateSourceProposal>[0]
+validateSourceProposal(sourceProposal, acquisitionProfile)
+let unofficialSourceRejected = false
+try {
+  validateSourceProposal({
+    ...sourceProposal,
+    sources: [{
+      ...sourceProposal.sources[0]!,
+      url: "https://example.com/ecmascript.html",
+    }],
+  }, acquisitionProfile)
+} catch {
+  unofficialSourceRejected = true
+}
+assert(unofficialSourceRejected, "source acquisition rejects URLs outside the approved publisher scope")
+const ecmaSections = htmlSections([
+  '<emu-clause id="sec-toboolean">',
+  "<h1>ToBoolean ( argument )</h1>",
+  "<p>The abstract operation ToBoolean returns a Boolean.</p>",
+  "</emu-clause>",
+])
+assert(
+  ecmaSections.length === 1 &&
+    ecmaSections[0]?.anchor === "sec-toboolean" &&
+    ecmaSections[0]?.searchText.includes("returns a Boolean"),
+  "generic HTML ingestion indexes ECMA emu-clause anchors",
+)
 assert(
   parseBatchUnits(["and.b64, or.b64", "xor.b64"]).join(",") ===
     "and.b64,or.b64,xor.b64",
@@ -303,6 +363,37 @@ const baseArtifactRun: RunState = {
   },
   history: [],
 }
+const ecmaArtifactRun: RunState = {
+  ...baseArtifactRun,
+  runId: "ecmascript-2025-ToBoolean-self-test",
+  language: "ecmascript",
+  specVersion: "2025",
+  unit: "ToBoolean",
+  unitSlug: "toboolean",
+  leanModuleName: "ToBoolean",
+  sourceManifest: "documents/sources/ecmascript/2025/source-manifest.json",
+  artifactRoot: "candidates/ecmascript/2025/units/toboolean",
+  stage: "LEAN_FORMALIZATION",
+}
+assert(
+  leanDeclarationNamespace(ecmaArtifactRun) === "Spec2Lean.ECMAScript.ToBoolean" &&
+    leanPackagePath(ecmaArtifactRun) === "lean/Spec2Lean/ECMAScript/ToBoolean.lean" &&
+    leanPackagePath(ecmaArtifactRun, true) === "lean/Spec2Lean/ECMAScript/ToBooleanProofs.lean",
+  "non-PTX runs receive language-scoped Lean namespaces and package paths",
+)
+assert(
+  buildGeneralPrompt(ecmaArtifactRun).includes(
+    "Required Lean namespace: Spec2Lean.ECMAScript.ToBoolean",
+  ),
+  "non-PTX agents receive the exact language-scoped namespace contract",
+)
+assert(
+  executionAgentForRun(
+    { ...ecmaArtifactRun, stage: "SOURCE_CURATION" },
+    "source-curator",
+  ) === "source-curator",
+  "non-PTX source curation uses the generic curator instead of the PTX fast path",
+)
 const normalizedInvalidDecision = normalizeAgentDecision(baseArtifactRun, {
   outcome: "BLOCKED",
   nextStage: "ARCHITECTURE",
@@ -723,6 +814,19 @@ assert(
     nestedPackage.text.includes("end TestUnit") &&
     nestedPackage.isolatedNamespace === true,
   "Lean packaging still isolates legacy nested PTX candidates",
+)
+
+const ecmaCandidate = [
+  "import Spec2Lean.Basic",
+  "namespace Spec2Lean.ECMAScript.ToBoolean",
+  "def marker := true",
+  "end Spec2Lean.ECMAScript.ToBoolean",
+  "",
+].join("\n")
+const ecmaPackage = packageTransform(ecmaCandidate, "ToBoolean", "ECMAScript")
+assert(
+  ecmaPackage.text === ecmaCandidate && ecmaPackage.isolatedNamespace === false,
+  "Lean packaging accepts a non-PTX language namespace",
 )
 
 const deltaAgent = await readFile(

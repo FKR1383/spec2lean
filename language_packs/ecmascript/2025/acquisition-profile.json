@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "language": "ecmascript",
+  "specificationVersion": "2025",
+  "publisher": "Ecma International",
+  "documentTitle": "ECMAScript 2025 Language Specification",
+  "allowedUrlPrefixes": [
+    "https://262.ecma-international.org/16.0/",
+    "https://ecma-international.org/wp-content/uploads/ECMA-262_16th_edition_june_2025.pdf"
+  ],
+  "requiredKinds": [
+    "html"
+  ],
+  "maxArtifacts": 2
+}

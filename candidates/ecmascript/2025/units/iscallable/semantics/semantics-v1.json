@@ -1,0 +1,365 @@
+{
+  "schema_version": 1,
+  "interpretation_id": "ecmascript-2025-iscallable-semantics-v1",
+  "revision_of": null,
+  "status": "READY_FOR_CRITIQUE",
+  "status_rationale": "Legacy bounded semantic interpretation produced in SEMANTIC_EXTRACTION because semantic-profile.json is unavailable; based only on source-bundle-v1 fragments.",
+  "language": "ecmascript",
+  "specification_version": "2025",
+  "construct": "IsCallable",
+  "architecture_reference": {
+    "path": "candidates/ecmascript/2025/units/iscallable/architecture/foundation-v1.md",
+    "status": "DRAFT_NOT_HUMAN_APPROVED",
+    "gate_a_record": {
+      "path": "reviews/ecmascript-iscallable/benchmark-auto/ecmascript-2025-IsCallable-1d8d9c52-a-benchmark-auto-v1.json",
+      "review_id": "ecmascript-2025-IsCallable-1d8d9c52-a-benchmark-auto-v1",
+      "decision": "auto_advanced",
+      "human_confirmation_recorded": false
+    }
+  },
+  "source_bundle_references": [
+    {
+      "path": "candidates/ecmascript/2025/units/iscallable/source-bundles/source-bundle-v1.json",
+      "bundle_id": "ecmascript-2025-iscallable-source-bundle-v1",
+      "role": "official_source_evidence",
+      "status": "DRAFT_SOURCE_BUNDLE_NOT_SEMANTICALLY_INTERPRETED",
+      "fragment_ids": [
+        "ECMASCRIPT-2025-ISC-001",
+        "ECMASCRIPT-2025-ISC-002",
+        "ECMASCRIPT-2025-ISC-003",
+        "ECMASCRIPT-2025-ISC-004",
+        "ECMASCRIPT-2025-ISC-005",
+        "ECMASCRIPT-2025-ISC-006",
+        "ECMASCRIPT-2025-ISC-007"
+      ]
+    }
+  ],
+  "construct_identity": {
+    "name": "IsCallable",
+    "signature": "IsCallable(argument)",
+    "kind": "abstract operation",
+    "source_fragment_ids": [
+      "ECMASCRIPT-2025-ISC-001",
+      "ECMASCRIPT-2025-ISC-002"
+    ]
+  },
+  "syntax_variants": {
+    "forms": [
+      {
+        "variant_id": "ISC-Base",
+        "text": "IsCallable ( argument )",
+        "scope": "abstract operation",
+        "source_fragment_ids": [
+          "ECMASCRIPT-2025-ISC-001",
+          "ECMASCRIPT-2025-ISC-002"
+        ]
+      }
+    ]
+  },
+  "operands": {
+    "names": ["argument"],
+    "order": ["argument"],
+    "roles": {
+      "argument": "input value to test for callability"
+    },
+    "allowed_input_domain_source": "ECMAScript language value",
+    "source_fragment_ids": [
+      "ECMASCRIPT-2025-ISC-002"
+    ]
+  },
+  "types": {
+    "input_type": {
+      "declared": "ECMASCRIPT language value",
+      "members": [
+        "Undefined",
+        "Null",
+        "Boolean",
+        "String",
+        "Symbol",
+        "Number",
+        "BigInt",
+        "Object"
+      ],
+      "source_fragment_ids": [
+        "ECMASCRIPT-2025-ISC-006"
+      ]
+    },
+    "output_type": {
+      "declared": "Boolean",
+      "source_fragment_ids": [
+        "ECMASCRIPT-2025-ISC-002"
+      ]
+    },
+    "bit_width": {
+      "status": "not_applicable",
+      "description": "IsCallable has no numeric or width-dependent operands/results in this clause.",
+      "source_support": "The clause names an argument value and a Boolean result only.",
+      "source_fragment_ids": [
+        "ECMASCRIPT-2025-ISC-002"
+      ]
+    }
+  },
+  "modifiers": {
+    "status": "none",
+    "notes": "No modifiers/flags (e.g., strictness, tail-position, host) are present in the IsCallable abstract-operation declaration.",
+    "classification": "SOURCE_FACT",
+    "source_fragment_ids": [
+      "ECMASCRIPT-2025-ISC-001",
+      "ECMASCRIPT-2025-ISC-002"
+    ]
+  },
+  "preconditions": {
+    "static": [
+      {
+        "id": "STATIC-PRE-1",
+        "statement": "Input must be an ECMAScript language value.",
+        "classification": "SOURCE_FACT",
+        "source_fragment_ids": [
+          "ECMASCRIPT-2025-ISC-002"
+        ]
+      },
+      {
+        "id": "STATIC-PRE-2",
+        "statement": "No size/bit-width or environment precondition is stated in this clause.",
+        "classification": "DERIVED_INTERPRETATION",
+        "source_fragment_ids": [
+          "ECMASCRIPT-2025-ISC-002"
+        ]
+      }
+    ],
+    "dynamic": [
+      {
+        "id": "DYN-PRE-1",
+        "statement": "No dynamic precondition beyond the normal execution of abstract operations is explicit in the IsCallable text.",
+        "classification": "OPEN_QUESTION",
+        "source_fragment_ids": [
+          "ECMASCRIPT-2025-ISC-002"
+        ]
+      }
+    ]
+  },
+  "state_reads": [
+    {
+      "component": "argument value",
+      "description": "The algorithm checks whether argument is an Object.",
+      "classification": "SOURCE_FACT",
+      "source_fragment_ids": [
+        "ECMASCRIPT-2025-ISC-003"
+      ]
+    },
+    {
+      "component": "argument internal-method table",
+      "description": "If argument is Object, the algorithm checks whether it has a [[Call]] internal method.",
+      "classification": "SOURCE_FACT",
+      "source_fragment_ids": [
+        "ECMASCRIPT-2025-ISC-004"
+      ]
+    }
+  ],
+  "state_writes": [
+    {
+      "component": "global mutable state",
+      "description": "No state updates are specified; the operation computes and returns a Boolean result.",
+      "classification": "DERIVED_INTERPRETATION",
+      "source_fragment_ids": [
+        "ECMASCRIPT-2025-ISC-002",
+        "ECMASCRIPT-2025-ISC-003",
+        "ECMASCRIPT-2025-ISC-004",
+        "ECMASCRIPT-2025-ISC-005"
+      ]
+    }
+  ],
+  "semantics": {
+    "classification": "DERIVED_INTERPRETATION",
+    "semantic_pseudocode": "function IsCallable(argument):\n  if argument is not an Object then return false;\n  if argument has a [[Call]] internal method then return true;\n  return false;",
+    "notes": "The pseudocode is a direct control-flow normalization of the three ordered steps in the clause.",
+    "source_fragment_ids": [
+      "ECMASCRIPT-2025-ISC-003",
+      "ECMASCRIPT-2025-ISC-004",
+      "ECMASCRIPT-2025-ISC-005"
+    ]
+  },
+  "truthiness_cases": {
+    "falsy_like": [
+      "non-Object values",
+      "Object values without [[Call]] internal method"
+    ],
+    "truthy_like": "Object values with a [[Call]] internal method",
+    "evidence_fragment_ids": [
+      "ECMASCRIPT-2025-ISC-003",
+      "ECMASCRIPT-2025-ISC-004",
+      "ECMASCRIPT-2025-ISC-005"
+    ]
+  },
+  "guard_or_predication_behavior": {
+    "status": "not_applicable",
+    "statement": "No guard or predication modifiers are described in the IsCallable abstract operation text.",
+    "classification": "SOURCE_FACT",
+    "source_fragment_ids": [
+      "ECMASCRIPT-2025-ISC-002"
+    ]
+  },
+  "behavioral_properties": {
+    "deterministic": {
+      "value": true,
+      "classification": "DERIVED_INTERPRETATION",
+      "evidence_fragment_ids": [
+        "ECMASCRIPT-2025-ISC-003",
+        "ECMASCRIPT-2025-ISC-004",
+        "ECMASCRIPT-2025-ISC-005"
+      ],
+      "rationale": "The operation consists of ordered deterministic tests and unconditional fixed returns."
+    },
+    "nondeterministic": {
+      "value": false,
+      "classification": "DERIVED_INTERPRETATION",
+      "source_fragment_ids": [
+        "ECMASCRIPT-2025-ISC-003",
+        "ECMASCRIPT-2025-ISC-004",
+        "ECMASCRIPT-2025-ISC-005"
+      ]
+    }
+  },
+  "exceptional_behavior": {
+    "status": "not_explicitly_stated",
+    "statement": "No throw/error completion form appears in the IsCallable definition.",
+    "classification": "DERIVED_INTERPRETATION",
+    "evidence_fragment_ids": [
+      "ECMASCRIPT-2025-ISC-002"
+    ]
+  },
+  "undefined_behavior": {
+    "status": "not_stated",
+    "statement": "No undefined behavior is stated in the bounded IsCallable text.",
+    "classification": "DERIVED_INTERPRETATION",
+    "evidence_fragment_ids": [
+      "ECMASCRIPT-2025-ISC-002"
+    ]
+  },
+  "implementation_defined_behavior": {
+    "status": "not_stated",
+    "statement": "No implementation-defined behavior is stated in the IsCallable clause itself.",
+    "classification": "DERIVED_INTERPRETATION",
+    "source_fragment_ids": [
+      "ECMASCRIPT-2025-ISC-002"
+    ]
+  },
+  "version_restrictions": {
+    "status": "not_explicit",
+    "statement": "No edition-introduction or version restriction is explicitly stated for IsCallable in this bounded clause.",
+    "classification": "OPEN_QUESTION",
+    "source_fragment_ids": [
+      "ECMASCRIPT-2025-ISC-001",
+      "ECMASCRIPT-2025-ISC-002"
+    ]
+  },
+  "target_restrictions": {
+    "status": "none_stated",
+    "statement": "No host/target execution restriction is stated in this bounded clause.",
+    "classification": "OPEN_QUESTION",
+    "source_fragment_ids": [
+      "ECMASCRIPT-2025-ISC-002"
+    ]
+  },
+  "design_dependencies": [
+    {
+      "id": "DD-1",
+      "statement": "Shared representation must provide an Object predicate/classifier over ECMAScript values.",
+      "classification": "DESIGN_DEPENDENCY",
+      "source_fragment_ids": [
+        "ECMASCRIPT-2025-ISC-006",
+        "ECMASCRIPT-2025-ISC-007"
+      ]
+    },
+    {
+      "id": "DD-2",
+      "statement": "Shared representation must expose whether an Object has the [[Call]] internal method.",
+      "classification": "DESIGN_DEPENDENCY",
+      "source_fragment_ids": [
+        "ECMASCRIPT-2025-ISC-004"
+      ]
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "A-1",
+      "statement": "The host value model normalizes abstract method presence checks to a deterministic predicate for objects in this unit.",
+      "classification": "ASSUMPTION"
+    }
+  ],
+  "ambiguities": [
+    {
+      "id": "AMB-1",
+      "statement": "The clause does not enumerate which specific object kinds have [[Call]] internal method; this is abstracted as a boolean property of the object.",
+      "classification": "AMBIGUITY",
+      "source_fragment_ids": [
+        "ECMASCRIPT-2025-ISC-004",
+        "ECMASCRIPT-2025-ISC-006",
+        "ECMASCRIPT-2025-ISC-007"
+      ]
+    }
+  ],
+  "open_questions": [
+    {
+      "id": "OQ-1",
+      "statement": "Whether object models elsewhere constrain the exact set of objects with [[Call]] is outside this bounded evidence and must be obtained from shared architecture of Object internal methods.",
+      "classification": "UNRESOLVED_QUESTION",
+      "source_fragment_ids": [
+        "ECMASCRIPT-2025-ISC-004"
+      ]
+    }
+  ],
+  "semantic_claims": [
+    {
+      "claim_id": "ECMASCRIPT-ISC-SEM-001",
+      "classification": "SOURCE_FACT",
+      "statement": "IsCallable is an abstract operation named in section 7.2.3 that takes one argument named argument and returns a Boolean.",
+      "evidence_fragment_ids": [
+        "ECMASCRIPT-2025-ISC-001",
+        "ECMASCRIPT-2025-ISC-002"
+      ]
+    },
+    {
+      "claim_id": "ECMASCRIPT-ISC-SEM-002",
+      "classification": "SOURCE_FACT",
+      "statement": "If argument is not an Object, IsCallable returns false.",
+      "evidence_fragment_ids": [
+        "ECMASCRIPT-2025-ISC-003"
+      ]
+    },
+    {
+      "claim_id": "ECMASCRIPT-ISC-SEM-003",
+      "classification": "SOURCE_FACT",
+      "statement": "If argument has a [[Call]] internal method, IsCallable returns true.",
+      "evidence_fragment_ids": [
+        "ECMASCRIPT-2025-ISC-004"
+      ]
+    },
+    {
+      "claim_id": "ECMASCRIPT-ISC-SEM-004",
+      "classification": "SOURCE_FACT",
+      "statement": "If argument is an Object but does not have [[Call]], IsCallable returns false.",
+      "evidence_fragment_ids": [
+        "ECMASCRIPT-2025-ISC-005"
+      ]
+    },
+    {
+      "claim_id": "ECMASCRIPT-ISC-SEM-005",
+      "classification": "DERIVED_INTERPRETATION",
+      "statement": "For a fixed argument, IsCallable is deterministic and total over its input type (returns either true or false).",
+      "evidence_fragment_ids": [
+        "ECMASCRIPT-2025-ISC-003",
+        "ECMASCRIPT-2025-ISC-004",
+        "ECMASCRIPT-2025-ISC-005"
+      ]
+    },
+    {
+      "claim_id": "ECMASCRIPT-ISC-SEM-006",
+      "classification": "DERIVED_INTERPRETATION",
+      "statement": "No exceptional completion, explicit undefined behavior, or implementation-defined behavior is stated in section 7.2.3 IsCallable.",
+      "evidence_fragment_ids": [
+        "ECMASCRIPT-2025-ISC-002"
+      ]
+    }
+  ]
+}

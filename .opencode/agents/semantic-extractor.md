@@ -110,20 +110,9 @@ If evidence is missing or contradictory, mark the unit as BLOCKED.
 
 # Prohibited Knowledge Transfer
 
-Do not import behavior from:
-
-- CUDA C
-- ISO C or C++
-- LLVM
-- SPIR-V
-- RISC-V
-- x86
-- another ISA
-- compiler implementations
-- model prior knowledge
-- unofficial documentation
-
-Such material is not evidence for PTX semantics.
+Do not import behavior from another language, edition, engine/compiler
+implementation, model prior knowledge, or unofficial documentation. Such
+material is not evidence for the current language semantics.
 
 # Prohibited Work
 
@@ -204,7 +193,7 @@ Do not put the protocol line inside a Markdown code fence.
 
 # Fast Semantic Extraction Discipline
 
-In automated PTX runs:
+In automated runs:
 
 - Treat the bounded Source Curator bundle as the complete retrieval input.
 - Do not redo source discovery or attempt to independently reconstruct the

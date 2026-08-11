@@ -1,0 +1,835 @@
+{
+  "schemaVersion": 2,
+  "manifestType": "spec2lean_evidence_manifest",
+  "generator": "spec2lean-traceability-v2",
+  "runId": "ecmascript-2025-ToBoolean-d97e001b",
+  "language": "ecmascript",
+  "specificationVersion": "2025",
+  "unit": "ToBoolean",
+  "documentRole": "SEMANTICS",
+  "sourceManifest": {
+    "path": "documents/sources/ecmascript/2025/source-manifest.json",
+    "sha256": "39686d0b18ec0ada4b3b9ffeaf542c794b7f822a6db07b1466b1d23a85c05845"
+  },
+  "leanDocument": {
+    "path": "candidates/ecmascript/2025/units/toboolean/lean/ToBoolean-v1.lean",
+    "sha256": "b354f10e8475ba19144ca495c1970feda4592518156bf7f2b3e1fbc5f9344ba9"
+  },
+  "semanticDocument": {
+    "path": "candidates/ecmascript/2025/units/toboolean/semantics/semantics-v1.json",
+    "sha256": "569493b737ede3e2d9bc025a74d5ec6d9f56b490ef679655ee888bde66120ba1"
+  },
+  "architectureDocument": {
+    "path": "candidates/ecmascript/2025/units/toboolean/architecture/foundation-v1.md",
+    "sha256": "7ad8e7eb00cda9b5977299fc12945fbf001702d2bc4342009fccbb20bca3402c"
+  },
+  "sourceBundles": [
+    {
+      "path": "candidates/ecmascript/2025/units/toboolean/source-bundles/source-bundle-v3.json",
+      "sha256": "7b9408a6711b8c99807e07205426f62136b61f85abdc8e7646d8d253512c4a9c"
+    }
+  ],
+  "entries": [
+    {
+      "entryId": "inductive:EcmaBoolean:17",
+      "declarationKind": "inductive",
+      "declarationName": "EcmaBoolean",
+      "leanRange": {
+        "startLine": 17,
+        "endLine": 23
+      },
+      "semanticIds": [
+        "ECMASCRIPT-TOB-SEM-001"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "ECMASCRIPT-TOB-SEM-001",
+          "classification": "SOURCE_FACT",
+          "statement": "ToBoolean is an abstract operation with name/section 7.1.2 that takes one argument named argument and returns a Boolean.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-TOB-V3-001",
+            "ECMASCRIPT-2025-TOB-V3-002"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-001",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5133,
+            "endLine": 5133
+          },
+          "quotation": "<emu-clause id=\"sec-toboolean\" oldids=\"table-toboolean-conversions\" type=\"abstract operation\" aoid=\"ToBoolean\"><span id=\"table-toboolean-conversions\"></span>"
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-002",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5135,
+            "endLine": 5135
+          },
+          "quotation": "The abstract operation ToBoolean takes argument <var>argument</var> (an <emu-xref href=\"#sec-ecmascript-language-types\" id=\"_ref_2071\"><a href=\"#sec-ecmascript-language-types\">ECMAScript language value</a></emu-xref>) and returns a Boolean. It converts <var>argument</var> to a value of type Boolean."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:EcmaNumber:24",
+      "declarationKind": "inductive",
+      "declarationName": "EcmaNumber",
+      "leanRange": {
+        "startLine": 24,
+        "endLine": 32
+      },
+      "semanticIds": [
+        "ECMASCRIPT-TOB-SEM-002"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "ECMASCRIPT-TOB-SEM-002",
+          "classification": "SOURCE_FACT",
+          "statement": "If argument is a Boolean, ToBoolean returns the same Boolean value.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-TOB-V3-003"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-003",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5136,
+            "endLine": 5136
+          },
+          "quotation": "If <var>argument</var> <emu-xref href=\"#sec-ecmascript-language-types-boolean-type\" id=\"_ref_2072\"><a href=\"#sec-ecmascript-language-types-boolean-type\">is a Boolean</a></emu-xref>, return <var>argument</var>."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "abbrev:EcmaBigInt:33",
+      "declarationKind": "abbrev",
+      "declarationName": "EcmaBigInt",
+      "leanRange": {
+        "startLine": 33,
+        "endLine": 36
+      },
+      "semanticIds": [
+        "ECMASCRIPT-TOB-SEM-002"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "ECMASCRIPT-TOB-SEM-002",
+          "classification": "SOURCE_FACT",
+          "statement": "If argument is a Boolean, ToBoolean returns the same Boolean value.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-TOB-V3-003"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-003",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5136,
+            "endLine": 5136
+          },
+          "quotation": "If <var>argument</var> <emu-xref href=\"#sec-ecmascript-language-types-boolean-type\" id=\"_ref_2072\"><a href=\"#sec-ecmascript-language-types-boolean-type\">is a Boolean</a></emu-xref>, return <var>argument</var>."
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-014",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "6.1.6.2",
+            "heading": "The BigInt Type",
+            "anchor": "sec-ecmascript-language-types-bigint-type",
+            "startLine": 2947,
+            "endLine": 2947
+          },
+          "quotation": "<p>The <dfn variants=\"is a BigInt,is not a BigInt\" tabindex=\"-1\">BigInt type</dfn> represents an <emu-xref href=\"#integer\" id=\"_ref_1490\"><a href=\"#integer\">integer</a></emu-xref>"
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "abbrev:EcmaString:37",
+      "declarationKind": "abbrev",
+      "declarationName": "EcmaString",
+      "leanRange": {
+        "startLine": 37,
+        "endLine": 40
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-010",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "6.1.4",
+            "heading": "The String Type",
+            "anchor": "sec-ecmascript-language-types-string-type",
+            "startLine": 2014,
+            "endLine": 2015
+          },
+          "quotation": "The empty String has length zero and therefore contains no elements."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:EcmaSymbol:41",
+      "declarationKind": "inductive",
+      "declarationName": "EcmaSymbol",
+      "leanRange": {
+        "startLine": 41,
+        "endLine": 46
+      },
+      "semanticIds": [],
+      "theoremObligationIds": [],
+      "claims": [],
+      "evidence": [
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-008",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "B.3.6",
+            "heading": "The [[IsHTMLDDA]] Internal Slot",
+            "anchor": "sec-IsHTMLDDA-internal-slot",
+            "startLine": 52820,
+            "endLine": 52827
+          },
+          "quotation": "An <dfn tabindex=\"-1\"><var class=\"field\">[[IsHTMLDDA]]</var> internal slot</dfn> may exist on <emu-xref href=\"#host-defined\" id=\"_ref_16813\"><a href=\"#host-defined\">host-defined</a></emu-xref> objects. Objects with an <var class=\"field\">[[IsHTMLDDA]]</var> internal slot behave like <emu-val>undefined</emu-val> in the <emu-xref href=\"#sec-toboolean\" id=\"_ref_889\"><a href=\"#sec-toboolean\">ToBoolean</a></emu-xref> ..."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "structure:EcmaObject:47",
+      "declarationKind": "structure",
+      "declarationName": "EcmaObject",
+      "leanRange": {
+        "startLine": 47,
+        "endLine": 52
+      },
+      "semanticIds": [
+        "ECMASCRIPT-TOB-SEM-004"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "ECMASCRIPT-TOB-SEM-004",
+          "classification": "SOURCE_FACT",
+          "statement": "Step 3 of ToBoolean is replaced in B.3.6.1 with a check: if argument is Object and has [[IsHTMLDDA]], return false.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-TOB-V3-005",
+            "ECMASCRIPT-2025-TOB-V3-007"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-005",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5136,
+            "endLine": 5136
+          },
+          "quotation": "NOTE: This step is replaced in section <emu-xref href=\"#sec-IsHTMLDDA-internal-slot-to-boolean\" id=\"_ref_201\"><a href=\"#sec-IsHTMLDDA-internal-slot-to-boolean\">B.3.6.1</a></emu-xref>."
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-007",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "B.3.6.1",
+            "heading": "Changes to ToBoolean",
+            "anchor": "sec-IsHTMLDDA-internal-slot-to-boolean",
+            "startLine": 52833,
+            "endLine": 52833
+          },
+          "quotation": "<emu-alg replaces-step=\"step-to-boolean-web-compat-insertion-point\"><ol start=\"3\"><li><span aria-hidden=\"true\" class=\"list-marker\">3. </span>If <var>argument</var> <emu-xref href=\"#sec-object-type\" id=\"_ref_16819\"><a href=\"#sec-object-type\">is an Object</a></emu-xref> and <var>argument</var> has an <var class=\"field\">[[IsHTMLDDA]]</var> internal slot, return <emu-val>false</emu-val>.</li></ol></emu-alg>"
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:EcmaValue:53",
+      "declarationKind": "inductive",
+      "declarationName": "EcmaValue",
+      "leanRange": {
+        "startLine": 53,
+        "endLine": 65
+      },
+      "semanticIds": [
+        "ECMASCRIPT-TOB-SEM-001",
+        "ECMASCRIPT-TOB-SEM-009"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "ECMASCRIPT-TOB-SEM-001",
+          "classification": "SOURCE_FACT",
+          "statement": "ToBoolean is an abstract operation with name/section 7.1.2 that takes one argument named argument and returns a Boolean.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-TOB-V3-001",
+            "ECMASCRIPT-2025-TOB-V3-002"
+          ]
+        },
+        {
+          "semanticId": "ECMASCRIPT-TOB-SEM-009",
+          "classification": "SOURCE_FACT",
+          "statement": "Type domain for argument is ECMAScript language value: Undefined, Null, Boolean, String, Symbol, Number, BigInt, Object; this plus default step implies values outside listed falsy/web-compat set return true.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-TOB-V3-004",
+            "ECMASCRIPT-2025-TOB-V3-006",
+            "ECMASCRIPT-2025-TOB-V3-009"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-001",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5133,
+            "endLine": 5133
+          },
+          "quotation": "<emu-clause id=\"sec-toboolean\" oldids=\"table-toboolean-conversions\" type=\"abstract operation\" aoid=\"ToBoolean\"><span id=\"table-toboolean-conversions\"></span>"
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-002",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5135,
+            "endLine": 5135
+          },
+          "quotation": "The abstract operation ToBoolean takes argument <var>argument</var> (an <emu-xref href=\"#sec-ecmascript-language-types\" id=\"_ref_2071\"><a href=\"#sec-ecmascript-language-types\">ECMAScript language value</a></emu-xref>) and returns a Boolean. It converts <var>argument</var> to a value of type Boolean."
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5136,
+            "endLine": 5136
+          },
+          "quotation": "If <var>argument</var> is one of <emu-val>undefined</emu-val>, <emu-val>null</emu-val>, <emu-val>+0</emu-val><sub>𝔽</sub>, <emu-val>-0</emu-val><sub>𝔽</sub>, <emu-val>NaN</emu-val>, <emu-val>0</emu-val><sub>ℤ</sub>, or the empty String, return <emu-val>false</emu-val>."
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-006",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5136,
+            "endLine": 5136
+          },
+          "quotation": "Return <emu-val>true</emu-val>."
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-009",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "6.1",
+            "heading": "ECMAScript Language Types",
+            "anchor": "sec-ecmascript-language-types",
+            "startLine": 1982,
+            "endLine": 1987
+          },
+          "quotation": "The ECMAScript language types are Undefined, Null, Boolean, String, Symbol, Number, BigInt, and Object."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:toBooleanBool:66",
+      "declarationKind": "def",
+      "declarationName": "toBooleanBool",
+      "leanRange": {
+        "startLine": 66,
+        "endLine": 71
+      },
+      "semanticIds": [
+        "ECMASCRIPT-TOB-SEM-002"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "ECMASCRIPT-TOB-SEM-002",
+          "classification": "SOURCE_FACT",
+          "statement": "If argument is a Boolean, ToBoolean returns the same Boolean value.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-TOB-V3-003"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-003",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5136,
+            "endLine": 5136
+          },
+          "quotation": "If <var>argument</var> <emu-xref href=\"#sec-ecmascript-language-types-boolean-type\" id=\"_ref_2072\"><a href=\"#sec-ecmascript-language-types-boolean-type\">is a Boolean</a></emu-xref>, return <var>argument</var>."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:numberIsFalsy:72",
+      "declarationKind": "def",
+      "declarationName": "numberIsFalsy",
+      "leanRange": {
+        "startLine": 72,
+        "endLine": 80
+      },
+      "semanticIds": [
+        "ECMASCRIPT-TOB-SEM-003"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "ECMASCRIPT-TOB-SEM-003",
+          "classification": "SOURCE_FACT",
+          "statement": "If argument is one of undefined, null, +0ℱ, -0ℱ, NaN, 0ℤ, or empty String, ToBoolean returns false.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-TOB-V3-004"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5136,
+            "endLine": 5136
+          },
+          "quotation": "If <var>argument</var> is one of <emu-val>undefined</emu-val>, <emu-val>null</emu-val>, <emu-val>+0</emu-val><sub>𝔽</sub>, <emu-val>-0</emu-val><sub>𝔽</sub>, <emu-val>NaN</emu-val>, <emu-val>0</emu-val><sub>ℤ</sub>, or the empty String, return <emu-val>false</emu-val>."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:bigintIsFalsy:81",
+      "declarationKind": "def",
+      "declarationName": "bigintIsFalsy",
+      "leanRange": {
+        "startLine": 81,
+        "endLine": 85
+      },
+      "semanticIds": [
+        "ECMASCRIPT-TOB-SEM-003"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "ECMASCRIPT-TOB-SEM-003",
+          "classification": "SOURCE_FACT",
+          "statement": "If argument is one of undefined, null, +0ℱ, -0ℱ, NaN, 0ℤ, or empty String, ToBoolean returns false.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-TOB-V3-004"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5136,
+            "endLine": 5136
+          },
+          "quotation": "If <var>argument</var> is one of <emu-val>undefined</emu-val>, <emu-val>null</emu-val>, <emu-val>+0</emu-val><sub>𝔽</sub>, <emu-val>-0</emu-val><sub>𝔽</sub>, <emu-val>NaN</emu-val>, <emu-val>0</emu-val><sub>ℤ</sub>, or the empty String, return <emu-val>false</emu-val>."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:stringIsFalsy:86",
+      "declarationKind": "def",
+      "declarationName": "stringIsFalsy",
+      "leanRange": {
+        "startLine": 86,
+        "endLine": 91
+      },
+      "semanticIds": [
+        "ECMASCRIPT-TOB-SEM-003"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "ECMASCRIPT-TOB-SEM-003",
+          "classification": "SOURCE_FACT",
+          "statement": "If argument is one of undefined, null, +0ℱ, -0ℱ, NaN, 0ℤ, or empty String, ToBoolean returns false.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-TOB-V3-004"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5136,
+            "endLine": 5136
+          },
+          "quotation": "If <var>argument</var> is one of <emu-val>undefined</emu-val>, <emu-val>null</emu-val>, <emu-val>+0</emu-val><sub>𝔽</sub>, <emu-val>-0</emu-val><sub>𝔽</sub>, <emu-val>NaN</emu-val>, <emu-val>0</emu-val><sub>ℤ</sub>, or the empty String, return <emu-val>false</emu-val>."
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-010",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "6.1.4",
+            "heading": "The String Type",
+            "anchor": "sec-ecmascript-language-types-string-type",
+            "startLine": 2014,
+            "endLine": 2015
+          },
+          "quotation": "The empty String has length zero and therefore contains no elements."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:ToBoolean:92",
+      "declarationKind": "def",
+      "declarationName": "ToBoolean",
+      "leanRange": {
+        "startLine": 92,
+        "endLine": 104
+      },
+      "semanticIds": [
+        "ECMASCRIPT-TOB-SEM-001",
+        "ECMASCRIPT-TOB-SEM-002",
+        "ECMASCRIPT-TOB-SEM-003",
+        "ECMASCRIPT-TOB-SEM-004",
+        "ECMASCRIPT-TOB-SEM-005",
+        "ECMASCRIPT-TOB-SEM-006"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "ECMASCRIPT-TOB-SEM-001",
+          "classification": "SOURCE_FACT",
+          "statement": "ToBoolean is an abstract operation with name/section 7.1.2 that takes one argument named argument and returns a Boolean.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-TOB-V3-001",
+            "ECMASCRIPT-2025-TOB-V3-002"
+          ]
+        },
+        {
+          "semanticId": "ECMASCRIPT-TOB-SEM-002",
+          "classification": "SOURCE_FACT",
+          "statement": "If argument is a Boolean, ToBoolean returns the same Boolean value.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-TOB-V3-003"
+          ]
+        },
+        {
+          "semanticId": "ECMASCRIPT-TOB-SEM-003",
+          "classification": "SOURCE_FACT",
+          "statement": "If argument is one of undefined, null, +0ℱ, -0ℱ, NaN, 0ℤ, or empty String, ToBoolean returns false.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-TOB-V3-004"
+          ]
+        },
+        {
+          "semanticId": "ECMASCRIPT-TOB-SEM-004",
+          "classification": "SOURCE_FACT",
+          "statement": "Step 3 of ToBoolean is replaced in B.3.6.1 with a check: if argument is Object and has [[IsHTMLDDA]], return false.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-TOB-V3-005",
+            "ECMASCRIPT-2025-TOB-V3-007"
+          ]
+        },
+        {
+          "semanticId": "ECMASCRIPT-TOB-SEM-005",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "For all remaining values, ToBoolean returns true.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-TOB-V3-004",
+            "ECMASCRIPT-2025-TOB-V3-005",
+            "ECMASCRIPT-2025-TOB-V3-006"
+          ]
+        },
+        {
+          "semanticId": "ECMASCRIPT-TOB-SEM-006",
+          "classification": "SOURCE_FACT",
+          "statement": "ToBoolean is a pure-returning abstract operation in this clause; no completion/throw result is specified.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-TOB-V3-002",
+            "ECMASCRIPT-2025-TOB-V3-006"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-001",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5133,
+            "endLine": 5133
+          },
+          "quotation": "<emu-clause id=\"sec-toboolean\" oldids=\"table-toboolean-conversions\" type=\"abstract operation\" aoid=\"ToBoolean\"><span id=\"table-toboolean-conversions\"></span>"
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-002",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5135,
+            "endLine": 5135
+          },
+          "quotation": "The abstract operation ToBoolean takes argument <var>argument</var> (an <emu-xref href=\"#sec-ecmascript-language-types\" id=\"_ref_2071\"><a href=\"#sec-ecmascript-language-types\">ECMAScript language value</a></emu-xref>) and returns a Boolean. It converts <var>argument</var> to a value of type Boolean."
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-003",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5136,
+            "endLine": 5136
+          },
+          "quotation": "If <var>argument</var> <emu-xref href=\"#sec-ecmascript-language-types-boolean-type\" id=\"_ref_2072\"><a href=\"#sec-ecmascript-language-types-boolean-type\">is a Boolean</a></emu-xref>, return <var>argument</var>."
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5136,
+            "endLine": 5136
+          },
+          "quotation": "If <var>argument</var> is one of <emu-val>undefined</emu-val>, <emu-val>null</emu-val>, <emu-val>+0</emu-val><sub>𝔽</sub>, <emu-val>-0</emu-val><sub>𝔽</sub>, <emu-val>NaN</emu-val>, <emu-val>0</emu-val><sub>ℤ</sub>, or the empty String, return <emu-val>false</emu-val>."
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-005",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5136,
+            "endLine": 5136
+          },
+          "quotation": "NOTE: This step is replaced in section <emu-xref href=\"#sec-IsHTMLDDA-internal-slot-to-boolean\" id=\"_ref_201\"><a href=\"#sec-IsHTMLDDA-internal-slot-to-boolean\">B.3.6.1</a></emu-xref>."
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-006",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5136,
+            "endLine": 5136
+          },
+          "quotation": "Return <emu-val>true</emu-val>."
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-007",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "B.3.6.1",
+            "heading": "Changes to ToBoolean",
+            "anchor": "sec-IsHTMLDDA-internal-slot-to-boolean",
+            "startLine": 52833,
+            "endLine": 52833
+          },
+          "quotation": "<emu-alg replaces-step=\"step-to-boolean-web-compat-insertion-point\"><ol start=\"3\"><li><span aria-hidden=\"true\" class=\"list-marker\">3. </span>If <var>argument</var> <emu-xref href=\"#sec-object-type\" id=\"_ref_16819\"><a href=\"#sec-object-type\">is an Object</a></emu-xref> and <var>argument</var> has an <var class=\"field\">[[IsHTMLDDA]]</var> internal slot, return <emu-val>false</emu-val>.</li></ol></emu-alg>"
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:toBoolean:105",
+      "declarationKind": "def",
+      "declarationName": "toBoolean",
+      "leanRange": {
+        "startLine": 105,
+        "endLine": 109
+      },
+      "semanticIds": [
+        "ECMASCRIPT-TOB-SEM-001",
+        "ECMASCRIPT-TOB-SEM-006"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "ECMASCRIPT-TOB-SEM-001",
+          "classification": "SOURCE_FACT",
+          "statement": "ToBoolean is an abstract operation with name/section 7.1.2 that takes one argument named argument and returns a Boolean.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-TOB-V3-001",
+            "ECMASCRIPT-2025-TOB-V3-002"
+          ]
+        },
+        {
+          "semanticId": "ECMASCRIPT-TOB-SEM-006",
+          "classification": "SOURCE_FACT",
+          "statement": "ToBoolean is a pure-returning abstract operation in this clause; no completion/throw result is specified.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-TOB-V3-002",
+            "ECMASCRIPT-2025-TOB-V3-006"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-001",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5133,
+            "endLine": 5133
+          },
+          "quotation": "<emu-clause id=\"sec-toboolean\" oldids=\"table-toboolean-conversions\" type=\"abstract operation\" aoid=\"ToBoolean\"><span id=\"table-toboolean-conversions\"></span>"
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-002",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5135,
+            "endLine": 5135
+          },
+          "quotation": "The abstract operation ToBoolean takes argument <var>argument</var> (an <emu-xref href=\"#sec-ecmascript-language-types\" id=\"_ref_2071\"><a href=\"#sec-ecmascript-language-types\">ECMAScript language value</a></emu-xref>) and returns a Boolean. It converts <var>argument</var> to a value of type Boolean."
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-TOB-V3-006",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.1.2",
+            "heading": "ToBoolean",
+            "anchor": "sec-toboolean",
+            "startLine": 5136,
+            "endLine": 5136
+          },
+          "quotation": "Return <emu-val>true</emu-val>."
+        }
+      ],
+      "unresolvedReferences": []
+    }
+  ],
+  "diagnostics": {
+    "declarationsWithoutReferences": [],
+    "unresolvedReferences": []
+  }
+}

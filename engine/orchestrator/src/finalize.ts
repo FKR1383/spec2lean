@@ -5,6 +5,7 @@ import { basename, dirname, resolve } from "node:path"
 
 import { REPO_ROOT } from "./repo.js"
 import { loadRun } from "./run-store.js"
+import { leanPackagePath } from "./lean-language.js"
 import { verifyTraceabilityManifest, type TraceabilityManifest } from "./traceability.js"
 
 function argument(name: string): string | undefined {
@@ -204,10 +205,10 @@ if (push) {
     run.artifactRoot,
     `runs/${run.runId}`,
     `reviews/${run.language}-${run.unitSlug}`,
-    `lean/Spec2Lean/PTX/${run.leanModuleName}.lean`,
+    leanPackagePath(run),
     `lean/Spec2Lean.lean`,
   ]
-  const proofPackage = `lean/Spec2Lean/PTX/${run.leanModuleName}Proofs.lean`
+  const proofPackage = leanPackagePath(run, true)
   try { await readFile(resolve(REPO_ROOT, proofPackage)); paths.push(proofPackage) } catch {}
 
   const add = await git(["add", "--", ...paths])

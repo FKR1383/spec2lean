@@ -1,0 +1,10 @@
+{
+  "sourcePath": "candidates/ecmascript/2025/units/iscallable/lean/IsCallable-v1.lean",
+  "packagePath": "lean/Spec2Lean/ECMAScript/IsCallable.lean",
+  "moduleImport": "Spec2Lean.ECMAScript.IsCallable",
+  "declarationNamespace": "Spec2Lean.ECMAScript.IsCallable",
+  "sourceSha256": "fedf88d4dbfed6b9ff11cd569a07e46c1f96fe6ace0e80a00f3c148c42b1d38e",
+  "packageSha256": "fedf88d4dbfed6b9ff11cd569a07e46c1f96fe6ace0e80a00f3c148c42b1d38e",
+  "isolatedNamespace": false,
+  "importAdjusted": false
+}

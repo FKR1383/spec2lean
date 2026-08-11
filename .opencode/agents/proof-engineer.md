@@ -175,9 +175,9 @@ Semantic failures require renewed critique and human review.
 
 Automated namespace rule:
 
-- Every new bounded unit must use the orchestrator-supplied unit namespace `Spec2Lean.PTX.<LeanModuleName>` for unit-specific Lean declarations.
+- Every new bounded unit must use the exact orchestrator-supplied `Required Lean namespace` for unit-specific Lean declarations.
 - Unit modules must import `Spec2Lean.Basic`, not the `Spec2Lean` root module, to avoid circular imports and duplicate declarations.
-- Do not define a second unit's common-looking declarations directly in `Spec2Lean.PTX`; keep them isolated until a separately approved shared PTX core is introduced.
+- Do not define common-looking declarations directly in a language root namespace; keep them unit-isolated until a separately approved shared language core exists.
 
 This agent is now used by the Spec2Lean automated orchestrator.
 
@@ -236,11 +236,11 @@ Do not mentally simulate Lean for every theorem before candidate_write.
 A rough first proof attempt that is then corrected by Lean is preferable to
 tens of thousands of tokens of speculative tactic analysis.
 
-For a bounded instruction unit, candidate_write should normally occur within
+For a bounded formalization unit, candidate_write should normally occur within
 the early part of the session.
 
 Do not re-review:
-- NVIDIA source evidence,
+- official source evidence,
 - semantic claim classification,
 - architecture,
 - theorem strength,

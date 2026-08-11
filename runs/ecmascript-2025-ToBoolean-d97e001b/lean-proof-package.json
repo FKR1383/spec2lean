@@ -1,0 +1,5 @@
+{
+  "sourcePath": "candidates/ecmascript/2025/units/toboolean/lean/ToBooleanProofs-v1.lean",
+  "packagePath": "lean/Spec2Lean/ECMAScript/ToBooleanProofs.lean",
+  "sha256": "12c2ba1f4fcadcd8597874b3090e8931167ef88c5d2f930336e9f5fbbf850ce2"
+}

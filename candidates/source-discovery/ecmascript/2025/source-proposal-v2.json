@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "language": "ecmascript",
+  "specification_version": "2025",
+  "publisher": "Ecma International",
+  "document_title": "ECMAScript 2025 Language Specification",
+  "sources": [
+    {
+      "kind": "html",
+      "url": "https://262.ecma-international.org/16.0/index.html",
+      "authority_reason": "Official Ecma International 16.0 HTML publication for ECMAScript 2025 (16th edition, June 2025), explicitly listed as the ECMAScript 2025 Language Specification on Ecma International's ECMA-262 standard page and hosted at the stable 262.ecma-international.org/16.0 domain required by the acquisition profile."
+    }
+  ]
+}

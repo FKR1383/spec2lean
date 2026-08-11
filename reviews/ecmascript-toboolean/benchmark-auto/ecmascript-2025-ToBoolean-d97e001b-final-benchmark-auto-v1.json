@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "recordType": "benchmark_gate_auto_advance",
+  "reviewId": "ecmascript-2025-ToBoolean-d97e001b-final-benchmark-auto-v1",
+  "unitId": "ecmascript-toboolean",
+  "runId": "ecmascript-2025-ToBoolean-d97e001b",
+  "gate": "FINAL",
+  "decision": "auto_advanced",
+  "controller": "Spec2Lean benchmark controller",
+  "rationale": "Benchmark-only unattended execution advanced this review boundary. This is not a human semantic approval and cannot authorize promotion.",
+  "submittedAtUtc": "2026-08-11T14:15:51.784Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ecmascript/2025/units/toboolean/lean/ToBooleanProofs-v1.lean",
+      "sha256": "12c2ba1f4fcadcd8597874b3090e8931167ef88c5d2f930336e9f5fbbf850ce2",
+      "sizeBytes": 4992
+    },
+    {
+      "relativePath": "candidates/ecmascript/2025/units/toboolean/reviews/final-critic-v1.md",
+      "sha256": "b6dd663af1f594a1e20650ec5b338bda9f259a689ab2f15b46986c0eee6c36e4",
+      "sizeBytes": 3645
+    }
+  ],
+  "humanConfirmationRecorded": false,
+  "gateApprovalPerformed": false,
+  "promotionPerformed": false,
+  "provenance": {
+    "controller": "spec2lean-cli",
+    "command": "formalize --auto-approve"
+  }
+}

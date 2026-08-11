@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "recordType": "benchmark_gate_auto_advance",
+  "reviewId": "ecmascript-2025-IsCallable-1d8d9c52-a-benchmark-auto-v1",
+  "unitId": "ecmascript-iscallable",
+  "runId": "ecmascript-2025-IsCallable-1d8d9c52",
+  "gate": "A",
+  "decision": "auto_advanced",
+  "controller": "Spec2Lean benchmark controller",
+  "rationale": "Benchmark-only unattended execution advanced this review boundary. This is not a human semantic approval and cannot authorize promotion.",
+  "submittedAtUtc": "2026-08-11T14:53:19.534Z",
+  "artifacts": [
+    {
+      "relativePath": "candidates/ecmascript/2025/units/iscallable/architecture/foundation-v1.md",
+      "sha256": "93dcd7438d5f526108d405b05721fe0b0d1b12d175fb3e4b3a15eff29b63e958",
+      "sizeBytes": 7943
+    },
+    {
+      "relativePath": "candidates/ecmascript/2025/units/iscallable/reviews/architecture-critic-v1.md",
+      "sha256": "bc7536b9cb025a760d1de93fd95e28d96fcce3e6b8fa359623e22bdef06379c5",
+      "sizeBytes": 1174
+    }
+  ],
+  "humanConfirmationRecorded": false,
+  "gateApprovalPerformed": false,
+  "promotionPerformed": false,
+  "provenance": {
+    "controller": "spec2lean-cli",
+    "command": "formalize --auto-approve"
+  }
+}

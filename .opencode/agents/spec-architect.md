@@ -41,7 +41,7 @@ the current bounded formalization unit in Lean 4.
 
 When the repository already contains a human-approved language pack or shared
 semantic environment, treat it as an input and produce a compact
-instruction-specific architecture delta. Do not rediscover or restate the
+unit-specific architecture delta. Do not rediscover or restate the
 entire language architecture for every unit.
 
 You are not the Source Curator, Semantic Extractor, Lean Formalizer,
@@ -96,8 +96,8 @@ A language architecture analysis may cover:
 
 Cover only the categories that materially affect the requested bounded unit.
 Reusing a shared concept does not prove that the concept applies to this unit:
-instruction-specific applicability (for example legal operands, modifiers, or
-bit-bucket syntax) still needs unit-specific official evidence or must remain
+unit-specific applicability (for example legal operands, coercions, modifiers,
+or exceptional behavior) still needs unit-specific official evidence or must remain
 an explicit design dependency/open question.
 
 # Evidence Discipline

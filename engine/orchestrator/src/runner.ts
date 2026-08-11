@@ -20,6 +20,7 @@ import {
   waitForAgentResult,
 } from "./async-session.js"
 import { installProofPackage, prepareLeanPackage, type LeanPackageInfo } from "./lean-package.js"
+import { leanDeclarationNamespace, leanPackagePath } from "./lean-language.js"
 import { prohibitedLeanTokens, verifyLeanFile } from "./lean-local.js"
 import { startOpenCode, unwrap } from "./opencode.js"
 import {
@@ -79,7 +80,7 @@ const FAST_FIRST_AGENTS:
     SOURCE_CURATION: "source-curator-fast",
   }
 
-function executionAgentForRun(
+export function executionAgentForRun(
   run: RunState,
   fallbackAgent: string,
 ): string {
@@ -90,7 +91,9 @@ function executionAgentForRun(
     return "semantic-extractor-delta"
   }
 
-  const fastAgent = FAST_FIRST_AGENTS[run.stage]
+  const fastAgent = run.language.toLowerCase() === "ptx"
+    ? FAST_FIRST_AGENTS[run.stage]
+    : undefined
 
   if (!fastAgent) return fallbackAgent
 
@@ -228,6 +231,7 @@ export function buildGeneralPrompt(
     `Unit: ${run.unit}`,
     `Unit slug: ${run.unitSlug}`,
     `Lean module base name: ${run.leanModuleName}`,
+    `Required Lean namespace: ${leanDeclarationNamespace(run)}`,
     `Source manifest: ${run.sourceManifest}`,
     `Artifact root: ${run.artifactRoot}`,
     `Current stage: ${run.stage}`,
@@ -320,8 +324,8 @@ export function buildGeneralPrompt(
           "",
           "# Installed Lean package artifacts",
           "",
-          `Semantics: lean/Spec2Lean/PTX/${run.leanModuleName}.lean`,
-          `Proofs: lean/Spec2Lean/PTX/${run.leanModuleName}Proofs.lean`,
+          `Semantics: ${leanPackagePath(run)}`,
+          `Proofs: ${leanPackagePath(run, true)}`,
           "The final critique must independently verify both and the root Lean package.",
           "",
           "IMPORTANT FINAL-ARTIFACT RULE:",
@@ -484,7 +488,7 @@ async function buildProofPrompt(run: RunState): Promise<ProofPromptContext & { p
     "",
     "# Hard constraints",
     "",
-    "- Do not read NVIDIA source files, architecture, or semantic claim bundles during this subtask.",
+    "- Do not re-read official source files, architecture, or semantic claim bundles during this subtask.",
     "- The theorem-strength-approved statements below are authoritative.",
     "- The orchestrator already extracted the frozen approved theorem statements; do not re-read the obligation JSON or theorem-strength review.",
     "- Do not weaken it, add semantic preconditions, or change semantics.",

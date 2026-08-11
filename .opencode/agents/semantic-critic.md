@@ -131,7 +131,7 @@ Do not weaken a theorem to make it provable.
 
 Do not treat successful Lean compilation as proof of source faithfulness.
 
-Do not infer PTX behavior from CUDA C, LLVM, another ISA, compiler
+Do not infer behavior from another language/edition, compiler or runtime
 behavior, or model prior knowledge.
 
 Use only the official evidence and approved project artifacts.

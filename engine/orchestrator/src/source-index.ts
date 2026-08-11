@@ -63,15 +63,24 @@ function stripHtml(value: string): string {
     .trim()
 }
 
-function htmlSections(lines: string[]): SourceIndexSection[] {
-  const stack: Array<{ anchor?: string; startLine: number }> = []
+export function htmlSections(lines: string[]): SourceIndexSection[] {
+  const stack: Array<{ tag: string; anchor?: string; startLine: number }> = []
   const sections: SourceIndexSection[] = []
   for (let index = 0; index < lines.length; index += 1) {
     const lineNumber = index + 1
-    for (const match of lines[index]!.matchAll(/<\/?section\b[^>]*>/gi)) {
+    for (const match of lines[index]!.matchAll(/<\/?(?:section|article|emu-clause)\b[^>]*>/gi)) {
       const token = match[0]
-      if (/^<\/section/i.test(token)) {
-        const opened = stack.pop()
+      const tag = token.match(/^<\/?([A-Za-z-]+)/)?.[1]?.toLowerCase()
+      if (tag === undefined) continue
+      if (/^<\//i.test(token)) {
+        let position = -1
+        for (let candidate = stack.length - 1; candidate >= 0; candidate -= 1) {
+          if (stack[candidate]!.tag === tag) {
+            position = candidate
+            break
+          }
+        }
+        const opened = position < 0 ? undefined : stack.splice(position, 1)[0]
         if (opened?.anchor !== undefined) {
           const preview = lines.slice(opened.startLine - 1, Math.min(lineNumber, opened.startLine + 12)).join("\n")
           sections.push({
@@ -84,7 +93,7 @@ function htmlSections(lines: string[]): SourceIndexSection[] {
         }
       } else {
         const anchor = token.match(/\bid\s*=\s*["']([^"']+)["']/i)?.[1]
-        stack.push({ anchor, startLine: lineNumber })
+        stack.push({ tag, anchor, startLine: lineNumber })
       }
     }
   }

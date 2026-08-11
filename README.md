@@ -91,6 +91,35 @@ For another language, register its official files in a source manifest with
 local paths, SHA-256 hashes, and sizes, then pass that manifest explicitly to
 `ingest`, `formalize`, or `formalize-batch`.
 
+If a versioned language pack contains an `acquisition-profile.json` and no
+source manifest is supplied, `formalize` starts the restricted OpenCode
+`source-acquirer` agent. That agent searches the web and proposes only a
+version-matched official source within the publisher URL scope declared by the
+profile. The TypeScript orchestrator then downloads the proposal, pins its
+SHA-256 and size, writes the source manifest, and builds the retrieval index.
+The agent never writes source files or semantic artifacts during acquisition,
+and the orchestrator never chooses or interprets specification prose.
+
+The first non-PTX portability pilot is ECMAScript 2025 `ToBoolean`. Its complete
+unattended benchmark command is:
+
+```bash
+./spec2lean formalize \
+  --language ecmascript \
+  --version 2025 \
+  --unit ToBoolean \
+  --auto-approve \
+  --perf-report
+```
+
+On a fresh checkout this single command asks OpenCode to discover the official
+ECMA source, deterministically acquires and indexes it, runs all formalization
+and proof stages, auto-advances benchmark gates, produces semantics/proof
+evidence manifests, and prints the end-to-end performance report. Source
+discovery time is included separately in that report. As with every
+`--auto-approve` run, the result is benchmark-only: it is not human-approved and
+cannot be promoted to `accepted/`.
+
 ## Formalizing one unit
 
 Start a normal human-reviewed run:

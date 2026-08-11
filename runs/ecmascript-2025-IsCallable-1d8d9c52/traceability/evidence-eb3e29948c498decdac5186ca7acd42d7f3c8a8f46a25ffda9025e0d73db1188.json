@@ -1,0 +1,533 @@
+{
+  "schemaVersion": 2,
+  "manifestType": "spec2lean_evidence_manifest",
+  "generator": "spec2lean-traceability-v2",
+  "runId": "ecmascript-2025-IsCallable-1d8d9c52",
+  "language": "ecmascript",
+  "specificationVersion": "2025",
+  "unit": "IsCallable",
+  "documentRole": "SEMANTICS",
+  "sourceManifest": {
+    "path": "documents/sources/ecmascript/2025/source-manifest.json",
+    "sha256": "39686d0b18ec0ada4b3b9ffeaf542c794b7f822a6db07b1466b1d23a85c05845"
+  },
+  "leanDocument": {
+    "path": "candidates/ecmascript/2025/units/iscallable/lean/IsCallable-v1.lean",
+    "sha256": "fedf88d4dbfed6b9ff11cd569a07e46c1f96fe6ace0e80a00f3c148c42b1d38e"
+  },
+  "semanticDocument": {
+    "path": "candidates/ecmascript/2025/units/iscallable/semantics/semantics-v1.json",
+    "sha256": "baaa6e1d3b6c4df6cd12a95b76afacb754702995333a282774807ceea9a02d29"
+  },
+  "architectureDocument": {
+    "path": "candidates/ecmascript/2025/units/iscallable/architecture/foundation-v1.md",
+    "sha256": "93dcd7438d5f526108d405b05721fe0b0d1b12d175fb3e4b3a15eff29b63e958"
+  },
+  "sourceBundles": [
+    {
+      "path": "candidates/ecmascript/2025/units/iscallable/source-bundles/source-bundle-v1.json",
+      "sha256": "08bf685571a633a77cbc32fe44a54ae79bbee52a7dcde66dbc9f931f3fcfb4f0"
+    }
+  ],
+  "entries": [
+    {
+      "entryId": "structure:EcmaObject:16",
+      "declarationKind": "structure",
+      "declarationName": "EcmaObject",
+      "leanRange": {
+        "startLine": 16,
+        "endLine": 22
+      },
+      "semanticIds": [
+        "D-2",
+        "ECMASCRIPT-ISC-SEM-001"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "D-2",
+          "classification": "DESIGN_DEPENDENCY",
+          "statement": "** Model “has a [[Call]] internal method” as an explicit predicate on objects (`hasCallInternalMethod`) rather than deriving from a finite object constructor; this preserves polymorphism of exotic and ordinary objects.",
+          "evidenceIds": [
+            "ARCH:D-2"
+          ]
+        },
+        {
+          "semanticId": "ECMASCRIPT-ISC-SEM-001",
+          "classification": "SOURCE_FACT",
+          "statement": "IsCallable is an abstract operation named in section 7.2.3 that takes one argument named argument and returns a Boolean.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-ISC-001",
+            "ECMASCRIPT-2025-ISC-002"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "ARCH:D-2",
+          "sourceKind": "ARTIFACT",
+          "documentPath": "candidates/ecmascript/2025/units/iscallable/architecture/foundation-v1.md",
+          "documentSha256": "93dcd7438d5f526108d405b05721fe0b0d1b12d175fb3e4b3a15eff29b63e958",
+          "locator": {
+            "startLine": 45,
+            "endLine": 45
+          },
+          "quotation": "- **D-2:** Model “has a [[Call]] internal method” as an explicit predicate on objects (`hasCallInternalMethod`) rather than deriving from a finite object constructor; this preserves polymorphism of exotic and ordinary objects."
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-ISC-001",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.2.3",
+            "heading": "IsCallable",
+            "anchor": "sec-iscallable",
+            "startLine": 5790,
+            "endLine": 5791
+          },
+          "quotation": "<emu-clause id=\"sec-iscallable\" type=\"abstract operation\" aoid=\"IsCallable\">\n      <h1><span class=\"secnum\">7.2.3</span> IsCallable ( <var>argument</var> )</h1>"
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-ISC-002",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.2.3",
+            "heading": "IsCallable",
+            "anchor": "sec-iscallable",
+            "startLine": 5792,
+            "endLine": 5792
+          },
+          "quotation": "The abstract operation IsCallable takes argument <var>argument</var> (an <emu-xref href=\"#sec-ecmascript-language-types\" id=\"_ref_2316\"><a href=\"#sec-ecmascript-language-types\">ECMAScript language value</a></emu-xref>) and returns a Boolean. It determines if <var>argument</var> is a callable function with a <var class=\"field\">[[Call]]</var> internal method. It performs the following steps when called:"
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-ISC-006",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "6.1",
+            "heading": "ECMAScript Language Types",
+            "anchor": "sec-ecmascript-language-types",
+            "startLine": 1984,
+            "endLine": 1987
+          },
+          "quotation": "An <dfn variants=\"ECMAScript language types\" tabindex=\"-1\">ECMAScript language type</dfn>\n  corresponds to values that are directly manipulated by an ECMAScript\nprogrammer using the ECMAScript language. The ECMAScript language types\nare Undefined, Null, Boolean, String, Symbol, Number, BigInt, and\nObject. An <dfn variants=\"ECMAScript language values\" tabindex=\"-1\">ECMAScript language value</dfn> is a value that is characterized by an ECMAScript language type."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "inductive:EcmaValue:23",
+      "declarationKind": "inductive",
+      "declarationName": "EcmaValue",
+      "leanRange": {
+        "startLine": 23,
+        "endLine": 35
+      },
+      "semanticIds": [
+        "D-3",
+        "ECMASCRIPT-ISC-SEM-001",
+        "ECMASCRIPT-ISC-SEM-002"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "D-3",
+          "classification": "DESIGN_DEPENDENCY",
+          "statement": "** Treat `isObject` as an externalized language-type classification from the shared value model; do not hardcode which concrete object constructors are callable inside this unit.",
+          "evidenceIds": [
+            "ARCH:D-3"
+          ]
+        },
+        {
+          "semanticId": "ECMASCRIPT-ISC-SEM-001",
+          "classification": "SOURCE_FACT",
+          "statement": "IsCallable is an abstract operation named in section 7.2.3 that takes one argument named argument and returns a Boolean.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-ISC-001",
+            "ECMASCRIPT-2025-ISC-002"
+          ]
+        },
+        {
+          "semanticId": "ECMASCRIPT-ISC-SEM-002",
+          "classification": "SOURCE_FACT",
+          "statement": "If argument is not an Object, IsCallable returns false.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-ISC-003"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "ARCH:D-3",
+          "sourceKind": "ARTIFACT",
+          "documentPath": "candidates/ecmascript/2025/units/iscallable/architecture/foundation-v1.md",
+          "documentSha256": "93dcd7438d5f526108d405b05721fe0b0d1b12d175fb3e4b3a15eff29b63e958",
+          "locator": {
+            "startLine": 46,
+            "endLine": 46
+          },
+          "quotation": "- **D-3:** Treat `isObject` as an externalized language-type classification from the shared value model; do not hardcode which concrete object constructors are callable inside this unit."
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-ISC-001",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.2.3",
+            "heading": "IsCallable",
+            "anchor": "sec-iscallable",
+            "startLine": 5790,
+            "endLine": 5791
+          },
+          "quotation": "<emu-clause id=\"sec-iscallable\" type=\"abstract operation\" aoid=\"IsCallable\">\n      <h1><span class=\"secnum\">7.2.3</span> IsCallable ( <var>argument</var> )</h1>"
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-ISC-002",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.2.3",
+            "heading": "IsCallable",
+            "anchor": "sec-iscallable",
+            "startLine": 5792,
+            "endLine": 5792
+          },
+          "quotation": "The abstract operation IsCallable takes argument <var>argument</var> (an <emu-xref href=\"#sec-ecmascript-language-types\" id=\"_ref_2316\"><a href=\"#sec-ecmascript-language-types\">ECMAScript language value</a></emu-xref>) and returns a Boolean. It determines if <var>argument</var> is a callable function with a <var class=\"field\">[[Call]]</var> internal method. It performs the following steps when called:"
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-ISC-003",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.2.3",
+            "heading": "IsCallable",
+            "anchor": "sec-iscallable",
+            "startLine": 5793,
+            "endLine": 5793
+          },
+          "quotation": "If <var>argument</var> <emu-xref href=\"#sec-object-type\" id=\"_ref_2317\"><a href=\"#sec-object-type\">is not an Object</a></emu-xref>, return <emu-val>false</emu-val>."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:isObject:36",
+      "declarationKind": "def",
+      "declarationName": "isObject",
+      "leanRange": {
+        "startLine": 36,
+        "endLine": 41
+      },
+      "semanticIds": [
+        "D-3",
+        "ECMASCRIPT-ISC-SEM-002"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "D-3",
+          "classification": "DESIGN_DEPENDENCY",
+          "statement": "** Treat `isObject` as an externalized language-type classification from the shared value model; do not hardcode which concrete object constructors are callable inside this unit.",
+          "evidenceIds": [
+            "ARCH:D-3"
+          ]
+        },
+        {
+          "semanticId": "ECMASCRIPT-ISC-SEM-002",
+          "classification": "SOURCE_FACT",
+          "statement": "If argument is not an Object, IsCallable returns false.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-ISC-003"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "ARCH:D-3",
+          "sourceKind": "ARTIFACT",
+          "documentPath": "candidates/ecmascript/2025/units/iscallable/architecture/foundation-v1.md",
+          "documentSha256": "93dcd7438d5f526108d405b05721fe0b0d1b12d175fb3e4b3a15eff29b63e958",
+          "locator": {
+            "startLine": 46,
+            "endLine": 46
+          },
+          "quotation": "- **D-3:** Treat `isObject` as an externalized language-type classification from the shared value model; do not hardcode which concrete object constructors are callable inside this unit."
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-ISC-003",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.2.3",
+            "heading": "IsCallable",
+            "anchor": "sec-iscallable",
+            "startLine": 5793,
+            "endLine": 5793
+          },
+          "quotation": "If <var>argument</var> <emu-xref href=\"#sec-object-type\" id=\"_ref_2317\"><a href=\"#sec-object-type\">is not an Object</a></emu-xref>, return <emu-val>false</emu-val>."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:hasCallInternalMethod:42",
+      "declarationKind": "def",
+      "declarationName": "hasCallInternalMethod",
+      "leanRange": {
+        "startLine": 42,
+        "endLine": 47
+      },
+      "semanticIds": [
+        "D-2",
+        "ECMASCRIPT-ISC-SEM-003",
+        "ECMASCRIPT-ISC-SEM-004"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "D-2",
+          "classification": "DESIGN_DEPENDENCY",
+          "statement": "** Model “has a [[Call]] internal method” as an explicit predicate on objects (`hasCallInternalMethod`) rather than deriving from a finite object constructor; this preserves polymorphism of exotic and ordinary objects.",
+          "evidenceIds": [
+            "ARCH:D-2"
+          ]
+        },
+        {
+          "semanticId": "ECMASCRIPT-ISC-SEM-003",
+          "classification": "SOURCE_FACT",
+          "statement": "If argument has a [[Call]] internal method, IsCallable returns true.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-ISC-004"
+          ]
+        },
+        {
+          "semanticId": "ECMASCRIPT-ISC-SEM-004",
+          "classification": "SOURCE_FACT",
+          "statement": "If argument is an Object but does not have [[Call]], IsCallable returns false.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-ISC-005"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "ARCH:D-2",
+          "sourceKind": "ARTIFACT",
+          "documentPath": "candidates/ecmascript/2025/units/iscallable/architecture/foundation-v1.md",
+          "documentSha256": "93dcd7438d5f526108d405b05721fe0b0d1b12d175fb3e4b3a15eff29b63e958",
+          "locator": {
+            "startLine": 45,
+            "endLine": 45
+          },
+          "quotation": "- **D-2:** Model “has a [[Call]] internal method” as an explicit predicate on objects (`hasCallInternalMethod`) rather than deriving from a finite object constructor; this preserves polymorphism of exotic and ordinary objects."
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-ISC-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.2.3",
+            "heading": "IsCallable",
+            "anchor": "sec-iscallable",
+            "startLine": 5793,
+            "endLine": 5793
+          },
+          "quotation": "If <var>argument</var> has a <var class=\"field\">[[Call]]</var> internal method, return <emu-val>true</emu-val>."
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-ISC-005",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.2.3",
+            "heading": "IsCallable",
+            "anchor": "sec-iscallable",
+            "startLine": 5793,
+            "endLine": 5793
+          },
+          "quotation": "Return <emu-val>false</emu-val>."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:IsCallable:48",
+      "declarationKind": "def",
+      "declarationName": "IsCallable",
+      "leanRange": {
+        "startLine": 48,
+        "endLine": 55
+      },
+      "semanticIds": [
+        "ECMASCRIPT-ISC-SEM-002",
+        "ECMASCRIPT-ISC-SEM-003",
+        "ECMASCRIPT-ISC-SEM-004"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "ECMASCRIPT-ISC-SEM-002",
+          "classification": "SOURCE_FACT",
+          "statement": "If argument is not an Object, IsCallable returns false.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-ISC-003"
+          ]
+        },
+        {
+          "semanticId": "ECMASCRIPT-ISC-SEM-003",
+          "classification": "SOURCE_FACT",
+          "statement": "If argument has a [[Call]] internal method, IsCallable returns true.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-ISC-004"
+          ]
+        },
+        {
+          "semanticId": "ECMASCRIPT-ISC-SEM-004",
+          "classification": "SOURCE_FACT",
+          "statement": "If argument is an Object but does not have [[Call]], IsCallable returns false.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-ISC-005"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "ECMASCRIPT-2025-ISC-003",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.2.3",
+            "heading": "IsCallable",
+            "anchor": "sec-iscallable",
+            "startLine": 5793,
+            "endLine": 5793
+          },
+          "quotation": "If <var>argument</var> <emu-xref href=\"#sec-object-type\" id=\"_ref_2317\"><a href=\"#sec-object-type\">is not an Object</a></emu-xref>, return <emu-val>false</emu-val>."
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-ISC-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.2.3",
+            "heading": "IsCallable",
+            "anchor": "sec-iscallable",
+            "startLine": 5793,
+            "endLine": 5793
+          },
+          "quotation": "If <var>argument</var> has a <var class=\"field\">[[Call]]</var> internal method, return <emu-val>true</emu-val>."
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-ISC-005",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.2.3",
+            "heading": "IsCallable",
+            "anchor": "sec-iscallable",
+            "startLine": 5793,
+            "endLine": 5793
+          },
+          "quotation": "Return <emu-val>false</emu-val>."
+        }
+      ],
+      "unresolvedReferences": []
+    },
+    {
+      "entryId": "def:isCallable:56",
+      "declarationKind": "def",
+      "declarationName": "isCallable",
+      "leanRange": {
+        "startLine": 56,
+        "endLine": 60
+      },
+      "semanticIds": [
+        "ECMASCRIPT-ISC-SEM-002",
+        "ECMASCRIPT-ISC-SEM-005"
+      ],
+      "theoremObligationIds": [],
+      "claims": [
+        {
+          "semanticId": "ECMASCRIPT-ISC-SEM-002",
+          "classification": "SOURCE_FACT",
+          "statement": "If argument is not an Object, IsCallable returns false.",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-ISC-003"
+          ]
+        },
+        {
+          "semanticId": "ECMASCRIPT-ISC-SEM-005",
+          "classification": "DERIVED_INTERPRETATION",
+          "statement": "For a fixed argument, IsCallable is deterministic and total over its input type (returns either true or false).",
+          "evidenceIds": [
+            "ECMASCRIPT-2025-ISC-003",
+            "ECMASCRIPT-2025-ISC-004",
+            "ECMASCRIPT-2025-ISC-005"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "ECMASCRIPT-2025-ISC-003",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.2.3",
+            "heading": "IsCallable",
+            "anchor": "sec-iscallable",
+            "startLine": 5793,
+            "endLine": 5793
+          },
+          "quotation": "If <var>argument</var> <emu-xref href=\"#sec-object-type\" id=\"_ref_2317\"><a href=\"#sec-object-type\">is not an Object</a></emu-xref>, return <emu-val>false</emu-val>."
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-ISC-004",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.2.3",
+            "heading": "IsCallable",
+            "anchor": "sec-iscallable",
+            "startLine": 5793,
+            "endLine": 5793
+          },
+          "quotation": "If <var>argument</var> has a <var class=\"field\">[[Call]]</var> internal method, return <emu-val>true</emu-val>."
+        },
+        {
+          "evidenceId": "ECMASCRIPT-2025-ISC-005",
+          "sourceKind": "HTML",
+          "documentPath": "documents/sources/ecmascript/2025/raw/specification.html",
+          "documentSha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+          "locator": {
+            "section": "7.2.3",
+            "heading": "IsCallable",
+            "anchor": "sec-iscallable",
+            "startLine": 5793,
+            "endLine": 5793
+          },
+          "quotation": "Return <emu-val>false</emu-val>."
+        }
+      ],
+      "unresolvedReferences": []
+    }
+  ],
+  "diagnostics": {
+    "declarationsWithoutReferences": [],
+    "unresolvedReferences": []
+  }
+}

@@ -2,6 +2,7 @@ import type {
   FormalizationStage,
   RunState,
 } from "./workflow.js"
+import { leanDeclarationNamespace } from "./lean-language.js"
 
 export type StagePlan = {
   agent: string
@@ -22,7 +23,7 @@ export const STAGE_PLANS:
     revisionStages: [],
     task: [
       "Produce or revise the bounded language architecture for the requested unit.",
-      "When approved shared architecture exists, produce an instruction-specific delta instead of rediscovering language-wide background.",
+      "When approved shared architecture exists, produce a unit-specific delta instead of rediscovering language-wide background.",
       "On revision, read the latest critic artifact first and repair every BLOCKER/MAJOR finding without unrelated redesign.",
       "Use only project-approved sources and tools.",
       "Do not approve any human gate.",
@@ -37,7 +38,7 @@ export const STAGE_PLANS:
     ],
     task: [
       "Independently critique the architecture candidate.",
-      "Check bounded scope, evidence/design classification, state model, and every state-affecting ambiguity; do not redesign the unit.",
+      "Check bounded scope, evidence/design classification, applicable value/state model, and every behavior-affecting ambiguity; do not redesign the unit.",
       "Request revision only for unresolved BLOCKER/MAJOR findings.",
       "MINOR/NOTE-only findings are non-blocking: record them and return SUCCESS to the human gate.",
       "If suitable, mark it ready for Human Gate A.",
@@ -80,7 +81,7 @@ export const STAGE_PLANS:
     task: [
       "Independently critique the semantic interpretation.",
       "Check every SOURCE_FACT against exact evidence IDs and every derived/design claim against explicit dependencies.",
-      "Build a compact execution-branch matrix (guards, operand lookup failures, state writes/no-op) and report only real mismatches.",
+      "Build a compact behavior-branch matrix covering applicable input/type cases, errors, host variation, guards, and state effects; do not demand inapplicable machine features.",
       "Request source or semantic revision only when the problem is BLOCKER/MAJOR.",
       "MINOR/NOTE-only findings are non-blocking: record them and return SUCCESS to the human gate.",
       "Otherwise mark it ready for Human Gate B.",
@@ -96,7 +97,7 @@ export const STAGE_PLANS:
       "Implement the Gate-B-approved bounded semantics in Lean.",
       "Enumerate exact approved semantic IDs before writing and validate every traceability citation against them.",
       "On revision, read the latest Lean-mapping critic artifact first and make only its required BLOCKER/MAJOR repairs.",
-      "Place all unit-specific declarations under namespace Spec2Lean.PTX.<LeanModuleName> supplied by the orchestrator.",
+      "Place all unit-specific declarations under namespace <LEAN_NAMESPACE> supplied by the orchestrator.",
       "Import Spec2Lean.Basic, never the Spec2Lean root module, from a module that the root will later import.",
       "Use Lean verification tools.",
       "Never use sorry, admit, new axioms, or unsafe.",
@@ -113,7 +114,7 @@ export const STAGE_PLANS:
     task: [
       "Independently compare the Lean mapping with the approved semantics.",
       "Compilation alone is not semantic correctness.",
-      "Compare every executable and relational branch against the approved execution-branch matrix, including false guards and partial lookups.",
+      "Compare every executable and relational branch against the approved behavior-branch matrix, including all applicable input/type, error, host, guard, and state cases.",
       "Use small Lean probes only when needed to decide a concrete mapping question; do not begin theorem design here.",
       "Request revision only for unresolved BLOCKER/MAJOR findings; MINOR/NOTE-only findings proceed to the human gate.",
       "If faithful, mark it ready for Human Gate C.",
@@ -131,7 +132,7 @@ export const STAGE_PLANS:
       "Write and verify the complete obligation artifact before emitting the result protocol.",
       "Copy the exact orchestrator-supplied SUCCESS stage name; never invent or reuse a *_REVIEW alias.",
       "On revision, read the latest theorem-strength critic artifact first and repair every BLOCKER/MAJOR finding.",
-      "Pin the intended Lean namespace to Spec2Lean.PTX.<LeanModuleName> and make supporting theorem names unit-specific where collision is possible.",
+      "Pin the intended Lean namespace to <LEAN_NAMESPACE> and make supporting theorem names unit-specific where collision is possible.",
       "Do not write proofs yet.",
       "Avoid vacuous, circular, or trivially functional determinism claims.",
     ].join("\n"),
@@ -206,7 +207,7 @@ export const STAGE_PLANS:
       "",
       "FINAL-REVIEW DISCIPLINE:",
       "This is an aggregation review, not a fresh research pass.",
-      "Do not repeat broad PTX source searches that were already independently checked",
+      "Do not repeat broad official-source searches that were already independently checked",
       "by the architecture, semantic, Lean-mapping, and theorem-strength critics.",
       "",
       "Read the latest:",
@@ -257,5 +258,8 @@ export function planForRun(
     )
   }
 
-  return plan
+  return {
+    ...plan,
+    task: plan.task.replaceAll("<LEAN_NAMESPACE>", leanDeclarationNamespace(run)),
+  }
 }
