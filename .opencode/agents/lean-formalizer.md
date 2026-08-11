@@ -1,7 +1,7 @@
 ---
 description: Converts human-approved semantic interpretations into traceable Lean 4 definitions without changing the approved meaning
 mode: primary
-model: opencode/deepseek-v4-flash-free
+model: openai/gpt-5.3-codex-spark
 temperature: 0
 steps: 64
 permission:

@@ -23,8 +23,10 @@ import { installProofPackage, prepareLeanPackage, type LeanPackageInfo } from ".
 import { prohibitedLeanTokens, verifyLeanFile } from "./lean-local.js"
 import { startOpenCode, unwrap } from "./opencode.js"
 import {
+  latestObligationPath,
   proofArtifactPath,
   proofStatementContractIssues,
+  proofTargets,
   proofTargetSummary,
   type ProofTarget,
 } from "./proof-plan.js"
@@ -203,7 +205,10 @@ function repairContractLines(run: RunState): string[] {
   ]
 }
 
-export function buildGeneralPrompt(run: RunState): string {
+export function buildGeneralPrompt(
+  run: RunState,
+  supplementalStageContext = "",
+): string {
   const plan = planForRun(run)
   const artifact = artifactContractForRun(run)
   const revisionTargets =
@@ -326,6 +331,9 @@ export function buildGeneralPrompt(run: RunState): string {
           "Do not spend the session re-performing already-completed source research.",
         ]
       : []),
+    ...(supplementalStageContext.length === 0
+      ? []
+      : ["", supplementalStageContext]),
     "",
     "# Safety Rules",
     "",
@@ -350,6 +358,43 @@ export function buildGeneralPrompt(run: RunState): string {
     "Use RETRY for step/time/tool/context/resource exhaustion or interrupted work.",
     "For BLOCKED, nextStage MUST be: BLOCKED.",
     "Do not put the result line in a Markdown fence.",
+  ].join("\n")
+}
+
+export async function buildTheoremStrengthContractContext(
+  run: RunState,
+): Promise<string> {
+  if (run.stage !== "THEOREM_STRENGTH_CRITIQUE") return ""
+
+  const obligationPath = await latestObligationPath(run)
+  const targets = await proofTargets(run)
+  return [
+    "# Deterministically Validated Theorem Contract Input",
+    "",
+    `Validated obligation artifact: \`${obligationPath}\``,
+    `Complete declaration count supplied: ${targets.length}`,
+    "The declarations below were structurally validated by the orchestrator.",
+    "They intentionally live in theorem_obligations[].lean_statement_sketch in the JSON contract.",
+    "No theorem/lemma declarations are expected in the Lean mapping before PROOF_GENERATION.",
+    "Review these exact statements for truth, strength, non-vacuity, and coverage.",
+    "Do not revise merely because the mapping .lean file contains definitions only.",
+    "",
+    "Your review artifact MUST contain this audit block with the exact path/count and every name:",
+    `Validated obligation artifact: \`${obligationPath}\``,
+    `Complete declaration count reviewed: ${targets.length}`,
+    "Declaration names reviewed:",
+    ...targets.map((target) => `- ${target.name}`),
+    "",
+    "# Exact declarations to review",
+    "",
+    ...targets.flatMap((target) => [
+      `## ${target.obligationId}: ${target.name}`,
+      target.statement,
+      ...(target.strengthRisks.length === 0
+        ? []
+        : ["Strength caveats:", ...target.strengthRisks.map((risk) => `- ${risk}`)]),
+      "",
+    ]),
   ].join("\n")
 }
 
@@ -687,7 +732,8 @@ export async function executeTick(
     proofContext = await buildProofPrompt(run)
     prompt = proofContext.prompt
   } else {
-    prompt = buildGeneralPrompt(run)
+    const theoremStrengthContext = await buildTheoremStrengthContractContext(run)
+    prompt = buildGeneralPrompt(run, theoremStrengthContext)
   }
 
   if (dryRun) {
@@ -861,7 +907,7 @@ export async function executeTick(
           }
         }
       }
-    } else if (result.outcome === "SUCCESS") {
+    } else if (result.outcome === "SUCCESS" || result.outcome === "REVISE") {
       const verification = await verifyExpectedArtifact(run)
       if (!verification.ok) {
         result = {
@@ -870,6 +916,7 @@ export async function executeTick(
           summary: `Agent reported SUCCESS but artifact verification failed: ${verification.issues.join(" | ")}`,
         }
       } else if (
+        result.outcome === "SUCCESS" &&
         run.stage === "SEMANTIC_EXTRACTION" &&
         run.semanticV2?.mode === "DELTA_FAST_PATH"
       ) {

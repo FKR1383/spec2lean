@@ -1,7 +1,7 @@
 ---
 description: Minimal no-tool agent used only to measure model service latency
 mode: primary
-model: opencode/deepseek-v4-flash-free
+model: openai/gpt-5.3-codex-spark
 temperature: 0
 steps: 1
 permission:

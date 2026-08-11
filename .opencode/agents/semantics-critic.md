@@ -1,7 +1,7 @@
 ---
 description: Reviews only the bounded semantic artifact against approved architecture and curated evidence before Gate B
 mode: primary
-model: opencode/deepseek-v4-flash-free
+model: openai/gpt-5.3-codex-spark
 temperature: 0
 steps: 48
 permission:

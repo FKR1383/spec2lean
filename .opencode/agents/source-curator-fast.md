@@ -1,7 +1,7 @@
 ---
 description: Fast bounded PTX source curator using deterministic indexed evidence first
 mode: primary
-model: opencode/deepseek-v4-flash-free
+model: openai/gpt-5.3-codex-spark
 temperature: 0
 steps: 16
 permission:

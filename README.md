@@ -215,10 +215,16 @@ repository, and opens a candidate Lean file:
 ```
 
 This works in a local checkout and in VS Code Remote SSH/container sessions;
-run it in the environment that contains the repository. In the opened Lean
+run it in the environment that contains the repository. The evidence panel
+opens automatically beside the first mapped declaration. In the opened Lean
 file:
 
+When the launcher reports an extension version update, run
+`Developer: Restart Extension Host` once in an already-open Remote window.
+Later launcher calls keep the active matching version and require no restart.
+
 1. click the `Spec2Lean` CodeLens above a declaration;
+   alternatively click the persistent `Spec2Lean Evidence` status-bar item;
 2. inspect claims and hash-verified evidence in the side panel;
 3. select a PDF evidence item to see the cited page and highlighted box;
 4. optionally record `Confirm mapping`, `Request change`, or `Question`

@@ -35,8 +35,10 @@ import {
   verifiedProofArtifactPath,
 } from "./proof-plan.js"
 import { reconcileProofStageResult } from "./proof-stage-result.js"
+import { buildTheoremStrengthContractContext } from "./runner.js"
 import {
   compareProofWithApprovedTheorems,
+  theoremStrengthReviewAuditIssues,
   validateTheoremObligationDocument,
 } from "./theorem-contract.js"
 import { loadAgentModel, loadProjectModel, REPO_ROOT } from "./repo.js"
@@ -139,6 +141,28 @@ assert(
     theorem_obligations: [{ obligation_id: "T-2", lean_statement_sketch: "theorem incomplete : ..." }],
   }).issues.length > 0,
   "theorem contract rejects placeholders before human approval",
+)
+const validTheoremReview = [
+  "Validated obligation artifact: `fixtures/obligations-v1.json`",
+  "Complete declaration count reviewed: 1",
+  "Declaration names reviewed:",
+  "- exact_contract",
+].join("\n")
+assert(
+  theoremStrengthReviewAuditIssues(
+    validTheoremReview,
+    "fixtures/obligations-v1.json",
+    theoremContract.declarations,
+  ).length === 0,
+  "theorem-strength review audit binds exact path, count, and names",
+)
+assert(
+  theoremStrengthReviewAuditIssues(
+    validTheoremReview.replace("count reviewed: 1", "count reviewed: 0"),
+    "fixtures/obligations-v1.json",
+    theoremContract.declarations,
+  ).some((issue) => issue.includes("validated obligation contract contains 1")),
+  "theorem-strength review audit rejects a false zero-declaration report",
 )
 
 let activeBatchOperations = 0
@@ -446,6 +470,16 @@ try {
   const targets = await proofTargets(run)
   assert(targets.length === 16, "mov.b32 proof target extraction")
   assert(new Set(targets.map((x) => x.name)).size === targets.length, "proof target names unique")
+  const theoremCriticContext = await buildTheoremStrengthContractContext({
+    ...run,
+    stage: "THEOREM_STRENGTH_CRITIQUE",
+  })
+  assert(
+    theoremCriticContext.includes("Complete declaration count supplied: 16") &&
+      theoremCriticContext.includes("No theorem/lemma declarations are expected in the Lean mapping") &&
+      targets.every((target) => theoremCriticContext.includes(target.name)),
+    "theorem-strength critic receives the deterministic JSON theorem contract",
+  )
 
   const proofPath = resolve(REPO_ROOT, "candidates/ptx/9.3/units/mov-b32/lean/MovB32Proofs-v1.lean")
   try {
@@ -610,7 +644,7 @@ for (const agentFile of agentFiles) {
   assert(!text.includes("Do not prove properties for another PTX instruction."), `${agentFile} no stale proof lock`)
 }
 assert(
-  (await loadAgentModel("proof-engineer")).full === "opencode/deepseek-v4-flash-free",
+  (await loadAgentModel("proof-engineer")).full === "openai/gpt-5.3-codex-spark",
   "proof engineer uses the bounded DeepSeek migration route",
 )
 const semanticCriticPrompt = await readFile(

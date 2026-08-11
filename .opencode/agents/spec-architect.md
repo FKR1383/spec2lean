@@ -1,7 +1,7 @@
 ---
 description: Discovers and documents language-wide formalization architecture from official specification evidence while separating source facts from design choices
 mode: primary
-model: opencode/deepseek-v4-flash-free
+model: openai/gpt-5.3-codex-spark
 temperature: 0
 steps: 64
 permission:

@@ -6,10 +6,15 @@ From the repository root, the simplest development launch is:
 ./spec2lean gui candidates/ptx/9.3/units/or-b16/lean/OrB16-v2.lean
 ```
 
-This packages and force-installs the local extension as a VSIX on the active
-VS Code server, then opens the repository plus the requested Lean file in a
-normal new window. It works with Remote VS Code CLIs that do not support
+This packages the local extension as a VSIX, installs it on the active VS Code
+server only when its version changed, then opens the repository plus the
+requested Lean file in a normal new window. It works with Remote VS Code CLIs that do not support
 `--extensionDevelopmentPath`.
+
+After an extension version update, an already-running Remote Extension Host
+must be restarted once with `Developer: Restart Extension Host`. Subsequent
+launcher calls detect the installed version and do not reinstall or invalidate
+the active extension process.
 
 Run that command in the environment where the repository lives. In a local
 checkout it installs into local VS Code; in an SSH/container checkout it
@@ -19,10 +24,15 @@ Node/npm dependencies already installed under `editors/vscode`, and VS Code
 1.95 or newer.
 
 This extension keeps the normal Lean editor intact and opens a synchronized
-evidence panel beside it. CodeLens links above every discovered declaration
+evidence panel beside the first mapped Lean file automatically. CodeLens links above every discovered declaration
 show semantic claims, reviewed project-design provenance, and hash-verified
 official source fragments. An unmapped declaration gets a visible warning
 CodeLens instead of being silently hidden.
+
+Set `spec2lean.autoOpenEvidence` to `false` if you prefer to open the panel only
+through a CodeLens or the `Spec2Lean: Show Evidence for Declaration` command.
+The `Spec2Lean Evidence` status-bar item remains available even when editor
+CodeLens rendering is disabled.
 
 CodeLens is deliberately hidden if the open Lean buffer no longer matches the
 SHA-256 recorded in the manifest. Refresh or rebuild the manifest instead of

@@ -2,18 +2,22 @@
   "name": "spec2lean-vscode",
   "displayName": "Spec2Lean Evidence",
   "description": "Source-to-Lean traceability and human feedback for Spec2Lean.",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "publisher": "spec2lean",
   "license": "MIT",
   "engines": {
     "vscode": "^1.95.0"
   },
+  "extensionKind": [
+    "workspace"
+  ],
   "categories": [
     "Other",
     "Programming Languages"
   ],
   "activationEvents": [
     "onLanguage:lean4",
+    "onStartupFinished",
     "onCommand:spec2lean.showEvidence",
     "onCommand:spec2lean.buildEvidenceManifest",
     "onCommand:spec2lean.refreshEvidence"
@@ -76,6 +80,11 @@
           "type": "boolean",
           "default": true,
           "description": "Update an open evidence panel as the Lean cursor moves between mapped declarations."
+        },
+        "spec2lean.autoOpenEvidence": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the evidence panel automatically when the first mapped Lean file is opened in a window."
         }
       }
     }

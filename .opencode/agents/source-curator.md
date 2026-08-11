@@ -1,7 +1,7 @@
 ---
 description: Builds bounded, source-only evidence bundles from official specifications without interpreting semantics or writing Lean
 mode: primary
-model: opencode/deepseek-v4-flash-free
+model: openai/gpt-5.3-codex-spark
 temperature: 0
 steps: 96
 permission:

@@ -4,7 +4,9 @@ import { resolve } from "node:path"
 import { artifactContractForRun } from "./artifact-contract.js"
 import { validateArtifactContent } from "./artifact-content.js"
 import { prohibitedLeanTokens, verifyLeanFile } from "./lean-local.js"
+import { latestObligationPath, proofTargets } from "./proof-plan.js"
 import { REPO_ROOT } from "./repo.js"
+import { theoremStrengthReviewAuditIssues } from "./theorem-contract.js"
 import type { RunState } from "./workflow.js"
 
 export type ArtifactVerification = {
@@ -38,6 +40,18 @@ export async function verifyExpectedArtifact(run: RunState): Promise<ArtifactVer
   }
 
   issues.push(...validateArtifactContent(run, source, parsedJson))
+
+  if (run.stage === "THEOREM_STRENGTH_CRITIQUE") {
+    try {
+      const obligationPath = await latestObligationPath(run)
+      const targets = await proofTargets(run)
+      issues.push(...theoremStrengthReviewAuditIssues(source, obligationPath, targets))
+    } catch (error) {
+      issues.push(
+        `could not validate theorem-strength review against its obligation contract: ${String(error)}`,
+      )
+    }
+  }
 
   if (path.endsWith(".lean")) {
     const banned = await prohibitedLeanTokens(path)

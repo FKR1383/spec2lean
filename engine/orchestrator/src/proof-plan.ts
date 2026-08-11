@@ -26,7 +26,7 @@ type ObligationArtifact = {
   }>
 }
 
-async function latestObligationPath(run: RunState): Promise<string> {
+export async function latestObligationPath(run: RunState): Promise<string> {
   const dirRelative = `${run.artifactRoot}/theorems`
   const files = (await readdir(resolve(REPO_ROOT, dirRelative))) as string[]
   const candidates = files

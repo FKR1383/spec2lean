@@ -114,6 +114,17 @@ class ManifestIndex {
       ))
   }
 
+  firstEntryForDocument(document: vscode.TextDocument): {
+    indexed: IndexedManifest
+    entry: EvidenceEntry
+  } | undefined {
+    const indexed = this.forDocument(document)
+    if (indexed === undefined) return undefined
+    const entry = [...indexed.manifest.entries]
+      .sort((left, right) => left.leanRange.startLine - right.leanRange.startLine)[0]
+    return entry === undefined ? undefined : { indexed, entry }
+  }
+
   entryAt(document: vscode.TextDocument, zeroBasedLine: number): {
     indexed: IndexedManifest
     entry: EvidenceEntry
@@ -514,9 +525,38 @@ async function runForDocument(root: string, document: vscode.TextDocument): Prom
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const index = new ManifestIndex()
   const panel = new EvidencePanel(context.extensionUri)
+  const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100)
+  status.command = "spec2lean.showEvidence"
+  status.text = "$(references) Spec2Lean Evidence"
+  status.tooltip = "Open evidence for the current mapped Lean declaration"
+  status.show()
   await index.refresh()
+  let automaticOpenCompleted = false
+  const openInitialEvidence = async (
+    editor = vscode.window.activeTextEditor,
+  ): Promise<void> => {
+    if (
+      automaticOpenCompleted ||
+      panel.isOpen() ||
+      editor === undefined ||
+      !vscode.workspace.getConfiguration("spec2lean").get<boolean>("autoOpenEvidence", true)
+    ) return
+    const located = index.entryAt(editor.document, editor.selection.active.line)
+      ?? index.firstEntryForDocument(editor.document)
+    if (located === undefined) return
+    automaticOpenCompleted = true
+    await panel.show(located.indexed, located.entry)
+  }
+  const scheduleInitialEvidence = (editor?: vscode.TextEditor): void => {
+    setTimeout(() => {
+      void openInitialEvidence(editor).catch((error: unknown) => {
+        console.warn("Could not auto-open Spec2Lean evidence", error)
+      })
+    }, 250)
+  }
 
   context.subscriptions.push(
+    status,
     vscode.languages.registerCodeLensProvider(
       [{ language: "lean4", scheme: "file" }, { pattern: "**/*.lean", scheme: "file" }],
       new EvidenceCodeLensProvider(index),
@@ -526,7 +566,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       async (manifestPath?: string, entryId?: string) => {
         const editor = vscode.window.activeTextEditor
         const located = manifestPath === undefined || entryId === undefined
-          ? editor === undefined ? undefined : index.entryAt(editor.document, editor.selection.active.line)
+          ? editor === undefined
+            ? undefined
+            : index.entryAt(editor.document, editor.selection.active.line)
+              ?? index.firstEntryForDocument(editor.document)
           : undefined
         if (located !== undefined) {
           await panel.show(located.indexed, located.entry)
@@ -595,7 +638,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const located = index.entryAt(event.textEditor.document, event.selections[0]?.active.line ?? 0)
       if (located !== undefined) await panel.show(located.indexed, located.entry, true)
     }),
+    vscode.window.onDidChangeActiveTextEditor((editor) => {
+      if (editor !== undefined) scheduleInitialEvidence(editor)
+    }),
   )
+
+  scheduleInitialEvidence()
 
   const watcher = vscode.workspace.createFileSystemWatcher("**/runs/*/traceability/evidence-*.json")
   let refreshTimer: ReturnType<typeof setTimeout> | undefined

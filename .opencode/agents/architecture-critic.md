@@ -1,7 +1,7 @@
 ---
 description: Reviews only bounded architecture scope, provenance classification, and state-affecting design before Gate A
 mode: primary
-model: opencode/deepseek-v4-flash-free
+model: openai/gpt-5.3-codex-spark
 temperature: 0
 steps: 40
 permission:

@@ -147,7 +147,15 @@ case "$cmd" in
     EXTENSION="$ROOT/editors/vscode"
     command -v code >/dev/null 2>&1 || { echo "VS Code CLI 'code' is not on PATH" >&2; exit 2; }
     npm --prefix "$EXTENSION" run package:vsix
-    code --install-extension "$EXTENSION/spec2lean-vscode.vsix" --force
+    extension_version="$(node -e 'process.stdout.write(require(process.argv[1]).version)' "$EXTENSION/package.json")"
+    installed_version="$(code --list-extensions --show-versions 2>/dev/null | awk -F@ '$1 == "spec2lean.spec2lean-vscode" { print $2; exit }')"
+    if [[ "$installed_version" != "$extension_version" ]]; then
+      code --install-extension "$EXTENSION/spec2lean-vscode.vsix" --force
+      echo "Spec2Lean Evidence updated: ${installed_version:-not-installed} -> $extension_version"
+      echo "If this VS Code Remote authority was already open, run 'Developer: Restart Extension Host' once."
+    else
+      echo "Spec2Lean Evidence $extension_version is already installed; keeping the active extension intact."
+    fi
     if (($#)); then
       target="$ROOT/$1"
       [[ -f "$target" ]] || { echo "Lean file not found: $1" >&2; exit 2; }

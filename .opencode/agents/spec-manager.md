@@ -1,7 +1,7 @@
 ---
 description: Manages the sequential Spec2Lean workflow, dependencies, human gates, and artifact lifecycle without acting as semantic authority
 mode: primary
-model: opencode/deepseek-v4-flash-free
+model: openai/gpt-5.3-codex-spark
 temperature: 0
 steps: 32
 permission:

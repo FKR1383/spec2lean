@@ -11,6 +11,10 @@ export type TheoremContract = {
   issues: string[]
 }
 
+function escapeRegex(source: string): string {
+  return source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
@@ -217,6 +221,41 @@ export function compareProofWithApprovedTheorems(
       issues.push(`missing approved theorem declaration: ${expected.name}`)
     } else if (declaration.canonicalStatement !== expected.canonicalStatement) {
       issues.push(`approved theorem statement changed: ${expected.name}`)
+    }
+  }
+  return issues
+}
+
+export function theoremStrengthReviewAuditIssues(
+  review: string,
+  obligationPath: string,
+  declarations: Array<Pick<TheoremDeclaration, "name">>,
+): string[] {
+  const issues: string[] = []
+  const pathPattern = new RegExp(
+    `Validated obligation artifact:\\s*\u0060?${escapeRegex(obligationPath)}\u0060?`,
+    "i",
+  )
+  if (!pathPattern.test(review)) {
+    issues.push(`theorem-strength review must identify validated obligation artifact ${obligationPath}`)
+  }
+
+  const countMatch = review.match(
+    /Complete declaration count reviewed:\s*\*{0,2}(\d+)\*{0,2}/i,
+  )
+  if (countMatch === null) {
+    issues.push("theorem-strength review must state the complete declaration count reviewed")
+  } else if (Number(countMatch[1]) !== declarations.length) {
+    issues.push(
+      `theorem-strength review counted ${countMatch[1]} declarations; ` +
+      `the validated obligation contract contains ${declarations.length}`,
+    )
+  }
+
+  for (const declaration of declarations) {
+    const namePattern = new RegExp(`\\b${escapeRegex(declaration.name)}\\b`)
+    if (!namePattern.test(review)) {
+      issues.push(`theorem-strength review does not identify declaration ${declaration.name}`)
     }
   }
   return issues

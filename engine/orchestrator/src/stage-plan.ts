@@ -127,6 +127,7 @@ export const STAGE_PLANS:
     revisionStages: [],
     task: [
       "Generate a small set of meaningful theorem obligations.",
+      "Store each complete header-only Lean theorem declaration in theorem_obligations[].lean_statement_sketch; this JSON is the pre-proof theorem contract.",
       "Write and verify the complete obligation artifact before emitting the result protocol.",
       "Copy the exact orchestrator-supplied SUCCESS stage name; never invent or reuse a *_REVIEW alias.",
       "On revision, read the latest theorem-strength critic artifact first and repair every BLOCKER/MAJOR finding.",
@@ -144,6 +145,8 @@ export const STAGE_PLANS:
     ],
     task: [
       "Independently review theorem strength and non-vacuity.",
+      "Review the deterministically supplied declarations from the latest obligations JSON; theorem declarations are intentionally not written to a .lean proof file until PROOF_GENERATION.",
+      "Never report declarations as missing merely because the Lean mapping file contains definitions only.",
       "Extract and count complete theorem declarations; reject placeholders, truncated statements, or duplicate names.",
       "For determinism/totality/correspondence obligations, analyze constructor overlap and missing premises and use a minimal Lean counterexample/probe when the result is not syntactically certain.",
       "A compiling statement is not evidence that the theorem is true or non-vacuous.",
