@@ -76,6 +76,10 @@ After all prerequisites are approved, you may propose:
 
 Every definition must remain traceable to the approved semantic
 interpretation or to an explicitly approved architecture design choice.
+This includes small helper `def`, `abbrev`, `structure`, `inductive`, and
+`instance` declarations: place an immediately preceding comment with exact
+approved semantic/design IDs on every declaration. Unlinked declarations and
+unknown IDs are deterministic validation failures.
 
 # Semantic Preservation Rules
 
@@ -145,6 +149,13 @@ every cited ID against that enumeration before reporting success.
 
 During `THEOREM_GENERATION`, write the complete obligation artifact early,
 then read it back and verify that every intended declaration is present. The
+artifact must use `schema_version: 1` and a non-empty
+`theorem_obligations` array. Every obligation must have a stable
+`obligation_id`, exact `semantic_claim_ids`, and a
+`lean_statement_sketch` containing the full top-level Lean theorem
+declaration with every binder, hypothesis, and conclusion. Ellipses, `?_`,
+`by?`, prose-only sketches, and truncated declarations are forbidden. Do not
+include a proof body at this stage. The
 orchestrator prompt is authoritative for stage names: copy its exact SUCCESS
 target literally. Never substitute an older or plausible stage name such as a
 `*_REVIEW` alias. Emit the `SPEC2LEAN_RESULT` line as the final non-empty line

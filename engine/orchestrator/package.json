@@ -23,6 +23,7 @@
     "doctor": "tsx src/doctor.ts",
     "perf-report": "tsx src/perf-report.ts",
     "ptx-index": "tsx src/ptx-index.ts",
+    "ingest": "tsx src/source-ingest.ts",
     "semantic-ir": "tsx src/semantic-ir-cli.ts",
     "traceability": "tsx src/traceability-cli.ts",
     "semantic-report": "tsx src/semantic-v2-report.ts"

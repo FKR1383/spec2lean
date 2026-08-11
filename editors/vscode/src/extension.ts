@@ -100,6 +100,8 @@ class ManifestIndex {
     const documentPath = relative(this.root, document.uri.fsPath).split(sep).join("/")
     const documentSha256 = sha256(Buffer.from(document.getText(), "utf8"))
     const rank = (indexed: IndexedManifest): number =>
+      (indexed.manifest.diagnostics.declarationsWithoutReferences.length === 0 ? 1_000_000_000 : 0) +
+      (indexed.manifest.diagnostics.unresolvedReferences.length === 0 ? 100_000_000 : 0) +
       (indexed.manifest.diagnostics.pdfAlignment?.matched ?? 0) * 1_000_000 +
       indexed.manifest.entries.reduce((sum, entry) => sum + entry.evidence.length, 0)
     const preferred = (matches: IndexedManifest[]): IndexedManifest | undefined =>
@@ -138,12 +140,13 @@ class EvidenceCodeLensProvider implements vscode.CodeLensProvider {
     const indexed = this.index.forDocument(document)
     if (indexed === undefined) return []
     return indexed.manifest.entries
-      .filter((entry) => entry.semanticIds.length > 0 || entry.evidence.length > 0)
       .map((entry) => new vscode.CodeLens(
         new vscode.Range(entry.leanRange.startLine - 1, 0, entry.leanRange.startLine - 1, 0),
         {
           command: "spec2lean.showEvidence",
-          title: `$(references) Spec2Lean: ${entry.claims.length} claims · ${entry.evidence.length} sources`,
+          title: entry.unresolvedReferences.length > 0 || (entry.semanticIds.length === 0 && entry.evidence.length === 0)
+            ? `$(warning) Spec2Lean: provenance incomplete`
+            : `$(references) Spec2Lean: ${entry.claims.length} claims · ${entry.evidence.length} sources`,
           arguments: [indexed.manifestPath, entry.entryId],
           tooltip: `Show hash-bound source evidence for ${entry.declarationName}`,
         },
@@ -249,6 +252,7 @@ class EvidencePanel {
       unit: indexed.manifest.unit,
       leanPath: indexed.manifest.leanDocument.path,
       entry,
+      diagnostics: indexed.manifest.diagnostics,
       evidence,
     }
     await this.panel.webview.postMessage({ type: "show", model })
@@ -362,6 +366,7 @@ class EvidencePanel {
     button.evidence.active { outline: 2px solid var(--vscode-focusBorder); }
     .verified { color: var(--vscode-testing-iconPassed); }
     .problem { color: var(--vscode-errorForeground); }
+    .warning { border: 1px solid var(--vscode-editorWarning-foreground); color: var(--vscode-editorWarning-foreground); padding: 8px; margin: 8px 0; }
     pre { white-space: pre-wrap; word-break: break-word; background: var(--vscode-textCodeBlock-background); padding: 12px; }
     #pdfWrap { position: relative; display: inline-block; max-width: 100%; }
     #pdfCanvas { max-width: 100%; height: auto; }
@@ -376,8 +381,9 @@ class EvidencePanel {
   <header><h1 id="title">Spec2Lean Evidence</h1><div id="subtitle" class="meta">Select a mapped Lean declaration.</div></header>
   <main id="content" hidden>
     <aside>
+      <div id="provenanceWarning" class="warning" hidden></div>
       <h2>Semantic claims</h2><div id="claims"></div>
-      <h2>Official evidence</h2><div id="evidenceList"></div>
+      <h2>Evidence &amp; provenance</h2><div id="evidenceList"></div>
       <h2>Human feedback</h2>
       <select id="decision" aria-label="Feedback decision">
         <option value="QUESTION">Question</option>
@@ -406,10 +412,15 @@ class EvidencePanel {
     const text = (node, value) => { node.textContent = value ?? ''; };
     function renderModel(next) {
       model = next;
+      selectedEvidence = undefined;
       byId('content').hidden = false;
       byId('empty').hidden = true;
       text(byId('title'), next.entry.declarationName);
       text(byId('subtitle'), next.unit + ' · ' + next.entry.declarationKind + ' · Lean lines ' + next.entry.leanRange.startLine + '–' + next.entry.leanRange.endLine);
+      const warnings = [];
+      if (next.entry.semanticIds.length === 0 && next.entry.evidence.length === 0) warnings.push('This declaration has no provenance reference.');
+      if (next.entry.unresolvedReferences.length) warnings.push('Unresolved IDs: ' + next.entry.unresolvedReferences.join(', '));
+      const warning = byId('provenanceWarning'); warning.hidden = warnings.length === 0; text(warning, warnings.join(' '));
       const claims = byId('claims'); claims.replaceChildren();
       for (const claim of next.entry.claims) {
         const card = document.createElement('div'); card.className = 'card';
@@ -425,7 +436,13 @@ class EvidencePanel {
         text(button, (evidence.sourceVerified ? '✓ ' : '⚠ ') + evidence.evidenceId);
         button.addEventListener('click', () => selectEvidence(evidence)); list.append(button);
       }
-      if (next.evidence.length === 0) text(list, 'No official fragment is linked.');
+      if (next.evidence.length === 0) {
+        text(list, 'No source or project-design evidence is linked.');
+        text(byId('sourceMeta'), 'Provenance repair is required before this declaration is promotion-safe.');
+        byId('sourceMeta').className = 'meta problem';
+        byId('pdfView').hidden = true; byId('htmlView').hidden = false;
+        text(byId('excerpt'), 'No evidence locator is available.');
+      }
       if (next.evidence[0]) void selectEvidence(next.evidence[0]);
     }
     async function selectEvidence(evidence) {
@@ -561,9 +578,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         try {
           await runCli(root, ["traceability", "build", "--run", runId, ...documentArgs, "--pdf-boxes"])
         } catch (error) {
+          const detail = String(error)
+          if (!/PDF|pdftotext|pdf-box/i.test(detail)) throw error
           await runCli(root, ["traceability", "build", "--run", runId, ...documentArgs])
           await vscode.window.showWarningMessage(
-            `PDF box extraction was unavailable; the HTML evidence manifest was still built. ${String(error)}`,
+            `PDF box extraction was unavailable; the HTML/artifact evidence manifest was still built. ${detail}`,
           )
         }
         await index.refresh()
@@ -577,6 +596,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (located !== undefined) await panel.show(located.indexed, located.entry, true)
     }),
   )
+
+  const watcher = vscode.workspace.createFileSystemWatcher("**/runs/*/traceability/evidence-*.json")
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined
+  const scheduleRefresh = (): void => {
+    if (refreshTimer !== undefined) clearTimeout(refreshTimer)
+    refreshTimer = setTimeout(() => { void index.refresh() }, 250)
+  }
+  watcher.onDidCreate(scheduleRefresh)
+  watcher.onDidChange(scheduleRefresh)
+  watcher.onDidDelete(scheduleRefresh)
+  context.subscriptions.push(watcher, {
+    dispose: () => {
+      if (refreshTimer !== undefined) clearTimeout(refreshTimer)
+    },
+  })
 }
 
 export function deactivate(): void {}

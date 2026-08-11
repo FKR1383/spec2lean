@@ -35,6 +35,10 @@ import {
   verifiedProofArtifactPath,
 } from "./proof-plan.js"
 import { reconcileProofStageResult } from "./proof-stage-result.js"
+import {
+  compareProofWithApprovedTheorems,
+  validateTheoremObligationDocument,
+} from "./theorem-contract.js"
 import { loadAgentModel, loadProjectModel, REPO_ROOT } from "./repo.js"
 import { withRepositoryLock } from "./repository-lock.js"
 import { runSemanticIrSelfTests } from "./semantic-ir-self-test.js"
@@ -106,6 +110,36 @@ try {
   workerConflictRejected = true
 }
 assert(workerConflictRejected, "conflicting worker aliases are rejected")
+
+const theoremContract = validateTheoremObligationDocument({
+  schema_version: 1,
+  theorem_obligations: [{
+    obligation_id: "T-1",
+    lean_statement_sketch: "theorem exact_contract (n : Nat) : n = n",
+  }],
+})
+assert(theoremContract.issues.length === 0, "complete theorem contract validates")
+assert(
+  compareProofWithApprovedTheorems(
+    theoremContract.declarations,
+    "theorem exact_contract (n : Nat) : n = n := by rfl",
+  ).length === 0,
+  "proof preserves the exact approved theorem statement",
+)
+assert(
+  compareProofWithApprovedTheorems(
+    theoremContract.declarations,
+    "theorem exact_contract (n : Nat) (h : n = 0) : n = n := by rfl",
+  ).some((issue) => issue.includes("statement changed")),
+  "proof contract rejects added assumptions even when Lean would compile",
+)
+assert(
+  validateTheoremObligationDocument({
+    schema_version: 1,
+    theorem_obligations: [{ obligation_id: "T-2", lean_statement_sketch: "theorem incomplete : ..." }],
+  }).issues.length > 0,
+  "theorem contract rejects placeholders before human approval",
+)
 
 let activeBatchOperations = 0
 let maximumBatchOperations = 0
@@ -273,7 +307,14 @@ const afterMalformedArtifactRetry: RunState = {
 }
 assert(
   artifactContractForRun(afterMalformedArtifactRetry).outputPath.endsWith("semantics-v2.json"),
-  "retry advances immutable semantic artifact revision",
+  "legacy retry records conservatively advance immutable semantic artifact revision",
+)
+assert(
+  artifactContractForRun({
+    ...afterMalformedArtifactRetry,
+    executions: [{ ...afterMalformedArtifactRetry.executions![0]!, artifactProduced: false }],
+  }).outputPath.endsWith("semantics-v1.json"),
+  "provider/protocol retry without an artifact does not inflate artifact versions",
 )
 assert(
   artifactContractForRun({
@@ -527,12 +568,12 @@ assert(
 )
 assert(
   runnerSource.includes('run.stage === "LEAN_FORMALIZATION"') &&
-    runnerSource.includes("buildTraceabilityManifest({ runId: run.runId })") &&
+    runnerSource.includes('buildPipelineTraceabilityManifest(run, "SEMANTICS")') &&
     runnerSource.includes("writeTraceabilityManifest(manifest)"),
   "verified Lean formalization automatically emits its evidence manifest",
 )
 assert(
-  runnerSource.includes('documentRole: "PROOFS"') &&
+  runnerSource.includes('buildPipelineTraceabilityManifest(run, "PROOFS")') &&
     runnerSource.match(/Deterministic theorem-to-source evidence manifest/g)?.length === 2,
   "verified proof generation automatically emits its theorem evidence manifest",
 )
@@ -580,6 +621,18 @@ assert(
   semanticCriticPrompt.includes("MINOR` or `NOTE` findings remain") &&
     semanticCriticPrompt.includes("never describe an artifact as \"ready\"") ,
   "semantic critic has a consistent severity-to-disposition contract",
+)
+const theoremStrengthCriticPrompt = await readFile(
+  resolve(REPO_ROOT, ".opencode/agents/theorem-strength-critic.md"),
+  "utf8",
+)
+assert(
+  theoremStrengthCriticPrompt.includes("constructor overlap") &&
+    theoremStrengthCriticPrompt.includes("counterexample/probe") &&
+    ["`BLOCKER`", "`MAJOR`", "`MINOR`", "`NOTE`", "counts"].every(
+      (token) => theoremStrengthCriticPrompt.includes(token),
+    ),
+  "stage-specific theorem critic checks truth and has deterministic disposition output",
 )
 const leanFormalizerPrompt = await readFile(
   resolve(REPO_ROOT, ".opencode/agents/lean-formalizer.md"),
@@ -653,7 +706,10 @@ const traceabilityManifest = await buildTraceabilityManifest({
   runId: "ptx-9.3-or.b16-ab7bd730",
 })
 const traceabilityIssues = await verifyTraceabilityManifest(traceabilityManifest)
-assert(traceabilityIssues.length === 0, `traceability manifest verifies: ${traceabilityIssues.join(", ")}`)
+assert(
+  traceabilityIssues.some((issue) => issue.includes("Lean declaration has no provenance reference")),
+  "traceability validation exposes legacy unlinked declarations instead of silently passing",
+)
 const orValueEntry = traceabilityManifest.entries.find((entry) => entry.declarationName === "orValue")
 assert(
   orValueEntry !== undefined &&
@@ -679,6 +735,20 @@ assert(
     deterministicTheorem.semanticIds.length > 0 &&
     deterministicTheorem.evidence.length > 0,
   "proof traceability resolves theorem obligations through semantic claims to evidence",
+)
+const designTraceabilityManifest = await buildTraceabilityManifest({
+  runId: "ptx-9.3-or.b32-b870f055",
+  documentRole: "PROOFS",
+})
+const bitBucketTheorem = designTraceabilityManifest.entries.find(
+  (entry) => entry.declarationName === "OrB32_OrB32Step_bitBucket_noop",
+)
+assert(
+  bitBucketTheorem !== undefined &&
+    ["D-2", "D-6", "AMB-OR-2"].every((id) => bitBucketTheorem.semanticIds.includes(id)) &&
+    bitBucketTheorem.unresolvedReferences.length === 0 &&
+    bitBucketTheorem.evidence.some((item) => item.sourceKind === "ARTIFACT"),
+  "traceability resolves reviewed architecture-design dependencies instead of treating them as NVIDIA facts",
 )
 const compositeProofTraceabilityManifest = await buildTraceabilityManifest({
   runId: "ptx-9.3-shr.b32-ad159e51",

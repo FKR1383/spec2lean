@@ -19,9 +19,10 @@ Node/npm dependencies already installed under `editors/vscode`, and VS Code
 1.95 or newer.
 
 This extension keeps the normal Lean editor intact and opens a synchronized
-evidence panel beside it. CodeLens links above mapped declarations show the
-semantic claims and hash-verified official source fragments used by the
-Spec2Lean run.
+evidence panel beside it. CodeLens links above every discovered declaration
+show semantic claims, reviewed project-design provenance, and hash-verified
+official source fragments. An unmapped declaration gets a visible warning
+CodeLens instead of being silently hidden.
 
 CodeLens is deliberately hidden if the open Lean buffer no longer matches the
 SHA-256 recorded in the manifest. Refresh or rebuild the manifest instead of
@@ -56,6 +57,7 @@ The panel supports:
 - PDF page rendering through bundled PDF.js;
 - normalized PDF bounding-box overlays when coordinates exist;
 - immutable human feedback records through the deterministic Spec2Lean CLI.
+- automatic refresh when a run writes a new content-addressed manifest.
 
 Feedback does **not** approve a human gate and does not promote artifacts.
 Existing source bundles without PDF page/bounding-box metadata remain usable

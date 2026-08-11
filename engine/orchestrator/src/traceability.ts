@@ -89,6 +89,7 @@ export type TraceabilityManifest = {
   sourceManifest: ArtifactFingerprint
   leanDocument: ArtifactFingerprint
   semanticDocument: ArtifactFingerprint
+  architectureDocument?: ArtifactFingerprint
   sourceBundles: ArtifactFingerprint[]
   theoremDocument?: ArtifactFingerprint
   entries: TraceabilityEntry[]
@@ -174,9 +175,48 @@ function classification(value: unknown): TraceabilityClassification | undefined 
     case "ASSUMPTION":
     case "OPEN_QUESTION":
       return value
+    case "AMBIGUITY":
+      return "OPEN_QUESTION"
     default:
       return undefined
   }
+}
+
+function collectArchitectureClaims(
+  source: string,
+  path: string,
+  documentSha256: string,
+  claims: Map<string, TraceabilityClaim>,
+  evidence: Map<string, TraceabilityEvidence>,
+): void {
+  const pattern = /^\s*[-*]\s+\**((?:SF|DI|DD|D|PRE|ASS|AMB|OQ)(?:-[A-Z0-9]+)+)\**\s*:\s*(.*)$/i
+  source.split(/\r?\n/).forEach((line, index) => {
+    const match = line.match(pattern)
+    if (match?.[1] === undefined || match[2] === undefined) return
+    const semanticId = match[1]
+    if (claims.has(semanticId)) return
+    const prefix = semanticId.split("-")[0]?.toUpperCase()
+    const claimClassification: TraceabilityClassification =
+      prefix === "SF" ? "SOURCE_FACT" :
+      prefix === "DI" || prefix === "PRE" ? "DERIVED_INTERPRETATION" :
+      prefix === "D" || prefix === "DD" ? "DESIGN_DEPENDENCY" :
+      prefix === "ASS" ? "ASSUMPTION" : "OPEN_QUESTION"
+    const evidenceId = `ARCH:${semanticId}`
+    claims.set(semanticId, {
+      semanticId,
+      classification: claimClassification,
+      statement: match[2].trim(),
+      evidenceIds: [evidenceId],
+    })
+    evidence.set(evidenceId, {
+      evidenceId,
+      sourceKind: "ARTIFACT",
+      documentPath: path,
+      documentSha256,
+      locator: { startLine: index + 1, endLine: index + 1 },
+      quotation: line.trim(),
+    })
+  })
 }
 
 function stringArray(value: unknown): string[] {
@@ -426,8 +466,11 @@ function collectTheoremBindings(value: unknown): Map<string, TheoremBinding> {
       }
       const collectNames = (item: unknown): void => {
         if (typeof item === "string") {
-          for (const match of item.matchAll(/\btheorem\s+([A-Za-z_][A-Za-z0-9_']*)/g)) {
-            if (match[1] !== undefined) names.add(match[1])
+          for (const match of item.matchAll(/\btheorem\s+([A-Za-z_][A-Za-z0-9_'.]*)/g)) {
+            if (match[1] !== undefined) {
+              names.add(match[1])
+              names.add(match[1].split(".").at(-1)!)
+            }
           }
           return
         }
@@ -510,6 +553,7 @@ export type BuildTraceabilityInput = {
   documentRole?: "SEMANTICS" | "PROOFS"
   leanPath?: string
   semanticPath?: string
+  architecturePath?: string
   sourceBundlePaths?: string[]
   theoremPath?: string
   includePdfRenditions?: boolean
@@ -526,9 +570,17 @@ export async function buildTraceabilityManifest(
         `${run.artifactRoot}/lean`,
         [new RegExp(`^${run.leanModuleName}-v(\\d+)\\.lean$`)],
       ))
-  const semanticPath = input.semanticPath ?? await latestVersionedFile(
-    `${run.artifactRoot}/semantics`,
-    [/^semantics-v(\d+)\.json$/, /^materialized-v(\d+)\.json$/],
+  const semanticPath = input.semanticPath ?? (
+    run.semanticV2?.mode === "DELTA_FAST_PATH" && run.semanticV2.current?.materializedPath !== undefined
+      ? run.semanticV2.current.materializedPath
+      : await latestVersionedFile(
+          `${run.artifactRoot}/semantics`,
+          [/^semantics-v(\d+)\.json$/],
+        )
+  )
+  const architecturePath = input.architecturePath ?? await latestVersionedFile(
+    `${run.artifactRoot}/architecture`,
+    [/^foundation-v(\d+)\.md$/],
   )
   const sourceBundlePaths = input.sourceBundlePaths ?? [
     await latestVersionedFile(
@@ -544,9 +596,10 @@ export async function buildTraceabilityManifest(
       )
     : undefined
 
-  const [leanData, semanticData, sourceBundleData, theoremData] = await Promise.all([
+  const [leanData, semanticData, architectureData, sourceBundleData, theoremData] = await Promise.all([
     readRepositoryFile(leanPath),
     readRepositoryFile(semanticPath),
+    readRepositoryFile(architecturePath),
     Promise.all(sourceBundlePaths.map(readRepositoryFile)),
     theoremPath === undefined ? undefined : readRepositoryFile(theoremPath),
   ])
@@ -559,6 +612,13 @@ export async function buildTraceabilityManifest(
       evidence.set(id, item)
     }
   }
+  collectArchitectureClaims(
+    architectureData.toString("utf8"),
+    architecturePath,
+    sha256(architectureData),
+    claims,
+    evidence,
+  )
   const theoremBindings = theoremData === undefined
     ? new Map<string, TheoremBinding>()
     : collectTheoremBindings(JSON.parse(theoremData.toString("utf8")) as unknown)
@@ -634,6 +694,7 @@ export async function buildTraceabilityManifest(
     sourceManifest,
     leanDocument: { path: leanPath, sha256: sha256(leanData) },
     semanticDocument: { path: semanticPath, sha256: sha256(semanticData) },
+    architectureDocument: { path: architecturePath, sha256: sha256(architectureData) },
     sourceBundles: sourceBundlePaths.map((path, index) => ({
       path,
       sha256: sha256(sourceBundleData[index]!),
@@ -708,6 +769,7 @@ export async function verifyTraceabilityManifest(
     generator?: string
     sourceBundle?: ArtifactFingerprint
     sourceBundles?: ArtifactFingerprint[]
+    architectureDocument?: ArtifactFingerprint
     documentRole?: "SEMANTICS" | "PROOFS"
   }
   const supportedVersion =
@@ -722,6 +784,7 @@ export async function verifyTraceabilityManifest(
     manifest.sourceManifest,
     manifest.leanDocument,
     manifest.semanticDocument,
+    ...(legacy.architectureDocument === undefined ? [] : [legacy.architectureDocument]),
     ...bundles,
     ...(manifest.theoremDocument === undefined ? [] : [manifest.theoremDocument]),
   ]) {
@@ -747,6 +810,12 @@ export async function verifyTraceabilityManifest(
   }
   if (legacy.documentRole === "PROOFS" && manifest.theoremDocument === undefined) {
     issues.push("proof traceability manifest lacks theorem obligation document")
+  }
+  for (const declaration of manifest.diagnostics.declarationsWithoutReferences) {
+    issues.push(`Lean declaration has no provenance reference: ${declaration}`)
+  }
+  for (const reference of manifest.diagnostics.unresolvedReferences) {
+    issues.push(`unresolved provenance reference: ${reference}`)
   }
   return [...new Set(issues)].sort((left, right) => left.localeCompare(right))
 }

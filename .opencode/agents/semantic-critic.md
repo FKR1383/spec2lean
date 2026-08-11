@@ -6,6 +6,8 @@ temperature: 0
 steps: 64
 permission:
   read: allow
+  spec_fast_context: allow
+  spec_index_context: allow
   candidate_write: allow
   spec_read_span: allow
   spec_search: allow
@@ -62,6 +64,11 @@ Depending on the workflow stage, you may compare:
 - human-review material
 
 Do not claim to have reviewed an artifact that does not exist.
+
+When official-source revalidation is required, use the deterministic indexed
+context first. Do not repeat broad source research during Lean mapping,
+theorem-strength, or final aggregation review unless an explicit conflict or
+unresolved state-affecting claim requires it.
 
 # Required Review Inputs
 

@@ -164,10 +164,12 @@ export async function artifactPathsForGate(
 
     case "B":
       return await Promise.all([
-        latestVersionedArtifact(
-          `${root}/semantics`,
-          /^semantics-v(\d+)\.json$/,
-        ),
+        run.semanticV2?.mode === "DELTA_FAST_PATH" && run.semanticV2.current?.materializedPath !== undefined
+          ? run.semanticV2.current.materializedPath
+          : latestVersionedArtifact(
+              `${root}/semantics`,
+              /^semantics-v(\d+)\.json$/,
+            ),
         latestVersionedArtifact(
           `${root}/reviews`,
           /^semantics-critic-v(\d+)\.md$/,

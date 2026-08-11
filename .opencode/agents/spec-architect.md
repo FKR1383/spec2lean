@@ -6,6 +6,8 @@ temperature: 0
 steps: 64
 permission:
   read: allow
+  spec_fast_context: allow
+  spec_index_context: allow
   spec_pdf_search: allow
   spec_pdf_read_pages: allow
   candidate_read: allow
@@ -59,6 +61,13 @@ Clearly separate:
 - assumptions
 - ambiguities
 - unresolved questions
+
+# Retrieval Discipline
+
+Start with `spec_fast_context` for PTX 9.3 or `spec_index_context` for another
+ingested language/version. Use narrow span/search/PDF tools only to close a
+specific gap or verify an exact citation. Never rescan an entire specification
+when the hash-verified index already identifies the bounded section.
 
 # Architecture Scope
 

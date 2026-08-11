@@ -496,15 +496,31 @@ async function latestSourceBundle(run: RunState): Promise<string> {
   return `${directory}/${latest.name}`
 }
 
-function bundleEvidenceIds(bundle: unknown): Set<string> {
-  if (!isRecord(bundle) || !isRecord(bundle.evidence_index) || !Array.isArray(bundle.evidence_index.fragments)) {
-    throw new Error("Source bundle has no evidence_index.fragments array")
+export function bundleEvidenceIds(bundle: unknown): Set<string> {
+  if (!isRecord(bundle)) throw new Error("Source bundle must be a JSON object")
+  const ids = new Set<string>()
+  const visit = (value: unknown, key = ""): void => {
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, key)
+      return
+    }
+    if (!isRecord(value)) {
+      if (
+        typeof value === "string" && value.length > 0 &&
+        ["fragment_id", "fact_id", "evidence_id"].includes(key)
+      ) ids.add(value)
+      return
+    }
+    for (const [childKey, child] of Object.entries(value)) {
+      if (childKey === "source_documents") continue
+      visit(child, childKey)
+    }
   }
-  return new Set(bundle.evidence_index.fragments.flatMap((fragment) =>
-    isRecord(fragment) && typeof fragment.fragment_id === "string"
-      ? [fragment.fragment_id]
-      : [],
-  ))
+  visit(bundle)
+  if (ids.size === 0) {
+    throw new Error("Source bundle has no stable fragment/fact/evidence identifiers")
+  }
+  return ids
 }
 
 async function verifyDeltaGrounding(

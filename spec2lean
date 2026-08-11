@@ -12,6 +12,7 @@ Usage:
   ./spec2lean formalize --language ptx --version 9.3 --unit mov.b32
   ./spec2lean formalize --language ptx --version 9.3 --unit mov.b32 --auto-approve
   ./spec2lean formalize-batch --language ptx --version 9.3 --units and.b64,or.b64 --workers 2 [--auto-approve]
+  ./spec2lean ingest --language <language> --version <version> --source-manifest <path>
   ./spec2lean resume-batch --batch <batch-id> [--workers N]
   ./spec2lean batch-report --batch <batch-id>
   ./spec2lean status --run <run-id>
@@ -69,6 +70,10 @@ case "$cmd" in
 
   formalize-batch)
     exec npm --prefix "$ORCH" run formalize-batch -- "$@"
+    ;;
+
+  ingest)
+    exec npm --prefix "$ORCH" run ingest -- "$@"
     ;;
 
   resume-batch)

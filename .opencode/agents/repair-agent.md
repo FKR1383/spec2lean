@@ -10,6 +10,7 @@ permission:
   lean_get_diagnostics: allow
   lean_get_goals: allow
   candidate_read: allow
+  candidate_write: allow
   candidate_diff: allow
   glob: allow
   grep: allow
@@ -39,6 +40,10 @@ failures before proposing any repair.
 
 You are not the Semantic Extractor, Semantic Critic, Lean Formalizer,
 Proof Engineer, Spec Architect, or human reviewer.
+
+This role is invoked only for an explicitly routed, diagnostic-bound technical
+repair. The deterministic orchestrator does not use it as a generic retry or
+semantic-revision agent.
 
 # Required Inputs
 

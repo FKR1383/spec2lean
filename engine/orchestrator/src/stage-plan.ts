@@ -30,13 +30,14 @@ export const STAGE_PLANS:
   },
 
   ARCHITECTURE_CRITIQUE: {
-    agent: "semantic-critic",
+    agent: "architecture-critic",
     successStage: "WAITING_GATE_A",
     revisionStages: [
       "ARCHITECTURE",
     ],
     task: [
       "Independently critique the architecture candidate.",
+      "Check bounded scope, evidence/design classification, state model, and every state-affecting ambiguity; do not redesign the unit.",
       "Request revision only for unresolved BLOCKER/MAJOR findings.",
       "MINOR/NOTE-only findings are non-blocking: record them and return SUCCESS to the human gate.",
       "If suitable, mark it ready for Human Gate A.",
@@ -70,7 +71,7 @@ export const STAGE_PLANS:
   },
 
   SEMANTIC_CRITIQUE: {
-    agent: "semantic-critic",
+    agent: "semantics-critic",
     successStage: "WAITING_GATE_B",
     revisionStages: [
       "SEMANTIC_EXTRACTION",
@@ -78,6 +79,8 @@ export const STAGE_PLANS:
     ],
     task: [
       "Independently critique the semantic interpretation.",
+      "Check every SOURCE_FACT against exact evidence IDs and every derived/design claim against explicit dependencies.",
+      "Build a compact execution-branch matrix (guards, operand lookup failures, state writes/no-op) and report only real mismatches.",
       "Request source or semantic revision only when the problem is BLOCKER/MAJOR.",
       "MINOR/NOTE-only findings are non-blocking: record them and return SUCCESS to the human gate.",
       "Otherwise mark it ready for Human Gate B.",
@@ -102,7 +105,7 @@ export const STAGE_PLANS:
   },
 
   LEAN_MAPPING_CRITIQUE: {
-    agent: "semantic-critic",
+    agent: "lean-mapping-critic",
     successStage: "WAITING_GATE_C",
     revisionStages: [
       "LEAN_FORMALIZATION",
@@ -110,6 +113,8 @@ export const STAGE_PLANS:
     task: [
       "Independently compare the Lean mapping with the approved semantics.",
       "Compilation alone is not semantic correctness.",
+      "Compare every executable and relational branch against the approved execution-branch matrix, including false guards and partial lookups.",
+      "Use small Lean probes only when needed to decide a concrete mapping question; do not begin theorem design here.",
       "Request revision only for unresolved BLOCKER/MAJOR findings; MINOR/NOTE-only findings proceed to the human gate.",
       "If faithful, mark it ready for Human Gate C.",
       "Do not approve Gate C.",
@@ -132,13 +137,16 @@ export const STAGE_PLANS:
   },
 
   THEOREM_STRENGTH_CRITIQUE: {
-    agent: "semantic-critic",
+    agent: "theorem-strength-critic",
     successStage: "WAITING_THEOREM_STRENGTH_APPROVAL",
     revisionStages: [
       "THEOREM_GENERATION",
     ],
     task: [
       "Independently review theorem strength and non-vacuity.",
+      "Extract and count complete theorem declarations; reject placeholders, truncated statements, or duplicate names.",
+      "For determinism/totality/correspondence obligations, analyze constructor overlap and missing premises and use a minimal Lean counterexample/probe when the result is not syntactically certain.",
+      "A compiling statement is not evidence that the theorem is true or non-vacuous.",
       "Request revision only for unresolved BLOCKER/MAJOR findings; MINOR/NOTE-only findings proceed to the human gate.",
       "If adequate, mark the set ready for human theorem-strength approval.",
       "Do not approve it yourself.",
@@ -182,7 +190,7 @@ export const STAGE_PLANS:
   },
 
   FINAL_CRITIQUE: {
-    agent: "semantic-critic",
+    agent: "final-critic",
     successStage: "WAITING_FINAL_APPROVAL",
     revisionStages: [
       "FINAL_CRITIQUE",
@@ -207,6 +215,7 @@ export const STAGE_PLANS:
       "- approved semantic artifact",
       "- Lean semantics",
       "- proof artifact",
+      "- deterministic semantics/proof traceability manifests and their coverage diagnostics",
       "",
       "Use Lean tools to confirm the final Lean semantics/proofs still compile.",
       "Only revisit official source evidence if the prior reviewed artifacts conflict",

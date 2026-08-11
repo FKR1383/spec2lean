@@ -60,6 +60,7 @@ export type EvidenceManifest = {
   sourceManifest: ArtifactFingerprint
   leanDocument: ArtifactFingerprint
   semanticDocument: ArtifactFingerprint
+  architectureDocument?: ArtifactFingerprint
   sourceBundle?: ArtifactFingerprint
   sourceBundles?: ArtifactFingerprint[]
   theoremDocument?: ArtifactFingerprint
@@ -86,6 +87,7 @@ export type EvidenceViewModel = {
   unit: string
   leanPath: string
   entry: EvidenceEntry
+  diagnostics: EvidenceManifest["diagnostics"]
   evidence: Array<Evidence & {
     sourceUri: string
     sourceVerified: boolean

@@ -2,6 +2,7 @@ import { access, readFile, stat } from "node:fs/promises"
 import { resolve } from "node:path"
 
 import { artifactContractForRun } from "./artifact-contract.js"
+import { validateArtifactContent } from "./artifact-content.js"
 import { prohibitedLeanTokens, verifyLeanFile } from "./lean-local.js"
 import { REPO_ROOT } from "./repo.js"
 import type { RunState } from "./workflow.js"
@@ -25,14 +26,18 @@ export async function verifyExpectedArtifact(run: RunState): Promise<ArtifactVer
 
   const fileStat = await stat(absolute)
   if (fileStat.size === 0) issues.push("artifact is empty")
+  const source = await readFile(absolute, "utf8")
+  let parsedJson: unknown
 
   if (path.endsWith(".json")) {
     try {
-      JSON.parse(await readFile(absolute, "utf8"))
+      parsedJson = JSON.parse(source)
     } catch (error) {
       issues.push(`invalid JSON: ${String(error)}`)
     }
   }
+
+  issues.push(...validateArtifactContent(run, source, parsedJson))
 
   if (path.endsWith(".lean")) {
     const banned = await prohibitedLeanTokens(path)

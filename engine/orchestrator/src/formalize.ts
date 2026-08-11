@@ -5,7 +5,7 @@ import { runLoopProcess } from "./loop-client.js"
 import { REPO_ROOT } from "./repo.js"
 import { createRun } from "./run-service.js"
 import { saveRun } from "./run-store.js"
-import { verifySourceManifest } from "./source-manifest.js"
+import { ensureSourceIndex } from "./source-index.js"
 import { transitionRun } from "./workflow.js"
 
 function argument(name: string): string | undefined {
@@ -35,7 +35,11 @@ try {
 } catch {
   throw new Error(`Source manifest does not exist: ${sourceManifest}`)
 }
-await verifySourceManifest(resolve(REPO_ROOT, sourceManifest))
+const sourceIndex = await ensureSourceIndex({
+  language,
+  specificationVersion: specVersion,
+  sourceManifest,
+})
 
 const run = await createRun({
   language,
@@ -54,6 +58,7 @@ console.log(JSON.stringify({
   stage: started.stage,
   artifactRoot: started.artifactRoot,
   benchmarkAutoApprove: started.benchmark?.autoApprove ?? false,
+  sourceIndex,
 }, null, 2))
 
 const code = await runLoopProcess(started.runId, {

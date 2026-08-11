@@ -24,6 +24,7 @@ import { prohibitedLeanTokens, verifyLeanFile } from "./lean-local.js"
 import { startOpenCode, unwrap } from "./opencode.js"
 import {
   proofArtifactPath,
+  proofStatementContractIssues,
   proofTargetSummary,
   type ProofTarget,
 } from "./proof-plan.js"
@@ -52,10 +53,28 @@ import {
 type Agent = { name: string }
 type Session = { id: string }
 
+async function buildPipelineTraceabilityManifest(
+  run: RunState,
+  documentRole: "SEMANTICS" | "PROOFS",
+) {
+  try {
+    return await buildTraceabilityManifest({
+      runId: run.runId,
+      documentRole,
+      includePdfRenditions: true,
+    })
+  } catch (error) {
+    console.warn(
+      `[spec2lean] optional PDF evidence alignment unavailable; ` +
+      `building the hash-bound HTML/artifact manifest: ${error instanceof Error ? error.message : String(error)}`,
+    )
+    return await buildTraceabilityManifest({ runId: run.runId, documentRole })
+  }
+}
+
 const FAST_FIRST_AGENTS:
   Partial<Record<FormalizationStage, string>> = {
     SOURCE_CURATION: "source-curator-fast",
-    SEMANTIC_EXTRACTION: "semantic-extractor-fast",
   }
 
 function executionAgentForRun(
@@ -189,6 +208,10 @@ export function buildGeneralPrompt(run: RunState): string {
   const artifact = artifactContractForRun(run)
   const revisionTargets =
     plan.revisionStages.length === 0 ? "(none)" : plan.revisionStages.join(", ")
+  const latestEvent = run.history.at(-1)
+  const currentRetryReason = latestEvent?.from === run.stage && latestEvent.to === run.stage
+    ? latestEvent.reason
+    : undefined
 
   return [
     "# Spec2Lean Automated Agentic Run",
@@ -219,6 +242,15 @@ export function buildGeneralPrompt(run: RunState): string {
     "# Stage Task",
     "",
     plan.task,
+    ...(currentRetryReason === undefined
+      ? []
+      : [
+          "",
+          "# Binding Same-Stage Retry Diagnostic",
+          "",
+          currentRetryReason,
+          "Repair this exact failure in the new immutable artifact. Do not repeat an already-failed output unchanged.",
+        ]),
     ...repairContractLines(run),
     ...(run.stage === "SEMANTIC_EXTRACTION" && run.semanticV2?.mode === "DELTA_FAST_PATH"
       ? [
@@ -344,14 +376,31 @@ async function buildProofPrompt(run: RunState): Promise<ProofPromptContext & { p
     if (banned.length > 0) {
       diagnostics = `Prohibited tokens in Lean code: ${banned.join(", ")}`
     } else {
-      const check = await verifyLeanFile(proofPath, 90_000)
-      existingCompiles = check.success
-      if (!check.success) diagnostics = check.output.slice(-12_000)
+      const statementIssues = await proofStatementContractIssues(run)
+      if (statementIssues.length > 0) {
+        diagnostics = [
+          "The proof file does not preserve the exact human-approved theorem contract:",
+          ...statementIssues.map((issue) => `- ${issue}`),
+        ].join("\n")
+      } else {
+        const check = await verifyLeanFile(proofPath, 90_000)
+        existingCompiles = check.success
+        if (!check.success) diagnostics = check.output.slice(-12_000)
+      }
     }
   }
 
   const repairMode = exists && !existingCompiles
-  const batchTargets = repairMode ? [] : summary.missing
+  const batchTargets: ProofTarget[] = []
+  if (!repairMode) {
+    let statementCharacters = 0
+    for (const item of summary.missing) {
+      if (batchTargets.length >= 4) break
+      if (batchTargets.length > 0 && statementCharacters + item.statement.length > 12_000) break
+      batchTargets.push(item)
+      statementCharacters += item.statement.length
+    }
+  }
 
   const target: ProofTarget | undefined =
     batchTargets.length === 0
@@ -372,6 +421,7 @@ async function buildProofPrompt(run: RunState): Promise<ProofPromptContext & { p
             ].join("\n"))
             .join("\n\n"),
           strengthRisks: [...new Set(batchTargets.flatMap((item) => item.strengthRisks))],
+          semanticIds: [...new Set(batchTargets.flatMap((item) => item.semanticIds))],
         }
 
   const mode = repairMode ? "REPAIR" : "PROVE_BATCH"
@@ -395,9 +445,10 @@ async function buildProofPrompt(run: RunState): Promise<ProofPromptContext & { p
     "- Do not weaken it, add semantic preconditions, or change semantics.",
     "- Do not use sorry, admit, new axiom, or unsafe.",
     "- Write/edit the proof artifact EARLY, then use Lean diagnostics; do not mentally plan the whole proof set.",
-    "- When the current proof artifact compiles, prove ALL remaining approved theorem declarations in this invocation.",
+    "- Prove exactly the bounded current batch below; later missing declarations are separate resumable batches.",
     "- Do not stop after the first successful theorem.",
     "- If the proof file already exists, preserve all previously compiling theorem declarations.",
+    "- Every helper declaration must have an immediately preceding traceability comment citing one or more semantic IDs from the current approved targets; approved theorem declarations are bound deterministically by obligation ID/name.",
     "- Use candidate_write create only if the proof file does not exist; otherwise use candidate_write replace with its exact current SHA-256.",
     "- Import only the installed semantics module and required standard/project modules.",
     "",
@@ -422,7 +473,10 @@ async function buildProofPrompt(run: RunState): Promise<ProofPromptContext & { p
             ...(target.strengthRisks.length > 0
               ? ["Strength caveats:", ...target.strengthRisks.map((risk) => `- ${risk}`), ""]
               : []),
-            "Create or extend the proof file with ALL theorem declarations listed above.",
+            ...(target.semanticIds.length > 0
+              ? ["Approved semantic IDs available for helper traceability:", ...target.semanticIds.map((id) => `- ${id}`), ""]
+              : []),
+            "Create or extend the proof file with every theorem declaration in this bounded batch.",
             "Then immediately run lean_check_file.",
             "Repair concrete diagnostics in the SAME session until the complete batch compiles or a genuine theorem/semantic conflict is found.",
           ]
@@ -458,6 +512,15 @@ async function finalizeProofStageLocally(run: RunState): Promise<AgentResult | u
       outcome: "RETRY",
       nextStage: "PROOF_GENERATION",
       summary: `Proof artifact contains prohibited Lean code tokens: ${banned.join(", ")}`,
+    }
+  }
+
+  const statementIssues = await proofStatementContractIssues(run)
+  if (statementIssues.length > 0) {
+    return {
+      outcome: "RETRY",
+      nextStage: "PROOF_GENERATION",
+      summary: `Proof artifact changed or omitted the approved theorem contract: ${statementIssues.join(" | ")}`,
     }
   }
 
@@ -583,10 +646,7 @@ export async function executeTick(
     const local = await finalizeProofStageLocally(run)
     if (local?.outcome === "SUCCESS") {
       await installProofPackage(run)
-      const manifest = await buildTraceabilityManifest({
-        runId: run.runId,
-        documentRole: "PROOFS",
-      })
+      const manifest = await buildPipelineTraceabilityManifest(run, "PROOFS")
       const issues = await verifyTraceabilityManifest(manifest)
       if (issues.length > 0) {
         throw new Error(`Local proof traceability generation failed: ${issues.join(" | ")}`)
@@ -764,7 +824,7 @@ export async function executeTick(
 
     if (!result) throw new Error("No agent result available")
 
-    if (plan.agent === "semantic-critic" && result.outcome === "REVISE") {
+    if (plan.agent.endsWith("-critic") && result.outcome === "REVISE") {
       try {
         const review = await readFile(resolve(REPO_ROOT, artifact.outputPath), "utf8")
         result = normalizeCriticResultFromReview(
@@ -785,10 +845,7 @@ export async function executeTick(
       if (result.outcome === "SUCCESS") {
         await installProofPackage(run)
         try {
-          const manifest = await buildTraceabilityManifest({
-            runId: run.runId,
-            documentRole: "PROOFS",
-          })
+          const manifest = await buildPipelineTraceabilityManifest(run, "PROOFS")
           const issues = await verifyTraceabilityManifest(manifest)
           if (issues.length > 0) throw new Error(issues.join(" | "))
           const manifestPath = await writeTraceabilityManifest(manifest)
@@ -834,7 +891,7 @@ export async function executeTick(
       }
       if (result.outcome === "SUCCESS" && run.stage === "LEAN_FORMALIZATION") {
         try {
-          const manifest = await buildTraceabilityManifest({ runId: run.runId })
+          const manifest = await buildPipelineTraceabilityManifest(run, "SEMANTICS")
           const issues = await verifyTraceabilityManifest(manifest)
           if (issues.length > 0) throw new Error(issues.join(" | "))
           const manifestPath = await writeTraceabilityManifest(manifest)
@@ -915,6 +972,7 @@ export async function executeTick(
           outcome: result.outcome,
           nextStage,
           response: response || (submitted ? "[no textual response]" : "[resumed session]"),
+          artifactProduced: await fileExists(artifact.outputPath),
           ...(failureClass === undefined ? {} : { failureClass }),
         },
       ],

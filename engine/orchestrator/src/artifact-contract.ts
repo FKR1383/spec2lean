@@ -51,7 +51,8 @@ export function stageAttempt(
             execution.outcome === "REVISE" ||
             (
               execution.outcome === "RETRY" &&
-              stage !== "PROOF_GENERATION"
+              stage !== "PROOF_GENERATION" &&
+              execution.artifactProduced !== false
             )
           ),
       )

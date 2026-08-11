@@ -26,9 +26,9 @@ the current run explicitly depends on them.
 ## Model Policy
 
 The project model is configured in `opencode.json`. Automated agents currently
-use `openai/gpt-5.3-codex-spark` with low reasoning effort through the explicitly
-enabled OpenAI provider. Keep every agent definition aligned with that project
-model unless both are deliberately changed together.
+use `opencode/deepseek-v4-flash-free` through the explicitly enabled `opencode`
+provider. Keep every routed agent definition aligned with that project model
+unless both are deliberately changed together.
 
 Do not guess or silently replace a model ID. The orchestrator must read the
 project model configuration rather than hard-code a different model.

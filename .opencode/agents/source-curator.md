@@ -6,6 +6,8 @@ temperature: 0
 steps: 96
 permission:
   read: allow
+  spec_fast_context: allow
+  spec_index_context: allow
   spec_pdf_search: allow
   spec_pdf_read_pages: allow
   candidate_read: allow
@@ -57,6 +59,11 @@ under:
 
 Do not use prior model knowledge, blog posts, compiler behavior, CUDA C
 behavior, LLVM behavior, other ISAs, or unofficial summaries as evidence.
+
+Start retrieval with `spec_fast_context` for PTX 9.3 or
+`spec_index_context` for another ingested language/version. Escalate to exact
+span/PDF tools only for missing coverage, quote verification, or PDF page
+alignment. The index is a locator, not semantic evidence by itself.
 
 # Acquisition Versus Source Bundle
 

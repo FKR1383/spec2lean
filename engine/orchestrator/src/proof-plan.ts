@@ -3,6 +3,10 @@ import { resolve } from "node:path"
 
 import { artifactContractForRun, stageAttempt } from "./artifact-contract.js"
 import { REPO_ROOT } from "./repo.js"
+import {
+  compareProofWithApprovedTheorems,
+  validateTheoremObligationDocument,
+} from "./theorem-contract.js"
 import type { RunState } from "./workflow.js"
 
 export type ProofTarget = {
@@ -10,6 +14,7 @@ export type ProofTarget = {
   name: string
   statement: string
   strengthRisks: string[]
+  semanticIds: string[]
 }
 
 type ObligationArtifact = {
@@ -17,6 +22,7 @@ type ObligationArtifact = {
     obligation_id?: string
     lean_statement_sketch?: string
     strength_risks?: string[]
+    semantic_claim_ids?: string[]
   }>
 }
 
@@ -36,19 +42,9 @@ async function latestObligationPath(run: RunState): Promise<string> {
   return `${dirRelative}/${candidates[0]!.name}`
 }
 
-function splitTheoremSketch(sketch: string): Array<{ name: string; statement: string }> {
-  const matches = [...sketch.matchAll(/^[ \t]*theorem\s+([A-Za-z0-9_']+)/gm)]
-  return matches.map((match, index) => {
-    const start = match.index ?? 0
-    const end = index + 1 < matches.length ? (matches[index + 1]!.index ?? sketch.length) : sketch.length
-    const statement = sketch.slice(start, end).trim().replace(/\n-- supporting[\s\S]*$/i, "").trim()
-    return { name: match[1]!, statement }
-  })
-}
-
 export function theoremDeclarationNames(source: string): Set<string> {
   return new Set(
-    [...source.matchAll(/^[ \t]*theorem\s+([A-Za-z0-9_']+)/gm)]
+    [...source.matchAll(/^[ \t]*theorem\s+([A-Za-z_][A-Za-z0-9_'.]*)/gm)]
       .flatMap((match) => {
         const name = match[1]
         return name === undefined ? [] : [name]
@@ -62,18 +58,36 @@ export async function proofTargets(run: RunState): Promise<ProofTarget[]> {
     await readFile(resolve(REPO_ROOT, obligationPath), "utf8"),
   ) as ObligationArtifact
 
+  const contract = validateTheoremObligationDocument(artifact)
+  if (contract.issues.length > 0) {
+    throw new Error(
+      `Invalid theorem obligation contract in ${obligationPath}: ${contract.issues.join(" | ")}`,
+    )
+  }
+
   const targets: ProofTarget[] = []
+  const obligationByName = new Map<string, { id: string; risks: string[]; semanticIds: string[] }>()
   for (const obligation of artifact.theorem_obligations ?? []) {
-    const id = obligation.obligation_id ?? "UNKNOWN"
-    const risks = obligation.strength_risks ?? []
-    for (const theorem of splitTheoremSketch(obligation.lean_statement_sketch ?? "")) {
-      targets.push({
-        obligationId: id,
-        name: theorem.name,
-        statement: theorem.statement,
-        strengthRisks: risks,
+    const names = [...(obligation.lean_statement_sketch ?? "").matchAll(
+      /^[ \t]*theorem\s+([A-Za-z_][A-Za-z0-9_'.]*)\b/gm,
+    )]
+    for (const match of names) {
+      obligationByName.set(match[1]!, {
+        id: obligation.obligation_id ?? "UNKNOWN",
+        risks: obligation.strength_risks ?? [],
+        semanticIds: obligation.semantic_claim_ids ?? [],
       })
     }
+  }
+  for (const theorem of contract.declarations) {
+    const obligation = obligationByName.get(theorem.name)
+    targets.push({
+      obligationId: obligation?.id ?? "UNKNOWN",
+      name: theorem.name,
+      statement: theorem.canonicalStatement,
+      strengthRisks: obligation?.risks ?? [],
+      semanticIds: obligation?.semanticIds ?? [],
+    })
   }
 
   if (targets.length === 0) {
@@ -81,6 +95,19 @@ export async function proofTargets(run: RunState): Promise<ProofTarget[]> {
   }
 
   return targets
+}
+
+export async function proofStatementContractIssues(run: RunState): Promise<string[]> {
+  const obligationPath = await latestObligationPath(run)
+  const obligation = JSON.parse(
+    await readFile(resolve(REPO_ROOT, obligationPath), "utf8"),
+  ) as unknown
+  const contract = validateTheoremObligationDocument(obligation)
+  if (contract.issues.length > 0) return contract.issues
+  const path = proofArtifactPath(run)
+  if (!(await fileExists(path))) return ["proof artifact does not exist"]
+  const proofSource = await readFile(resolve(REPO_ROOT, path), "utf8")
+  return compareProofWithApprovedTheorems(contract.declarations, proofSource)
 }
 
 export function proofArtifactPath(run: RunState): string {

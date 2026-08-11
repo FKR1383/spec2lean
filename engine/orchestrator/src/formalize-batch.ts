@@ -9,7 +9,7 @@ import { makeLeanModuleName, makeUnitSlug } from "./artifact-contract.js"
 import { REPO_ROOT } from "./repo.js"
 import { createRun } from "./run-service.js"
 import { saveRun } from "./run-store.js"
-import { verifySourceManifest } from "./source-manifest.js"
+import { ensureSourceIndex } from "./source-index.js"
 import { transitionRun } from "./workflow.js"
 
 function argument(name: string): string | undefined {
@@ -109,7 +109,7 @@ async function createBatch(): Promise<FormalizationBatch> {
   } catch {
     throw new Error(`Source manifest does not exist: ${sourceManifest}`)
   }
-  await verifySourceManifest(resolve(REPO_ROOT, sourceManifest))
+  await ensureSourceIndex({ language, specificationVersion: specVersion, sourceManifest })
 
   const units = parseBatchUnits([
     ...argumentsFor("--units"),

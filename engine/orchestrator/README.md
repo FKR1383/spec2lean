@@ -18,6 +18,16 @@ For PTX, the source manifest is inferred from the specification version. The
 run state is persisted under `runs/<run-id>/run.json`, so a closed terminal or
 interrupted client does not discard workflow progress.
 
+Before the first run for a language/version, `formalize` verifies the source
+manifest and builds a deterministic local retrieval index from pinned HTML or
+PDF text. Later runs reuse it only when the manifest and source hashes still
+match. This is retrieval-only preprocessing, not model-generated semantics:
+
+```bash
+./spec2lean ingest --language <language> --version <version> \
+  --source-manifest <repository-relative-source-manifest.json>
+```
+
 For an unattended performance benchmark, opt in at run creation:
 
 ```bash
@@ -74,8 +84,9 @@ for a run with:
 ```
 
 The generator joins the claim IDs attached to Lean declarations to the
-structured semantic document and hash-bound source-bundle fragments. Missing
-links remain diagnostics. Successful `LEAN_FORMALIZATION` now emits this
+structured semantic document, reviewed architecture decisions, and hash-bound
+source-bundle fragments. Missing links and unknown IDs fail deterministic
+validation instead of producing a promotion-safe manifest. Successful `LEAN_FORMALIZATION` now emits this
 immutable manifest automatically; rebuilding identical evidence reuses the
 same content-addressed file. A later PDF rendition is another immutable view,
 not an overwrite. Human feedback recorded through the UI is an
@@ -154,7 +165,10 @@ uses a separate persisted session, and the standalone `tick` command still
 owns and closes its own runtime, so crash recovery and bounded diagnostics do
 not depend on an in-memory session object.
 
-Completed non-proof retries advance to a fresh immutable artifact revision.
+Non-proof retries advance to a fresh immutable artifact revision only when the
+attempt actually wrote an artifact; provider/protocol failures before a write
+reuse the same version number. Historical records without this marker remain
+conservative. Completed candidate files are never overwritten.
 Malformed JSON is rejected before atomic candidate publication, so a partial
 artifact cannot poison later retries. Proof generation intentionally retains
 its checked progress file. `formalize` also verifies every file, size, and
@@ -257,15 +271,19 @@ session:
 
 1. extract the human-approved theorem declarations from the obligation artifact;
 2. locally check any existing proof artifact first;
-3. give the Proof Engineer the remaining theorem declarations as one batch
-   (or concrete Lean diagnostics for an existing noncompiling batch);
+3. give the Proof Engineer a bounded batch (at most four declarations and a
+   fixed statement-size budget), or concrete diagnostics for a noncompiling
+   batch;
 4. re-run `lake env lean` locally;
 5. keep already compiling declarations;
 6. move to final critique only when all approved declarations are present,
    Lean accepts the file, and prohibited verification bypasses are absent.
 
-This prevents long speculative proof-planning sessions from consuming the
-entire model context before a proof file is written.
+Exact canonical theorem statements are checked against the human-approved
+obligation artifact before completion, so a compiling proof cannot silently
+add assumptions or weaken a result. This also prevents long speculative
+proof-planning sessions from consuming the entire model context before a proof
+file is written.
 
 ## Final promotion and Git milestone
 
@@ -275,10 +293,11 @@ After explicit final human approval moves the run to `ACCEPTED`:
 ./spec2lean finalize --run <run-id> --push
 ```
 
-This creates the accepted artifact bundle and manifest. With `--push`, it then
-stages only the unit/run/package paths, commits the milestone, and pushes
-`main`. It refuses automated commit if the Git index already contains staged
-changes.
+This creates the accepted bundle only from artifacts whose exact hashes occur
+in the five human approval records, plus complete traceability manifests and
+their pinned source bundles. With `--push`, it stages only the unit/run/package
+paths, commits the milestone, and pushes the current branch. It refuses an
+automated commit if the Git index already contains staged changes.
 
 ## Underlying npm commands
 

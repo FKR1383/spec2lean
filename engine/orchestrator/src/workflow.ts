@@ -66,6 +66,7 @@ export type AgentExecution = {
   outcome: string
   nextStage: FormalizationStage
   response: string
+  artifactProduced?: boolean
   failureClass?: "PROVIDER_RETRY_BUDGET_EXCEEDED"
 }
 

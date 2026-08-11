@@ -15,9 +15,10 @@ Generate and verify a manifest for an existing run:
 ./spec2lean traceability audit
 ```
 
-The v2 generator reads the structured claim, evidence, and theorem-obligation
-IDs already emitted by the pipeline. Missing or unknown references remain
-explicit diagnostics. The orchestrator emits a semantics manifest after
+The v2 generator reads the structured claim, architecture-design, evidence,
+and theorem-obligation IDs already emitted by the pipeline. Missing or unknown
+references remain explicit diagnostics and make validation fail; incomplete
+manifests are useful for repair/UI inspection but are not promotion-safe. The orchestrator emits a semantics manifest after
 verified Lean formalization and a proof manifest after verified proof
 generation. Opening a CodeLens never launches an agent or repeats source
 research. Content-addressed paths preserve every reviewed Lean revision and
