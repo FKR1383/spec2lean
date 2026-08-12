@@ -15,6 +15,7 @@
     "reject": "tsx src/reject.ts",
     "formalize": "tsx src/formalize.ts",
     "formalize-batch": "tsx src/formalize-batch.ts",
+    "pipeline-runtime-smoke": "tsx src/pipeline-runtime-smoke.ts",
     "batch-report": "tsx src/batch-report.ts",
     "finalize": "tsx src/finalize.ts",
     "inspect-session": "tsx src/inspect-session.ts",

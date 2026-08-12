@@ -11,8 +11,10 @@ import { createRun } from "./run-service.js"
 import { saveRun } from "./run-store.js"
 import { ensureSourceIndex } from "./source-index.js"
 import {
-  DEFAULT_PIPELINE_WORKER_CAPS,
-  parsePipelineWorkerCaps,
+  DEFAULT_PIPELINE_AGENT_CAPS,
+  pipelineAgentCapsIssues,
+  parsePipelineAgentCaps,
+  pipelineAgentWorkerCount,
 } from "./pipeline-config.js"
 import { snapshotPipelineDependencies } from "./pipeline-dependencies.js"
 import { runPipelinedBatch } from "./pipeline-runtime.js"
@@ -53,6 +55,7 @@ export function resolveWorkerCount(
   workersRaw: string | undefined,
   concurrencyRaw: string | undefined,
   fallback: number,
+  maximum = 8,
 ): number {
   if (
     workersRaw !== undefined &&
@@ -66,17 +69,18 @@ export function resolveWorkerCount(
 
   const raw = workersRaw ?? concurrencyRaw
   const value = raw === undefined ? fallback : Number(raw)
-  if (!Number.isInteger(value) || value <= 0 || value > 8) {
-    throw new Error(`Invalid worker count: ${raw ?? value} (maximum 8)`)
+  if (!Number.isInteger(value) || value <= 0 || value > maximum) {
+    throw new Error(`Invalid worker count: ${raw ?? value} (maximum ${maximum})`)
   }
   return value
 }
 
-function workerCount(fallback: number): number {
+function workerCount(fallback: number, maximum = 8): number {
   return resolveWorkerCount(
     argument("--workers"),
     argument("--concurrency"),
     fallback,
+    maximum,
   )
 }
 
@@ -122,7 +126,16 @@ async function createBatch(): Promise<FormalizationBatch> {
     ...argumentsFor("--unit"),
   ])
   const pipelineEnabled = process.argv.includes("--pipeline")
-  const concurrency = workerCount(pipelineEnabled ? 3 : 2)
+  if (pipelineEnabled && argument("--stage-workers") !== undefined) {
+    throw new Error("--stage-workers was replaced by exact --agent-workers in agent-pinned pipeline mode")
+  }
+  const pipelineAgentCaps = pipelineEnabled
+    ? parsePipelineAgentCaps(argument("--agent-workers"), DEFAULT_PIPELINE_AGENT_CAPS)
+    : undefined
+  const concurrency = workerCount(
+    pipelineAgentCaps === undefined ? 2 : pipelineAgentWorkerCount(pipelineAgentCaps),
+    pipelineEnabled ? 16 : 8,
+  )
   const pipelineDependencies = pipelineEnabled
     ? await snapshotPipelineDependencies({
         language,
@@ -164,12 +177,10 @@ async function createBatch(): Promise<FormalizationBatch> {
   }
   if (pipelineEnabled) {
     batch.pipeline = {
-      schemaVersion: 1,
+      schemaVersion: 2,
+      schedulingMode: "AGENT_PINNED",
       globalWorkers: concurrency,
-      workerCaps: parsePipelineWorkerCaps(
-        argument("--stage-workers"),
-        DEFAULT_PIPELINE_WORKER_CAPS,
-      ),
+      agentCaps: pipelineAgentCaps!,
       dependencies: pipelineDependencies!,
       startedAt: now,
       updatedAt: now,
@@ -187,15 +198,21 @@ async function createBatch(): Promise<FormalizationBatch> {
 
 async function ensurePipelineState(batch: FormalizationBatch): Promise<void> {
   if (batch.pipeline !== undefined) return
+  if (argument("--stage-workers") !== undefined) {
+    throw new Error("--stage-workers was replaced by exact --agent-workers in agent-pinned pipeline mode")
+  }
   const now = new Date().toISOString()
+  const agentCaps = parsePipelineAgentCaps(
+    argument("--agent-workers"),
+    DEFAULT_PIPELINE_AGENT_CAPS,
+  )
   batch.executionMode = "STAGE_PIPELINE"
+  batch.concurrency = pipelineAgentWorkerCount(agentCaps)
   batch.pipeline = {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    schedulingMode: "AGENT_PINNED",
     globalWorkers: batch.concurrency,
-    workerCaps: parsePipelineWorkerCaps(
-      argument("--stage-workers"),
-      DEFAULT_PIPELINE_WORKER_CAPS,
-    ),
+    agentCaps,
     dependencies: await snapshotPipelineDependencies({
       language: batch.language,
       specificationVersion: batch.specVersion,
@@ -219,8 +236,27 @@ async function main(): Promise<void> {
   const pipelineEnabled =
     process.argv.includes("--pipeline") || batch.executionMode === "STAGE_PIPELINE"
   if (pipelineEnabled) await ensurePipelineState(batch)
+  if (batch.pipeline !== undefined && batch.pipeline.schemaVersion !== 2) {
+    throw new Error("Unsupported pre-agent-pinned pipeline state; create a new pipeline batch")
+  }
+  if (batch.pipeline !== undefined) {
+    const capIssues = pipelineAgentCapsIssues(batch.pipeline.agentCaps)
+    if (
+      batch.pipeline.schedulingMode !== "AGENT_PINNED" ||
+      capIssues.length > 0
+    ) {
+      throw new Error(
+        `Invalid agent-pinned pipeline state: ${[
+          ...(batch.pipeline.schedulingMode === "AGENT_PINNED"
+            ? []
+            : [`invalid scheduling mode: ${String(batch.pipeline.schedulingMode)}`]),
+          ...capIssues,
+        ].join(" | ")}`,
+      )
+    }
+  }
   const options = {
-    concurrency: workerCount(batch.concurrency),
+    concurrency: workerCount(batch.concurrency, pipelineEnabled ? 16 : 8),
     maxTicks: positiveInteger("--max-ticks", 50),
     maxStageRetries: positiveInteger("--max-stage-retries", 4),
     maxStageRevisions: positiveInteger("--max-stage-revisions", 3),
@@ -229,11 +265,11 @@ async function main(): Promise<void> {
   batch.concurrency = options.concurrency
   if (batch.pipeline !== undefined) {
     batch.pipeline.globalWorkers = options.concurrency
-    const stageWorkers = argument("--stage-workers")
-    if (stageWorkers !== undefined) {
-      batch.pipeline.workerCaps = parsePipelineWorkerCaps(
-        stageWorkers,
-        batch.pipeline.workerCaps,
+    const agentWorkers = argument("--agent-workers")
+    if (agentWorkers !== undefined) {
+      batch.pipeline.agentCaps = parsePipelineAgentCaps(
+        agentWorkers,
+        batch.pipeline.agentCaps,
       )
     }
     await saveBatch(batch)
@@ -245,7 +281,8 @@ async function main(): Promise<void> {
     autoApprove: batch.autoApprove,
     executionMode: batch.executionMode ?? "RUN_PARALLEL",
     concurrency: options.concurrency,
-    stageWorkers: batch.pipeline?.workerCaps,
+    schedulingMode: batch.pipeline?.schedulingMode,
+    agentWorkers: batch.pipeline?.agentCaps,
     pinnedDependencies: batch.pipeline?.dependencies,
     runs: batch.runs,
   }, null, 2))

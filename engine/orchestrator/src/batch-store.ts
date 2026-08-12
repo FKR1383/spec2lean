@@ -24,7 +24,24 @@ export const PIPELINE_POOLS = [
 
 export type PipelinePool = (typeof PIPELINE_POOLS)[number]
 
-export type PipelineWorkerCaps = Record<PipelinePool, number>
+export const PIPELINE_AGENTS = [
+  "spec-architect",
+  "architecture-critic",
+  "source-curator-fast",
+  "source-curator",
+  "semantic-extractor-delta",
+  "semantic-extractor",
+  "semantics-critic",
+  "lean-formalizer",
+  "lean-mapping-critic",
+  "theorem-strength-critic",
+  "proof-engineer",
+  "final-critic",
+] as const
+
+export type PipelineAgent = (typeof PIPELINE_AGENTS)[number]
+
+export type PipelineAgentCaps = Record<PipelineAgent, number>
 
 export type PipelineDependency = {
   role: "SOURCE_MANIFEST" | "SOURCE_INDEX" | "SEMANTIC_PROFILE" | "SHARED_ENVIRONMENT"
@@ -39,6 +56,7 @@ export type PipelineLease = {
   unit: string
   stage: string
   pool: PipelinePool
+  agent: PipelineAgent
   leasedAt: string
 }
 
@@ -48,6 +66,7 @@ export type PipelineJobMetric = {
   runId: string
   unit: string
   pool: PipelinePool
+  agent: PipelineAgent
   fromStage: string
   toStage: string
   queuedAt: string
@@ -71,9 +90,10 @@ export type PipelineRunSchedulingState = {
 }
 
 export type PipelineState = {
-  schemaVersion: 1
+  schemaVersion: 2
+  schedulingMode: "AGENT_PINNED"
   globalWorkers: number
-  workerCaps: PipelineWorkerCaps
+  agentCaps: PipelineAgentCaps
   dependencies: PipelineDependency[]
   startedAt: string
   updatedAt: string

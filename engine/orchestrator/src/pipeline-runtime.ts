@@ -8,17 +8,23 @@ import {
   type FormalizationBatch,
   type PipelineJobMetric,
   type PipelineLease,
-  type PipelinePool,
+  type PipelineAgent,
 } from "./batch-store.js"
 import { advanceBenchmarkGate, waitingGateForStage } from "./gate-runtime.js"
 import { startOpenCode, type Spec2LeanOpenCode } from "./opencode.js"
-import { poolForStage, selectPipelineCandidate } from "./pipeline-config.js"
+import {
+  pipelineAgentForRun,
+  pipelineAgentWorkerLayout,
+  poolForStage,
+  selectPipelineCandidate,
+} from "./pipeline-config.js"
 import { verifyPipelineDependencies } from "./pipeline-dependencies.js"
 import { proofTargetSummary } from "./proof-plan.js"
 import { REPO_ROOT } from "./repo.js"
 import { withRepositoryLock } from "./repository-lock.js"
 import { executeTick } from "./runner.js"
-import { loadRun } from "./run-store.js"
+import { loadRun, saveRun } from "./run-store.js"
+import { prepareSemanticV2Run } from "./semantic-v2.js"
 import type { FormalizationStage, RunState } from "./workflow.js"
 
 const TERMINAL_STAGES = new Set<FormalizationStage>([
@@ -38,6 +44,7 @@ export type PipelineRuntimeOptions = {
 
 type WorkerSlot = {
   id: string
+  agent: PipelineAgent
   runtime?: Spec2LeanOpenCode
   busy: boolean
 }
@@ -59,6 +66,18 @@ function processIsAlive(pid: number): boolean {
   } catch (error) {
     return (error as NodeJS.ErrnoException).code === "EPERM"
   }
+}
+
+async function loadRunForPipelineRouting(runId: string): Promise<RunState> {
+  let run = await loadRun(runId)
+  if (run.stage === "SEMANTIC_EXTRACTION") {
+    const prepared = await prepareSemanticV2Run(run)
+    if (prepared !== run) {
+      await saveRun(prepared)
+      run = prepared
+    }
+  }
+  return run
 }
 
 async function claimController(batchId: string): Promise<FormalizationBatch> {
@@ -117,7 +136,14 @@ async function runPipelineJob(
   providerRetryBudgetSeconds: number,
   ensureRuntime: (worker: WorkerSlot) => Promise<Spec2LeanOpenCode>,
 ): Promise<PipelineJobResult> {
-  const before = await loadRun(lease.runId)
+  const before = await loadRunForPipelineRouting(lease.runId)
+  const selectedAgent = pipelineAgentForRun(before)
+  if (selectedAgent !== worker.agent || lease.agent !== worker.agent) {
+    throw new Error(
+      `Agent-pinned worker ${worker.id}/${worker.agent} cannot execute ` +
+      `${before.stage} routed to ${selectedAgent ?? "no-agent"}`,
+    )
+  }
   const beforeManifestCount = await manifestCount(lease.runId)
   const beforeProofDeclared = before.stage === "PROOF_GENERATION"
     ? (await proofTargetSummary(before)).declared
@@ -148,6 +174,7 @@ async function runPipelineJob(
     runId: lease.runId,
     unit: lease.unit,
     pool: lease.pool,
+    agent: lease.agent,
     fromStage: before.stage,
     toStage: after.stage,
     queuedAt,
@@ -205,6 +232,7 @@ async function failedPipelineJob(
       runId: lease.runId,
       unit: lease.unit,
       pool: lease.pool,
+      agent: lease.agent,
       fromStage: before.stage,
       toStage: after.stage,
       queuedAt,
@@ -258,10 +286,16 @@ export async function runPipelinedBatch(
   }
 
   batch.pipeline.globalWorkers = options.globalWorkers
-  const workers: WorkerSlot[] = Array.from(
-    { length: options.globalWorkers },
-    (_, index) => ({ id: `worker-${index + 1}`, busy: false }),
-  )
+  const workers: WorkerSlot[] = pipelineAgentWorkerLayout(
+    batch.pipeline.agentCaps,
+  ).map((worker) => ({ ...worker, busy: false }))
+  if (workers.length > 1 && process.env.SPEC2LEAN_OPENCODE_PORT !== undefined) {
+    await releaseController(batch)
+    throw new Error(
+      "SPEC2LEAN_OPENCODE_PORT fixes a single server port and is incompatible " +
+      "with multiple agent-pinned runtimes; unset it for pipeline execution",
+    )
+  }
   const active = new Map<string, Promise<PipelineJobResult>>()
   const invocationTicks = new Map<string, number>()
   const stopped = new Map<string, string>()
@@ -283,7 +317,9 @@ export async function runPipelinedBatch(
 
   try {
     while (true) {
-      let runs = await Promise.all(batch.runs.map((entry) => loadRun(entry.runId)))
+      let runs = await Promise.all(
+        batch.runs.map((entry) => loadRunForPipelineRouting(entry.runId)),
+      )
       let gateAdvanced = false
       for (const run of runs) {
         const advanced = await advanceBenchmarkGate(run)
@@ -295,7 +331,9 @@ export async function runPipelinedBatch(
         )
       }
       if (gateAdvanced) {
-        runs = await Promise.all(batch.runs.map((entry) => loadRun(entry.runId)))
+        runs = await Promise.all(
+          batch.runs.map((entry) => loadRunForPipelineRouting(entry.runId)),
+        )
       }
 
       const now = new Date().toISOString()
@@ -315,18 +353,15 @@ export async function runPipelinedBatch(
         batch.pipeline.runs[run.runId] = state
       }
 
-      const poolActive = new Map<PipelinePool, number>()
-      for (const lease of Object.values(batch.pipeline.leases)) {
-        poolActive.set(lease.pool, (poolActive.get(lease.pool) ?? 0) + 1)
-      }
-
       let dispatched = false
-      for (const worker of workers.filter((candidate) => !candidate.busy)) {
+      while (active.size < options.globalWorkers) {
         const candidates = runs.flatMap((run) => {
           const pool = poolForStage(run.stage)
+          const agent = pipelineAgentForRun(run)
           const state = batch.pipeline!.runs[run.runId]
           if (
             pool === undefined ||
+            agent === undefined ||
             stopped.has(run.runId) ||
             batch.pipeline!.leases[run.runId] !== undefined ||
             (invocationTicks.get(run.runId) ?? 0) >= options.maxTicks
@@ -334,16 +369,23 @@ export async function runPipelinedBatch(
           return [{
             value: run,
             pool,
+            agent,
             readySince: state?.readySince ?? now,
             stableKey: run.unit,
           }]
         })
-        const selected = selectPipelineCandidate(
-          candidates,
-          poolActive,
-          batch.pipeline.workerCaps,
+        const proposals = workers.flatMap((worker) => {
+          if (worker.busy) return []
+          const candidate = selectPipelineCandidate(candidates, worker.agent)
+          return candidate === undefined ? [] : [{ worker, candidate }]
+        }).sort((left, right) =>
+          Date.parse(left.candidate.readySince) - Date.parse(right.candidate.readySince) ||
+          left.candidate.stableKey.localeCompare(right.candidate.stableKey) ||
+          left.worker.id.localeCompare(right.worker.id)
         )
-        if (selected === undefined) continue
+        const proposal = proposals[0]
+        if (proposal === undefined) break
+        const { worker, candidate: selected } = proposal
 
         const lease: PipelineLease = {
           leaseId: randomUUID(),
@@ -352,17 +394,17 @@ export async function runPipelinedBatch(
           unit: selected.value.unit,
           stage: selected.value.stage,
           pool: selected.pool,
+          agent: selected.agent,
           leasedAt: new Date().toISOString(),
         }
         batch.pipeline.leases[selected.value.runId] = lease
-        poolActive.set(selected.pool, (poolActive.get(selected.pool) ?? 0) + 1)
         worker.busy = true
         dispatched = true
         batch.pipeline.updatedAt = new Date().toISOString()
         batch.updatedAt = batch.pipeline.updatedAt
         await saveBatch(batch)
         console.log(
-          `[pipeline] dispatch worker=${worker.id} pool=${selected.pool} ` +
+          `[pipeline] dispatch worker=${worker.id} agent=${worker.agent} pool=${selected.pool} ` +
           `unit=${selected.value.unit} stage=${selected.value.stage}`,
         )
         active.set(
@@ -385,11 +427,14 @@ export async function runPipelinedBatch(
 
       if (active.size === 0) {
         const disabled = runs.filter((run) => {
-          const pool = poolForStage(run.stage)
-          return pool !== undefined && batch.pipeline!.workerCaps[pool] === 0
+          const agent = pipelineAgentForRun(run)
+          return agent !== undefined && batch.pipeline!.agentCaps[agent] === 0
         })
         for (const run of disabled) {
-          stopped.set(run.runId, `NO_WORKER_FOR_STAGE:${run.stage}`)
+          stopped.set(
+            run.runId,
+            `NO_WORKER_FOR_AGENT:${pipelineAgentForRun(run) ?? "unknown"}`,
+          )
         }
         const status = batchStatus(runs, stopped)
         batch.lastRunFinishedAt = new Date().toISOString()
@@ -468,7 +513,7 @@ export async function runPipelinedBatch(
         batch.updatedAt = batch.pipeline.updatedAt
         await saveBatch(batch)
         console.log(
-          `[pipeline] complete worker=${result.worker.id} pool=${result.lease.pool} ` +
+          `[pipeline] complete worker=${result.worker.id} agent=${result.worker.agent} pool=${result.lease.pool} ` +
           `unit=${result.lease.unit} ${result.before.stage} -> ${result.after.stage} ` +
           `service=${result.metric.serviceMs}ms` +
           (stopReason === undefined ? "" : ` stopped=${stopReason}`),

@@ -85,6 +85,44 @@ const stageMetrics = Object.values(jobs.reduce<Record<string, {
   p95QueueWaitSeconds: Number((percentile(group.queueWaitMs, 0.95) / 1000).toFixed(1)),
   errors: group.errors,
 })).sort((left, right) => right.serviceSeconds - left.serviceSeconds)
+const agentMetrics = Object.values(jobs.reduce<Record<string, {
+  agent: string
+  jobs: number
+  serviceMs: number[]
+  queueWaitMs: number[]
+  retries: number
+  revisions: number
+  errors: number
+}>>((groups, job) => {
+  const group = groups[job.agent] ?? {
+    agent: job.agent,
+    jobs: 0,
+    serviceMs: [],
+    queueWaitMs: [],
+    retries: 0,
+    revisions: 0,
+    errors: 0,
+  }
+  group.jobs += 1
+  group.serviceMs.push(job.serviceMs)
+  group.queueWaitMs.push(job.queueWaitMs)
+  if (job.outcome === "RETRY") group.retries += 1
+  if (job.outcome === "REVISE") group.revisions += 1
+  if (job.error !== undefined) group.errors += 1
+  groups[job.agent] = group
+  return groups
+}, {})).map((group) => ({
+  agent: group.agent,
+  jobs: group.jobs,
+  serviceSeconds: Number((group.serviceMs.reduce((sum, value) => sum + value, 0) / 1000).toFixed(1)),
+  meanServiceSeconds: Number((group.serviceMs.reduce((sum, value) => sum + value, 0) / group.jobs / 1000).toFixed(1)),
+  p95ServiceSeconds: Number((percentile(group.serviceMs, 0.95) / 1000).toFixed(1)),
+  meanQueueWaitSeconds: Number((group.queueWaitMs.reduce((sum, value) => sum + value, 0) / group.jobs / 1000).toFixed(1)),
+  p95QueueWaitSeconds: Number((percentile(group.queueWaitMs, 0.95) / 1000).toFixed(1)),
+  retries: group.retries,
+  revisions: group.revisions,
+  errors: group.errors,
+})).sort((left, right) => right.serviceSeconds - left.serviceSeconds)
 const totalServiceMs = jobs.reduce((sum, job) => sum + job.serviceMs, 0)
 const completedUnits = runs.filter(
   (run) => run.stage === "ACCEPTED" || run.stage === "BENCHMARK_COMPLETE",
@@ -135,7 +173,8 @@ console.log(JSON.stringify({
   },
   pipeline: batch.pipeline === undefined ? undefined : {
     globalWorkers: batch.pipeline.globalWorkers,
-    workerCaps: batch.pipeline.workerCaps,
+    schedulingMode: batch.pipeline.schedulingMode,
+    agentCaps: batch.pipeline.agentCaps,
     pinnedDependencies: batch.pipeline.dependencies,
     jobs: jobs.length,
     throughputUnitsPerHour: wallClockMs === 0
@@ -163,6 +202,8 @@ console.log(JSON.stringify({
     manifestGenerationIncludedInStageServiceTime: true,
     criticalStageByServiceTime: stageMetrics[0]?.stage,
     stageMetrics,
+    criticalAgentByServiceTime: agentMetrics[0]?.agent,
+    agentMetrics,
   },
   runs,
 }, null, 2))

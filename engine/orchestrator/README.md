@@ -81,19 +81,29 @@ an entire unit:
   --language ptx \
   --version 9.3 \
   --units and.b64,or.b64,xor.b64 \
-  --workers 3 \
-  --stage-workers evidence=2,semantic=2,lean=2,theorem=1,proof=2,critic=2 \
   --auto-approve
 ```
 
-The seven pools are `architecture`, `evidence`, `semantic`, `lean`, `theorem`,
-`proof`, and `critic`. `--workers` bounds total concurrent model work; pool
-caps provide structural backpressure without requiring seven simultaneous
-agents. Idle workers can serve a different eligible pool and keep their
-OpenCode runtime alive between jobs. A durable lease prevents two workers from
-executing the same run concurrently. A second controller refuses to attach
-while the first controller PID is live; after a crash, persisted
-`activeExecution` state remains the source of session recovery.
+Workers are pinned to actual OpenCode agent identities, not generic threads.
+The default is exactly one persistent worker/runtime for each executable role:
+`spec-architect`, `architecture-critic`, `source-curator-fast`,
+`source-curator`, `semantic-extractor-delta`, `semantic-extractor`,
+`semantics-critic`, `lean-formalizer`, `lean-mapping-critic`,
+`theorem-strength-critic`, `proof-engineer`, and `final-critic`. The logical
+stage pools remain useful reporting dimensions, but they do not own or share
+workers. The same `lean-formalizer` worker serves Lean formalization and theorem
+generation because those stages select the same sub-agent. Fast/fallback roles
+have separate workers and queues.
+
+Every dispatch deterministically recomputes the run's selected agent and
+refuses execution if it differs from the worker identity. `--workers` is only
+an optional global simultaneous-execution safety bound (default: all configured
+agent workers). Per-agent multiplicity can be changed explicitly, for example
+`--agent-workers proof-engineer=2,final-critic=1`; unspecified agents remain at
+one. A durable lease prevents two workers from executing the same run
+concurrently. A second controller refuses to attach while the first controller
+PID is live; after a crash, persisted `activeExecution` state remains the
+source of session recovery.
 
 The batch snapshots SHA-256 identities for the source manifest and available
 language-front-end artifacts (retrieval index, semantic profile, and shared
@@ -102,8 +112,8 @@ never silently mixed into an in-flight batch. Human gates consume no worker
 and park only the affected unit. Benchmark auto-advance uses the same
 deterministic decision-record implementation as the single-run loop.
 
-`batch-report` includes per-stage service and queue-wait mean/p95, worker
-utilization, throughput, retry/revision totals, execution models, and whether
+`batch-report` includes per-agent and per-stage service/queue-wait mean/p95,
+worker utilization, throughput, retry/revision totals, execution models, and whether
 traceability-manifest creation occurred inside measured stage service time.
 Every semantics/proof manifest remains unit-scoped, content-addressed,
 immutable, deterministically validated, and directly consumable by the VS Code
@@ -113,8 +123,8 @@ Resume preserves the saved execution mode and pool configuration; explicit
 overrides are optional:
 
 ```bash
-./spec2lean resume-batch --batch <batch-id> --workers 4 \
-  --stage-workers evidence=2,semantic=2,lean=1,proof=2
+./spec2lean resume-batch --batch <batch-id> --workers 8 \
+  --agent-workers proof-engineer=2
 ./spec2lean batch-report --batch <batch-id>
 ```
 

@@ -20,11 +20,18 @@ import {
   makeUnitSlug,
 } from "./artifact-contract.js"
 import { mapWithConcurrency } from "./batch-runtime.js"
-import { saveBatch, type FormalizationBatch } from "./batch-store.js"
+import {
+  PIPELINE_AGENTS,
+  saveBatch,
+  type FormalizationBatch,
+} from "./batch-store.js"
 import { parseBatchUnits, resolveWorkerCount } from "./formalize-batch.js"
 import {
-  DEFAULT_PIPELINE_WORKER_CAPS,
-  parsePipelineWorkerCaps,
+  DEFAULT_PIPELINE_AGENT_CAPS,
+  parsePipelineAgentCaps,
+  pipelineAgentCapsIssues,
+  pipelineAgentForRun,
+  pipelineAgentWorkerLayout,
   poolForStage,
   selectPipelineCandidate,
 } from "./pipeline-config.js"
@@ -43,6 +50,7 @@ import {
 } from "./lean-language.js"
 import { validateSourceProposal } from "./source-bootstrap.js"
 import { htmlSections } from "./source-index.js"
+import { STAGE_PLANS } from "./stage-plan.js"
 import {
   proofTargets,
   theoremDeclarationNames,
@@ -185,30 +193,47 @@ assert(poolForStage("SOURCE_CURATION") === "evidence", "source curation uses evi
 assert(poolForStage("PROOF_GENERATION") === "proof", "proof generation uses proof pool")
 assert(poolForStage("WAITING_GATE_B") === undefined, "human gates consume no pipeline worker")
 assert(
-  parsePipelineWorkerCaps("evidence=3,proof=1").evidence === 3 &&
-    parsePipelineWorkerCaps("evidence=3,proof=1").proof === 1 &&
-    parsePipelineWorkerCaps("evidence=3,proof=1").semantic ===
-      DEFAULT_PIPELINE_WORKER_CAPS.semantic,
-  "stage worker overrides preserve unspecified pool caps",
+  parsePipelineAgentCaps("proof-engineer=2,source-curator-fast=1")["proof-engineer"] === 2 &&
+    parsePipelineAgentCaps("proof-engineer=2,source-curator-fast=1")["lean-formalizer"] ===
+      DEFAULT_PIPELINE_AGENT_CAPS["lean-formalizer"],
+  "agent worker overrides preserve unspecified dedicated workers",
 )
-let invalidPipelinePoolRejected = false
+let invalidPipelineAgentRejected = false
 try {
-  parsePipelineWorkerCaps("unknown=2")
+  parsePipelineAgentCaps("unknown=2")
 } catch {
-  invalidPipelinePoolRejected = true
+  invalidPipelineAgentRejected = true
 }
-assert(invalidPipelinePoolRejected, "unknown pipeline worker pools are rejected")
-const selectedPipelineCandidate = selectPipelineCandidate(
-  [
-    { value: "new-evidence", pool: "evidence", readySince: "2026-01-02T00:00:00.000Z", stableKey: "b" },
-    { value: "old-proof", pool: "proof", readySince: "2026-01-01T00:00:00.000Z", stableKey: "a" },
-  ],
-  new Map([["proof", 1]]),
-  { ...DEFAULT_PIPELINE_WORKER_CAPS, proof: 1 },
+assert(invalidPipelineAgentRejected, "unknown pipeline agents are rejected")
+assert(
+  pipelineAgentCapsIssues(DEFAULT_PIPELINE_AGENT_CAPS).length === 0 &&
+    pipelineAgentCapsIssues({ ...DEFAULT_PIPELINE_AGENT_CAPS, "proof-engineer": -1 })
+      .some((issue) => issue.includes("proof-engineer")),
+  "persisted agent worker configuration is validated before scheduling",
+)
+const defaultAgentWorkers = pipelineAgentWorkerLayout(DEFAULT_PIPELINE_AGENT_CAPS)
+assert(
+  defaultAgentWorkers.length === 12 &&
+    new Set(defaultAgentWorkers.map((worker) => worker.agent)).size === 12 &&
+    defaultAgentWorkers.every((worker) => worker.id === `${worker.agent}-1`),
+  "default pipeline creates exactly one persistent worker identity per executable sub-agent",
 )
 assert(
-  selectedPipelineCandidate?.value === "new-evidence",
-  "pipeline scheduler skips a saturated pool without blocking other stages",
+  Object.values(STAGE_PLANS).every((plan) =>
+    PIPELINE_AGENTS.some((agent) => agent === plan.agent)
+  ),
+  "every base stage agent has a registered dedicated pipeline worker",
+)
+const selectedPipelineCandidate = selectPipelineCandidate(
+  [
+    { value: "other-agent", pool: "evidence", agent: "source-curator", readySince: "2026-01-01T00:00:00.000Z", stableKey: "a" },
+    { value: "own-agent", pool: "proof", agent: "proof-engineer", readySince: "2026-01-02T00:00:00.000Z", stableKey: "b" },
+  ],
+  "proof-engineer",
+)
+assert(
+  selectedPipelineCandidate?.value === "own-agent",
+  "agent-pinned worker cannot consume another agent queue",
 )
 
 const theoremContract = validateTheoremObligationDocument({
@@ -312,9 +337,10 @@ const pipelineBatch: FormalizationBatch = {
   updatedAt: "2026-01-01T00:00:00.000Z",
   runs: parkedRuns.map((run) => ({ unit: run.unit, runId: run.runId })),
   pipeline: {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    schedulingMode: "AGENT_PINNED",
     globalWorkers: 2,
-    workerCaps: DEFAULT_PIPELINE_WORKER_CAPS,
+    agentCaps: DEFAULT_PIPELINE_AGENT_CAPS,
     dependencies: [{
       role: "SOURCE_MANIFEST",
       path: parkedRuns[0]!.sourceManifest,
@@ -510,6 +536,49 @@ assert(
     "source-curator",
   ) === "source-curator",
   "non-PTX source curation uses the generic curator instead of the PTX fast path",
+)
+const fastCuratorRun: RunState = {
+  ...baseArtifactRun,
+  stage: "SOURCE_CURATION",
+}
+assert(
+  pipelineAgentForRun(fastCuratorRun) === "source-curator-fast",
+  "first PTX source pass is routed to its dedicated fast-curator worker",
+)
+assert(
+  pipelineAgentForRun({
+    ...fastCuratorRun,
+    executions: [{
+      at: "2026-01-01T00:00:01.000Z",
+      stage: "SOURCE_CURATION",
+      agent: "source-curator-fast",
+      sessionId: "fixture",
+      outcome: "RETRY",
+      nextStage: "SOURCE_CURATION",
+      response: "bounded fast path unavailable",
+    }],
+  }) === "source-curator",
+  "PTX source fallback moves to the separate full-curator worker",
+)
+assert(
+  pipelineAgentForRun({
+    ...baseArtifactRun,
+    semanticV2: {
+      profilePath: "fixture-profile.json",
+      sharedEnvironmentPath: "fixture-environment.json",
+      mode: "DELTA_FAST_PATH",
+      missingRequiredSemanticIds: [],
+      events: [],
+    },
+  }) === "semantic-extractor-delta",
+  "semantic delta work has a dedicated extractor worker",
+)
+assert(
+  pipelineAgentForRun({ ...baseArtifactRun, stage: "LEAN_FORMALIZATION" }) ===
+    "lean-formalizer" &&
+    pipelineAgentForRun({ ...baseArtifactRun, stage: "THEOREM_GENERATION" }) ===
+      "lean-formalizer",
+  "the same Lean formalizer sub-agent owns both of its logical stage queues",
 )
 const normalizedInvalidDecision = normalizeAgentDecision(baseArtifactRun, {
   outcome: "BLOCKED",
@@ -811,9 +880,13 @@ const pipelineRuntimeSource = await readFile(
 assert(
   pipelineRuntimeSource.includes("verifyPipelineDependencies") &&
     pipelineRuntimeSource.includes("worker.runtime ??= await startOpenCode()") &&
+    pipelineRuntimeSource.includes("selectedAgent !== worker.agent") &&
+    pipelineRuntimeSource.includes("selectPipelineCandidate(candidates, worker.agent)") &&
+    pipelineRuntimeSource.includes("loadRunForPipelineRouting") &&
+    pipelineRuntimeSource.includes("prepareSemanticV2Run(run)") &&
     pipelineRuntimeSource.includes("await executeTick(lease.runId") &&
     pipelineRuntimeSource.includes("manifestGenerationIncludedInServiceMs: true"),
-  "pipeline pins language inputs, reuses worker runtimes, executes bounded ticks, and measures manifest work",
+  "pipeline pins language inputs, isolates agent queues/runtimes, executes bounded ticks, and measures manifest work",
 )
 const runnerSource = await readFile(
   resolve(REPO_ROOT, "engine/orchestrator/src/runner.ts"),
