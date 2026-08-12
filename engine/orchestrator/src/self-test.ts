@@ -879,14 +879,15 @@ const pipelineRuntimeSource = await readFile(
 )
 assert(
   pipelineRuntimeSource.includes("verifyPipelineDependencies") &&
-    pipelineRuntimeSource.includes("worker.runtime ??= await startOpenCode()") &&
+    pipelineRuntimeSource.includes("sharedRuntimeStartup ??= startOpenCode()") &&
+    pipelineRuntimeSource.includes("sharedRuntime?.runtime.server.close()") &&
     pipelineRuntimeSource.includes("selectedAgent !== worker.agent") &&
     pipelineRuntimeSource.includes("selectPipelineCandidate(candidates, worker.agent)") &&
     pipelineRuntimeSource.includes("loadRunForPipelineRouting") &&
     pipelineRuntimeSource.includes("prepareSemanticV2Run(run)") &&
     pipelineRuntimeSource.includes("await executeTick(lease.runId") &&
     pipelineRuntimeSource.includes("manifestGenerationIncludedInServiceMs: true"),
-  "pipeline pins language inputs, isolates agent queues/runtimes, executes bounded ticks, and measures manifest work",
+  "pipeline pins language inputs, isolates agent queues over one shared runtime, executes bounded ticks, and measures manifest work",
 )
 const runnerSource = await readFile(
   resolve(REPO_ROOT, "engine/orchestrator/src/runner.ts"),

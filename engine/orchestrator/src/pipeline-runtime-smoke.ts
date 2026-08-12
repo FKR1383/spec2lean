@@ -2,36 +2,49 @@ import { startOpenCode, unwrap } from "./opencode.js"
 import { PIPELINE_AGENTS } from "./batch-store.js"
 
 type Agent = { name?: string }
+type Session = { id?: string }
 
-const runtimes: Awaited<ReturnType<typeof startOpenCode>>[] = []
+let runtime: Awaited<ReturnType<typeof startOpenCode>> | undefined
+const sessionIds: string[] = []
 
 try {
-  // Two independently bound servers are sufficient to verify the primitive
-  // used by every lazy agent-pinned worker. This sends no model prompt.
-  runtimes.push(await startOpenCode())
-  runtimes.push(await startOpenCode())
-
-  const registries = await Promise.all(runtimes.map(async (runtime) =>
-    unwrap<Agent[]>(await runtime.runtime.client.app.agents())
+  runtime = await startOpenCode()
+  const registry = unwrap<Agent[]>(await runtime.runtime.client.app.agents())
+  const names = new Set(registry.flatMap((agent) =>
+    typeof agent.name === "string" ? [agent.name] : []
   ))
-  const urls = runtimes.map((runtime) => runtime.runtime.server.url)
-  const missingAgents = registries.flatMap((registry, index) => {
-    const names = new Set(registry.flatMap((agent) =>
-      typeof agent.name === "string" ? [agent.name] : []
-    ))
-    return PIPELINE_AGENTS
-      .filter((agent) => !names.has(agent))
-      .map((agent) => `runtime-${index + 1}:${agent}`)
-  })
-  const ok = new Set(urls).size === runtimes.length && missingAgents.length === 0
+  const missingAgents = PIPELINE_AGENTS.filter((agent) => !names.has(agent))
+
+  // Concurrent session creation exercises the shared-server primitive used
+  // by agent-pinned workers without submitting a model prompt.
+  const sessions = await Promise.all(
+    PIPELINE_AGENTS.slice(0, 4).map(async (agent) =>
+      unwrap<Session>(await runtime!.runtime.client.session.create({
+        body: { title: `Spec2Lean shared-runtime smoke ${agent}` },
+      }))
+    ),
+  )
+  sessionIds.push(...sessions.flatMap((session) => session.id ? [session.id] : []))
+  const ok =
+    missingAgents.length === 0 &&
+    sessionIds.length === sessions.length &&
+    new Set(sessionIds).size === sessions.length
   console.log(JSON.stringify({
     ok,
     promptSubmitted: false,
-    runtimeUrls: urls,
-    registrySizes: registries.map((registry) => registry.length),
+    runtimeCount: 1,
+    runtimeUrl: runtime.runtime.server.url,
+    registrySize: registry.length,
+    concurrentSessionsCreated: sessionIds.length,
+    uniqueSessionIds: new Set(sessionIds).size,
     missingAgents,
   }, null, 2))
   if (!ok) process.exitCode = 1
 } finally {
-  for (const runtime of runtimes.reverse()) runtime.runtime.server.close()
+  if (runtime !== undefined) {
+    await Promise.allSettled(sessionIds.map(async (id) =>
+      runtime!.runtime.client.session.delete({ path: { id } })
+    ))
+    runtime.runtime.server.close()
+  }
 }

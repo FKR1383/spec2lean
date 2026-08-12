@@ -45,7 +45,6 @@ export type PipelineRuntimeOptions = {
 type WorkerSlot = {
   id: string
   agent: PipelineAgent
-  runtime?: Spec2LeanOpenCode
   busy: boolean
 }
 
@@ -56,7 +55,20 @@ type PipelineJobResult = {
   after: RunState
   metric: PipelineJobMetric
   proofMadeProgress: boolean
+  infrastructureRetry?: boolean
   error?: string
+}
+
+function isSharedRuntimeTransportError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return [
+    "fetch failed",
+    "ECONNREFUSED",
+    "ECONNRESET",
+    "EPIPE",
+    "socket hang up",
+    "server closed",
+  ].some((fragment) => message.toLowerCase().includes(fragment.toLowerCase()))
 }
 
 function processIsAlive(pid: number): boolean {
@@ -134,7 +146,8 @@ async function runPipelineJob(
   lease: PipelineLease,
   queuedAt: string,
   providerRetryBudgetSeconds: number,
-  ensureRuntime: (worker: WorkerSlot) => Promise<Spec2LeanOpenCode>,
+  ensureRuntime: () => Promise<Spec2LeanOpenCode>,
+  invalidateRuntime: (runtime: Spec2LeanOpenCode) => Promise<boolean>,
 ): Promise<PipelineJobResult> {
   const before = await loadRunForPipelineRouting(lease.runId)
   const selectedAgent = pipelineAgentForRun(before)
@@ -150,15 +163,21 @@ async function runPipelineJob(
     : undefined
   const startedAt = new Date().toISOString()
   let error: string | undefined
+  let infrastructureRetry = false
+  let runtime: Spec2LeanOpenCode | undefined
 
   try {
-    worker.runtime = await ensureRuntime(worker)
+    runtime = await ensureRuntime()
     await executeTick(lease.runId, {
-      runtime: worker.runtime,
+      runtime,
       providerRetryBudgetMs: providerRetryBudgetSeconds * 1000,
     })
   } catch (caught) {
     error = caught instanceof Error ? caught.message : String(caught)
+    infrastructureRetry = isSharedRuntimeTransportError(caught)
+    if (infrastructureRetry && runtime !== undefined) {
+      await invalidateRuntime(runtime)
+    }
   }
 
   const after = await loadRun(lease.runId)
@@ -198,6 +217,7 @@ async function runPipelineJob(
     before,
     after,
     metric,
+    infrastructureRetry,
     proofMadeProgress:
       before.stage === "PROOF_GENERATION" &&
       after.stage === "PROOF_GENERATION" &&
@@ -289,30 +309,29 @@ export async function runPipelinedBatch(
   const workers: WorkerSlot[] = pipelineAgentWorkerLayout(
     batch.pipeline.agentCaps,
   ).map((worker) => ({ ...worker, busy: false }))
-  if (workers.length > 1 && process.env.SPEC2LEAN_OPENCODE_PORT !== undefined) {
-    await releaseController(batch)
-    throw new Error(
-      "SPEC2LEAN_OPENCODE_PORT fixes a single server port and is incompatible " +
-      "with multiple agent-pinned runtimes; unset it for pipeline execution",
-    )
-  }
   const active = new Map<string, Promise<PipelineJobResult>>()
   const invocationTicks = new Map<string, number>()
   const stopped = new Map<string, string>()
-  let runtimeStartup: Promise<void> = Promise.resolve()
-  const ensureRuntime = async (worker: WorkerSlot): Promise<Spec2LeanOpenCode> => {
-    if (worker.runtime !== undefined) return worker.runtime
-    let runtime: Spec2LeanOpenCode | undefined
-    const start = runtimeStartup.then(async () => {
-      worker.runtime ??= await startOpenCode()
-      runtime = worker.runtime
+  let runtimeRestartAttempts = 0
+  let sharedRuntime: Spec2LeanOpenCode | undefined
+  let sharedRuntimeStartup: Promise<Spec2LeanOpenCode> | undefined
+  const ensureRuntime = async (): Promise<Spec2LeanOpenCode> => {
+    if (sharedRuntime !== undefined) return sharedRuntime
+    sharedRuntimeStartup ??= startOpenCode().catch((error) => {
+      runtimeRestartAttempts += 1
+      sharedRuntimeStartup = undefined
+      throw error
     })
-    // Port allocation closes its probe socket before the SDK server binds.
-    // Serial startup removes the otherwise unnecessary cross-worker race.
-    runtimeStartup = start.catch(() => undefined)
-    await start
-    if (runtime === undefined) throw new Error(`Failed to initialize ${worker.id}`)
-    return runtime
+    sharedRuntime = await sharedRuntimeStartup
+    return sharedRuntime
+  }
+  const invalidateRuntime = async (runtime: Spec2LeanOpenCode): Promise<boolean> => {
+    if (sharedRuntime !== runtime) return false
+    runtime.runtime.server.close()
+    sharedRuntime = undefined
+    sharedRuntimeStartup = undefined
+    runtimeRestartAttempts += 1
+    return true
   }
 
   try {
@@ -415,6 +434,7 @@ export async function runPipelinedBatch(
             selected.readySince,
             options.providerRetryBudgetSeconds,
             ensureRuntime,
+            invalidateRuntime,
           ).catch((error) => failedPipelineJob(
             worker,
             lease,
@@ -461,11 +481,13 @@ export async function runPipelinedBatch(
         delete batch.pipeline.leases[result.lease.runId]
         batch.pipeline.jobs.push(result.metric)
         const state = batch.pipeline.runs[result.lease.runId]!
-        state.totalTicks += 1
-        invocationTicks.set(
-          result.lease.runId,
-          (invocationTicks.get(result.lease.runId) ?? 0) + 1,
-        )
+        if (!result.infrastructureRetry) {
+          state.totalTicks += 1
+          invocationTicks.set(
+            result.lease.runId,
+            (invocationTicks.get(result.lease.runId) ?? 0) + 1,
+          )
+        }
 
         const last = result.after.executions?.at(-1)
         const retried =
@@ -485,9 +507,13 @@ export async function runPipelinedBatch(
         state.readyStage = undefined
         state.readySince = undefined
 
-        let stopReason = result.error
+        let stopReason = result.infrastructureRetry
+          ? runtimeRestartAttempts > 3
+            ? "SHARED_RUNTIME_RESTART_LIMIT_REACHED"
+            : undefined
+          : result.error
         if (stopReason === undefined && result.after.revision <= result.before.revision) {
-          stopReason = "RUN_REVISION_DID_NOT_ADVANCE"
+          if (!result.infrastructureRetry) stopReason = "RUN_REVISION_DID_NOT_ADVANCE"
         }
         if (
           stopReason === undefined &&
@@ -516,14 +542,15 @@ export async function runPipelinedBatch(
           `[pipeline] complete worker=${result.worker.id} agent=${result.worker.agent} pool=${result.lease.pool} ` +
           `unit=${result.lease.unit} ${result.before.stage} -> ${result.after.stage} ` +
           `service=${result.metric.serviceMs}ms` +
+          (result.infrastructureRetry && stopReason === undefined
+            ? " shared-runtime-restart=rescheduled"
+            : "") +
           (stopReason === undefined ? "" : ` stopped=${stopReason}`),
         )
       }
     }
   } finally {
-    await Promise.allSettled(
-      workers.map(async (worker) => worker.runtime?.runtime.server.close()),
-    )
+    sharedRuntime?.runtime.server.close()
     await releaseController(batch)
   }
 }

@@ -85,7 +85,8 @@ an entire unit:
 ```
 
 Workers are pinned to actual OpenCode agent identities, not generic threads.
-The default is exactly one persistent worker/runtime for each executable role:
+The default is exactly one persistent logical worker for each executable role
+over one shared, lazy OpenCode server:
 `spec-architect`, `architecture-critic`, `source-curator-fast`,
 `source-curator`, `semantic-extractor-delta`, `semantic-extractor`,
 `semantics-critic`, `lean-formalizer`, `lean-mapping-critic`,
@@ -104,6 +105,12 @@ one. A durable lease prevents two workers from executing the same run
 concurrently. A second controller refuses to attach while the first controller
 PID is live; after a crash, persisted `activeExecution` state remains the
 source of session recovery.
+
+The shared server hosts independent persisted sessions for concurrent jobs;
+agent identity is selected per session prompt, not by server identity. This
+avoids one process/port/runtime per sub-agent without weakening queue
+isolation. A transport failure invalidates the singleton server, preserves the
+run's `activeExecution`, and reschedules through a bounded restart policy.
 
 The batch snapshots SHA-256 identities for the source manifest and available
 language-front-end artifacts (retrieval index, semantic profile, and shared

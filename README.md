@@ -227,10 +227,12 @@ other units:
 ./spec2lean batch-report --batch <batch-id>
 ```
 
-The pipeline creates one persistent, agent-pinned worker/runtime for each
-actual execution role. A worker never changes agent identity: for example,
+The pipeline creates one persistent, agent-pinned logical worker for each
+actual execution role over one shared lazy OpenCode server. A worker never
+changes agent identity, while each dispatched unit/stage gets an independent
+persisted OpenCode session. For example,
 `source-curator-fast`, `source-curator`, `semantic-extractor-delta`, and
-`semantic-extractor` have separate queues/runtimes, while the two logical
+`semantic-extractor` have separate queues, while the two logical
 stages genuinely owned by `lean-formalizer` share that one agent worker.
 `--workers` optionally lowers the global simultaneous-execution safety bound;
 it does not change worker identity. `--agent-workers proof-engineer=2` is an
@@ -241,6 +243,9 @@ environment before dispatch. Normal human gates park only their own unit;
 `--auto-approve` retains benchmark-only decision records and never creates a
 human approval. Deterministic Lean checks and declaration/theorem evidence
 manifest generation remain inside their existing stage boundaries.
+If the shared server transport fails, affected leases remain resumable and the
+scheduler performs a bounded server restart instead of changing agent routing
+or duplicating unit state.
 
 For a large corpus, keep one worker per agent first and tune only agents whose
 queue/service telemetry proves a bottleneck. Do not launch one process per
