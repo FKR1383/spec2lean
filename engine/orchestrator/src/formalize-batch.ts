@@ -10,6 +10,12 @@ import { REPO_ROOT } from "./repo.js"
 import { createRun } from "./run-service.js"
 import { saveRun } from "./run-store.js"
 import { ensureSourceIndex } from "./source-index.js"
+import {
+  DEFAULT_PIPELINE_WORKER_CAPS,
+  parsePipelineWorkerCaps,
+} from "./pipeline-config.js"
+import { snapshotPipelineDependencies } from "./pipeline-dependencies.js"
+import { runPipelinedBatch } from "./pipeline-runtime.js"
 import { transitionRun } from "./workflow.js"
 
 function argument(name: string): string | undefined {
@@ -115,7 +121,15 @@ async function createBatch(): Promise<FormalizationBatch> {
     ...argumentsFor("--units"),
     ...argumentsFor("--unit"),
   ])
-  const concurrency = workerCount(2)
+  const pipelineEnabled = process.argv.includes("--pipeline")
+  const concurrency = workerCount(pipelineEnabled ? 3 : 2)
+  const pipelineDependencies = pipelineEnabled
+    ? await snapshotPipelineDependencies({
+        language,
+        specificationVersion: specVersion,
+        sourceManifest,
+      })
+    : undefined
   const autoApprove = process.argv.includes("--auto-approve")
   const now = new Date().toISOString()
   const batchId = `${language}-${specVersion}-batch-${randomUUID().slice(0, 8)}`
@@ -143,18 +157,68 @@ async function createBatch(): Promise<FormalizationBatch> {
     sourceManifest,
     autoApprove,
     concurrency,
+    executionMode: pipelineEnabled ? "STAGE_PIPELINE" : "RUN_PARALLEL",
     createdAt: now,
     updatedAt: now,
     runs: entries,
   }
+  if (pipelineEnabled) {
+    batch.pipeline = {
+      schemaVersion: 1,
+      globalWorkers: concurrency,
+      workerCaps: parsePipelineWorkerCaps(
+        argument("--stage-workers"),
+        DEFAULT_PIPELINE_WORKER_CAPS,
+      ),
+      dependencies: pipelineDependencies!,
+      startedAt: now,
+      updatedAt: now,
+      leases: {},
+      runs: Object.fromEntries(entries.map((entry) => [entry.runId, {
+        totalTicks: 0,
+        consecutiveRetries: 0,
+      }])),
+      jobs: [],
+    }
+  }
   await saveBatch(batch)
   return batch
+}
+
+async function ensurePipelineState(batch: FormalizationBatch): Promise<void> {
+  if (batch.pipeline !== undefined) return
+  const now = new Date().toISOString()
+  batch.executionMode = "STAGE_PIPELINE"
+  batch.pipeline = {
+    schemaVersion: 1,
+    globalWorkers: batch.concurrency,
+    workerCaps: parsePipelineWorkerCaps(
+      argument("--stage-workers"),
+      DEFAULT_PIPELINE_WORKER_CAPS,
+    ),
+    dependencies: await snapshotPipelineDependencies({
+      language: batch.language,
+      specificationVersion: batch.specVersion,
+      sourceManifest: batch.sourceManifest,
+    }),
+    startedAt: now,
+    updatedAt: now,
+    leases: {},
+    runs: Object.fromEntries(batch.runs.map((entry) => [entry.runId, {
+      totalTicks: 0,
+      consecutiveRetries: 0,
+    }])),
+    jobs: [],
+  }
 }
 
 async function main(): Promise<void> {
   const batch = argument("--batch") === undefined
     ? await createBatch()
     : await loadBatch(required("--batch"))
+  const pipelineEnabled =
+    process.argv.includes("--pipeline") || batch.executionMode === "STAGE_PIPELINE"
+  if (pipelineEnabled) await ensurePipelineState(batch)
   const options = {
     concurrency: workerCount(batch.concurrency),
     maxTicks: positiveInteger("--max-ticks", 50),
@@ -163,21 +227,43 @@ async function main(): Promise<void> {
     providerRetryBudgetSeconds: positiveInteger("--provider-retry-budget-seconds", 60),
   }
   batch.concurrency = options.concurrency
+  if (batch.pipeline !== undefined) {
+    batch.pipeline.globalWorkers = options.concurrency
+    const stageWorkers = argument("--stage-workers")
+    if (stageWorkers !== undefined) {
+      batch.pipeline.workerCaps = parsePipelineWorkerCaps(
+        stageWorkers,
+        batch.pipeline.workerCaps,
+      )
+    }
+    await saveBatch(batch)
+  }
 
   console.log(JSON.stringify({
     ok: true,
     batchId: batch.batchId,
     autoApprove: batch.autoApprove,
+    executionMode: batch.executionMode ?? "RUN_PARALLEL",
     concurrency: options.concurrency,
+    stageWorkers: batch.pipeline?.workerCaps,
+    pinnedDependencies: batch.pipeline?.dependencies,
     runs: batch.runs,
   }, null, 2))
 
-  const result = await runBatch(batch, options)
+  const result = pipelineEnabled
+    ? await runPipelinedBatch(batch, {
+        globalWorkers: options.concurrency,
+        maxTicks: options.maxTicks,
+        maxStageRetries: options.maxStageRetries,
+        maxStageRevisions: options.maxStageRevisions,
+        providerRetryBudgetSeconds: options.providerRetryBudgetSeconds,
+      })
+    : await runBatch(batch, options)
   console.log(JSON.stringify({
     ok: result.exitCode === 0,
     batchId: batch.batchId,
     status: result.status,
-    runs: batch.runs,
+    runs: result.batch.runs,
   }, null, 2))
   process.exitCode = result.exitCode
 }

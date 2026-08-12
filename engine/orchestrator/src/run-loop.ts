@@ -1,21 +1,9 @@
 import { startOpenCode } from "./opencode.js"
-import { recordBenchmarkAutoAdvance } from "./benchmark-decision-record.js"
-import { GATES } from "./gates.js"
-import { loadRun, saveRun } from "./run-store.js"
+import { advanceBenchmarkGate, waitingGateForStage } from "./gate-runtime.js"
+import { loadRun } from "./run-store.js"
 import { proofTargetSummary } from "./proof-plan.js"
 import { executeTick } from "./runner.js"
-import {
-  transitionRun,
-  type FormalizationStage,
-  type GateName,
-} from "./workflow.js"
-
-const GATE_FOR_WAIT_STAGE = new Map<FormalizationStage, GateName>(
-  Object.entries(GATES).map(([gate, plan]) => [
-    plan.waitingStage,
-    gate as GateName,
-  ]),
-)
+import type { FormalizationStage } from "./workflow.js"
 
 const TERMINAL_STAGES = new Set<FormalizationStage>([
   "BENCHMARK_COMPLETE",
@@ -62,33 +50,18 @@ async function main(): Promise<void> {
       const before = await loadRun(runId)
       console.log(`[spec2lean] run=${runId} stage=${before.stage} revision=${before.revision}`)
 
-      const waitingGate = GATE_FOR_WAIT_STAGE.get(before.stage)
-      if (waitingGate !== undefined && before.benchmark?.autoApprove === true) {
-        const decision = await recordBenchmarkAutoAdvance(before, waitingGate)
-        const target = waitingGate === "FINAL"
-          ? "BENCHMARK_COMPLETE"
-          : GATES[waitingGate].approvedStage
-        let next = transitionRun(
-          before,
-          target,
-          `${decision.recovered ? "Recovered" : "Recorded"} benchmark-only ${waitingGate} auto-advance; review=${decision.reviewPath}; humanConfirmationRecorded=false`,
-        )
-        next = {
-          ...next,
-          gates: {
-            ...next.gates,
-            [waitingGate]: "benchmark_auto_advanced",
-          },
-        }
-        await saveRun(next)
+      const waitingGate = waitingGateForStage(before.stage)
+      const autoAdvance = await advanceBenchmarkGate(before)
+      if (autoAdvance !== undefined) {
+        const next = autoAdvance.run
         console.log(JSON.stringify({
           ok: true,
           deterministic: true,
           benchmarkOnly: true,
           humanConfirmationRecorded: false,
           runId,
-          gate: waitingGate,
-          reviewPath: decision.reviewPath,
+          gate: autoAdvance.gate,
+          reviewPath: autoAdvance.reviewPath,
           fromStage: before.stage,
           toStage: next.stage,
           revision: next.revision,

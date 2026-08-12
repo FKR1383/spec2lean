@@ -71,6 +71,53 @@ Resume an interrupted/incomplete batch and report aggregate performance with:
 Do not put the same unit in a batch twice or start two independent batches for
 the same unit artifact root.
 
+## Stage-pipelined batches
+
+The throughput path schedules stage ticks rather than assigning one worker to
+an entire unit:
+
+```bash
+./spec2lean formalize-pipeline \
+  --language ptx \
+  --version 9.3 \
+  --units and.b64,or.b64,xor.b64 \
+  --workers 3 \
+  --stage-workers evidence=2,semantic=2,lean=2,theorem=1,proof=2,critic=2 \
+  --auto-approve
+```
+
+The seven pools are `architecture`, `evidence`, `semantic`, `lean`, `theorem`,
+`proof`, and `critic`. `--workers` bounds total concurrent model work; pool
+caps provide structural backpressure without requiring seven simultaneous
+agents. Idle workers can serve a different eligible pool and keep their
+OpenCode runtime alive between jobs. A durable lease prevents two workers from
+executing the same run concurrently. A second controller refuses to attach
+while the first controller PID is live; after a crash, persisted
+`activeExecution` state remains the source of session recovery.
+
+The batch snapshots SHA-256 identities for the source manifest and available
+language-front-end artifacts (retrieval index, semantic profile, and shared
+environment). A changed dependency stops resume before any agent runs; it is
+never silently mixed into an in-flight batch. Human gates consume no worker
+and park only the affected unit. Benchmark auto-advance uses the same
+deterministic decision-record implementation as the single-run loop.
+
+`batch-report` includes per-stage service and queue-wait mean/p95, worker
+utilization, throughput, retry/revision totals, execution models, and whether
+traceability-manifest creation occurred inside measured stage service time.
+Every semantics/proof manifest remains unit-scoped, content-addressed,
+immutable, deterministically validated, and directly consumable by the VS Code
+evidence UI.
+
+Resume preserves the saved execution mode and pool configuration; explicit
+overrides are optional:
+
+```bash
+./spec2lean resume-batch --batch <batch-id> --workers 4 \
+  --stage-workers evidence=2,semantic=2,lean=1,proof=2
+./spec2lean batch-report --batch <batch-id>
+```
+
 ## Lean-to-source evidence manifests
 
 The VS Code evidence UI consumes a deterministic manifest instead of parsing

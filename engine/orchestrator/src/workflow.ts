@@ -68,6 +68,13 @@ export type AgentExecution = {
   response: string
   artifactProduced?: boolean
   failureClass?: "PROVIDER_RETRY_BUDGET_EXCEEDED"
+  traceability?: {
+    documentRole: "SEMANTICS" | "PROOFS"
+    manifestPath: string
+    generationMs: number
+    entries: number
+    unresolvedReferences: number
+  }
 }
 
 export type ActiveExecution = {

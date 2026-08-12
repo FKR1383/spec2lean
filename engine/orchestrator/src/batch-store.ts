@@ -12,6 +12,77 @@ export type BatchRunEntry = {
   lastError?: string
 }
 
+export const PIPELINE_POOLS = [
+  "architecture",
+  "evidence",
+  "semantic",
+  "lean",
+  "theorem",
+  "proof",
+  "critic",
+] as const
+
+export type PipelinePool = (typeof PIPELINE_POOLS)[number]
+
+export type PipelineWorkerCaps = Record<PipelinePool, number>
+
+export type PipelineDependency = {
+  role: "SOURCE_MANIFEST" | "SOURCE_INDEX" | "SEMANTIC_PROFILE" | "SHARED_ENVIRONMENT"
+  path: string
+  sha256: string
+}
+
+export type PipelineLease = {
+  leaseId: string
+  workerId: string
+  runId: string
+  unit: string
+  stage: string
+  pool: PipelinePool
+  leasedAt: string
+}
+
+export type PipelineJobMetric = {
+  leaseId: string
+  workerId: string
+  runId: string
+  unit: string
+  pool: PipelinePool
+  fromStage: string
+  toStage: string
+  queuedAt: string
+  startedAt: string
+  finishedAt: string
+  queueWaitMs: number
+  serviceMs: number
+  outcome?: string
+  manifestCountBefore: number
+  manifestCountAfter: number
+  manifestGenerationIncludedInServiceMs: true
+  error?: string
+}
+
+export type PipelineRunSchedulingState = {
+  readyStage?: string
+  readySince?: string
+  totalTicks: number
+  consecutiveRetries: number
+  retryStage?: string
+}
+
+export type PipelineState = {
+  schemaVersion: 1
+  globalWorkers: number
+  workerCaps: PipelineWorkerCaps
+  dependencies: PipelineDependency[]
+  startedAt: string
+  updatedAt: string
+  controller?: { pid: number; claimedAt: string }
+  leases: Record<string, PipelineLease>
+  runs: Record<string, PipelineRunSchedulingState>
+  jobs: PipelineJobMetric[]
+}
+
 export type FormalizationBatch = {
   schemaVersion: 1
   batchId: string
@@ -20,6 +91,8 @@ export type FormalizationBatch = {
   sourceManifest: string
   autoApprove: boolean
   concurrency: number
+  executionMode?: "RUN_PARALLEL" | "STAGE_PIPELINE"
+  pipeline?: PipelineState
   createdAt: string
   updatedAt: string
   lastRunFinishedAt?: string

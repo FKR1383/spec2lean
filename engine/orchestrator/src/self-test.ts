@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
-import { readFile, readdir, unlink } from "node:fs/promises"
+import { readFile, readdir, rm, unlink } from "node:fs/promises"
 import { resolve } from "node:path"
 
 import { parseAgentResult } from "./agent-result.js"
@@ -20,7 +20,14 @@ import {
   makeUnitSlug,
 } from "./artifact-contract.js"
 import { mapWithConcurrency } from "./batch-runtime.js"
+import { saveBatch, type FormalizationBatch } from "./batch-store.js"
 import { parseBatchUnits, resolveWorkerCount } from "./formalize-batch.js"
+import {
+  DEFAULT_PIPELINE_WORKER_CAPS,
+  parsePipelineWorkerCaps,
+  poolForStage,
+  selectPipelineCandidate,
+} from "./pipeline-config.js"
 import { normalizeCriticResultFromReview } from "./critic-disposition.js"
 import {
   artifactPathsForGate,
@@ -42,6 +49,7 @@ import {
   verifiedProofArtifactPath,
 } from "./proof-plan.js"
 import { reconcileProofStageResult } from "./proof-stage-result.js"
+import { runPipelinedBatch } from "./pipeline-runtime.js"
 import {
   buildGeneralPrompt,
   buildTheoremStrengthContractContext,
@@ -53,6 +61,7 @@ import {
   validateTheoremObligationDocument,
 } from "./theorem-contract.js"
 import { loadAgentModel, loadProjectModel, REPO_ROOT } from "./repo.js"
+import { saveRun } from "./run-store.js"
 import { withRepositoryLock } from "./repository-lock.js"
 import { runSemanticIrSelfTests } from "./semantic-ir-self-test.js"
 import { runSemanticV2SelfTests } from "./semantic-v2-self-test.js"
@@ -172,6 +181,35 @@ try {
   workerConflictRejected = true
 }
 assert(workerConflictRejected, "conflicting worker aliases are rejected")
+assert(poolForStage("SOURCE_CURATION") === "evidence", "source curation uses evidence pool")
+assert(poolForStage("PROOF_GENERATION") === "proof", "proof generation uses proof pool")
+assert(poolForStage("WAITING_GATE_B") === undefined, "human gates consume no pipeline worker")
+assert(
+  parsePipelineWorkerCaps("evidence=3,proof=1").evidence === 3 &&
+    parsePipelineWorkerCaps("evidence=3,proof=1").proof === 1 &&
+    parsePipelineWorkerCaps("evidence=3,proof=1").semantic ===
+      DEFAULT_PIPELINE_WORKER_CAPS.semantic,
+  "stage worker overrides preserve unspecified pool caps",
+)
+let invalidPipelinePoolRejected = false
+try {
+  parsePipelineWorkerCaps("unknown=2")
+} catch {
+  invalidPipelinePoolRejected = true
+}
+assert(invalidPipelinePoolRejected, "unknown pipeline worker pools are rejected")
+const selectedPipelineCandidate = selectPipelineCandidate(
+  [
+    { value: "new-evidence", pool: "evidence", readySince: "2026-01-02T00:00:00.000Z", stableKey: "b" },
+    { value: "old-proof", pool: "proof", readySince: "2026-01-01T00:00:00.000Z", stableKey: "a" },
+  ],
+  new Map([["proof", 1]]),
+  { ...DEFAULT_PIPELINE_WORKER_CAPS, proof: 1 },
+)
+assert(
+  selectedPipelineCandidate?.value === "new-evidence",
+  "pipeline scheduler skips a saturated pool without blocking other stages",
+)
 
 const theoremContract = validateTheoremObligationDocument({
   schema_version: 1,
@@ -235,6 +273,85 @@ await mapWithConcurrency([1, 2, 3, 4], 2, async (value) => {
   return value * 2
 })
 assert(maximumBatchOperations === 2, "batch runtime enforces bounded concurrency")
+const pipelineFixtureId = `pipeline-self-test-${randomUUID()}`
+const pipelineRun = (suffix: string, stage: RunState["stage"]): RunState => ({
+  schemaVersion: 1,
+  runId: `${pipelineFixtureId}-${suffix}`,
+  mode: "formalization",
+  language: "ptx",
+  specVersion: "9.3",
+  unit: `${suffix}.b32`,
+  unitSlug: `${suffix}-b32`,
+  leanModuleName: `${suffix[0]!.toUpperCase()}${suffix.slice(1)}B32`,
+  sourceManifest: "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+  artifactRoot: `candidates/ptx/9.3/units/${suffix}-b32`,
+  stage,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+  revision: 1,
+  gates: { A: "pending", B: "pending", C: "pending", THEOREM_STRENGTH: "pending", FINAL: "pending" },
+  history: [{ at: "2026-01-01T00:00:00.000Z", from: "ARCHITECTURE_CRITIQUE", to: stage, reason: "pipeline scheduler fixture" }],
+})
+const parkedRuns = [
+  pipelineRun("left", "WAITING_GATE_A"),
+  pipelineRun("right", "WAITING_GATE_B"),
+]
+const sourceManifestData = await readFile(
+  resolve(REPO_ROOT, "documents/sources/nvidia/ptx/9.3/source-manifest.json"),
+)
+const pipelineBatch: FormalizationBatch = {
+  schemaVersion: 1,
+  batchId: pipelineFixtureId,
+  language: "ptx",
+  specVersion: "9.3",
+  sourceManifest: parkedRuns[0]!.sourceManifest,
+  autoApprove: false,
+  concurrency: 2,
+  executionMode: "STAGE_PIPELINE",
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+  runs: parkedRuns.map((run) => ({ unit: run.unit, runId: run.runId })),
+  pipeline: {
+    schemaVersion: 1,
+    globalWorkers: 2,
+    workerCaps: DEFAULT_PIPELINE_WORKER_CAPS,
+    dependencies: [{
+      role: "SOURCE_MANIFEST",
+      path: parkedRuns[0]!.sourceManifest,
+      sha256: createHash("sha256").update(sourceManifestData).digest("hex"),
+    }],
+    startedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    leases: {},
+    runs: Object.fromEntries(parkedRuns.map((run) => [run.runId, {
+      totalTicks: 0,
+      consecutiveRetries: 0,
+    }])),
+    jobs: [],
+  },
+}
+try {
+  await Promise.all(parkedRuns.map(saveRun))
+  await saveBatch(pipelineBatch)
+  const parkedResult = await runPipelinedBatch(pipelineBatch, {
+    globalWorkers: 2,
+    maxTicks: 1,
+    maxStageRetries: 1,
+    maxStageRevisions: 1,
+    providerRetryBudgetSeconds: 1,
+  })
+  assert(
+    parkedResult.status === "WAITING_HUMAN" &&
+      parkedResult.batch.pipeline?.jobs.length === 0 &&
+      parkedResult.batch.pipeline.controller === undefined,
+    "pipeline parks independent human gates without starting a worker",
+  )
+} finally {
+  await rm(resolve(REPO_ROOT, `runs/batches/${pipelineFixtureId}.json`), { force: true })
+  await Promise.all(parkedRuns.map((run) =>
+    rm(resolve(REPO_ROOT, `runs/${run.runId}`), { recursive: true, force: true })
+  ))
+}
 let activeLockedOperations = 0
 let maximumLockedOperations = 0
 await mapWithConcurrency([1, 2], 2, async () => {
@@ -667,6 +784,10 @@ const runLoopSource = await readFile(
   resolve(REPO_ROOT, "engine/orchestrator/src/run-loop.ts"),
   "utf8",
 )
+const gateRuntimeSource = await readFile(
+  resolve(REPO_ROOT, "engine/orchestrator/src/gate-runtime.ts"),
+  "utf8",
+)
 assert(!runLoopSource.includes("npm\""), "run loop does not spawn npm ticks")
 assert(!runLoopSource.includes("spawn("), "run loop executes ticks in-process")
 assert(
@@ -678,9 +799,21 @@ assert(
   "run loop passes the shared runtime and bounded provider retry policy into each tick",
 )
 assert(
-  runLoopSource.includes("recordBenchmarkAutoAdvance") &&
-    runLoopSource.includes('"BENCHMARK_COMPLETE"'),
-  "run loop records benchmark decisions and terminates outside human acceptance",
+  runLoopSource.includes("advanceBenchmarkGate") &&
+    gateRuntimeSource.includes("recordBenchmarkAutoAdvance") &&
+    gateRuntimeSource.includes('"BENCHMARK_COMPLETE"'),
+  "single-run and pipeline controllers share deterministic benchmark gate decisions",
+)
+const pipelineRuntimeSource = await readFile(
+  resolve(REPO_ROOT, "engine/orchestrator/src/pipeline-runtime.ts"),
+  "utf8",
+)
+assert(
+  pipelineRuntimeSource.includes("verifyPipelineDependencies") &&
+    pipelineRuntimeSource.includes("worker.runtime ??= await startOpenCode()") &&
+    pipelineRuntimeSource.includes("await executeTick(lease.runId") &&
+    pipelineRuntimeSource.includes("manifestGenerationIncludedInServiceMs: true"),
+  "pipeline pins language inputs, reuses worker runtimes, executes bounded ticks, and measures manifest work",
 )
 const runnerSource = await readFile(
   resolve(REPO_ROOT, "engine/orchestrator/src/runner.ts"),
@@ -693,12 +826,13 @@ assert(
 )
 assert(
   runnerSource.includes('run.stage === "LEAN_FORMALIZATION"') &&
-    runnerSource.includes('buildPipelineTraceabilityManifest(run, "SEMANTICS")') &&
+    runnerSource.includes('generateVerifiedTraceability(run, "SEMANTICS")') &&
+    runnerSource.includes("generationMs: Date.now() - startedAt") &&
     runnerSource.includes("writeTraceabilityManifest(manifest)"),
-  "verified Lean formalization automatically emits its evidence manifest",
+  "verified Lean formalization automatically emits and times its evidence manifest",
 )
 assert(
-  runnerSource.includes('buildPipelineTraceabilityManifest(run, "PROOFS")') &&
+  runnerSource.match(/generateVerifiedTraceability\(run, "PROOFS"\)/g)?.length === 2 &&
     runnerSource.match(/Deterministic theorem-to-source evidence manifest/g)?.length === 2,
   "verified proof generation automatically emits its theorem evidence manifest",
 )

@@ -75,6 +75,28 @@ async function buildPipelineTraceabilityManifest(
   }
 }
 
+type TraceabilityExecutionMetrics = NonNullable<
+  NonNullable<RunState["executions"]>[number]["traceability"]
+>
+
+async function generateVerifiedTraceability(
+  run: RunState,
+  documentRole: "SEMANTICS" | "PROOFS",
+): Promise<TraceabilityExecutionMetrics> {
+  const startedAt = Date.now()
+  const manifest = await buildPipelineTraceabilityManifest(run, documentRole)
+  const issues = await verifyTraceabilityManifest(manifest)
+  if (issues.length > 0) throw new Error(issues.join(" | "))
+  const manifestPath = await writeTraceabilityManifest(manifest)
+  return {
+    documentRole,
+    manifestPath,
+    generationMs: Date.now() - startedAt,
+    entries: manifest.entries.length,
+    unresolvedReferences: manifest.diagnostics.unresolvedReferences.length,
+  }
+}
+
 const FAST_FIRST_AGENTS:
   Partial<Record<FormalizationStage, string>> = {
     SOURCE_CURATION: "source-curator-fast",
@@ -695,13 +717,15 @@ export async function executeTick(
     const local = await finalizeProofStageLocally(run)
     if (local?.outcome === "SUCCESS") {
       await installProofPackage(run)
-      const manifest = await buildPipelineTraceabilityManifest(run, "PROOFS")
-      const issues = await verifyTraceabilityManifest(manifest)
-      if (issues.length > 0) {
-        throw new Error(`Local proof traceability generation failed: ${issues.join(" | ")}`)
+      let traceability: TraceabilityExecutionMetrics
+      try {
+        traceability = await generateVerifiedTraceability(run, "PROOFS")
+      } catch (error) {
+        throw new Error(
+          `Local proof traceability generation failed: ${error instanceof Error ? error.message : String(error)}`,
+        )
       }
-      const manifestPath = await writeTraceabilityManifest(manifest)
-      const localSummary = `${local.summary} Deterministic theorem-to-source evidence manifest: ${manifestPath}.`
+      const localSummary = `${local.summary} Deterministic theorem-to-source evidence manifest: ${traceability.manifestPath}.`
       const next = transitionRun(run, "FINAL_CRITIQUE", `local Lean verification: ${localSummary}`)
       const saved = {
         ...next,
@@ -716,6 +740,7 @@ export async function executeTick(
             outcome: local.outcome,
             nextStage: local.nextStage,
             response: localSummary,
+            traceability,
           },
         ],
       }
@@ -828,6 +853,7 @@ export async function executeTick(
     let response = ""
     let result: AgentResult | undefined
     let failureClass: "PROVIDER_RETRY_BUDGET_EXCEEDED" | undefined
+    let traceability: TraceabilityExecutionMetrics | undefined
 
     try {
       response = await waitForAgentResult(runtime.runtime.server.url, sessionId, {
@@ -895,13 +921,10 @@ export async function executeTick(
       if (result.outcome === "SUCCESS") {
         await installProofPackage(run)
         try {
-          const manifest = await buildPipelineTraceabilityManifest(run, "PROOFS")
-          const issues = await verifyTraceabilityManifest(manifest)
-          if (issues.length > 0) throw new Error(issues.join(" | "))
-          const manifestPath = await writeTraceabilityManifest(manifest)
+          traceability = await generateVerifiedTraceability(run, "PROOFS")
           result = {
             ...result,
-            summary: `${result.summary} Deterministic theorem-to-source evidence manifest: ${manifestPath}.`,
+            summary: `${result.summary} Deterministic theorem-to-source evidence manifest: ${traceability.manifestPath}.`,
           }
         } catch (error) {
           result = {
@@ -942,13 +965,10 @@ export async function executeTick(
       }
       if (result.outcome === "SUCCESS" && run.stage === "LEAN_FORMALIZATION") {
         try {
-          const manifest = await buildPipelineTraceabilityManifest(run, "SEMANTICS")
-          const issues = await verifyTraceabilityManifest(manifest)
-          if (issues.length > 0) throw new Error(issues.join(" | "))
-          const manifestPath = await writeTraceabilityManifest(manifest)
+          traceability = await generateVerifiedTraceability(run, "SEMANTICS")
           result = {
             ...result,
-            summary: `${result.summary} Deterministic Lean-to-source evidence manifest: ${manifestPath}.`,
+            summary: `${result.summary} Deterministic Lean-to-source evidence manifest: ${traceability.manifestPath}.`,
           }
         } catch (error) {
           result = {
@@ -1025,6 +1045,7 @@ export async function executeTick(
           response: response || (submitted ? "[no textual response]" : "[resumed session]"),
           artifactProduced: await fileExists(artifact.outputPath),
           ...(failureClass === undefined ? {} : { failureClass }),
+          ...(traceability === undefined ? {} : { traceability }),
         },
       ],
     }

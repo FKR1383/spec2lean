@@ -208,26 +208,39 @@ Generate performance and semantic-path reports:
 
 ## Batches and worker count
 
-Each unit remains an independent persistent run. `--workers` controls how many
-runs are active concurrently and is capped at eight:
+For compatibility, `formalize-batch` assigns each worker a complete unit run.
+For throughput-oriented work, use the stage pipeline. Each unit still has an
+independent persistent run, but workers take one stage tick at a time, so a
+unit waiting on a gate or a slow proof does not hold a worker or globally block
+other units:
 
 ```bash
-./spec2lean formalize-batch \
+./spec2lean formalize-pipeline \
   --language ptx \
   --version 9.3 \
   --units and.b64,or.b64,xor.b64 \
-  --workers 2 \
+  --workers 3 \
+  --stage-workers evidence=2,semantic=2,lean=2,theorem=1,proof=2,critic=2 \
   --auto-approve
 ```
 
 ```bash
-./spec2lean resume-batch --batch <batch-id> --workers 2
+./spec2lean resume-batch --batch <batch-id> --workers 3
 ./spec2lean batch-report --batch <batch-id>
 ```
 
-For a large corpus, use a bounded worker pool rather than launching every unit
-at once. Start with two workers and increase only after observing model quota,
-memory, and Lean-package lock contention.
+`--workers` is the global concurrency bound (maximum eight);
+`--stage-workers` sets per-pool backpressure and may set a pool to zero for a
+deliberate parked run. The scheduler reuses a persistent OpenCode runtime per
+global worker, records durable unit leases and queue/service telemetry, and
+hash-pins the source manifest, retrieval index, semantic profile, and shared
+environment before dispatch. Normal human gates park only their own unit;
+`--auto-approve` retains benchmark-only decision records and never creates a
+human approval. Deterministic Lean checks and declaration/theorem evidence
+manifest generation remain inside their existing stage boundaries.
+
+For a large corpus, start with three global workers and tune pool caps from
+`batch-report`; do not launch one process per unit.
 
 ## VS Code evidence GUI
 
