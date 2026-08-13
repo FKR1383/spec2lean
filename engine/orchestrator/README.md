@@ -90,11 +90,11 @@ over one shared, lazy OpenCode server:
 `spec-architect`, `architecture-critic`, `source-curator-fast`,
 `source-curator`, `semantic-extractor-delta`, `semantic-extractor`,
 `semantics-critic`, `lean-formalizer`, `lean-mapping-critic`,
-`theorem-strength-critic`, `proof-engineer`, and `final-critic`. The logical
+`theorem-designer`, `theorem-strength-critic`, `proof-engineer`, and
+`final-critic`. The logical
 stage pools remain useful reporting dimensions, but they do not own or share
-workers. The same `lean-formalizer` worker serves Lean formalization and theorem
-generation because those stages select the same sub-agent. Fast/fallback roles
-have separate workers and queues.
+workers. Lean implementation and theorem-contract design use separate agents
+and queues. Fast/fallback roles also have separate workers and queues.
 
 Every dispatch deterministically recomputes the run's selected agent and
 refuses execution if it differs from the worker identity. `--workers` is only

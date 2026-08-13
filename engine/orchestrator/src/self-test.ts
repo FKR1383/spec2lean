@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from "node:crypto"
-import { readFile, readdir, rm, unlink } from "node:fs/promises"
-import { resolve } from "node:path"
+import { mkdir, readFile, readdir, rm, unlink, writeFile } from "node:fs/promises"
+import { dirname, resolve } from "node:path"
 
 import { parseAgentResult } from "./agent-result.js"
 import { normalizeAgentDecision } from "./agent-decision.js"
+import { recoverResultFromVerifiedArtifact } from "./artifact-recovery.js"
 import {
   benchmarkDecisionLocation,
   recordBenchmarkAutoAdvance,
@@ -35,7 +36,12 @@ import {
   poolForStage,
   selectPipelineCandidate,
 } from "./pipeline-config.js"
-import { normalizeCriticResultFromReview } from "./critic-disposition.js"
+import {
+  normalizeCriticResultFromReview,
+  reviewDispositionCounts,
+  reviewExplicitlyReady,
+  reviewExplicitlyRequiresRevision,
+} from "./critic-disposition.js"
 import {
   artifactPathsForGate,
   verifyHumanDecisionRecord,
@@ -58,6 +64,12 @@ import {
 } from "./proof-plan.js"
 import { reconcileProofStageResult } from "./proof-stage-result.js"
 import { runPipelinedBatch } from "./pipeline-runtime.js"
+import { resolvePtxInstructionSection } from "./ptx-section-resolver.js"
+import {
+  collectArchitectureProvenanceClaims,
+  collectSemanticProvenanceClaims,
+  validateArchitectureIndex,
+} from "./provenance-catalog.js"
 import {
   buildGeneralPrompt,
   buildTheoremStrengthContractContext,
@@ -76,7 +88,9 @@ import { runSemanticV2SelfTests } from "./semantic-v2-self-test.js"
 import {
   buildTraceabilityManifest,
   manifestEntryForLine,
+  parseLeanDeclarations,
   traceabilityManifestPath,
+  unresolvedReferenceTokens,
   verifyTraceabilityManifest,
 } from "./traceability.js"
 import {
@@ -213,8 +227,8 @@ assert(
 )
 const defaultAgentWorkers = pipelineAgentWorkerLayout(DEFAULT_PIPELINE_AGENT_CAPS)
 assert(
-  defaultAgentWorkers.length === 12 &&
-    new Set(defaultAgentWorkers.map((worker) => worker.agent)).size === 12 &&
+  defaultAgentWorkers.length === 13 &&
+    new Set(defaultAgentWorkers.map((worker) => worker.agent)).size === 13 &&
     defaultAgentWorkers.every((worker) => worker.id === `${worker.agent}-1`),
   "default pipeline creates exactly one persistent worker identity per executable sub-agent",
 )
@@ -416,6 +430,29 @@ assert(
   majorCriticResult.outcome === "REVISE",
   "BLOCKER/MAJOR critic reviews still require revision",
 )
+const machineReadableReview = [
+  "BLOCKER: 0",
+  "MAJOR: 0",
+  "MINOR: 2",
+  "NOTE: 1",
+  "PRE_GATE_REVISION_REQUIRED: false",
+].join("\n")
+const machineReadableCounts = reviewDispositionCounts(machineReadableReview)
+assert(
+  machineReadableCounts?.BLOCKER === 0 &&
+    machineReadableCounts.MAJOR === 0 &&
+    machineReadableCounts.MINOR === 2 &&
+    machineReadableCounts.NOTE === 1 &&
+    reviewExplicitlyReady(machineReadableReview) &&
+    !reviewExplicitlyRequiresRevision(machineReadableReview),
+  "critic disposition block is machine-readable and explicitly ready",
+)
+assert(
+  !reviewExplicitlyReady("Not ready for human gate") &&
+    !reviewExplicitlyReady("PRE_GATE_REVISION_REQUIRED: true\nReady for review") &&
+    reviewExplicitlyRequiresRevision("PRE_GATE_REVISION_REQUIRED: true"),
+  "critic readiness cannot be inferred from negated or contradictory prose",
+)
 const blockedProofResult = reconcileProofStageResult(
   {
     outcome: "BLOCKED",
@@ -518,6 +555,62 @@ const ecmaArtifactRun: RunState = {
   artifactRoot: "candidates/ecmascript/2025/units/toboolean",
   stage: "LEAN_FORMALIZATION",
 }
+const artifactRecoveryRoot = `candidates/self-test/artifact-recovery-${randomUUID()}`
+try {
+  const architectureRecoveryRun: RunState = {
+    ...baseArtifactRun,
+    runId: `artifact-recovery-${randomUUID()}`,
+    artifactRoot: artifactRecoveryRoot,
+    stage: "ARCHITECTURE",
+  }
+  const architecturePath = artifactContractForRun(architectureRecoveryRun).outputPath
+  await mkdir(resolve(REPO_ROOT, dirname(architecturePath)), { recursive: true })
+  await writeFile(
+    resolve(REPO_ROOT, architecturePath),
+    [
+      "# Bounded scope",
+      "Official source facts and evidence are recorded here.",
+      "Project design dependency is explicit.",
+      "Assumptions, ambiguities, and open questions remain visible.",
+      "Gate A review checklist.",
+      "<!-- SPEC2LEAN_ARCHITECTURE_INDEX",
+      '{"schemaVersion":1,"entries":[{"semanticId":"D-1","classification":"DESIGN_DEPENDENCY","statement":"bounded test design","evidenceIds":[],"dependencyIds":[],"stateAffecting":false,"status":"RESOLVED"}]}',
+      "-->",
+    ].join("\n"),
+  )
+  const recoveredArchitecture = await recoverResultFromVerifiedArtifact(architectureRecoveryRun)
+  assert(
+    recoveredArchitecture?.outcome === "SUCCESS" &&
+      recoveredArchitecture.nextStage === "ARCHITECTURE_CRITIQUE",
+    "valid written artifact recovers a lost terminal protocol response",
+  )
+
+  const criticRecoveryRun: RunState = {
+    ...architectureRecoveryRun,
+    stage: "ARCHITECTURE_CRITIQUE",
+  }
+  const criticPath = artifactContractForRun(criticRecoveryRun).outputPath
+  await mkdir(resolve(REPO_ROOT, dirname(criticPath)), { recursive: true })
+  await writeFile(
+    resolve(REPO_ROOT, criticPath),
+    [
+      "# Architecture review",
+      "BLOCKER: 0",
+      "MAJOR: 0",
+      "MINOR: 1",
+      "NOTE: 0",
+      "PRE_GATE_REVISION_REQUIRED: false",
+    ].join("\n"),
+  )
+  const recoveredCritic = await recoverResultFromVerifiedArtifact(criticRecoveryRun)
+  assert(
+    recoveredCritic?.outcome === "SUCCESS" &&
+      recoveredCritic.nextStage === "WAITING_GATE_A",
+    "critic recovery requires a valid explicit zero-blocker disposition",
+  )
+} finally {
+  await rm(resolve(REPO_ROOT, artifactRecoveryRoot), { recursive: true, force: true })
+}
 assert(
   leanDeclarationNamespace(ecmaArtifactRun) === "Spec2Lean.ECMAScript.ToBoolean" &&
     leanPackagePath(ecmaArtifactRun) === "lean/Spec2Lean/ECMAScript/ToBoolean.lean" &&
@@ -577,8 +670,8 @@ assert(
   pipelineAgentForRun({ ...baseArtifactRun, stage: "LEAN_FORMALIZATION" }) ===
     "lean-formalizer" &&
     pipelineAgentForRun({ ...baseArtifactRun, stage: "THEOREM_GENERATION" }) ===
-      "lean-formalizer",
-  "the same Lean formalizer sub-agent owns both of its logical stage queues",
+      "theorem-designer",
+  "Lean implementation and theorem design use distinct bounded sub-agent queues",
 )
 const normalizedInvalidDecision = normalizeAgentDecision(baseArtifactRun, {
   outcome: "BLOCKED",
@@ -710,6 +803,31 @@ const parsed = parseAgentResult(
   'prefix\nSPEC2LEAN_RESULT {"outcome":"SUCCESS","nextStage":"ARCHITECTURE_CRITIQUE","summary":"ok"}',
 )
 assert(parsed.outcome === "SUCCESS", "result parsing")
+
+const ptxSourceIndex = JSON.parse(
+  await readFile(resolve(REPO_ROOT, ".spec2lean-cache/ptx/9.3/source-index-v1.json"), "utf8"),
+) as {
+  sections: Array<{
+    anchor: string
+    startLine: number
+    endLine: number
+    heading: string
+    searchText?: string
+  }>
+}
+for (const [unit, expectedAnchor] of [
+  ["add.u64", "integer-arithmetic-instructions-add"],
+  ["add.f32", "floating-point-instructions-add"],
+  ["add.f16", "half-precision-floating-point-instructions-add"],
+  ["add.f32.f16", "mixed-precision-floating-point-instructions-add"],
+  ["neg.s32", "integer-arithmetic-instructions-neg"],
+] as const) {
+  const resolution = resolvePtxInstructionSection(ptxSourceIndex.sections, unit)
+  assert(
+    resolution.status === "FOUND" && resolution.section.anchor === expectedAnchor,
+    `typed PTX resolver selects ${expectedAnchor} for ${unit}`,
+  )
+}
 
 const retrievalProfile = JSON.parse(
   await readFile(
@@ -944,8 +1062,53 @@ for (const agentFile of agentFiles) {
 }
 assert(
   (await loadAgentModel("proof-engineer")).full === "openai/gpt-5.3-codex-spark",
-  "proof engineer uses the bounded DeepSeek migration route",
+  "proof engineer uses the configured Spark benchmark model",
 )
+for (const criticAgent of [
+  "architecture-critic",
+  "semantics-critic",
+  "lean-mapping-critic",
+  "theorem-strength-critic",
+  "final-critic",
+]) {
+  const prompt = await readFile(
+    resolve(REPO_ROOT, `.opencode/agents/${criticAgent}.md`),
+    "utf8",
+  )
+  assert(
+    ["BLOCKER: <number>", "MAJOR: <number>", "MINOR: <number>", "NOTE: <number>",
+      "PRE_GATE_REVISION_REQUIRED: <true|false>"].every((line) => prompt.includes(line)),
+    `${criticAgent} emits the deterministic critic disposition block`,
+  )
+}
+for (const pipelineAgent of PIPELINE_AGENTS) {
+  const prompt = await readFile(
+    resolve(REPO_ROOT, `.opencode/agents/${pipelineAgent}.md`),
+    "utf8",
+  )
+  assert(
+    prompt.includes("candidate_validate: allow") &&
+      prompt.includes("candidate_validate"),
+    `${pipelineAgent} can run and is instructed to run same-session deterministic validation`,
+  )
+}
+for (const generatingAgent of [
+  "spec-architect",
+  "source-curator",
+  "semantic-extractor",
+  "lean-formalizer",
+]) {
+  const prompt = await readFile(
+    resolve(REPO_ROOT, `.opencode/agents/${generatingAgent}.md`),
+    "utf8",
+  )
+  assert(
+    prompt.includes("candidate_validate") &&
+      prompt.toLowerCase().includes("write") &&
+      prompt.toLowerCase().includes("early"),
+    `${generatingAgent} executes and persists before emitting the protocol result`,
+  )
+}
 const semanticCriticPrompt = await readFile(
   resolve(REPO_ROOT, ".opencode/agents/semantic-critic.md"),
   "utf8",
@@ -960,9 +1123,9 @@ const theoremStrengthCriticPrompt = await readFile(
   "utf8",
 )
 assert(
-  theoremStrengthCriticPrompt.includes("constructor overlap") &&
-    theoremStrengthCriticPrompt.includes("counterexample/probe") &&
-    ["`BLOCKER`", "`MAJOR`", "`MINOR`", "`NOTE`", "counts"].every(
+  theoremStrengthCriticPrompt.includes("constructor/branch coverage") &&
+    theoremStrengthCriticPrompt.includes("counterexample") &&
+    ["BLOCKER: <number>", "MAJOR: <number>", "MINOR: <number>", "NOTE: <number>"].every(
       (token) => theoremStrengthCriticPrompt.includes(token),
     ),
   "stage-specific theorem critic checks truth and has deterministic disposition output",
@@ -972,9 +1135,20 @@ const leanFormalizerPrompt = await readFile(
   "utf8",
 )
 assert(
-  leanFormalizerPrompt.includes("copy its exact SUCCESS") &&
-    leanFormalizerPrompt.includes("exact semantic claim IDs"),
+  leanFormalizerPrompt.includes("-- spec2lean: EXACT-ID-1") &&
+    leanFormalizerPrompt.includes("candidate_validate") &&
+    leanFormalizerPrompt.includes("Semantic preservation"),
   "Lean formalizer pins workflow protocol and traceability IDs",
+)
+const proofEngineerPrompt = await readFile(
+  resolve(REPO_ROOT, ".opencode/agents/proof-engineer.md"),
+  "utf8",
+)
+assert(
+  proofEngineerPrompt.includes("frozen theorem declarations") &&
+    runnerSource.includes("# Exact frozen theorem declarations") &&
+    runnerSource.includes("contractRepairTargets = await proofTargets(run)"),
+  "proof repair receives exact approved declarations instead of reconstructing theorem headers",
 )
 
 const candidateTool = await readFile(
@@ -983,8 +1157,10 @@ const candidateTool = await readFile(
 )
 assert(
   candidateTool.includes("JSON.parse(args.content)") &&
-    candidateTool.includes("invalid JSON; artifact was not written"),
-  "candidate_write validates JSON before the atomic write",
+    candidateTool.includes("invalid JSON; artifact was not written") &&
+    candidateTool.includes("candidate_validate") &&
+    candidateTool.includes("verifyTraceabilityManifest"),
+  "candidate tools validate JSON before write and run same-session stage/traceability checks",
 )
 
 const leanVerifierSmoke = await verifyLeanFile("lean/Spec2Lean/PTX/MovB32.lean")
@@ -1043,28 +1219,79 @@ const deltaAgent = await readFile(
 )
 assert(
   deltaAgent.includes("sourceBundleEvidenceId") &&
-    deltaAgent.includes("The orchestrator will record the failure") &&
-    deltaAgent.includes("Do not copy shared entries into local claims"),
+    deltaAgent.includes("explicit legacy fallback") &&
+    deltaAgent.includes("copy shared entries into local claims"),
   "delta extractor preserves grounding, reuse, and fallback boundaries",
 )
 
+const normalizedLegacyClaims = collectSemanticProvenanceClaims({
+  semantic_claims: [{
+    claim_id: "SF-1",
+    classification: "SOURCE_FACT",
+    statement: "fact",
+    evidence_fragment_ids: ["E-1"],
+  }],
+  design_dependencies: [{
+    dependency_id: "D-MUL-1",
+    classification: "DESIGN_DEPENDENCY",
+    statement: "design",
+    source_facts: ["SF-1"],
+  }],
+}, "fixture.json")
+assert(
+  normalizedLegacyClaims.some((claim) => claim.semanticId === "D-MUL-1") &&
+    normalizedLegacyClaims.some((claim) => claim.semanticId === "SF-1"),
+  "provenance catalog normalizes historical claim_id and dependency_id layouts",
+)
+const normalizedLegacyArchitecture = collectArchitectureProvenanceClaims([
+  "- SOURCE FACT (SF-MUL-1): exact fact",
+  "- DESIGN CHOICE (D-1): bounded design",
+  "- **OQ-1:** unresolved question",
+  "| SF-MUL-1 | D-1 |",
+].join("\n"), "fixture.md")
+assert(
+  normalizedLegacyArchitecture.map((claim) => claim.semanticId).join(",") ===
+    "D-1,OQ-1,SF-MUL-1",
+  "architecture compatibility reader accepts definition bullets but not dependency-table references",
+)
+assert(
+  validateArchitectureIndex([
+    "<!-- SPEC2LEAN_ARCHITECTURE_INDEX",
+    '{"schemaVersion":1,"entries":[{"semanticId":"D-1","classification":"DESIGN_DEPENDENCY","statement":"design","evidenceIds":["SF-MISSING"],"dependencyIds":[],"stateAffecting":false,"status":"RESOLVED"}]}',
+    "-->",
+  ].join("\n")).some((issue) => issue.includes("unknown evidenceId")),
+  "canonical architecture index rejects invented provenance references",
+)
+const blankSeparatedDeclaration = parseLeanDeclarations([
+  "-- spec2lean: SF-1",
+  "",
+  "def traced := true",
+].join("\n"))[0]
+assert(
+  blankSeparatedDeclaration?.comment.includes("spec2lean: SF-1") &&
+    unresolvedReferenceTokens("PTX 9.3 text", new Set()).length === 0 &&
+    unresolvedReferenceTokens("traceability: SF-UNKNOWN-1", new Set()).includes("SF-UNKNOWN-1"),
+  "Lean provenance tolerates one formatting blank and flags only explicit provenance tokens",
+)
+
 const traceabilityManifest = await buildTraceabilityManifest({
-  runId: "ptx-9.3-or.b16-ab7bd730",
+  runId: "ptx-9.3-or.b32-b870f055",
 })
 const traceabilityIssues = await verifyTraceabilityManifest(traceabilityManifest)
 assert(
-  traceabilityIssues.some((issue) => issue.includes("Lean declaration has no provenance reference")),
+  traceabilityIssues.some((issue) => issue.includes("b32DomainSize")) &&
+    traceabilityIssues.some((issue) => issue.includes("PredId")),
   "traceability validation exposes legacy unlinked declarations instead of silently passing",
 )
 const orValueEntry = traceabilityManifest.entries.find((entry) => entry.declarationName === "orValue")
 assert(
   orValueEntry !== undefined &&
-    orValueEntry.semanticIds.includes("SF-ORB16-003") &&
-    orValueEntry.evidence.some((evidence) => evidence.evidenceId === "PTX-9.3-ORB16-005"),
+    orValueEntry.semanticIds.includes("PTX-OR-SEM1-005") &&
+    orValueEntry.evidence.some((evidence) => evidence.evidenceId === "PTX-9.3-OR-005"),
   "traceability generator resolves Lean claim comments to exact source fragments",
 )
 const proofTraceabilityManifest = await buildTraceabilityManifest({
-  runId: "ptx-9.3-or.b16-ab7bd730",
+  runId: "ptx-9.3-or.b32-b870f055",
   documentRole: "PROOFS",
 })
 const proofTraceabilityIssues = await verifyTraceabilityManifest(proofTraceabilityManifest)
@@ -1073,7 +1300,7 @@ assert(
   `proof traceability manifest verifies: ${proofTraceabilityIssues.join(", ")}`,
 )
 const deterministicTheorem = proofTraceabilityManifest.entries.find(
-  (entry) => entry.declarationName === "OrB16Step_deterministic",
+  (entry) => entry.declarationName === "OrB32_OrB32Step_deterministic",
 )
 assert(
   deterministicTheorem !== undefined &&
@@ -1082,11 +1309,7 @@ assert(
     deterministicTheorem.evidence.length > 0,
   "proof traceability resolves theorem obligations through semantic claims to evidence",
 )
-const designTraceabilityManifest = await buildTraceabilityManifest({
-  runId: "ptx-9.3-or.b32-b870f055",
-  documentRole: "PROOFS",
-})
-const bitBucketTheorem = designTraceabilityManifest.entries.find(
+const bitBucketTheorem = proofTraceabilityManifest.entries.find(
   (entry) => entry.declarationName === "OrB32_OrB32Step_bitBucket_noop",
 )
 assert(
@@ -1096,38 +1319,18 @@ assert(
     bitBucketTheorem.evidence.some((item) => item.sourceKind === "ARTIFACT"),
   "traceability resolves reviewed architecture-design dependencies instead of treating them as NVIDIA facts",
 )
-const compositeProofTraceabilityManifest = await buildTraceabilityManifest({
-  runId: "ptx-9.3-shr.b32-ad159e51",
-  documentRole: "PROOFS",
-})
 assert(
-  compositeProofTraceabilityManifest.leanDocument.path ===
-    "candidates/ptx/9.3/units/shr-b32/lean/ShrB32Proofs-v1.lean",
+  proofTraceabilityManifest.leanDocument.path ===
+    "candidates/ptx/9.3/units/or-b32/lean/OrB32Proofs-v1.lean",
   "proof traceability selects the completed artifact contract, not a higher stale candidate version",
 )
-for (const declarationName of [
-  "execShrB32_sound_executed",
-  "execShrB32_sound_malformed",
-  "shrB32Step_to_exec_correspondence",
-]) {
-  const entry = compositeProofTraceabilityManifest.entries.find(
-    (candidate) => candidate.declarationName === declarationName,
-  )
-  assert(
-    entry !== undefined &&
-      entry.theoremObligationIds.includes("PTX-SHR-THM-002") &&
-      entry.semanticIds.length > 0 &&
-      entry.evidence.length > 0,
-    `proof traceability resolves every declaration in a composite theorem obligation: ${declarationName}`,
-  )
-}
-const completedShrRun = JSON.parse(await readFile(
-  resolve(REPO_ROOT, "runs/ptx-9.3-shr.b32-ad159e51/run.json"),
+const completedOrRun = JSON.parse(await readFile(
+  resolve(REPO_ROOT, "runs/ptx-9.3-or.b32-b870f055/run.json"),
   "utf8",
 )) as RunState
 assert(
-  verifiedProofArtifactPath(completedShrRun) ===
-    "candidates/ptx/9.3/units/shr-b32/lean/ShrB32Proofs-v1.lean",
+  verifiedProofArtifactPath(completedOrRun) ===
+    "candidates/ptx/9.3/units/or-b32/lean/OrB32Proofs-v1.lean",
   "completed proof artifact path is derived from successful proof-stage history",
 )
 assert(

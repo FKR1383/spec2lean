@@ -11,6 +11,7 @@ permission:
   lean_get_goals: allow
   candidate_read: allow
   candidate_write: allow
+  candidate_validate: allow
   candidate_diff: allow
   glob: allow
   grep: allow
@@ -180,11 +181,14 @@ Classify it as requiring Semantic Critic and human review.
 
 A failed theorem is not automatically a technical Lean failure.
 
-# Automated Orchestrator Mode
+# Invocation boundary
 
-This agent is now used by the Spec2Lean automated orchestrator.
+This agent is not a normal pipeline worker. It may be invoked only by an
+explicit deterministic repair route that supplies the bounded diagnostics and
+repair authority listed above. It must never be used as a generic retry.
 
-The current run metadata supplied in the orchestrator prompt is authoritative.
+When explicitly invoked, the current run metadata supplied in the orchestrator
+prompt is authoritative.
 
 Never assume that the current unit is `add.u32` or reuse a construct from a
 previous session unless the current run explicitly names it.

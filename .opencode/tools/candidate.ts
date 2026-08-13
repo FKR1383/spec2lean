@@ -19,6 +19,23 @@ import {
   sep,
 } from "node:path"
 
+import { artifactContractForRun } from "../../engine/orchestrator/src/artifact-contract.ts"
+import { verifyExpectedArtifact } from "../../engine/orchestrator/src/artifact-verify.ts"
+import {
+  buildProvenanceCatalog,
+  latestVersionedArtifact,
+} from "../../engine/orchestrator/src/provenance-catalog.ts"
+import { proofTargets } from "../../engine/orchestrator/src/proof-plan.ts"
+import { loadRun } from "../../engine/orchestrator/src/run-store.ts"
+import {
+  bundleEvidenceIds,
+  validateSemanticDeltaForRun,
+} from "../../engine/orchestrator/src/semantic-v2.ts"
+import {
+  buildTraceabilityManifest,
+  verifyTraceabilityManifest,
+} from "../../engine/orchestrator/src/traceability.ts"
+
 const TOOL_VERSION = 1
 const TIMEOUT_MS = 3_000
 
@@ -31,6 +48,8 @@ const MAX_DIFF_CHANGES = 400
 
 const WRITABLE_ROOT = "candidates"
 const DIFF_ROOTS = ["candidates", "accepted"] as const
+
+type UnknownRecord = Record<string, unknown>
 
 const ALLOWED_EXTENSIONS = new Set([
   ".json",
@@ -150,6 +169,26 @@ async function resolveExistingArtifact(
     absolutePath: canonicalPath,
     relativePath,
   }
+}
+
+async function resolveOfficialSourceFile(
+  worktree: string,
+  path: string,
+): Promise<string> {
+  if (path.length === 0 || path.includes("\0") || path.includes("\\") || isAbsolute(path)) {
+    throw new Error("official source path must be repository-relative")
+  }
+  const projectRoot = await realpath(worktree)
+  const documentsRoot = await realpath(resolve(projectRoot, "documents"))
+  const lexicalPath = resolve(projectRoot, normalize(path))
+  ensureInsideRoot(documentsRoot, lexicalPath)
+  const metadata = await lstat(lexicalPath)
+  if (!metadata.isFile() || metadata.isSymbolicLink()) {
+    throw new Error("official source is not a regular file")
+  }
+  const canonicalPath = await realpath(lexicalPath)
+  ensureInsideRoot(documentsRoot, canonicalPath)
+  return canonicalPath
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -576,6 +615,165 @@ export const write = tool({
           code: "CANDIDATE_WRITE_FAILED",
           message: error instanceof Error ? error.message : "unknown error",
         },
+      })
+    }
+  },
+})
+
+export const validate = tool({
+  description:
+    "Validate the current stage artifact with the same deterministic contract " +
+    "used by the Spec2Lean orchestrator. Lean stages also run declaration-level " +
+    "provenance validation. This tool is read-only and must pass before SUCCESS.",
+
+  args: {
+    runId: tool.schema.string().min(1).max(180),
+    path: tool.schema.string().min(1).max(300),
+  },
+
+  async execute(args, context) {
+    try {
+      const run = await loadRun(args.runId)
+      const expected = artifactContractForRun(run).outputPath
+      if (args.path !== expected) {
+        throw new Error(`path is not the current stage artifact; expected ${expected}`)
+      }
+      // Reuse the candidate path resolver to enforce the tool worktree and
+      // candidates/ boundary before repository-owned validators read it.
+      await resolveExistingArtifact(context.worktree, args.path, [WRITABLE_ROOT])
+
+      const verification = await verifyExpectedArtifact(run)
+      const issues = [...verification.issues]
+      if (run.stage === "SOURCE_CURATION") {
+        const bundle = JSON.parse(
+          await readFile(resolve(context.worktree, args.path), "utf8"),
+        ) as UnknownRecord
+        if (bundle.language !== run.language ||
+          bundle.specification_version !== run.specVersion || bundle.unit !== run.unit) {
+          issues.push("source bundle language/version/unit identity does not match the run")
+        }
+        const documents = new Map<string, { path: string; sha256: string; kind: string }>()
+        for (const [index, value] of (Array.isArray(bundle.source_documents)
+          ? bundle.source_documents : []).entries()) {
+          if (typeof value !== "object" || value === null || Array.isArray(value)) continue
+          const document = value as UnknownRecord
+          if (typeof document.document_id !== "string" ||
+            typeof document.local_path !== "string" || typeof document.sha256 !== "string" ||
+            typeof document.kind !== "string") continue
+          try {
+            const sourcePath = await resolveOfficialSourceFile(context.worktree, document.local_path)
+            const actual = sha256(await readBoundedFile(sourcePath, 256 * 1024 * 1024))
+            if (actual !== document.sha256) issues.push(`source document ${index} hash mismatch`)
+            documents.set(document.document_id, {
+              path: document.local_path,
+              sha256: document.sha256,
+              kind: document.kind,
+            })
+          } catch (error) {
+            issues.push(`source document ${index} is invalid: ${error instanceof Error ? error.message : String(error)}`)
+          }
+        }
+        for (const [index, value] of (Array.isArray(bundle.fragments) ? bundle.fragments : []).entries()) {
+          if (typeof value !== "object" || value === null || Array.isArray(value)) continue
+          const fragment = value as UnknownRecord
+          const document = typeof fragment.document_id === "string"
+            ? documents.get(fragment.document_id)
+            : undefined
+          if (document === undefined) issues.push(`fragment ${index} references unknown document_id`)
+          else if (fragment.source_sha256 !== document.sha256) {
+            issues.push(`fragment ${index} source_sha256 does not match its source document`)
+          } else if (fragment.source_kind !== document.kind) {
+            issues.push(`fragment ${index} source_kind does not match its source document`)
+          }
+        }
+      }
+      if (run.stage === "SEMANTIC_EXTRACTION") {
+        const semantic = await validateSemanticDeltaForRun(run)
+        issues.push(...semantic.issues)
+        if (semantic.ok && run.semanticV2?.mode !== "DELTA_FAST_PATH") {
+          const catalog = await buildProvenanceCatalog(run)
+          const knownSemanticIds = new Set(catalog.claims.map((claim) => claim.semanticId))
+          for (const claim of catalog.claims.filter((item) => item.origin === "SEMANTICS")) {
+            for (const dependencyId of claim.dependencyIds) {
+              if (!knownSemanticIds.has(dependencyId)) {
+                issues.push(`${claim.semanticId} references unknown semantic dependency: ${dependencyId}`)
+              }
+            }
+          }
+          const sourceBundlePath = await latestVersionedArtifact(
+            `${run.artifactRoot}/source-bundles`,
+            [/^source-bundle-v(\d+)\.json$/],
+          )
+          const bundleIds = bundleEvidenceIds(JSON.parse(
+            await readFile(resolve(context.worktree, sourceBundlePath), "utf8"),
+          ) as unknown)
+          for (const claim of catalog.claims.filter((item) =>
+            item.origin === "SEMANTICS" && item.classification === "SOURCE_FACT"
+          )) {
+            for (const evidenceId of claim.evidenceIds) {
+              if (!bundleIds.has(evidenceId)) {
+                issues.push(`${claim.semanticId} references unknown source-bundle evidence: ${evidenceId}`)
+              }
+            }
+          }
+          issues.push(...catalog.claims.flatMap((claim) =>
+            claim.classification === "OPEN_QUESTION" &&
+            claim.stateAffecting === true &&
+            claim.unresolved
+              ? [`unresolved state-affecting semantic ID: ${claim.semanticId}`]
+              : [],
+          ))
+        }
+      }
+      if (run.stage === "LEAN_FORMALIZATION" || run.stage === "PROOF_GENERATION") {
+        const catalog = await buildProvenanceCatalog(run)
+        issues.push(...catalog.claims.flatMap((claim) =>
+          claim.classification === "OPEN_QUESTION" &&
+          claim.stateAffecting === true &&
+          claim.unresolved
+            ? [`Lean generation is forbidden with unresolved state-affecting semantic ID: ${claim.semanticId}`]
+            : [],
+        ))
+        const manifest = await buildTraceabilityManifest({
+          runId: run.runId,
+          documentRole: run.stage === "PROOF_GENERATION" ? "PROOFS" : "SEMANTICS",
+          leanPath: args.path,
+        })
+        issues.push(...await verifyTraceabilityManifest(manifest))
+      }
+      if (run.stage === "THEOREM_GENERATION") {
+        const [catalog, targets] = await Promise.all([
+          buildProvenanceCatalog(run),
+          proofTargets(run),
+        ])
+        const known = new Set(catalog.claims.map((claim) => claim.semanticId))
+        for (const target of targets) {
+          for (const semanticId of target.semanticIds) {
+            if (!known.has(semanticId)) {
+              issues.push(`${target.obligationId} references unknown semantic ID: ${semanticId}`)
+            }
+          }
+        }
+      }
+
+      const uniqueIssues = [...new Set(issues)].sort((left, right) => left.localeCompare(right))
+      return jsonResult({
+        ok: uniqueIssues.length === 0,
+        tool: "candidate_validate",
+        version: TOOL_VERSION,
+        runId: run.runId,
+        stage: run.stage,
+        artifact: args.path,
+        issues: uniqueIssues,
+      })
+    } catch (error) {
+      return jsonResult({
+        ok: false,
+        tool: "candidate_validate",
+        version: TOOL_VERSION,
+        runId: args.runId,
+        artifact: args.path,
+        issues: [error instanceof Error ? error.message : "unknown error"],
       })
     }
   },

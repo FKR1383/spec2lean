@@ -1,5 +1,9 @@
 import { startOpenCode } from "./opencode.js"
-import { advanceBenchmarkGate, waitingGateForStage } from "./gate-runtime.js"
+import {
+  advanceBenchmarkGate,
+  benchmarkGateReadinessIssues,
+  waitingGateForStage,
+} from "./gate-runtime.js"
 import { loadRun } from "./run-store.js"
 import { proofTargetSummary } from "./proof-plan.js"
 import { executeTick } from "./runner.js"
@@ -70,14 +74,19 @@ async function main(): Promise<void> {
       }
 
       if (waitingGate !== undefined) {
+        const readinessIssues = await benchmarkGateReadinessIssues(before)
         console.log(JSON.stringify({
-          ok: true,
+          ok: readinessIssues.length === 0,
           stopped: true,
-          reason: "HUMAN_APPROVAL_REQUIRED",
+          reason: readinessIssues.length === 0
+            ? "HUMAN_APPROVAL_REQUIRED"
+            : "BENCHMARK_SEMANTIC_REVIEW_REQUIRED",
           runId,
           stage: before.stage,
           ticks,
+          ...(readinessIssues.length === 0 ? {} : { issues: readinessIssues }),
         }, null, 2))
+        if (readinessIssues.length > 0) process.exitCode = 2
         return
       }
 

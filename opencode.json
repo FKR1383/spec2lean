@@ -65,6 +65,7 @@
     "spec_get_context": "deny",
     "candidate_read": "deny",
     "candidate_write": "deny",
+    "candidate_validate": "deny",
     "candidate_diff": "deny",
     "lean_check_file": "deny",
     "lean_get_diagnostics": "deny",

@@ -100,8 +100,9 @@ SHA-256 and size, writes the source manifest, and builds the retrieval index.
 The agent never writes source files or semantic artifacts during acquisition,
 and the orchestrator never chooses or interprets specification prose.
 
-The first non-PTX portability pilot is ECMAScript 2025 `ToBoolean`. Its complete
-unattended benchmark command is:
+The ECMAScript 2025 language pack is the first non-PTX portability path. No
+generated ECMAScript unit artifact is checked in; a clean unattended sample can
+be created with:
 
 ```bash
 ./spec2lean formalize \
@@ -232,8 +233,10 @@ actual execution role over one shared lazy OpenCode server. A worker never
 changes agent identity, while each dispatched unit/stage gets an independent
 persisted OpenCode session. For example,
 `source-curator-fast`, `source-curator`, `semantic-extractor-delta`, and
-`semantic-extractor` have separate queues, while the two logical
-stages genuinely owned by `lean-formalizer` share that one agent worker.
+`semantic-extractor` have separate queues. Lean implementation is owned by
+`lean-formalizer`, while theorem-contract design is independently owned by
+`theorem-designer`; a long theorem-design task therefore cannot block the Lean
+mapping queue.
 `--workers` optionally lowers the global simultaneous-execution safety bound;
 it does not change worker identity. `--agent-workers proof-engineer=2` is an
 explicit per-agent throughput override; every registered role defaults to one.
@@ -324,6 +327,8 @@ The main implementation guide is [engine/orchestrator/README.md](engine/orchestr
 Semantic IR and traceability contracts are documented in
 [ir/semantic/README.md](ir/semantic/README.md) and
 [ir/traceability/README.md](ir/traceability/README.md).
+The complete generated catalog of role prompts and exact static stage tasks is
+[SUBAGENT_PROMPTS.md](SUBAGENT_PROMPTS.md).
 
 ## Safety model
 

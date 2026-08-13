@@ -16,6 +16,8 @@ The schemas are:
   fingerprints, and claim lifecycle.
 - `semantic-profile.schema.json`: bounded fast-path capabilities, mandatory
   safety checks, required approved shared IDs, and explicit legacy fallback.
+- `full-semantics.schema.json`: canonical language-neutral full-semantics
+  fallback for units that cannot use a reviewed shared-environment delta.
 
 The TypeScript equivalents and deterministic implementation are under
 `engine/orchestrator/src/semantic-ir/`.

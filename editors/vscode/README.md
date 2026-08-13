@@ -3,7 +3,7 @@
 From the repository root, the simplest development launch is:
 
 ```bash
-./spec2lean gui candidates/ptx/9.3/units/or-b16/lean/OrB16-v2.lean
+./spec2lean gui candidates/ptx/9.3/units/or-b32/lean/OrB32-v7.lean
 ```
 
 This packages the local extension as a VSIX, installs it on the active VS Code

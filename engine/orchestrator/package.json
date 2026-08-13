@@ -27,7 +27,8 @@
     "ingest": "tsx src/source-ingest.ts",
     "semantic-ir": "tsx src/semantic-ir-cli.ts",
     "traceability": "tsx src/traceability-cli.ts",
-    "semantic-report": "tsx src/semantic-v2-report.ts"
+    "semantic-report": "tsx src/semantic-v2-report.ts",
+    "prompt-readme": "tsx src/generate-prompt-readme.ts"
   },
   "dependencies": {
     "@opencode-ai/sdk": "^1.18.14"

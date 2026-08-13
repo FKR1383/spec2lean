@@ -82,6 +82,11 @@ export type SemanticV2Preflight = {
   issues: string[]
 }
 
+export type SemanticDeltaRunValidation = {
+  ok: boolean
+  issues: string[]
+}
+
 const profilePathFor = (run: RunState): string =>
   `language_packs/${run.language.toLowerCase()}/${run.specVersion}/semantic-profile.json`
 
@@ -561,6 +566,42 @@ async function verifyDeltaGrounding(
     if (documentHash !== evidence.source.documentSha256) {
       throw new Error(`Evidence document fingerprint mismatch: ${evidenceId}`)
     }
+  }
+}
+
+/** Same-session, read-only validation used by the restricted candidate tool. */
+export async function validateSemanticDeltaForRun(
+  run: RunState,
+): Promise<SemanticDeltaRunValidation> {
+  if (
+    run.stage !== "SEMANTIC_EXTRACTION" ||
+    run.semanticV2?.mode !== "DELTA_FAST_PATH" ||
+    run.semanticV2.current === undefined
+  ) return { ok: true, issues: [] }
+
+  try {
+    const [environmentInput, deltaInput] = await Promise.all([
+      readFile(ensureRepositoryRelative(run.semanticV2.sharedEnvironmentPath), "utf8")
+        .then((source) => JSON.parse(source) as unknown),
+      readFile(ensureRepositoryRelative(run.semanticV2!.current!.deltaPath), "utf8")
+        .then((source) => JSON.parse(source) as unknown),
+    ])
+    const evaluation = evaluateSemanticDeltaDocuments(environmentInput, deltaInput)
+    if (!evaluation.ok) {
+      return {
+        ok: false,
+        issues: [
+          ...evaluation.issues,
+          ...evaluation.unresolvedStateAffectingSemanticIds.map(
+            (id) => `unresolved state-affecting semantic ID: ${id}`,
+          ),
+        ],
+      }
+    }
+    await verifyDeltaGrounding(run, deltaInput as InstructionSemanticDelta)
+    return { ok: true, issues: [] }
+  } catch (error) {
+    return { ok: false, issues: [error instanceof Error ? error.message : String(error)] }
   }
 }
 

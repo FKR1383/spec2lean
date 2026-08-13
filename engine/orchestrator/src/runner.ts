@@ -12,6 +12,7 @@ import {
 } from "./agent-decision.js"
 import { artifactContractForRun } from "./artifact-contract.js"
 import { verifyExpectedArtifact } from "./artifact-verify.js"
+import { recoverResultFromVerifiedArtifact } from "./artifact-recovery.js"
 import { normalizeCriticResultFromReview } from "./critic-disposition.js"
 import {
   abortSession,
@@ -41,6 +42,7 @@ import {
   verifySemanticV2CriticPreflight,
 } from "./semantic-v2.js"
 import { planForRun } from "./stage-plan.js"
+import { buildStageInputContext } from "./stage-context.js"
 import {
   buildTraceabilityManifest,
   verifyTraceabilityManifest,
@@ -337,7 +339,8 @@ export function buildGeneralPrompt(
           "",
           `The complete semantic artifact is the deterministic materialized view at ${run.semanticV2.current.materializedPath}.`,
           `Its instruction-specific provenance delta is ${run.semanticV2.current.deltaPath}.`,
-          "Treat the human-approved materialized view as the semantic authority for this unit while preserving claim classifications and origin IDs in traceability.",
+          "Treat the Gate-B-authorized materialized view as the semantic authority for this run while preserving claim classifications and origin IDs in traceability.",
+          "The deterministic stage-input contract states whether that authorization is human approval or benchmark-only auto-advance.",
           "Do not expect the legacy hand-authored semantics JSON layout and do not regenerate semantic content.",
         ]
       : []),
@@ -434,13 +437,17 @@ type ProofPromptContext = {
   total: number
 }
 
-async function buildProofPrompt(run: RunState): Promise<ProofPromptContext & { prompt: string }> {
+async function buildProofPrompt(
+  run: RunState,
+  preflightDiagnostics?: string,
+): Promise<ProofPromptContext & { prompt: string }> {
   const packageInfo = await prepareLeanPackage(run)
   const proofPath = proofArtifactPath(run)
   const summary = await proofTargetSummary(run)
   const exists = await fileExists(proofPath)
   let diagnostics: string | undefined
   let existingCompiles = false
+  let contractRepairTargets: ProofTarget[] = []
 
   if (exists) {
     const banned = await prohibitedLeanTokens(proofPath)
@@ -449,8 +456,9 @@ async function buildProofPrompt(run: RunState): Promise<ProofPromptContext & { p
     } else {
       const statementIssues = await proofStatementContractIssues(run)
       if (statementIssues.length > 0) {
+        contractRepairTargets = await proofTargets(run)
         diagnostics = [
-          "The proof file does not preserve the exact human-approved theorem contract:",
+          "The proof file does not preserve the exact theorem contract authorized at the theorem-strength boundary:",
           ...statementIssues.map((issue) => `- ${issue}`),
         ].join("\n")
       } else {
@@ -459,6 +467,11 @@ async function buildProofPrompt(run: RunState): Promise<ProofPromptContext & { p
         if (!check.success) diagnostics = check.output.slice(-12_000)
       }
     }
+  }
+
+  if (preflightDiagnostics !== undefined) {
+    diagnostics = preflightDiagnostics
+    existingCompiles = false
   }
 
   const repairMode = exists && !existingCompiles
@@ -478,7 +491,7 @@ async function buildProofPrompt(run: RunState): Promise<ProofPromptContext & { p
       ? undefined
       : {
           obligationId: batchTargets.map((item) => item.obligationId).join(", "),
-          name: `${batchTargets.length} remaining approved theorem declarations`,
+          name: `${batchTargets.length} remaining authorized theorem declarations`,
           statement: batchTargets
             .map((item, index) => [
               `-- TARGET ${index + 1}: ${item.obligationId} / ${item.name}`,
@@ -511,15 +524,15 @@ async function buildProofPrompt(run: RunState): Promise<ProofPromptContext & { p
     "# Hard constraints",
     "",
     "- Do not re-read official source files, architecture, or semantic claim bundles during this subtask.",
-    "- The theorem-strength-approved statements below are authoritative.",
-    "- The orchestrator already extracted the frozen approved theorem statements; do not re-read the obligation JSON or theorem-strength review.",
+    "- The theorem-strength-authorized statements below are authoritative for this run.",
+    "- The orchestrator already extracted the frozen statements; do not re-read the obligation JSON or theorem-strength review.",
     "- Do not weaken it, add semantic preconditions, or change semantics.",
     "- Do not use sorry, admit, new axiom, or unsafe.",
     "- Write/edit the proof artifact EARLY, then use Lean diagnostics; do not mentally plan the whole proof set.",
     "- Prove exactly the bounded current batch below; later missing declarations are separate resumable batches.",
     "- Do not stop after the first successful theorem.",
     "- If the proof file already exists, preserve all previously compiling theorem declarations.",
-    "- Every helper declaration must have an immediately preceding traceability comment citing one or more semantic IDs from the current approved targets; approved theorem declarations are bound deterministically by obligation ID/name.",
+    "- Every helper declaration must have an immediately preceding `-- spec2lean: ID` comment citing the supplied allowlist; theorem declarations are bound deterministically by obligation ID/name.",
     "- Use candidate_write create only if the proof file does not exist; otherwise use candidate_write replace with its exact current SHA-256.",
     "- Import only the installed semantics module and required standard/project modules.",
     "",
@@ -530,6 +543,20 @@ async function buildProofPrompt(run: RunState): Promise<ProofPromptContext & { p
           diagnostics,
           "",
           "Repair only these concrete elaboration/proof failures. Do not add new theorem declarations until the file compiles.",
+          ...(contractRepairTargets.length === 0
+            ? []
+            : [
+                "",
+                "# Exact frozen theorem declarations",
+                "",
+                "Replace mismatching theorem headers with these exact authorized declarations; do not reconstruct them from memory:",
+                "",
+                ...contractRepairTargets.flatMap((item) => [
+                  `## ${item.obligationId}: ${item.name}`,
+                  item.statement,
+                  "",
+                ]),
+              ]),
           "After EVERY candidate_write, immediately run lean_check_file. Never finish after an unchecked write; reserve tool steps for the final compile check.",
         ]
       : target
@@ -545,18 +572,19 @@ async function buildProofPrompt(run: RunState): Promise<ProofPromptContext & { p
               ? ["Strength caveats:", ...target.strengthRisks.map((risk) => `- ${risk}`), ""]
               : []),
             ...(target.semanticIds.length > 0
-              ? ["Approved semantic IDs available for helper traceability:", ...target.semanticIds.map((id) => `- ${id}`), ""]
+              ? ["Authorized semantic IDs available for helper traceability:", ...target.semanticIds.map((id) => `- ${id}`), ""]
               : []),
             "Create or extend the proof file with every theorem declaration in this bounded batch.",
             "Then immediately run lean_check_file.",
             "Repair concrete diagnostics in the SAME session until the complete batch compiles or a genuine theorem/semantic conflict is found.",
           ]
         : [
-            "All approved theorem declarations are already present. Only verify the proof file with Lean and report SUCCESS if it compiles cleanly.",
+            "All authorized theorem declarations are already present. Only verify the proof file with Lean and report SUCCESS if it compiles cleanly.",
           ]),
     "# Result protocol",
     "",
-    `If the proof artifact compiles after this subtask, use RETRY/${run.stage} unless every approved theorem is present; the orchestrator will decide final completion itself.`,
+    "After the final candidate_write and Lean check, call candidate_validate for this run and proof path; repair provenance issues in this same session.",
+    `If the proof artifact compiles after this subtask, use RETRY/${run.stage} unless every authorized theorem is present; the orchestrator will decide final completion itself.`,
     'Your LAST non-empty line must be: SPEC2LEAN_RESULT {"outcome":"RETRY","nextStage":"PROOF_GENERATION","summary":"short factual summary"}',
     "If a genuine theorem/semantic conflict is discovered, use BLOCKED/BLOCKED instead.",
   ].join("\n")
@@ -715,54 +743,61 @@ export async function executeTick(
     // Fast path: a previous/interrupted proof attempt may already have completed.
     await prepareLeanPackage(run)
     const local = await finalizeProofStageLocally(run)
+    let proofPreflightDiagnostics: string | undefined
     if (local?.outcome === "SUCCESS") {
       await installProofPackage(run)
-      let traceability: TraceabilityExecutionMetrics
       try {
-        traceability = await generateVerifiedTraceability(run, "PROOFS")
+        const traceability = await generateVerifiedTraceability(run, "PROOFS")
+        const localSummary = `${local.summary} Deterministic theorem-to-source evidence manifest: ${traceability.manifestPath}.`
+        const next = transitionRun(run, "FINAL_CRITIQUE", `local Lean verification: ${localSummary}`)
+        const saved = {
+          ...next,
+          activeExecution: undefined,
+          executions: [
+            ...(run.executions ?? []),
+            {
+              at: new Date().toISOString(),
+              stage: run.stage,
+              agent: "orchestrator-local-lean",
+              sessionId: "local",
+              outcome: local.outcome,
+              nextStage: local.nextStage,
+              response: localSummary,
+              traceability,
+            },
+          ],
+        }
+        await saveRun(saved)
+        console.log(JSON.stringify({
+          ok: true,
+          runId,
+          agent: "orchestrator-local-lean",
+          outcome: "SUCCESS",
+          fromStage: run.stage,
+          toStage: saved.stage,
+          revision: saved.revision,
+          summary: localSummary,
+        }, null, 2))
+        return
       } catch (error) {
-        throw new Error(
-          `Local proof traceability generation failed: ${error instanceof Error ? error.message : String(error)}`,
-        )
+        proofPreflightDiagnostics =
+          `The proof file compiles and preserves the approved theorem contract, but ` +
+          `deterministic traceability validation failed:\n` +
+          `${error instanceof Error ? error.message : String(error)}\n` +
+          `Repair only the immediately preceding provenance comments/helper attribution. ` +
+          `Do not change any theorem header or proof body unless Lean requires it after the comment-only repair.`
       }
-      const localSummary = `${local.summary} Deterministic theorem-to-source evidence manifest: ${traceability.manifestPath}.`
-      const next = transitionRun(run, "FINAL_CRITIQUE", `local Lean verification: ${localSummary}`)
-      const saved = {
-        ...next,
-        activeExecution: undefined,
-        executions: [
-          ...(run.executions ?? []),
-          {
-            at: new Date().toISOString(),
-            stage: run.stage,
-            agent: "orchestrator-local-lean",
-            sessionId: "local",
-            outcome: local.outcome,
-            nextStage: local.nextStage,
-            response: localSummary,
-            traceability,
-          },
-        ],
-      }
-      await saveRun(saved)
-      console.log(JSON.stringify({
-        ok: true,
-        runId,
-        agent: "orchestrator-local-lean",
-        outcome: "SUCCESS",
-        fromStage: run.stage,
-        toStage: saved.stage,
-        revision: saved.revision,
-        summary: localSummary,
-      }, null, 2))
-      return
     }
 
-    proofContext = await buildProofPrompt(run)
-    prompt = proofContext.prompt
+    proofContext = await buildProofPrompt(run, proofPreflightDiagnostics)
+    prompt = `${proofContext.prompt}\n\n${await buildStageInputContext(run)}`
   } else {
     const theoremStrengthContext = await buildTheoremStrengthContractContext(run)
-    prompt = buildGeneralPrompt(run, theoremStrengthContext)
+    const stageInputContext = await buildStageInputContext(run)
+    prompt = buildGeneralPrompt(
+      run,
+      [stageInputContext, theoremStrengthContext].filter(Boolean).join("\n\n"),
+    )
   }
 
   if (dryRun) {
@@ -865,12 +900,13 @@ export async function executeTick(
       try {
         result = parseAgentResult(response)
       } catch (error) {
-        result = {
+        result = await recoverResultFromVerifiedArtifact(run) ?? {
           outcome: "RETRY",
           nextStage: run.stage,
           summary:
-            `Agent response did not contain a valid terminal protocol result; ` +
-            `no model-based recovery was attempted: ${error instanceof Error ? error.message : String(error)}`,
+            `Agent response did not contain a valid terminal protocol result and ` +
+            `the required artifact did not establish recoverable completion: ` +
+            `${error instanceof Error ? error.message : String(error)}`,
         }
       }
     } catch (error) {
@@ -889,7 +925,7 @@ export async function executeTick(
       if (error instanceof ProviderRetryBudgetExceededError) {
         failureClass = "PROVIDER_RETRY_BUDGET_EXCEEDED"
       }
-      result = {
+      result = await recoverResultFromVerifiedArtifact(run) ?? {
         outcome: "RETRY",
         nextStage: run.stage,
         summary: error instanceof ProviderRetryBudgetExceededError

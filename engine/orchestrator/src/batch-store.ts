@@ -34,6 +34,7 @@ export const PIPELINE_AGENTS = [
   "semantics-critic",
   "lean-formalizer",
   "lean-mapping-critic",
+  "theorem-designer",
   "theorem-strength-critic",
   "proof-engineer",
   "final-critic",

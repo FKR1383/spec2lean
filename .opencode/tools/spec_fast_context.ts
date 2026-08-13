@@ -3,6 +3,11 @@ import { createHash } from "node:crypto"
 import { readFile, realpath, stat } from "node:fs/promises"
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path"
 
+import {
+  resolvePtxInstructionSection,
+  type PtxIndexedSection,
+} from "../../engine/orchestrator/src/ptx-section-resolver.ts"
+
 const TOOL_VERSION = 1
 const PROFILE_PATH =
   "language_packs/ptx/9.3/retrieval-profile.json"
@@ -40,12 +45,7 @@ type SourceManifest = {
   }>
 }
 
-type Section = {
-  anchor: string
-  startLine: number
-  endLine: number
-  heading: string
-}
+type Section = PtxIndexedSection
 
 type Index = {
   schemaVersion: number
@@ -241,20 +241,6 @@ function boundedContext(
   }
 }
 
-function scoreCandidate(section: Section, mnemonic: string): number {
-  const anchor = section.anchor.toLowerCase()
-  const heading = section.heading.toLowerCase()
-
-  let score = 0
-
-  if (anchor.endsWith(`-${mnemonic}`)) score += 100
-  if (anchor.includes(`instructions-${mnemonic}`)) score += 50
-  if (heading.includes(`instructions: ${mnemonic}`)) score += 40
-  if (heading.includes(` ${mnemonic} `)) score += 10
-
-  return score
-}
-
 export default tool({
   description:
     "Return a deterministic, hash-verified PTX 9.3 evidence context for one " +
@@ -280,21 +266,9 @@ export default tool({
         throw new Error(`cannot derive PTX mnemonic from unit: ${args.unit}`)
       }
 
-      const candidates = loaded.index.sections
-        .filter((section) =>
-          section.anchor.toLowerCase().endsWith(`-${mnemonic}`),
-        )
-        .map((section) => ({
-          section,
-          score: scoreCandidate(section, mnemonic),
-        }))
-        .sort((a, b) =>
-          b.score - a.score ||
-          (a.section.endLine - a.section.startLine) -
-            (b.section.endLine - b.section.startLine),
-        )
+      const resolution = resolvePtxInstructionSection(loaded.index.sections, args.unit)
 
-      if (candidates.length === 0) {
+      if (resolution.status === "NOT_FOUND") {
         return jsonResult({
           ok: false,
           tool: "spec_fast_context",
@@ -307,24 +281,19 @@ export default tool({
         })
       }
 
-      const best = candidates[0]!
-
-      const tied = candidates.filter(
-        (candidate) => candidate.score === best.score,
-      )
-
-      if (tied.length > 1) {
+      if (resolution.status === "AMBIGUOUS") {
         return jsonResult({
           ok: false,
           tool: "spec_fast_context",
           version: TOOL_VERSION,
           error: {
             code: "AMBIGUOUS_INSTRUCTION_SECTION",
-            candidates: tied.slice(0, 8).map(({ section }) => ({
+            candidates: resolution.candidates.slice(0, 8).map(({ section, score }) => ({
               anchor: section.anchor,
               startLine: section.startLine,
               endLine: section.endLine,
               heading: section.heading,
+              score,
             })),
           },
         })
@@ -362,7 +331,7 @@ export default tool({
         mnemonic,
         target: boundedContext(
           loaded.lines,
-          best.section,
+          resolution.section,
           loaded.profile.context.targetMaxLines,
         ),
         shared,

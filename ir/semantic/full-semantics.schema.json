@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec2lean.dev/schema/semantic/full-semantics-v2.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "documentType",
+    "interpretationId",
+    "unit",
+    "provenance",
+    "semanticClaims",
+    "syntaxForms",
+    "operands",
+    "operation",
+    "stateEffects",
+    "preconditions",
+    "proofFamilies"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "documentType": { "const": "spec2lean_full_semantics" },
+    "interpretationId": { "type": "string", "minLength": 1 },
+    "unit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["language", "specificationVersion", "unit", "unitSlug"],
+      "properties": {
+        "language": { "type": "string", "minLength": 1 },
+        "specificationVersion": { "type": "string", "minLength": 1 },
+        "unit": { "type": "string", "minLength": 1 },
+        "unitSlug": { "type": "string", "minLength": 1 }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["architecture", "sourceBundles", "gateAAuthority"],
+      "properties": {
+        "architecture": { "$ref": "common.schema.json#/$defs/fingerprint" },
+        "sourceBundles": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "common.schema.json#/$defs/fingerprint" }
+        },
+        "gateAAuthority": {
+          "enum": ["HUMAN_APPROVED", "BENCHMARK_AUTO_ADVANCED_NOT_HUMAN_APPROVED"]
+        }
+      }
+    },
+    "semanticClaims": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "common.schema.json#/$defs/claim" }
+    },
+    "syntaxForms": { "$ref": "instruction-delta.schema.json#/$defs/syntaxForms" },
+    "operands": { "$ref": "instruction-delta.schema.json#/$defs/operands" },
+    "operation": { "$ref": "instruction-delta.schema.json#/$defs/operation" },
+    "stateEffects": { "$ref": "instruction-delta.schema.json#/$defs/stateEffects" },
+    "preconditions": { "$ref": "instruction-delta.schema.json#/$defs/preconditions" },
+    "proofFamilies": { "$ref": "instruction-delta.schema.json#/$defs/proofFamilies" }
+  }
+}

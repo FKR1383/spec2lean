@@ -21,6 +21,10 @@ import { REPO_ROOT } from "./repo.js"
 import { loadRun } from "./run-store.js"
 import { alignEvidenceToOfficialPdf } from "./pdf-alignment.js"
 import { verifiedProofArtifactPath } from "./proof-plan.js"
+import {
+  collectArchitectureProvenanceClaims,
+  collectSemanticProvenanceClaims,
+} from "./provenance-catalog.js"
 
 export type TraceabilityClassification =
   | "SOURCE_FACT"
@@ -167,21 +171,6 @@ async function latestVersionedFile(
   return `${directory}/${selected.name}`
 }
 
-function classification(value: unknown): TraceabilityClassification | undefined {
-  switch (value) {
-    case "SOURCE_FACT":
-    case "DERIVED_INTERPRETATION":
-    case "DESIGN_DEPENDENCY":
-    case "ASSUMPTION":
-    case "OPEN_QUESTION":
-      return value
-    case "AMBIGUITY":
-      return "OPEN_QUESTION"
-    default:
-      return undefined
-  }
-}
-
 function collectArchitectureClaims(
   source: string,
   path: string,
@@ -189,23 +178,16 @@ function collectArchitectureClaims(
   claims: Map<string, TraceabilityClaim>,
   evidence: Map<string, TraceabilityEvidence>,
 ): void {
-  const pattern = /^\s*[-*]\s+\**((?:SF|DI|DD|D|PRE|ASS|AMB|OQ)(?:-[A-Z0-9]+)+)\**\s*:\s*(.*)$/i
-  source.split(/\r?\n/).forEach((line, index) => {
-    const match = line.match(pattern)
-    if (match?.[1] === undefined || match[2] === undefined) return
-    const semanticId = match[1]
-    if (claims.has(semanticId)) return
-    const prefix = semanticId.split("-")[0]?.toUpperCase()
-    const claimClassification: TraceabilityClassification =
-      prefix === "SF" ? "SOURCE_FACT" :
-      prefix === "DI" || prefix === "PRE" ? "DERIVED_INTERPRETATION" :
-      prefix === "D" || prefix === "DD" ? "DESIGN_DEPENDENCY" :
-      prefix === "ASS" ? "ASSUMPTION" : "OPEN_QUESTION"
+  const lines = source.split(/\r?\n/)
+  for (const item of collectArchitectureProvenanceClaims(source, path)) {
+    const semanticId = item.semanticId
+    if (claims.has(semanticId)) continue
+    const lineIndex = Math.max(0, lines.findIndex((line) => line.includes(semanticId)))
     const evidenceId = `ARCH:${semanticId}`
     claims.set(semanticId, {
       semanticId,
-      classification: claimClassification,
-      statement: match[2].trim(),
+      classification: item.classification,
+      statement: item.statement,
       evidenceIds: [evidenceId],
     })
     evidence.set(evidenceId, {
@@ -213,10 +195,10 @@ function collectArchitectureClaims(
       sourceKind: "ARTIFACT",
       documentPath: path,
       documentSha256,
-      locator: { startLine: index + 1, endLine: index + 1 },
-      quotation: line.trim(),
+      locator: { startLine: lineIndex + 1, endLine: lineIndex + 1 },
+      quotation: lines[lineIndex]?.trim(),
     })
-  })
+  }
 }
 
 function stringArray(value: unknown): string[] {
@@ -225,38 +207,21 @@ function stringArray(value: unknown): string[] {
     : []
 }
 
-function collectClaims(value: unknown, claims: Map<string, TraceabilityClaim>): void {
-  if (Array.isArray(value)) {
-    for (const item of value) collectClaims(item, claims)
-    return
-  }
-  if (!isRecord(value)) return
-
-  const semanticId = typeof value.semanticId === "string"
-    ? value.semanticId
-    : typeof value.claim_id === "string"
-      ? value.claim_id
-      : typeof value.id === "string"
-        ? value.id
-        : undefined
-  const claimClassification = classification(value.classification)
-  const statement = typeof value.statement === "string" ? value.statement : undefined
-  if (semanticId !== undefined && claimClassification !== undefined && statement !== undefined) {
-    const evidenceIds = [
-      ...stringArray(value.evidenceIds),
-      ...stringArray(value.evidence_fragment_ids),
-    ].sort((left, right) => left.localeCompare(right))
-    if (!claims.has(semanticId)) {
-      claims.set(semanticId, {
-        semanticId,
-        classification: claimClassification,
-        statement,
-        evidenceIds: [...new Set(evidenceIds)],
+function collectClaims(
+  value: unknown,
+  path: string,
+  claims: Map<string, TraceabilityClaim>,
+): void {
+  for (const item of collectSemanticProvenanceClaims(value, path)) {
+    if (!claims.has(item.semanticId)) {
+      claims.set(item.semanticId, {
+        semanticId: item.semanticId,
+        classification: item.classification,
+        statement: item.statement,
+        evidenceIds: item.evidenceIds,
       })
     }
   }
-
-  for (const nested of Object.values(value)) collectClaims(nested, claims)
 }
 
 function number(value: unknown): number | undefined {
@@ -376,18 +341,25 @@ function collectEvidence(value: unknown): Map<string, TraceabilityEvidence> {
           ? document.kind.toUpperCase()
         : "ARTIFACT"
     const sourceKind = rawKind === "HTML" || rawKind === "PDF" ? rawKind : "ARTIFACT"
+    const canonicalLocator = isRecord(fragment.locator) ? fragment.locator : undefined
     result.set(fragment.fragment_id, {
       evidenceId: fragment.fragment_id,
       sourceKind,
       documentPath,
       documentSha256,
       locator: {
-        section: typeof fragment.section_number === "string" ? fragment.section_number : undefined,
-        heading: typeof fragment.section_heading === "string" ? fragment.section_heading : undefined,
-        anchor: typeof fragment.html_anchor === "string" ? fragment.html_anchor : undefined,
-        startLine: number(fragment.html_line_start),
-        endLine: number(fragment.html_line_end),
-        page: number(fragment.pdf_page) ?? number(fragment.page),
+        section: typeof canonicalLocator?.section === "string"
+          ? canonicalLocator.section
+          : typeof fragment.section_number === "string" ? fragment.section_number : undefined,
+        heading: typeof canonicalLocator?.heading === "string"
+          ? canonicalLocator.heading
+          : typeof fragment.section_heading === "string" ? fragment.section_heading : undefined,
+        anchor: typeof canonicalLocator?.anchor === "string"
+          ? canonicalLocator.anchor
+          : typeof fragment.html_anchor === "string" ? fragment.html_anchor : undefined,
+        startLine: number(canonicalLocator?.start_line) ?? number(fragment.html_line_start),
+        endLine: number(canonicalLocator?.end_line) ?? number(fragment.html_line_end),
+        page: number(canonicalLocator?.page) ?? number(fragment.pdf_page) ?? number(fragment.page),
         bbox: bbox(fragment.pdf_bbox) ?? bbox(fragment.bbox),
       },
       quotation: typeof fragment.exact_quote === "string" ? fragment.exact_quote : undefined,
@@ -496,7 +468,7 @@ function collectTheoremBindings(value: unknown): Map<string, TheoremBinding> {
   return bindings
 }
 
-function parseLeanDeclarations(source: string): LeanDeclaration[] {
+export function parseLeanDeclarations(source: string): LeanDeclaration[] {
   const lines = source.split(/\r?\n/)
   const declarations: Omit<LeanDeclaration, "endLine">[] = []
   const declarationPattern = /^\s*(?:(?:private|protected|noncomputable)\s+)*(def|theorem|lemma|structure|inductive|abbrev|instance)\s+([A-Za-z_][A-Za-z0-9_'.]*)/
@@ -506,10 +478,18 @@ function parseLeanDeclarations(source: string): LeanDeclaration[] {
     if (match?.[1] === undefined || match[2] === undefined) continue
     const comments: string[] = []
     let commentLine = index - 1
+    let skippedBlank = false
     while (commentLine >= 0) {
       const line = lines[commentLine] ?? ""
       const comment = line.match(/^\s*--\s?(.*)$/)
-      if (comment?.[1] === undefined) break
+      if (comment?.[1] === undefined) {
+        if (!skippedBlank && line.trim().length === 0) {
+          skippedBlank = true
+          commentLine -= 1
+          continue
+        }
+        break
+      }
       comments.unshift(comment[1])
       commentLine -= 1
     }
@@ -538,12 +518,18 @@ function expandCompactReferences(comment: string): string {
 function referencedIds(comment: string, knownIds: Iterable<string>): string[] {
   const expanded = expandCompactReferences(comment)
   return [...knownIds]
-    .filter((id) => expanded.includes(id))
+    .filter((id) => {
+      const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      return new RegExp(`(^|[^A-Za-z0-9_.-])${escaped}(?=$|[^A-Za-z0-9_.-])`).test(expanded)
+    })
     .sort((left, right) => left.localeCompare(right))
 }
 
-function unresolvedReferenceTokens(comment: string, known: Set<string>): string[] {
-  const expanded = expandCompactReferences(comment)
+export function unresolvedReferenceTokens(comment: string, known: Set<string>): string[] {
+  const provenanceLines = comment.split(/\r?\n/).filter((line) =>
+    /\b(?:spec2lean|traceability|provenance|semantic|evidence)\b/i.test(line)
+  )
+  const expanded = expandCompactReferences(provenanceLines.join("\n"))
   const tokens = expanded.match(/\b[A-Z][A-Z0-9]*(?:-[A-Z0-9.]+){2,}\b/g) ?? []
   return [...new Set(tokens.filter((token) => !known.has(token)))].sort((a, b) => a.localeCompare(b))
 }
@@ -605,7 +591,7 @@ export async function buildTraceabilityManifest(
   ])
   const semanticDocument: unknown = JSON.parse(semanticData.toString("utf8"))
   const claims = new Map<string, TraceabilityClaim>()
-  collectClaims(semanticDocument, claims)
+  collectClaims(semanticDocument, semanticPath, claims)
   const evidence = new Map<string, TraceabilityEvidence>()
   for (const data of sourceBundleData) {
     for (const [id, item] of collectEvidence(JSON.parse(data.toString("utf8")) as unknown)) {
@@ -622,7 +608,11 @@ export async function buildTraceabilityManifest(
   const theoremBindings = theoremData === undefined
     ? new Map<string, TheoremBinding>()
     : collectTheoremBindings(JSON.parse(theoremData.toString("utf8")) as unknown)
-  const knownIds = new Set([...claims.keys(), ...evidence.keys()])
+  const knownIds = new Set([
+    ...claims.keys(),
+    ...evidence.keys(),
+    ...[...theoremBindings.values()].map((binding) => binding.obligationId),
+  ])
 
   const sourceManifestPath = run.sourceManifest ?? (
     run.language.toLowerCase() === "ptx"

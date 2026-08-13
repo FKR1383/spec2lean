@@ -1,5 +1,13 @@
 import { recordBenchmarkAutoAdvance } from "./benchmark-decision-record.js"
 import { GATES } from "./gates.js"
+import {
+  buildProvenanceCatalog,
+  collectArchitectureProvenanceClaims,
+  latestVersionedArtifact,
+} from "./provenance-catalog.js"
+import { readFile } from "node:fs/promises"
+import { resolve } from "node:path"
+import { REPO_ROOT } from "./repo.js"
 import { saveRun } from "./run-store.js"
 import {
   transitionRun,
@@ -19,6 +27,35 @@ export function waitingGateForStage(stage: FormalizationStage): GateName | undef
   return GATE_FOR_WAIT_STAGE.get(stage)
 }
 
+export async function benchmarkGateReadinessIssues(run: RunState): Promise<string[]> {
+  const gate = waitingGateForStage(run.stage)
+  if (gate === undefined || run.benchmark?.autoApprove !== true) return []
+  try {
+    const claims = gate === "A"
+      ? collectArchitectureProvenanceClaims(
+          await readFile(resolve(REPO_ROOT, await latestVersionedArtifact(
+            `${run.artifactRoot}/architecture`,
+            [/^foundation-v(\d+)\.md$/],
+          )), "utf8"),
+          "architecture",
+        )
+      : gate === "B"
+        ? (await buildProvenanceCatalog(run)).claims
+        : []
+    return claims.flatMap((claim) =>
+      claim.classification === "OPEN_QUESTION" &&
+      claim.stateAffecting === true &&
+      claim.unresolved
+        ? [`${claim.semanticId}: ${claim.statement}`]
+        : [],
+    )
+  } catch (error) {
+    return gate === "A" || gate === "B"
+      ? [`deterministic semantic readiness check failed: ${error instanceof Error ? error.message : String(error)}`]
+      : []
+  }
+}
+
 /**
  * Advances benchmark-only gates without turning them into human approvals.
  *
@@ -30,6 +67,7 @@ export async function advanceBenchmarkGate(
 ): Promise<{ run: RunState; gate: GateName; reviewPath: string; recovered: boolean } | undefined> {
   const gate = waitingGateForStage(run.stage)
   if (gate === undefined || run.benchmark?.autoApprove !== true) return undefined
+  if ((await benchmarkGateReadinessIssues(run)).length > 0) return undefined
 
   const decision = await recordBenchmarkAutoAdvance(run, gate)
   const target = gate === "FINAL"
