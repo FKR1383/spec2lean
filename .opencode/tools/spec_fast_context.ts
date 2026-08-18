@@ -20,6 +20,7 @@ type RetrievalProfile = {
   index: {
     schemaVersion: number
     cachePath: string
+    requiredEvidenceKinds: Array<"html" | "pdf">
   }
   context: {
     targetMaxLines: number
@@ -58,6 +59,12 @@ type Index = {
     totalLines: number
   }
   sections: Section[]
+  renditions: Array<{
+    kind: "html" | "pdf"
+    artifact: { relativePath: string; sha256: string }
+    source: { relativePath: string; sha256: string; totalLines: number }
+    sections: Array<Section & { page?: number }>
+  }>
 }
 
 type Loaded = {
@@ -119,7 +126,14 @@ async function load(worktree: string): Promise<Loaded> {
       profile.schemaVersion !== 1 ||
       profile.language !== "PTX" ||
       profile.specificationVersion !== "9.3" ||
-      profile.index.schemaVersion !== 1 ||
+      profile.index.schemaVersion !== 2 ||
+      !Array.isArray(profile.index.requiredEvidenceKinds) ||
+      profile.index.requiredEvidenceKinds.length === 0 ||
+      profile.index.requiredEvidenceKinds.some(
+        (kind) => kind !== "html" && kind !== "pdf",
+      ) ||
+      new Set(profile.index.requiredEvidenceKinds).size !==
+        profile.index.requiredEvidenceKinds.length ||
       !Number.isInteger(profile.context.targetMaxLines) ||
       profile.context.targetMaxLines <= 0 ||
       profile.context.targetMaxLines > 200 ||
@@ -180,7 +194,11 @@ async function load(worktree: string): Promise<Loaded> {
       index.schemaVersion !== profile.index.schemaVersion ||
       index.specificationVersion !== profile.specificationVersion ||
       index.source.relativePath !== expectedSourcePath ||
-      index.source.sha256 !== htmlArtifact.sha256
+      index.source.sha256 !== htmlArtifact.sha256 ||
+      !Array.isArray(index.renditions) ||
+      profile.index.requiredEvidenceKinds.some(
+        (kind) => !index.renditions.some((item) => item.kind === kind),
+      )
     ) {
       throw new Error("cached PTX index does not match the retrieval profile and manifest")
     }
@@ -376,6 +394,12 @@ export default tool({
           specificationVersion: loaded.profile.specificationVersion,
         },
         source: loaded.index.source,
+        indexedRenditions: loaded.index.renditions.map((item) => ({
+          kind: item.kind,
+          artifact: item.artifact,
+          indexSource: item.source,
+          sectionCount: item.sections.length,
+        })),
         unit: args.unit,
         mnemonic,
         purpose,

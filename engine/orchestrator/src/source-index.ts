@@ -15,16 +15,25 @@ export type SourceIndexSection = {
   endLine: number
   heading: string
   searchText: string
+  page?: number
+}
+
+export type SourceIndexRendition = {
+  kind: "html" | "pdf"
+  artifact: { relativePath: string; sha256: string }
+  source: { relativePath: string; sha256: string; totalLines: number }
+  sections: SourceIndexSection[]
 }
 
 export type SourceIndex = {
-  schemaVersion: 1
+  schemaVersion: 2
   language: string
   specificationVersion: string
   sourceManifest: { relativePath: string; sha256: string }
-  sourceArtifact?: { relativePath: string; sha256: string; kind: "html" | "pdf" }
+  sourceArtifact: { relativePath: string; sha256: string; kind: "html" | "pdf" }
   source: { relativePath: string; sha256: string; totalLines: number }
   sections: SourceIndexSection[]
+  renditions: SourceIndexRendition[]
 }
 
 const execFileAsync = promisify(execFile)
@@ -119,7 +128,76 @@ export function sourceIndexPath(language: string, version: string): string {
   if (!/^[a-z][a-z0-9_-]*$/.test(safeLanguage) || !/^[A-Za-z0-9._-]+$/.test(version)) {
     throw new Error("language/version is unsafe for a source-index path")
   }
-  return `.spec2lean-cache/${safeLanguage}/${version}/source-index-v1.json`
+  return `.spec2lean-cache/${safeLanguage}/${version}/source-index-v2.json`
+}
+
+function pdfSections(source: string): SourceIndexSection[] {
+  const sections: SourceIndexSection[] = []
+  let startLine = 1
+  for (const [index, pageSource] of source.split("\f").entries()) {
+    const pageLines = pageSource.split(/\r?\n/)
+    const endLine = Math.max(startLine, startLine + pageLines.length - 1)
+    const rendered = pageLines.join(" ").replace(/\s+/g, " ").trim()
+    if (rendered.length > 0) {
+      sections.push({
+        anchor: `pdf-page-${String(index + 1).padStart(6, "0")}`,
+        startLine,
+        endLine,
+        heading: rendered.slice(0, 500),
+        searchText: rendered.slice(0, 12_000),
+        page: index + 1,
+      })
+    }
+    startLine = endLine + 1
+  }
+  return sections
+}
+
+async function buildRendition(input: {
+  artifact: UnknownRecord
+  manifestAbsolute: string
+  outputRelative: string
+}): Promise<SourceIndexRendition> {
+  const kind = String(input.artifact.kind).toLowerCase() as "html" | "pdf"
+  if (!["html", "pdf"].includes(kind) ||
+      typeof input.artifact.local_path !== "string" ||
+      typeof input.artifact.sha256 !== "string") {
+    throw new Error("source manifest contains an invalid indexable artifact")
+  }
+  const artifactAbsolute = resolve(dirname(input.manifestAbsolute), input.artifact.local_path)
+  const artifactRelative = safeRelative(relative(REPO_ROOT, artifactAbsolute))
+  const artifactData = await readFile(artifactAbsolute)
+  const artifactSha256 = sha256(artifactData)
+  if (artifactSha256 !== input.artifact.sha256) {
+    throw new Error(`indexed ${kind} hash does not match source manifest`)
+  }
+
+  let sourceRelative = artifactRelative
+  let sourceData = artifactData
+  if (kind === "pdf") {
+    sourceRelative = `${dirname(input.outputRelative)}/source-${artifactSha256}.txt`
+    const extractedAbsolute = resolve(REPO_ROOT, sourceRelative)
+    try {
+      sourceData = await readFile(extractedAbsolute)
+    } catch {
+      await mkdir(dirname(extractedAbsolute), { recursive: true })
+      await execFileAsync("pdftotext", ["-layout", artifactAbsolute, extractedAbsolute], {
+        timeout: 120_000,
+        maxBuffer: 1024 * 1024,
+      })
+      sourceData = await readFile(extractedAbsolute)
+    }
+    if (sourceData.length === 0) throw new Error("PDF text extraction produced an empty index source")
+  }
+
+  const sourceText = sourceData.toString("utf8")
+  const lines = sourceText.split(/\r?\n/)
+  return {
+    kind,
+    artifact: { relativePath: artifactRelative, sha256: artifactSha256 },
+    source: { relativePath: sourceRelative, sha256: sha256(sourceData), totalLines: lines.length },
+    sections: kind === "html" ? htmlSections(lines) : pdfSections(sourceText),
+  }
 }
 
 export async function ensureSourceIndex(input: {
@@ -133,50 +211,35 @@ export async function ensureSourceIndex(input: {
   const manifestData = await readFile(manifestAbsolute)
   const manifest = JSON.parse(manifestData.toString("utf8")) as UnknownRecord
   const artifacts = Array.isArray(manifest.artifacts) ? manifest.artifacts.filter(isRecord) : []
-  const artifact = artifacts.find((item) => String(item.kind).toLowerCase() === "html") ??
-    artifacts.find((item) => String(item.kind).toLowerCase() === "pdf")
-  if (artifact === undefined || typeof artifact.local_path !== "string" || typeof artifact.sha256 !== "string") {
+  const indexable = artifacts.filter((item) => ["html", "pdf"].includes(String(item.kind).toLowerCase()))
+  if (indexable.length === 0) {
     return { status: "NO_INDEXABLE_SOURCE", rebuilt: false }
   }
-
-  const sourceArtifactAbsolute = resolve(dirname(manifestAbsolute), artifact.local_path)
-  const sourceArtifactRelative = safeRelative(relative(REPO_ROOT, sourceArtifactAbsolute))
-  const sourceArtifactData = await readFile(sourceArtifactAbsolute)
-  const actualArtifactHash = sha256(sourceArtifactData)
-  if (actualArtifactHash !== artifact.sha256) throw new Error("indexed source hash does not match source manifest")
-  const kind = String(artifact.kind).toLowerCase() as "html" | "pdf"
   const outputRelative = sourceIndexPath(input.language, input.specificationVersion)
   const outputAbsolute = resolve(REPO_ROOT, outputRelative)
-  let sourceRelative = sourceArtifactRelative
-  let sourceData = sourceArtifactData
-  if (kind === "pdf") {
-    sourceRelative = `${dirname(outputRelative)}/source-${actualArtifactHash}.txt`
-    const extractedAbsolute = resolve(REPO_ROOT, sourceRelative)
-    try {
-      sourceData = await readFile(extractedAbsolute)
-    } catch {
-      await mkdir(dirname(extractedAbsolute), { recursive: true })
-      await execFileAsync("pdftotext", ["-layout", sourceArtifactAbsolute, extractedAbsolute], {
-        timeout: 120_000,
-        maxBuffer: 1024 * 1024,
-      })
-      sourceData = await readFile(extractedAbsolute)
-    }
-    if (sourceData.length === 0) throw new Error("PDF text extraction produced an empty index source")
-  }
-  const actualSourceHash = sha256(sourceData)
+  const renditions = await Promise.all(indexable.map(async (artifact) =>
+    await buildRendition({ artifact, manifestAbsolute, outputRelative })))
+  const primary = renditions.find((item) => item.kind === "html") ?? renditions[0]!
   try {
     const existing = JSON.parse(await readFile(outputAbsolute, "utf8")) as SourceIndex
     if (
-      existing.schemaVersion === 1 &&
+      existing.schemaVersion === 2 &&
       existing.language.toLowerCase() === input.language.toLowerCase() &&
       existing.specificationVersion === input.specificationVersion &&
       existing.sourceManifest.relativePath === manifestRelative &&
       existing.sourceManifest.sha256 === sha256(manifestData) &&
-      existing.sourceArtifact?.relativePath === sourceArtifactRelative &&
-      existing.sourceArtifact.sha256 === actualArtifactHash &&
-      existing.source.relativePath === sourceRelative &&
-      existing.source.sha256 === actualSourceHash &&
+      existing.sourceArtifact.relativePath === primary.artifact.relativePath &&
+      existing.sourceArtifact.sha256 === primary.artifact.sha256 &&
+      existing.source.relativePath === primary.source.relativePath &&
+      existing.source.sha256 === primary.source.sha256 &&
+      existing.renditions.length === renditions.length &&
+      existing.renditions.every((item, index) =>
+        item.kind === renditions[index]?.kind &&
+        item.artifact.relativePath === renditions[index]?.artifact.relativePath &&
+        item.artifact.sha256 === renditions[index]?.artifact.sha256 &&
+        item.source.relativePath === renditions[index]?.source.relativePath &&
+        item.source.sha256 === renditions[index]?.source.sha256 &&
+        item.sections.length > 0) &&
       existing.sections.length > 0 &&
       existing.sections.every((section) => typeof section.searchText === "string")
     ) return { path: outputRelative, status: "READY", rebuilt: false }
@@ -184,28 +247,15 @@ export async function ensureSourceIndex(input: {
     // Missing, stale, or malformed cache is deterministically rebuilt below.
   }
 
-  const lines = sourceData.toString("utf8").split(/\r?\n/)
   const index: SourceIndex = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     language: input.language,
     specificationVersion: input.specificationVersion,
     sourceManifest: { relativePath: manifestRelative, sha256: sha256(manifestData) },
-    sourceArtifact: { relativePath: sourceArtifactRelative, sha256: actualArtifactHash, kind },
-    source: { relativePath: sourceRelative, sha256: actualSourceHash, totalLines: lines.length },
-    sections: kind === "html" ? htmlSections(lines) : Array.from(
-      { length: Math.ceil(lines.length / 120) },
-      (_, index) => {
-        const startLine = index * 120 + 1
-        const endLine = Math.min(lines.length, startLine + 119)
-        return {
-          anchor: `pdf-chunk-${String(index + 1).padStart(6, "0")}`,
-          startLine,
-          endLine,
-          heading: lines.slice(startLine - 1, Math.min(endLine, startLine + 12)).join(" ").replace(/\s+/g, " ").trim().slice(0, 500),
-          searchText: lines.slice(startLine - 1, endLine).join(" ").replace(/\s+/g, " ").trim().slice(0, 12_000),
-        }
-      },
-    ),
+    sourceArtifact: { ...primary.artifact, kind: primary.kind },
+    source: primary.source,
+    sections: primary.sections,
+    renditions,
   }
   await mkdir(dirname(outputAbsolute), { recursive: true })
   await writeFile(outputAbsolute, `${JSON.stringify(index, null, 2)}\n`, "utf8")

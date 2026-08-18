@@ -1018,8 +1018,9 @@ const parsed = parseAgentResult(
 assert(parsed.outcome === "SUCCESS", "result parsing")
 
 const ptxSourceIndex = JSON.parse(
-  await readFile(resolve(REPO_ROOT, ".spec2lean-cache/ptx/9.3/source-index-v1.json"), "utf8"),
+  await readFile(resolve(REPO_ROOT, ".spec2lean-cache/ptx/9.3/source-index-v2.json"), "utf8"),
 ) as {
+  schemaVersion: number
   sections: Array<{
     anchor: string
     startLine: number
@@ -1027,7 +1028,14 @@ const ptxSourceIndex = JSON.parse(
     heading: string
     searchText?: string
   }>
+  renditions: Array<{ kind: "html" | "pdf"; sections: unknown[] }>
 }
+assert(ptxSourceIndex.schemaVersion === 2, "production source index uses the multi-rendition schema")
+assert(
+  ptxSourceIndex.renditions.some((item) => item.kind === "html" && item.sections.length > 0) &&
+    ptxSourceIndex.renditions.some((item) => item.kind === "pdf" && item.sections.length > 0),
+  "production source index contains searchable HTML and PDF renditions",
+)
 for (const [unit, expectedAnchor] of [
   ["add.u64", "integer-arithmetic-instructions-add"],
   ["add.f32", "floating-point-instructions-add"],

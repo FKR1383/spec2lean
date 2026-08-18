@@ -4,8 +4,9 @@
   "specificationVersion": "9.3",
   "sourceManifest": "documents/sources/nvidia/ptx/9.3/source-manifest.json",
   "index": {
-    "schemaVersion": 1,
-    "cachePath": ".spec2lean-cache/ptx/9.3/source-index-v1.json"
+    "schemaVersion": 2,
+    "cachePath": ".spec2lean-cache/ptx/9.3/source-index-v2.json",
+    "requiredEvidenceKinds": ["html", "pdf"]
   },
   "context": {
     "targetMaxLines": 120,
