@@ -43,6 +43,22 @@ behavior-affecting open entry. Independently verify only concrete risky or
 disputed citations through indexed/narrow source tools. Do not repeat broad
 research for already pinned low-risk context.
 
+Audit the architect's coverage matrix row-by-row. For each applicable source
+form, verify that the cited normative text supports that exact operand position,
+type/coercion, branch, state effect, error, or restriction. Examples do not
+establish a grammar-wide permission. When official HTML and PDF are both
+pinned, independently spot-check the signature and operation in both
+renditions and report a locator/rendition mismatch as MAJOR. Do not require the
+architecture to duplicate the later source bundle, but do require reproducible
+anchor/line and page/search locators.
+
+Perform a representation loss audit: every architecture constructor/field and
+execution boundary must have a fact/design dependency, and every applicable
+normative form must be represented, explicitly excluded by Gate-visible
+project authority, or left open. Silent narrowing and silent addition are both
+semantic defects. Apply native concepts for the current language instead of
+requiring ISA state machinery everywhere.
+
 Use the same canonical classification contract as the architect:
 
 - Architecture SOURCE_FACT entries are internal index roots. Empty
@@ -70,6 +86,13 @@ Use the same canonical classification contract as the architect:
 A genuine unsupported semantic commitment, hidden state-affecting decision,
 wrong source claim, or out-of-scope shared dependency is BLOCKER/MAJOR. Wording
 and optional review-context improvements are MINOR/NOTE.
+
+Do not turn the critic into a second architect. A review is complete after the
+bounded matrix, risky citations, dependency closure, and open-question triage
+have been checked. Do not request revisions for preferred naming, alternative
+Lean encodings, extra theorem families, or facts already covered by eligible
+approved shared semantics. A revision must repair a concrete correctness or
+traceability invariant, not stylistic taste.
 
 Before returning REVISE, confirm that each BLOCKER/MAJOR identifies a concrete
 entry ID, violated rule, and minimal required repair. Do not request a second
