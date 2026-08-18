@@ -110,9 +110,9 @@ export type ArtifactFingerprint = {
 }
 
 export type TraceabilityManifest = {
-  schemaVersion: 3
+  schemaVersion: 4
   manifestType: "spec2lean_evidence_manifest"
-  generator: "spec2lean-traceability-v3"
+  generator: "spec2lean-traceability-v4"
   runId: string
   language: string
   specificationVersion: string
@@ -127,11 +127,14 @@ export type TraceabilityManifest = {
   entries: TraceabilityEntry[]
   semanticUncertainties: TraceabilityUncertainty[]
   diagnostics: {
+    requiredOfficialRenditions: Array<"HTML" | "PDF">
     declarationsWithoutReferences: string[]
     unresolvedReferences: string[]
     declarationsWithoutEvidencePath: string[]
     claimsWithoutDependencyPath: string[]
     sourceFactsWithoutOfficialEvidence: string[]
+    sourceFactsWithoutHtmlEvidence: string[]
+    sourceFactsWithoutPdfEvidence: string[]
     assumptionsWithoutApprovalDependency: string[]
     unresolvedOpenQuestions: string[]
     pdfAlignment?: {
@@ -701,6 +704,19 @@ export async function buildTraceabilityManifest(
   )
   if (sourceManifestPath === undefined) throw new Error("Run has no source manifest")
   const sourceManifest = await fingerprint(sourceManifestPath)
+  const sourceManifestValue = JSON.parse(
+    (await readRepositoryFile(sourceManifestPath)).toString("utf8"),
+  ) as UnknownRecord
+  const officialKinds = new Set(
+    (Array.isArray(sourceManifestValue.artifacts) ? sourceManifestValue.artifacts : [])
+      .filter(isRecord)
+      .map((artifact) => String(artifact.kind ?? "").toUpperCase())
+      .filter((kind): kind is "HTML" | "PDF" => kind === "HTML" || kind === "PDF"),
+  )
+  const requiredOfficialRenditions: Array<"HTML" | "PDF"> = [
+    ...(officialKinds.has("HTML") ? ["HTML" as const] : []),
+    ...(input.includePdfRenditions && officialKinds.has("PDF") ? ["PDF" as const] : []),
+  ]
   let pdfAlignment: Awaited<ReturnType<typeof alignEvidenceToOfficialPdf>> | undefined
   let pdfAlignmentFailure: string | undefined
   if (input.includePdfRenditions) {
@@ -718,6 +734,14 @@ export async function buildTraceabilityManifest(
   const pdfRenditions = new Map(
     (pdfAlignment?.renditions ?? []).map((item) => [item.alignedFromEvidenceId!, item]),
   )
+  const semanticSourceFacts = strictSemanticIr ? [...claims.values()].filter((claim) =>
+    claim.classification === "SOURCE_FACT" && claim.origin === "SEMANTICS") : []
+  const sourceFactHasKind = (claim: TraceabilityClaim, kind: "HTML" | "PDF"): boolean =>
+    claim.evidenceIds.some((id) => {
+      const item = evidence.get(id)
+      if (item?.sourceKind === kind) return true
+      return kind === "PDF" && pdfRenditions.has(id)
+    })
 
   const entries = parseLeanDeclarations(leanData.toString("utf8")).map((declaration) => {
     const theoremBinding = theoremBindings.get(declaration.name)
@@ -795,9 +819,9 @@ export async function buildTraceabilityManifest(
     .sort((left, right) => left.semanticId.localeCompare(right.semanticId))
 
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     manifestType: "spec2lean_evidence_manifest",
-    generator: "spec2lean-traceability-v3",
+    generator: "spec2lean-traceability-v4",
     runId: run.runId,
     language: run.language,
     specificationVersion: run.specVersion,
@@ -817,6 +841,7 @@ export async function buildTraceabilityManifest(
     entries,
     semanticUncertainties,
     diagnostics: {
+      requiredOfficialRenditions,
       declarationsWithoutReferences: entries
         .filter((entry) => entry.semanticIds.length === 0 && entry.evidence.length === 0)
         .map((entry) => entry.declarationName),
@@ -828,13 +853,22 @@ export async function buildTraceabilityManifest(
       claimsWithoutDependencyPath: strictSemanticIr ? uniqueSorted([...claims.values()]
         .filter((claim) => claim.classification === "DERIVED_INTERPRETATION" && claim.dependencyIds.length === 0)
         .map((claim) => claim.semanticId)) : [],
-      sourceFactsWithoutOfficialEvidence: strictSemanticIr ? uniqueSorted([...claims.values()]
-        .filter((claim) => claim.classification === "SOURCE_FACT" && claim.origin === "SEMANTICS")
+      sourceFactsWithoutOfficialEvidence: strictSemanticIr ? uniqueSorted(semanticSourceFacts
         .filter((claim) => !claim.evidenceIds.some((id) => {
           const item = evidence.get(id)
           return item?.sourceKind === "HTML" || item?.sourceKind === "PDF"
         }))
         .map((claim) => claim.semanticId)) : [],
+      sourceFactsWithoutHtmlEvidence: requiredOfficialRenditions.includes("HTML")
+        ? uniqueSorted(semanticSourceFacts
+          .filter((claim) => !sourceFactHasKind(claim, "HTML"))
+          .map((claim) => claim.semanticId))
+        : [],
+      sourceFactsWithoutPdfEvidence: requiredOfficialRenditions.includes("PDF")
+        ? uniqueSorted(semanticSourceFacts
+          .filter((claim) => !sourceFactHasKind(claim, "PDF"))
+          .map((claim) => claim.semanticId))
+        : [],
       assumptionsWithoutApprovalDependency: strictSemanticIr ? uniqueSorted([...claims.values()]
         .filter((claim) => claim.classification === "ASSUMPTION" && claim.origin === "SEMANTICS" && claim.humanApprovalDependencies.length === 0)
         .map((claim) => claim.semanticId)) : [],
@@ -913,7 +947,8 @@ export async function verifyTraceabilityManifest(
   const supportedVersion =
     (legacy.schemaVersion === 1 && legacy.generator === "spec2lean-traceability-v1") ||
     (legacy.schemaVersion === 2 && legacy.generator === "spec2lean-traceability-v2") ||
-    (legacy.schemaVersion === 3 && legacy.generator === "spec2lean-traceability-v3")
+    (legacy.schemaVersion === 3 && legacy.generator === "spec2lean-traceability-v3") ||
+    (legacy.schemaVersion === 4 && legacy.generator === "spec2lean-traceability-v4")
   if (!supportedVersion || manifest.manifestType !== "spec2lean_evidence_manifest") {
     issues.push("unsupported traceability manifest schema")
   }
@@ -956,7 +991,7 @@ export async function verifyTraceabilityManifest(
   for (const reference of manifest.diagnostics.unresolvedReferences) {
     issues.push(`unresolved provenance reference: ${reference}`)
   }
-  if (manifest.schemaVersion === 3) {
+  if (legacy.schemaVersion === 3 || legacy.schemaVersion === 4) {
     for (const declaration of manifest.diagnostics.declarationsWithoutEvidencePath) {
       issues.push(`Lean declaration has no transitive source or project evidence path: ${declaration}`)
     }
@@ -965,6 +1000,14 @@ export async function verifyTraceabilityManifest(
     }
     for (const semanticId of manifest.diagnostics.sourceFactsWithoutOfficialEvidence) {
       issues.push(`semantic SOURCE_FACT has no official HTML/PDF evidence: ${semanticId}`)
+    }
+    if (legacy.schemaVersion === 4) {
+      for (const semanticId of manifest.diagnostics.sourceFactsWithoutHtmlEvidence) {
+        issues.push(`semantic SOURCE_FACT lacks required official HTML evidence: ${semanticId}`)
+      }
+      for (const semanticId of manifest.diagnostics.sourceFactsWithoutPdfEvidence) {
+        issues.push(`semantic SOURCE_FACT lacks required official PDF evidence: ${semanticId}`)
+      }
     }
     for (const semanticId of manifest.diagnostics.assumptionsWithoutApprovalDependency) {
       issues.push(`semantic ASSUMPTION has no human-approval dependency: ${semanticId}`)
