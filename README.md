@@ -36,8 +36,35 @@ accepted, hash-pinned artifact bundle
 
 Every stage is resumable. Candidate revisions are immutable, provider failures
 that write nothing do not inflate artifact versions, and proof work is split
-into bounded batches. Exact theorem statements are checked deterministically,
-so a compiling proof cannot add assumptions or weaken an approved result.
+into bounded batches. The theorem contract requires behavioral operation
+fidelity and execution correspondence, and exact statements are checked
+deterministically so a compiling proof cannot add assumptions or weaken an
+approved result.
+
+## Components and authority
+
+- `spec2lean`: stable CLI for ingestion, runs, batches, gates, traceability,
+  reports, finalization, and the GUI launcher.
+- `engine/orchestrator/`: deterministic state machine, scheduling, immutable
+  artifact contracts, validators, Lean checks, traceability, and reports.
+- `.opencode/agents/`: one bounded prompt/permission contract per research,
+  generation, or critic role; [SUBAGENT_PROMPTS.md](SUBAGENT_PROMPTS.md) is the
+  generated human-review catalog.
+- `.opencode/tools/`: restricted source, candidate, review, and Lean tools used
+  by agents instead of unrestricted shell edits.
+- `language_packs/`: versioned acquisition, retrieval, and shared-semantic
+  policy. A language pack is policy, not proof or automatic approval.
+- `ir/`: JSON schemas for source bundles, semantic composition, theorem
+  contracts, traceability, and feedback.
+- `lean/`: the checked Lean package and only accepted installed modules.
+- `accepted/`: immutable human-accepted bundles; `candidates/`, `runs/`, and
+  `reviews/` hold durable lineage and gate records.
+- `editors/vscode/`: the manifest-driven evidence/feedback extension.
+
+Authority flows from hash-pinned official sources to classified semantic
+claims, explicit project/human decisions, Lean definitions, frozen theorem
+contracts, and proofs. Lean proves implementation of approved semantics within
+the bounded scope; it does not independently prove the publisher prose.
 
 ## Requirements
 
@@ -81,11 +108,12 @@ The raw files are local cache material and are verified against
   --source-manifest documents/sources/nvidia/ptx/9.3/source-manifest.json
 ```
 
-Ingestion verifies every manifest artifact and builds a local deterministic
-index from pinned HTML, or from locally extracted PDF text when HTML is not
-available. Repeated calls are cache hits while all hashes remain unchanged.
-The index locates bounded evidence; it does not generate semantic facts or
-imply human approval.
+Ingestion verifies every manifest artifact and builds source-index v2 across
+all pinned HTML and PDF renditions (PDF text is extracted locally). Each
+rendition has its own hash, sections/pages, and search results; HTML is only the
+primary view when available. Repeated calls are cache hits while all hashes
+remain unchanged. The index locates bounded evidence; it does not generate
+semantic facts or imply human approval.
 
 For another language, register its official files in a source manifest with
 local paths, SHA-256 hashes, and sizes, then pass that manifest explicitly to
@@ -307,8 +335,14 @@ Spec2Lean: Build Evidence Manifest for Current Run
 ```
 
 Declarations with missing or unresolved provenance remain visible with a
-warning CodeLens. They are not silently treated as complete. More extension
-details are in [editors/vscode/README.md](editors/vscode/README.md).
+warning CodeLens. They are not silently treated as complete. The extension
+verifies the manifest and source SHA-256 before rendering, prefers matched PDF
+geometry when present, shows exact HTML lines as the canonical text view, and
+records immutable feedback that never approves a gate. Set
+`spec2lean.autoOpenEvidence=false` to disable automatic panel opening; the
+CodeLens, status-bar item, and `Spec2Lean: Show Evidence for Declaration`
+command remain available. If an updated extension is installed into an already
+open Remote window, run `Developer: Restart Extension Host` once.
 
 ## Traceability CLI
 
@@ -324,14 +358,33 @@ resolved semantic, source, theorem-obligation, or reviewed architecture-design
 provenance. Older incomplete runs remain inspectable but fail validation until
 their provenance is reviewed and repaired.
 
-Schema-v3 manifests follow each declaration's direct claim IDs transitively
+Schema-v4 manifests follow each declaration's direct claim IDs transitively
 through DERIVED_INTERPRETATION, DESIGN_DEPENDENCY, ASSUMPTION, and
 OPEN_QUESTION dependencies to official SOURCE_FACT fragments or explicit
 project authority. They report source-fact, approval, dependency, and
-per-declaration evidence-path gaps separately. HTML remains the exact
-hash-bound canonical locator; PDF renditions are corroborating views with
-explicit eligible/matched/ambiguous/unmatched counts. The GUI opens a verified
-PDF rendition first when one exists and warns when PDF coverage is partial.
+per-declaration evidence-path gaps separately. When the source profile requires
+HTML and PDF, every semantic SOURCE_FACT must reach both—through an explicit
+fragment or deterministic quote alignment—or validation fails. The GUI opens a
+verified PDF rendition first when one exists and reports missing/ambiguous
+renditions instead of inventing a box.
+
+## Semantic and proof contracts
+
+Source bundle v2 stores hash-pinned source documents, exact quotations,
+locators, inclusion reasons, and explicit load-bearing/non-load-bearing gaps.
+Semantic IR v2 separates `SOURCE_FACT`, `DERIVED_INTERPRETATION`,
+`DESIGN_DEPENDENCY`, `ASSUMPTION`, and `OPEN_QUESTION`, supports a separately
+human-approved shared environment plus unit delta, and deterministically
+materializes the complete review view. Ineligible units fall back to full
+semantics rather than importing out-of-scope shared claims.
+
+Theorem contract v2 requires each obligation to carry a correctness kind,
+rationale, exact semantic claim IDs, and a complete frozen Lean declaration.
+Every unit must include genuine `OPERATION_FIDELITY` and
+`EXECUTION_CORRESPONDENCE` obligations; guard, state, frame, determinism,
+partiality, and scope obligations are added when applicable. Proof generation
+may batch work, but final completion requires every exact declaration,
+compilation, no prohibited bypass, and a valid proof evidence manifest.
 
 ## Development checks
 
@@ -347,12 +400,10 @@ cd lean
 lake build
 ```
 
-The main implementation guide is [engine/orchestrator/README.md](engine/orchestrator/README.md).
-Semantic IR and traceability contracts are documented in
-[ir/semantic/README.md](ir/semantic/README.md) and
-[ir/traceability/README.md](ir/traceability/README.md).
-The complete generated catalog of role prompts and exact static stage tasks is
-[SUBAGENT_PROMPTS.md](SUBAGENT_PROMPTS.md).
+This README is the single operational/project guide. The complete generated
+catalog of role prompts and exact static stage tasks is
+[SUBAGENT_PROMPTS.md](SUBAGENT_PROMPTS.md); JSON schema files remain the
+machine-readable contracts.
 
 ## Safety model
 
