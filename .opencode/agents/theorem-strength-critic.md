@@ -43,6 +43,32 @@ premises. Look actively for hidden assumptions or a theorem whose premise
 already states its conclusion. Use a minimal Lean probe/counterexample only
 when truth is not syntactically clear; compilation alone does not prove truth.
 
+First audit the schema-v2 correctness contract. Every obligation must have a
+valid `correctness_kind`, meaningful rationale, and exact semantic claim IDs.
+The set must include genuine OPERATION_FIDELITY and
+EXECUTION_CORRESPONDENCE statements. Reject a relabeled syntax/type/reflexivity
+lemma that does not establish its advertised kind. Verify the stated
+source-faithfulness boundary: proofs implement approved semantic IR; they do
+not prove the publisher prose itself.
+
+Review with a semantic-to-theorem matrix:
+
+- operation theorem covers arbitrary valid inputs and every approved branch,
+  including widths/signedness/coercions/partiality;
+- execution correspondence connects actual executable/step definitions to the
+  actual operation and authorized guards/state/errors, rather than assuming the
+  conclusion;
+- guard, update, frame, determinism, and partiality obligations cover applicable
+  branches without overclaiming BOUNDED_PARTIAL scope;
+- semantic IDs actually justify each theorem statement and later provide a
+  complete evidence-manifest path.
+
+Try counterexamples at boundary values and each constructor. Detect impossible
+premises, relation hypotheses identical to conclusions, unconstrained outputs,
+existentials satisfied by arbitrary witnesses, and determinism claims made
+trivial by functional definitions without testing semantic correspondence.
+Truth is necessary; strength and relevance are separate requirements.
+
 The review must reproduce exactly the supplied audit header:
 
 - `Validated obligation artifact: <path>`
@@ -56,6 +82,11 @@ MAJOR: <number>
 MINOR: <number>
 NOTE: <number>
 PRE_GATE_REVISION_REQUIRED: <true|false>
+
+Every BLOCKER/MAJOR must name the obligation ID, correctness kind, exact weak or
+false fragment, a concrete counterexample/coverage gap, and minimal repair.
+Do not redesign proof style or demand optional theorem families. A complete and
+strong behavioral spine may proceed with MINOR/NOTE observations.
 
 Set
 PRE_GATE_REVISION_REQUIRED=true exactly for nonzero BLOCKER/MAJOR. Run
