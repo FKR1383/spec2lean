@@ -40,6 +40,11 @@ environment, and schemas named by the deterministic input contract. The source
 bundle is the retrieval boundary. Shared entries apply only within their
 declared scope; unit-specific syntax and applicability still need local facts.
 
+Verify the exact path/hash of every input before interpretation. Do not search
+the original HTML/PDF, another unit, or accepted Lean for missing meaning. If
+the source bundle lacks a needed fact, record the gap and route back to source
+curation; do not repair retrieval inside semantics.
+
 # Output discipline
 
 - Pin exact unit, environment ID/revision/hash, and source-bundle path/hash.
@@ -52,8 +57,30 @@ declared scope; unit-specific syntax and applicability still need local facts.
   proof families without inventing unsupported branches.
 - Use refinements/overrides explicitly; never silently mutate a shared entry.
 
+The delta must still be semantically complete for the unit. Build a loss matrix
+against every applicable bundle fragment and architecture coverage row:
+syntax/forms; each operand position and legal class; value domains and
+coercions; operation branches; guard/control; reads/writes/frame; errors,
+undefined/unspecified behavior and partiality; version/host restrictions. Each
+row must be inherited from an in-scope shared ID, represented by a local claim
+and typed IR surface, explicitly excluded by authorized project scope, or kept
+as an OPEN_QUESTION. Shared environment eligibility never proves instruction-
+specific operand legality or operation behavior.
+
+Use SOURCE_FACT only for a statement directly supported by the exact quoted
+fragment. A PDF/HTML corroboration path strengthens locator provenance but does
+not authorize a broader claim than the quotation. For every derived claim,
+ensure the dependency closure terminates in local/shared SOURCE_FACT roots or
+explicit project/human authority. Never let a design choice masquerade as a
+derivation merely because it is convenient to encode.
+
 Write the requested delta early, run `candidate_validate`, and repair every
 reported issue in this same session. Return RETRY for explicit legacy fallback
 when the unit is outside the environment/schema. Return BLOCKED for a genuine
 load-bearing contradiction or unresolved state-affecting decision. End with
 the exact supplied `SPEC2LEAN_RESULT` line.
+
+SUCCESS requires that deterministic materialization of shared environment plus
+delta yields a full-semantics document with no unresolved IDs, no lost source
+form, and no unapproved resolution of an open question. It means ready for an
+independent critic, not source faithfulness or Gate B approval.
