@@ -46,6 +46,20 @@ When the runtime lists CONSERVATIVE_BOUNDED_SCOPE, accept only an explicit
 partial/precondition exclusion with BOUNDED_PARTIAL scope; a guessed value or
 silent narrowing remains MAJOR.
 
+Use a declaration/branch matrix rather than prose impressions. For every
+authorized syntax form and operand legal form, identify its Lean constructor
+and every consumer. For every operation branch, identify the exact Lean
+condition/result. For every guard, error, destination, lookup, state effect,
+and frame promise, identify the executable/relational clause. Then run the gain
+audit: reject constructors, defaults, state fields, or outcomes with no
+semantic authority.
+
+Review the pure operation independently from state execution and verify their
+connection. The mapping must expose statements strong enough for later
+OPERATION_FIDELITY and EXECUTION_CORRESPONDENCE theorems. A correct arithmetic
+or logical helper paired with an incorrect destination/guard update is not a
+faithful mapping.
+
 Audit constructor coverage against every semantic syntax form and every
 operand `legalForms` list. Report any missing authorized constructor/branch as
 MAJOR; compilation cannot waive it. Verify the required module header exactly
@@ -55,6 +69,19 @@ declaration's IDs through dependency chains: SOURCE_FACT leaves need official
 fragments, DESIGN_DEPENDENCY/ASSUMPTION must be labeled as project authority,
 and a quotation must support the exact mapped behavior rather than merely the
 instruction family.
+
+Actually run `lean_check_file` on the exact candidate. Check notation-driven
+instances (`BEq` for `==`/`!=`, equality/decidability where used), imports,
+namespace, finite-width/signed behavior, exhaustiveness, and verification
+bypass. Do not infer compilation from appearance. Compare the module header's
+supported/excluded inventory to constructors and semantic rows, not just label
+presence.
+
+Inspect `candidate_validate` traceability diagnostics. Every declaration needs
+a resolved claim/dependency path. When official HTML and PDF are required,
+SOURCE_FACT paths must reach both. A missing PDF path, invented ID, project
+design mislabeled as official, or behavior declaration without evidence path
+is MAJOR.
 
 Write findings plus:
 
