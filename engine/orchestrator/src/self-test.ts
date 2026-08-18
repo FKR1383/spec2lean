@@ -67,7 +67,7 @@ import {
   makeLeanLanguageName,
 } from "./lean-language.js"
 import { validateSourceProposal } from "./source-bootstrap.js"
-import { htmlSections } from "./source-index.js"
+import { ensureSourceIndex, htmlSections } from "./source-index.js"
 import { STAGE_PLANS } from "./stage-plan.js"
 import {
   proofTargets,
@@ -1069,6 +1069,16 @@ const parsed = parseAgentResult(
 )
 assert(parsed.outcome === "SUCCESS", "result parsing")
 
+const productionSourceIndex = await ensureSourceIndex({
+  language: "ptx",
+  specificationVersion: "9.3",
+  sourceManifest: "documents/sources/nvidia/ptx/9.3/source-manifest.json",
+})
+assert(
+  productionSourceIndex.status === "READY" &&
+    productionSourceIndex.path === ".spec2lean-cache/ptx/9.3/source-index-v2.json",
+  "self-test deterministically prepares the production multi-rendition source index",
+)
 const ptxSourceIndex = JSON.parse(
   await readFile(resolve(REPO_ROOT, ".spec2lean-cache/ptx/9.3/source-index-v2.json"), "utf8"),
 ) as {
