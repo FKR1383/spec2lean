@@ -278,6 +278,58 @@ const theoremContract = validateTheoremObligationDocument({
   }],
 })
 assert(theoremContract.issues.length === 0, "complete theorem contract validates")
+const correctnessTheoremContract = validateTheoremObligationDocument({
+  schema_version: 2,
+  source_faithfulness_boundary:
+    "These proofs establish that Lean implements the approved semantic IR; source specification prose remains evidence-reviewed authority.",
+  theorem_obligations: [
+    {
+      obligation_id: "T-OPERATION",
+      correctness_kind: "OPERATION_FIDELITY",
+      correctness_rationale: "Connects the core Lean value function to the approved operation claim.",
+      semantic_claim_ids: ["SEM-OP"],
+      lean_statement_sketch: "theorem operation_fidelity (n : Nat) : n = n",
+    },
+    {
+      obligation_id: "T-EXECUTION",
+      correctness_kind: "EXECUTION_CORRESPONDENCE",
+      correctness_rationale: "Connects executable evaluation to the approved relational execution semantics.",
+      semantic_claim_ids: ["SEM-STEP"],
+      lean_statement_sketch: "theorem execution_correspondence (n : Nat) : n = n",
+    },
+  ],
+})
+assert(
+  correctnessTheoremContract.issues.length === 0,
+  "schema v2 requires semantic operation fidelity and execution correspondence",
+)
+assert(
+  validateTheoremObligationDocument({
+    schema_version: 2,
+    source_faithfulness_boundary:
+      "These proofs implement approved semantic IR while source specification prose remains evidence-reviewed authority.",
+    theorem_obligations: [{
+      obligation_id: "T-STYLE-ONLY",
+      correctness_kind: "SCOPE_BOUNDARY",
+      correctness_rationale: "This theorem only records a boundary and does not prove the instruction operation.",
+      semantic_claim_ids: ["SEM-SCOPE"],
+      lean_statement_sketch: "theorem style_only (n : Nat) : n = n",
+    }],
+  }).issues.some((issue) => issue.includes("OPERATION_FIDELITY")) &&
+    validateTheoremObligationDocument({
+      schema_version: 2,
+      source_faithfulness_boundary:
+        "These proofs implement approved semantic IR while source specification prose remains evidence-reviewed authority.",
+      theorem_obligations: [{
+        obligation_id: "T-STYLE-ONLY",
+        correctness_kind: "SCOPE_BOUNDARY",
+        correctness_rationale: "This theorem only records a boundary and does not prove the instruction operation.",
+        semantic_claim_ids: ["SEM-SCOPE"],
+        lean_statement_sketch: "theorem style_only (n : Nat) : n = n",
+      }],
+    }).issues.some((issue) => issue.includes("EXECUTION_CORRESPONDENCE")),
+  "schema v2 rejects theorem sets that prove only syntax or scope",
+)
 assert(
   compareProofWithApprovedTheorems(
     theoremContract.declarations,

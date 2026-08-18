@@ -6,6 +6,7 @@ import { REPO_ROOT } from "./repo.js"
 import {
   compareProofWithApprovedTheorems,
   validateTheoremObligationDocument,
+  type CorrectnessKind,
 } from "./theorem-contract.js"
 import type { RunState } from "./workflow.js"
 
@@ -15,6 +16,7 @@ export type ProofTarget = {
   statement: string
   strengthRisks: string[]
   semanticIds: string[]
+  correctnessKind?: CorrectnessKind
 }
 
 type ObligationArtifact = {
@@ -23,6 +25,7 @@ type ObligationArtifact = {
     lean_statement_sketch?: string
     strength_risks?: string[]
     semantic_claim_ids?: string[]
+    correctness_kind?: CorrectnessKind
   }>
 }
 
@@ -66,7 +69,12 @@ export async function proofTargets(run: RunState): Promise<ProofTarget[]> {
   }
 
   const targets: ProofTarget[] = []
-  const obligationByName = new Map<string, { id: string; risks: string[]; semanticIds: string[] }>()
+  const obligationByName = new Map<string, {
+    id: string
+    risks: string[]
+    semanticIds: string[]
+    correctnessKind?: CorrectnessKind
+  }>()
   for (const obligation of artifact.theorem_obligations ?? []) {
     const names = [...(obligation.lean_statement_sketch ?? "").matchAll(
       /^[ \t]*theorem\s+([A-Za-z_][A-Za-z0-9_'.]*)\b/gm,
@@ -76,6 +84,7 @@ export async function proofTargets(run: RunState): Promise<ProofTarget[]> {
         id: obligation.obligation_id ?? "UNKNOWN",
         risks: obligation.strength_risks ?? [],
         semanticIds: obligation.semantic_claim_ids ?? [],
+        correctnessKind: obligation.correctness_kind,
       })
     }
   }
@@ -87,6 +96,7 @@ export async function proofTargets(run: RunState): Promise<ProofTarget[]> {
       statement: theorem.canonicalStatement,
       strengthRisks: obligation?.risks ?? [],
       semanticIds: obligation?.semanticIds ?? [],
+      correctnessKind: obligation?.correctnessKind,
     })
   }
 
