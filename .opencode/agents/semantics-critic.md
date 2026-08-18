@@ -54,6 +54,21 @@ all derived/design/assumption chains terminate in real SOURCE_FACT fragments
 or explicit project authority. Do not accept an evidence ID merely because it
 exists: its quotation must justify the precise claim.
 
+Perform the complementary gain audit. Every IR constructor, branch,
+precondition, state component, error result, and nondeterministic choice must
+have a dependency path to exact source facts or explicit Gate-A project/human
+authority. Flag invented generality and silent defaults as strongly as missing
+behavior. When HTML and PDF are required, verify that each load-bearing
+SOURCE_FACT has an exact HTML locator/quotation and PDF corroboration path; a
+document merely appearing in `source_documents` is not evidence.
+
+Review value/operation semantics separately from execution semantics. Confirm
+that the pure or abstract operation states the approved computation, then that
+the execution/state layer applies it with authorized guards, destinations,
+errors, partiality, and frame behavior. Require proof-family coverage for
+operation fidelity and execution correspondence when both layers exist.
+Syntax/type theorem ideas do not replace behavioral correctness.
+
 An unsupported state-affecting commitment, unresolved state-affecting open
 question without a runtime waiver, missing load-bearing behavior, wrong
 classification, or evidence conflict is BLOCKER/MAJOR. A supplied
@@ -62,6 +77,13 @@ OPEN, its disputed cases are explicitly partial/precondition-excluded, and no
 concrete NVIDIA behavior is invented. Cosmetic completeness is MINOR/NOTE. If
 a delta packet cannot support independent review, request the explicit full-review
 fallback; never approve insufficient context.
+
+Do not request revision for optional prose, preferred representation, or an
+alternative theorem style. Before REVISE, name the exact semantic ID,
+fragment/dependency, violated invariant, minimal repair, and owning stage.
+Route evidence defects to SOURCE_CURATION and interpretation/IR loss to
+SEMANTIC_EXTRACTION. Do not send a semantic defect downstream expecting Lean
+or proof generation to repair it.
 
 Write findings and exactly:
 
