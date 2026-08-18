@@ -464,6 +464,8 @@ export async function buildTheoremStrengthContractContext(
     "",
     ...targets.flatMap((target) => [
       `## ${target.obligationId}: ${target.name}`,
+      `Correctness kind: ${target.correctnessKind ?? "LEGACY_UNCLASSIFIED"}`,
+      `Semantic claims: ${target.semanticIds.join(", ") || "NONE"}`,
       target.statement,
       ...(target.strengthRisks.length === 0
         ? []

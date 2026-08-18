@@ -148,6 +148,9 @@ export const STAGE_PLANS:
     revisionStages: [],
     task: [
       "Generate a small set of meaningful theorem obligations from the exact Gate-C-authorized mapping.",
+      "Use theorem contract schema v2 and classify each obligation by correctness_kind.",
+      "Require an operation-fidelity theorem and an execution-correspondence theorem; syntax/style/typechecking lemmas alone are insufficient.",
+      "Bind every obligation to the exact semantic claim IDs it verifies and state the source-faithfulness boundary explicitly.",
       "Store each complete header-only Lean theorem declaration in theorem_obligations[].lean_statement_sketch; this JSON is the pre-proof theorem contract.",
       "Write and verify the complete obligation artifact before emitting the result protocol.",
       "Copy the exact orchestrator-supplied SUCCESS stage name; never invent or reuse a *_REVIEW alias.",

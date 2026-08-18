@@ -309,8 +309,22 @@ export async function buildStageInputContext(run: RunState): Promise<string> {
       "Schema: ir/source/source-bundle-v2.schema.json",
       "Use schema_version=2 with bundle_id, language, specification_version, unit, source_documents, fragments, and evidence_gaps.",
       "Every fragment requires fragment_id, document_id, exact_quote, source_sha256, reason_for_inclusion, and an HTML/PDF locator.",
+      "When the source manifest pins both HTML and PDF, every load-bearing SOURCE_FACT needs an exact HTML quotation/anchor/line path and PDF corroboration by an explicit PDF fragment or deterministic exact-quote alignment.",
+      "Do not call a source bundle complete when either required rendition is missing; candidate traceability generation enforces both paths.",
       "Every gap requires gap_id, statement, and impact=LOAD_BEARING|NON_LOAD_BEARING.",
       "A LOAD_BEARING gap that prevents operand/operation/state behavior from being stated soundly requires BLOCKED, not SUCCESS.",
+    )
+  }
+  if (run.stage === "THEOREM_GENERATION") {
+    lines.push(
+      "",
+      "# Theorem correctness contract v2",
+      "",
+      "Write schema_version=2 and a source_faithfulness_boundary statement.",
+      "Every theorem obligation requires correctness_kind, correctness_rationale, semantic_claim_ids, and one complete header-only Lean theorem declaration.",
+      "The contract must contain at least one OPERATION_FIDELITY obligation and one EXECUTION_CORRESPONDENCE obligation.",
+      "These prove that Lean implements the approved semantic IR. They do not prove that official source prose is itself true; that boundary remains evidence-, critic-, and gate-governed.",
+      "Additional applicable kinds are GUARD_BEHAVIOR, STATE_UPDATE, FRAME_PROPERTY, DETERMINISM, PARTIALITY, and SCOPE_BOUNDARY.",
     )
   }
   if (run.stage === "SEMANTIC_EXTRACTION" && run.semanticV2?.mode !== "DELTA_FAST_PATH") {
