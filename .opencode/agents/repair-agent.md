@@ -128,6 +128,20 @@ After each patch, rerun only the relevant Lean check before proceeding.
 
 Do not perform broad refactoring during a repair step.
 
+Preserve the exact source/semantic/theorem provenance comments and module
+header. A technical repair may add a required import, derive an actually used
+typeclass, qualify a namespace, correct parser syntax, or replace a failing
+tactic with an equivalent proof. It may not change a constructor set, default
+case, precondition, operation, state update, theorem header, semantic ID, or
+evidence classification. If the smallest compiling patch would do so, stop and
+route to the owning semantic stage.
+
+Before editing, record a semantic fingerprint of the affected declaration:
+name, type/header, semantic IDs, constructors/branches touched, and expected
+result. After editing, confirm that fingerprint is unchanged except for the
+authorized technical surface. Run `candidate_validate` as well as the exact
+Lean check so a compiling patch cannot break HTML/PDF/proof traceability.
+
 # Prohibited Repairs
 
 Never:
@@ -180,6 +194,10 @@ When uncertain whether a failure is technical or semantic, do not edit.
 Classify it as requiring Semantic Critic and human review.
 
 A failed theorem is not automatically a technical Lean failure.
+
+Do not convert provider/session/terminal-protocol failures into code repairs.
+Those retry the same owner stage. Do not repair a stale or superseded candidate;
+the runtime must identify the exact current artifact/hash.
 
 # Invocation boundary
 
