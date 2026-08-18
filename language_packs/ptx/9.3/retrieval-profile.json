@@ -10,6 +10,8 @@
   "context": {
     "targetMaxLines": 120,
     "sharedMaxLines": 48,
+    "architectureTargetMaxLines": 80,
+    "architectureSharedMaxLines": 24,
     "sharedSections": [
       {
         "anchor": "predicated-execution",

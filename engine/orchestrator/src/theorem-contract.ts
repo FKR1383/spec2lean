@@ -11,6 +11,13 @@ export type TheoremContract = {
   issues: string[]
 }
 
+const LEAN_SURFACE_OPERATOR_ALIASES: ReadonlyArray<readonly [string, string]> = [
+  ["<->", "↔"],
+  ["->", "→"],
+  ["\\/", "∨"],
+  ["/\\", "∧"],
+]
+
 function escapeRegex(source: string): string {
   return source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
@@ -122,7 +129,75 @@ export function canonicalTheoremStatement(declaration: string): string {
   const statement = assignment === undefined
     ? withoutComments
     : withoutComments.slice(0, assignment)
-  return statement.replace(/\s+/g, " ").trim()
+  return normalizeLeanStatementSurfaceSyntax(statement).replace(/\s+/g, " ").trim()
+}
+
+/**
+ * Normalize only parser-equivalent Lean surface spellings. This deliberately
+ * does not reorder binders, add/remove hypotheses, unfold definitions, or use
+ * theorem proving. It prevents JSON escaping and ASCII/Unicode notation from
+ * turning an unchanged theorem proposition into a false contract mismatch.
+ */
+export function normalizeLeanStatementSurfaceSyntax(source: string): string {
+  let output = ""
+  let index = 0
+  let inString = false
+  let escaped = false
+
+  while (index < source.length) {
+    const current = source[index]!
+    if (inString) {
+      output += current
+      if (escaped) escaped = false
+      else if (current === "\\") escaped = true
+      else if (current === '"') inString = false
+      index += 1
+      continue
+    }
+    if (current === '"') {
+      inString = true
+      output += current
+      index += 1
+      continue
+    }
+
+    const unicodeEscape = source.slice(index).match(/^\\u([0-9a-fA-F]{4})/)
+    if (unicodeEscape?.[1] !== undefined) {
+      output += String.fromCharCode(Number.parseInt(unicodeEscape[1], 16))
+      index += unicodeEscape[0].length
+      continue
+    }
+
+    const alias = LEAN_SURFACE_OPERATOR_ALIASES.find(([spelling]) =>
+      source.startsWith(spelling, index)
+    )
+    if (alias !== undefined) {
+      output += alias[1]
+      index += alias[0].length
+      continue
+    }
+
+    output += current
+    index += 1
+  }
+  return output
+}
+
+export function theoremContractEncodingIssues(input: unknown): string[] {
+  const issues: string[] = []
+  for (const [index, obligation] of obligationRecords(input).entries()) {
+    const sketch = obligation.lean_statement_sketch
+    if (typeof sketch === "string" && /\\u[0-9a-fA-F]{4}/.test(sketch)) {
+      const id = typeof obligation.obligation_id === "string"
+        ? obligation.obligation_id
+        : `index ${index}`
+      issues.push(
+        `${id} contains a literal \\uXXXX escape; write valid Lean source notation ` +
+        "(for example ∨ or \\/) rather than double-escaped Unicode",
+      )
+    }
+  }
+  return issues
 }
 
 export function theoremDeclarations(source: string): TheoremDeclaration[] {

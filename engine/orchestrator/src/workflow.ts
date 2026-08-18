@@ -49,6 +49,10 @@ export type GateStatus =
   | "benchmark_auto_advanced"
   | "rejected"
 
+export type AgentFailureClass =
+  | "PROVIDER_RETRY_BUDGET_EXCEEDED"
+  | "OUTPUT_LENGTH_EXCEEDED"
+
 export type RunEvent = {
   at: string
   from: FormalizationStage | null
@@ -67,7 +71,13 @@ export type AgentExecution = {
   nextStage: FormalizationStage
   response: string
   artifactProduced?: boolean
-  failureClass?: "PROVIDER_RETRY_BUDGET_EXCEEDED"
+  failureClass?: AgentFailureClass
+  progress?: {
+    kind: "PROOF_BATCH_CONTINUATION"
+    declarationsBefore: number
+    declarationsAfter: number
+    declarationsTotal: number
+  }
   traceability?: {
     documentRole: "SEMANTICS" | "PROOFS"
     manifestPath: string
@@ -84,6 +94,10 @@ export type ActiveExecution = {
   model?: string
   sessionId: string
   expectedArtifact: string
+  artifactBaseline?: {
+    exists: boolean
+    sha256?: string
+  }
 }
 
 export type SemanticV2Mode =

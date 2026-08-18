@@ -79,7 +79,7 @@ class ManifestIndex {
     for (const uri of files) {
       try {
         const manifest = JSON.parse(await readFile(uri.fsPath, "utf8")) as EvidenceManifest
-        if ((manifest.schemaVersion === 1 || manifest.schemaVersion === 2) && manifest.manifestType === "spec2lean_evidence_manifest") {
+        if ([1, 2, 3].includes(manifest.schemaVersion) && manifest.manifestType === "spec2lean_evidence_manifest") {
           loaded.push({
             manifestPath: relative(root, uri.fsPath).split(sep).join("/"),
             manifest,
@@ -103,6 +103,8 @@ class ManifestIndex {
       (indexed.manifest.diagnostics.declarationsWithoutReferences.length === 0 ? 1_000_000_000 : 0) +
       (indexed.manifest.diagnostics.unresolvedReferences.length === 0 ? 100_000_000 : 0) +
       (indexed.manifest.diagnostics.pdfAlignment?.matched ?? 0) * 1_000_000 +
+      ((indexed.manifest.diagnostics.declarationsWithoutEvidencePath?.length ?? 0) === 0 ? 10_000_000 : 0) +
+      (indexed.manifest.diagnostics.pdfAlignment?.failure === undefined ? 5_000_000 : 0) +
       indexed.manifest.entries.reduce((sum, entry) => sum + entry.evidence.length, 0)
     const preferred = (matches: IndexedManifest[]): IndexedManifest | undefined =>
       matches
@@ -264,6 +266,7 @@ class EvidencePanel {
       leanPath: indexed.manifest.leanDocument.path,
       entry,
       diagnostics: indexed.manifest.diagnostics,
+      semanticUncertainties: indexed.manifest.semanticUncertainties ?? [],
       evidence,
     }
     await this.panel.webview.postMessage({ type: "show", model })
@@ -393,6 +396,7 @@ class EvidencePanel {
   <main id="content" hidden>
     <aside>
       <div id="provenanceWarning" class="warning" hidden></div>
+      <h2>Open questions &amp; benchmark assumptions</h2><div id="uncertainties"></div>
       <h2>Semantic claims</h2><div id="claims"></div>
       <h2>Evidence &amp; provenance</h2><div id="evidenceList"></div>
       <h2>Human feedback</h2>
@@ -429,9 +433,24 @@ class EvidencePanel {
       text(byId('title'), next.entry.declarationName);
       text(byId('subtitle'), next.unit + ' · ' + next.entry.declarationKind + ' · Lean lines ' + next.entry.leanRange.startLine + '–' + next.entry.leanRange.endLine);
       const warnings = [];
+      if (next.entry.coverage && next.entry.coverage.officialEvidenceIds.length === 0 && next.entry.coverage.projectEvidenceIds.length === 0) warnings.push('No transitive official-source or project-authority evidence path.');
+      if (next.entry.coverage?.unresolvedDependencyIds.length) warnings.push('Unresolved dependency IDs: ' + next.entry.coverage.unresolvedDependencyIds.join(', '));
+      if (next.semanticUncertainties.length) warnings.push('Unresolved semantic questions remain: ' + next.semanticUncertainties.map((item) => item.semanticId).join(', ') + '.');
+      if (next.diagnostics.pdfAlignment?.failure) warnings.push('PDF alignment failed: ' + next.diagnostics.pdfAlignment.failure);
+      if (next.diagnostics.pdfAlignment?.coverageRatio !== undefined && next.diagnostics.pdfAlignment.coverageRatio < 1) warnings.push('PDF corroboration is partial: ' + next.diagnostics.pdfAlignment.matched + '/' + (next.diagnostics.pdfAlignment.eligible ?? '?') + ' official fragments aligned; HTML evidence remains hash-bound.');
       if (next.entry.semanticIds.length === 0 && next.entry.evidence.length === 0) warnings.push('This declaration has no provenance reference.');
       if (next.entry.unresolvedReferences.length) warnings.push('Unresolved IDs: ' + next.entry.unresolvedReferences.join(', '));
       const warning = byId('provenanceWarning'); warning.hidden = warnings.length === 0; text(warning, warnings.join(' '));
+      const uncertainties = byId('uncertainties'); uncertainties.replaceChildren();
+      for (const item of next.semanticUncertainties) {
+        const card = document.createElement('div'); card.className = 'card';
+        const label = document.createElement('div'); label.className = 'classification OPEN_QUESTION';
+        const policy = item.benchmarkDisposition ? ' · AUTO BENCHMARK · ' + item.benchmarkDisposition.policy + ' · NOT HUMAN APPROVED' : '';
+        text(label, 'OPEN_QUESTION · ' + item.semanticId + policy);
+        const statement = document.createElement('div'); text(statement, item.statement);
+        card.append(label, statement); uncertainties.append(card);
+      }
+      if (next.semanticUncertainties.length === 0) text(uncertainties, 'No unresolved semantic question is recorded for this manifest.');
       const claims = byId('claims'); claims.replaceChildren();
       for (const claim of next.entry.claims) {
         const card = document.createElement('div'); card.className = 'card';
@@ -444,7 +463,7 @@ class EvidencePanel {
       for (const evidence of next.evidence) {
         const button = document.createElement('button'); button.className = 'evidence secondary';
         button.dataset.evidenceId = evidence.evidenceId;
-        text(button, (evidence.sourceVerified ? '✓ ' : '⚠ ') + evidence.evidenceId);
+        text(button, (evidence.sourceVerified ? '✓ ' : '⚠ ') + evidence.sourceKind + ' · ' + evidence.evidenceId);
         button.addEventListener('click', () => selectEvidence(evidence)); list.append(button);
       }
       if (next.evidence.length === 0) {
@@ -454,7 +473,8 @@ class EvidencePanel {
         byId('pdfView').hidden = true; byId('htmlView').hidden = false;
         text(byId('excerpt'), 'No evidence locator is available.');
       }
-      if (next.evidence[0]) void selectEvidence(next.evidence[0]);
+      const preferredEvidence = next.evidence.find((item) => item.sourceKind === 'PDF') ?? next.evidence.find((item) => item.sourceKind === 'HTML') ?? next.evidence[0];
+      if (preferredEvidence) void selectEvidence(preferredEvidence);
     }
     async function selectEvidence(evidence) {
       selectedEvidence = evidence;

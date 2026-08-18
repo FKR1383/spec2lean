@@ -39,8 +39,18 @@ indexed fast path. Do not interpret semantics, write Lean, or approve a gate.
    exact and every fragment must retain document path/hash and locator.
 5. Classify each evidence gap as LOAD_BEARING or NON_LOAD_BEARING. Missing
    evidence is never filled by inference.
+   Under an explicit runtime CONSERVATIVE_BOUNDED_SCOPE waiver, a gap is
+   NON_LOAD_BEARING only when the disputed case is retained as OPEN_QUESTION
+   and explicitly excluded/partial; record both the gap and waiver ID.
 6. Run `candidate_validate`, repair structural issues in this session, and
    return SUCCESS only when it passes. A load-bearing gap returns BLOCKED.
+   Use a distinctive normative quotation (at least four whitespace-separated
+   tokens), not a bare heading or mnemonic. Bind every fragment to an existing
+   source document with matching kind and SHA-256. Preserve HTML
+   anchor/line locators and, when an official PDF is pinned, use the PDF search
+   result to add/corroborate page information. Cover syntax, each operand
+   position/class, type/coercion, operation, guards/state/error behavior, and
+   applicability; do not infer general operand legality from examples alone.
 
 Do not browse the repository or source corpus for reassurance after the
 indexed context has answered the bounded request. End with the exact supplied

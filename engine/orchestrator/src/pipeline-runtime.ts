@@ -10,7 +10,12 @@ import {
   type PipelineLease,
   type PipelineAgent,
 } from "./batch-store.js"
-import { advanceBenchmarkGate, waitingGateForStage } from "./gate-runtime.js"
+import {
+  advanceBenchmarkGate,
+  benchmarkGateParking,
+  waitingGateForStage,
+  type BenchmarkGateParking,
+} from "./gate-runtime.js"
 import { startOpenCode, type Spec2LeanOpenCode } from "./opencode.js"
 import {
   pipelineAgentForRun,
@@ -21,6 +26,11 @@ import {
 import { verifyPipelineDependencies } from "./pipeline-dependencies.js"
 import { proofTargetSummary } from "./proof-plan.js"
 import { REPO_ROOT } from "./repo.js"
+import {
+  isProviderAvailabilityFailure,
+  outputLengthRetryLimitReached,
+  semanticRetryState,
+} from "./retry-policy.js"
 import { withRepositoryLock } from "./repository-lock.js"
 import { executeTick } from "./runner.js"
 import { loadRun, saveRun } from "./run-store.js"
@@ -185,6 +195,12 @@ async function runPipelineJob(
   const afterProofDeclared = after.stage === "PROOF_GENERATION"
     ? (await proofTargetSummary(after)).declared
     : undefined
+  const proofMadeProgress =
+    before.stage === "PROOF_GENERATION" &&
+    after.stage === "PROOF_GENERATION" &&
+    beforeProofDeclared !== undefined &&
+    afterProofDeclared !== undefined &&
+    afterProofDeclared > beforeProofDeclared
   const finishedAt = new Date().toISOString()
   const last = after.executions?.at(-1)
   const metric: PipelineJobMetric = {
@@ -202,9 +218,10 @@ async function runPipelineJob(
     queueWaitMs: Math.max(0, Date.parse(startedAt) - Date.parse(queuedAt)),
     serviceMs: Math.max(0, Date.parse(finishedAt) - Date.parse(startedAt)),
     outcome:
-      after.revision > before.revision && last?.stage === before.stage
+      (after.executions?.length ?? 0) > (before.executions?.length ?? 0) && last?.stage === before.stage
         ? last.outcome
         : undefined,
+    productiveProgress: proofMadeProgress,
     manifestCountBefore: beforeManifestCount,
     manifestCountAfter: afterManifestCount,
     manifestGenerationIncludedInServiceMs: true,
@@ -218,12 +235,7 @@ async function runPipelineJob(
     after,
     metric,
     infrastructureRetry,
-    proofMadeProgress:
-      before.stage === "PROOF_GENERATION" &&
-      after.stage === "PROOF_GENERATION" &&
-      beforeProofDeclared !== undefined &&
-      afterProofDeclared !== undefined &&
-      afterProofDeclared > beforeProofDeclared,
+    proofMadeProgress,
     error,
   }
 }
@@ -276,7 +288,11 @@ function stageRevisionCount(run: RunState): number {
   ).length
 }
 
-function batchStatus(runs: readonly RunState[], stopped: ReadonlyMap<string, string>): string {
+function batchStatus(
+  runs: readonly RunState[],
+  stopped: ReadonlyMap<string, string>,
+  parked: ReadonlyMap<string, BenchmarkGateParking>,
+): string {
   if (runs.every((run) => run.stage === "ACCEPTED" || run.stage === "BENCHMARK_COMPLETE")) {
     return "COMPLETE"
   }
@@ -284,6 +300,7 @@ function batchStatus(runs: readonly RunState[], stopped: ReadonlyMap<string, str
     stopped.size > 0 ||
     runs.some((run) => run.stage === "BLOCKED" || run.stage === "FAILED")
   ) return "INCOMPLETE"
+  if (parked.size > 0) return "PARKED_SEMANTIC_REVIEW"
   if (runs.some((run) => waitingGateForStage(run.stage) !== undefined)) {
     return "WAITING_HUMAN"
   }
@@ -306,12 +323,24 @@ export async function runPipelinedBatch(
   }
 
   batch.pipeline.globalWorkers = options.globalWorkers
+  for (const entry of batch.runs) {
+    const run = await loadRunForPipelineRouting(entry.runId)
+    const retry = semanticRetryState(run.executions ?? [], run.stage)
+    const state = batch.pipeline.runs[run.runId] ?? {
+      totalTicks: 0,
+      consecutiveRetries: 0,
+    }
+    state.consecutiveRetries = retry.consecutiveRetries
+    state.retryStage = retry.retryStage
+    batch.pipeline.runs[run.runId] = state
+  }
   const workers: WorkerSlot[] = pipelineAgentWorkerLayout(
     batch.pipeline.agentCaps,
   ).map((worker) => ({ ...worker, busy: false }))
   const active = new Map<string, Promise<PipelineJobResult>>()
   const invocationTicks = new Map<string, number>()
   const stopped = new Map<string, string>()
+  let providerPause: string | undefined
   let runtimeRestartAttempts = 0
   let sharedRuntime: Spec2LeanOpenCode | undefined
   let sharedRuntimeStartup: Promise<Spec2LeanOpenCode> | undefined
@@ -346,7 +375,8 @@ export async function runPipelinedBatch(
         gateAdvanced = true
         console.log(
           `[pipeline] unit=${run.unit} gate=${advanced.gate} ` +
-          `benchmark-auto-advance ${run.stage} -> ${advanced.run.stage}`,
+          `benchmark-auto-advance ${run.stage} -> ${advanced.run.stage} ` +
+          `semantic-assumptions=${advanced.semanticAssumptions.map((item) => item.semanticId).join(",") || "none"}`,
         )
       }
       if (gateAdvanced) {
@@ -354,6 +384,15 @@ export async function runPipelinedBatch(
           batch.runs.map((entry) => loadRunForPipelineRouting(entry.runId)),
         )
       }
+      const parkedEntries = await Promise.all(runs.map(async (run) => [
+        run.runId,
+        await benchmarkGateParking(run),
+      ] as const))
+      const parked = new Map<string, BenchmarkGateParking>(
+        parkedEntries.flatMap(([runId, parking]) =>
+          parking === undefined ? [] : [[runId, parking] as const]
+        ),
+      )
 
       const now = new Date().toISOString()
       for (const run of runs) {
@@ -379,6 +418,7 @@ export async function runPipelinedBatch(
           const agent = pipelineAgentForRun(run)
           const state = batch.pipeline!.runs[run.runId]
           if (
+            providerPause !== undefined ||
             pool === undefined ||
             agent === undefined ||
             stopped.has(run.runId) ||
@@ -446,6 +486,15 @@ export async function runPipelinedBatch(
       }
 
       if (active.size === 0) {
+        if (providerPause !== undefined) {
+          for (const run of runs) {
+            if (
+              poolForStage(run.stage) !== undefined &&
+              !TERMINAL_STAGES.has(run.stage) &&
+              waitingGateForStage(run.stage) === undefined
+            ) stopped.set(run.runId, providerPause)
+          }
+        }
         const disabled = runs.filter((run) => {
           const agent = pipelineAgentForRun(run)
           return agent !== undefined && batch.pipeline!.agentCaps[agent] === 0
@@ -456,13 +505,34 @@ export async function runPipelinedBatch(
             `NO_WORKER_FOR_AGENT:${pipelineAgentForRun(run) ?? "unknown"}`,
           )
         }
-        const status = batchStatus(runs, stopped)
+        const status = batchStatus(runs, stopped, parked)
         batch.lastRunFinishedAt = new Date().toISOString()
         for (const entry of batch.runs) {
           const run = runs.find((item) => item.runId === entry.runId)!
+          const parking = parked.get(run.runId)
           entry.lastObservedStage = run.stage
           entry.lastError = stopped.get(run.runId)
-          entry.lastExitCode = stopped.has(run.runId) ? 2 : 0
+          entry.blockingIssues = parking?.issues
+          entry.lastStatus = stopped.has(run.runId)
+            ? "STOPPED"
+            : run.stage === "ACCEPTED" || run.stage === "BENCHMARK_COMPLETE"
+              ? "COMPLETE"
+              : run.stage === "BLOCKED" || run.stage === "FAILED"
+                ? "BLOCKED"
+                : parking !== undefined
+                  ? "PARKED_SEMANTIC_REVIEW"
+                  : waitingGateForStage(run.stage) !== undefined
+                    ? "WAITING_HUMAN"
+                    : "NO_RUNNABLE_WORK"
+          entry.lastExitCode = entry.lastStatus === "COMPLETE" || entry.lastStatus === "WAITING_HUMAN"
+            ? 0
+            : 2
+          if (parking !== undefined) {
+            console.log(
+              `[pipeline] parked unit=${run.unit} gate=${parking.gate} ` +
+              `reason=${parking.reason} issues=${parking.issues.join(" | ")}`,
+            )
+          }
         }
         batch.pipeline.updatedAt = batch.lastRunFinishedAt
         batch.updatedAt = batch.lastRunFinishedAt
@@ -481,7 +551,12 @@ export async function runPipelinedBatch(
         delete batch.pipeline.leases[result.lease.runId]
         batch.pipeline.jobs.push(result.metric)
         const state = batch.pipeline.runs[result.lease.runId]!
-        if (!result.infrastructureRetry) {
+        const last = result.after.executions?.at(-1)
+        const executionRecorded =
+          (result.after.executions?.length ?? 0) > (result.before.executions?.length ?? 0)
+        const providerUnavailable =
+          executionRecorded && isProviderAvailabilityFailure(last)
+        if (!result.infrastructureRetry && !providerUnavailable) {
           state.totalTicks += 1
           invocationTicks.set(
             result.lease.runId,
@@ -489,12 +564,13 @@ export async function runPipelinedBatch(
           )
         }
 
-        const last = result.after.executions?.at(-1)
         const retried =
           result.after.stage === result.before.stage && last?.outcome === "RETRY"
         if (result.proofMadeProgress) {
           state.consecutiveRetries = 0
           state.retryStage = undefined
+        } else if (providerUnavailable) {
+          // Availability failures pause the batch and do not consume semantic retry budget.
         } else if (retried) {
           state.consecutiveRetries = state.retryStage === result.after.stage
             ? state.consecutiveRetries + 1
@@ -507,11 +583,17 @@ export async function runPipelinedBatch(
         state.readyStage = undefined
         state.readySince = undefined
 
-        let stopReason = result.infrastructureRetry
-          ? runtimeRestartAttempts > 3
-            ? "SHARED_RUNTIME_RESTART_LIMIT_REACHED"
-            : undefined
-          : result.error
+        let stopReason: string | undefined
+        if (providerUnavailable) {
+          providerPause = "PROVIDER_UNAVAILABLE"
+          stopReason = providerPause
+        } else {
+          stopReason = result.infrastructureRetry
+            ? runtimeRestartAttempts > 3
+              ? "SHARED_RUNTIME_RESTART_LIMIT_REACHED"
+              : undefined
+            : result.error
+        }
         if (stopReason === undefined && result.after.revision <= result.before.revision) {
           if (!result.infrastructureRetry) stopReason = "RUN_REVISION_DID_NOT_ADVANCE"
         }
@@ -519,6 +601,13 @@ export async function runPipelinedBatch(
           stopReason === undefined &&
           stageRevisionCount(result.after) >= options.maxStageRevisions
         ) stopReason = "STAGE_REVISION_LIMIT_REACHED"
+        if (
+          stopReason === undefined &&
+          outputLengthRetryLimitReached(
+            result.after.executions ?? [],
+            state.consecutiveRetries,
+          )
+        ) stopReason = "OUTPUT_LENGTH_RETRY_LIMIT_REACHED"
         if (
           stopReason === undefined &&
           state.consecutiveRetries >= options.maxStageRetries
@@ -535,6 +624,8 @@ export async function runPipelinedBatch(
         entry.lastObservedStage = result.after.stage
         entry.lastError = stopReason
         entry.lastExitCode = stopReason === undefined ? 0 : 2
+        entry.lastStatus = stopReason === undefined ? "RUNNING" : "STOPPED"
+        entry.blockingIssues = undefined
         batch.pipeline.updatedAt = new Date().toISOString()
         batch.updatedAt = batch.pipeline.updatedAt
         await saveBatch(batch)
@@ -544,6 +635,9 @@ export async function runPipelinedBatch(
           `service=${result.metric.serviceMs}ms` +
           (result.infrastructureRetry && stopReason === undefined
             ? " shared-runtime-restart=rescheduled"
+            : "") +
+          (providerUnavailable
+            ? " provider-unavailable=batch-paused-resumable"
             : "") +
           (stopReason === undefined ? "" : ` stopped=${stopReason}`),
         )

@@ -41,8 +41,10 @@ state behavior; do not reacquire evidence or approve any gate.
 
 1. Read only the installed mapping, current proof file if present, exact frozen
    declarations, and concrete diagnostics supplied by the prompt.
-2. Copy every theorem header byte-for-byte from the frozen contract. Never
-   reconstruct a binder or conclusion from memory.
+2. Copy every theorem header from the frozen contract. Never reconstruct a
+   binder or conclusion from memory. ASCII/Unicode parser-equivalent operators
+   are accepted deterministically, but hypotheses, binder order, and
+   conclusions must remain identical.
 3. Write a complete first proof attempt early.
 4. Immediately run `lean_check_file`; use diagnostics/goals to repair only
    concrete failures.

@@ -22,6 +22,7 @@ export type ProvenanceClaim = {
   statement: string
   evidenceIds: string[]
   dependencyIds: string[]
+  humanApprovalDependencies: string[]
   stateAffecting?: boolean
   unresolved: boolean
   originPath: string
@@ -131,6 +132,11 @@ export function collectSemanticProvenanceClaims(
           ["dependencyIds", "dependency_ids", "depends_on", "source_facts", "related_claims"],
           ["dependency", "depends_on_context"],
         ),
+        humanApprovalDependencies: collectIds(
+          nested,
+          ["humanApprovalDependencies", "human_approval_dependencies", "review_record_ids"],
+          ["human_approval_dependency", "review_record_id"],
+        ),
         stateAffecting:
           typeof nested.stateAffecting === "boolean"
             ? nested.stateAffecting
@@ -191,11 +197,15 @@ export function validateArchitectureIndex(source: string): string[] {
     return ["architecture index must have schemaVersion=1 and an entries array"]
   }
   const ids = new Set<string>()
+  const entriesById = new Map<string, ArchitectureIndex["entries"][number]>()
   index.entries.forEach((entry, position) => {
     const path = `architecture index entry ${position}`
     if (!nonEmptyString(entry.semanticId)) issues.push(`${path} has no semanticId`)
     else if (ids.has(entry.semanticId)) issues.push(`duplicate architecture semanticId: ${entry.semanticId}`)
-    else ids.add(entry.semanticId)
+    else {
+      ids.add(entry.semanticId)
+      entriesById.set(entry.semanticId, entry)
+    }
     if (!PROVENANCE_CLASSIFICATIONS.includes(entry.classification as never)) {
       issues.push(`${path} has invalid classification`)
     }
@@ -208,17 +218,54 @@ export function validateArchitectureIndex(source: string): string[] {
     }
     if (typeof entry.stateAffecting !== "boolean") issues.push(`${path} has no stateAffecting boolean`)
     if (entry.status !== "RESOLVED" && entry.status !== "OPEN") issues.push(`${path} has invalid status`)
+    if (
+      entry.classification === "SOURCE_FACT" &&
+      ((Array.isArray(entry.evidenceIds) && entry.evidenceIds.length > 0) ||
+        (Array.isArray(entry.dependencyIds) && entry.dependencyIds.length > 0))
+    ) {
+      issues.push(
+        `${entry.semanticId} SOURCE_FACT must be an internal architecture-index root; ` +
+        "put exact official locators in the human-readable source-fact section",
+      )
+    }
+    if (entry.classification === "OPEN_QUESTION" && entry.status !== "OPEN") {
+      issues.push(`${entry.semanticId} OPEN_QUESTION must have status OPEN`)
+    }
+    if (
+      PROVENANCE_CLASSIFICATIONS.includes(entry.classification as never) &&
+      entry.classification !== "OPEN_QUESTION" &&
+      entry.status === "OPEN"
+    ) {
+      issues.push(`${entry.semanticId} has status OPEN but is not classified OPEN_QUESTION`)
+    }
+    if (
+      entry.classification === "DERIVED_INTERPRETATION" &&
+      Array.isArray(entry.dependencyIds) &&
+      entry.dependencyIds.length === 0
+    ) {
+      issues.push(`${entry.semanticId} DERIVED_INTERPRETATION has no dependencyIds`)
+    }
   })
   index.entries.forEach((entry) => {
     if (!nonEmptyString(entry.semanticId)) return
     for (const dependencyId of Array.isArray(entry.dependencyIds) ? entry.dependencyIds : []) {
       if (!ids.has(dependencyId)) {
         issues.push(`${entry.semanticId} references unknown dependencyId: ${dependencyId}`)
+      } else if (
+        entry.classification === "DERIVED_INTERPRETATION" &&
+        entry.status === "RESOLVED" &&
+        entriesById.get(dependencyId)?.status === "OPEN"
+      ) {
+        issues.push(
+          `${entry.semanticId} resolved DERIVED_INTERPRETATION depends on open entry: ${dependencyId}`,
+        )
       }
     }
     for (const evidenceId of Array.isArray(entry.evidenceIds) ? entry.evidenceIds : []) {
       if (!ids.has(evidenceId)) {
         issues.push(`${entry.semanticId} references unknown evidenceId: ${evidenceId}`)
+      } else if (entriesById.get(evidenceId)?.classification !== "SOURCE_FACT") {
+        issues.push(`${entry.semanticId} evidenceId is not a SOURCE_FACT: ${evidenceId}`)
       }
     }
   })
@@ -237,6 +284,7 @@ export function collectArchitectureProvenanceClaims(
       statement: entry.statement,
       evidenceIds: [...entry.evidenceIds].sort((left, right) => left.localeCompare(right)),
       dependencyIds: [...entry.dependencyIds].sort((left, right) => left.localeCompare(right)),
+      humanApprovalDependencies: [],
       stateAffecting: entry.stateAffecting,
       unresolved: entry.status === "OPEN",
       originPath,
@@ -287,6 +335,7 @@ export function collectArchitectureProvenanceClaims(
       statement: statement.trim(),
       evidenceIds: [],
       dependencyIds: [],
+      humanApprovalDependencies: [],
       unresolved: claimClassification === "OPEN_QUESTION",
       originPath,
       origin: "ARCHITECTURE",

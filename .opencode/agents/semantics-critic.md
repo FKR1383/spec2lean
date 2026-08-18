@@ -45,10 +45,22 @@ behavior, and host/version restrictions. Do not impose machine-state concepts
 on a pure abstract operation. Use narrow source reads only for a concrete
 conflict.
 
+The behavior matrix is a loss audit, not a plausibility summary. Compare each
+source-visible form against the IR one-by-one, including every operand
+position's legal classes (register, immediate/literal, special destination,
+etc.). A form present in official evidence but absent from the IR is MAJOR
+unless an explicit Gate-A-authorized scope boundary excludes it. Verify that
+all derived/design/assumption chains terminate in real SOURCE_FACT fragments
+or explicit project authority. Do not accept an evidence ID merely because it
+exists: its quotation must justify the precise claim.
+
 An unsupported state-affecting commitment, unresolved state-affecting open
-question, missing load-bearing behavior, wrong classification, or evidence
-conflict is BLOCKER/MAJOR. Cosmetic completeness is MINOR/NOTE. If a delta
-packet cannot support independent review, request the explicit full-review
+question without a runtime waiver, missing load-bearing behavior, wrong
+classification, or evidence conflict is BLOCKER/MAJOR. A supplied
+CONSERVATIVE_BOUNDED_SCOPE waiver is acceptable only if the question remains
+OPEN, its disputed cases are explicitly partial/precondition-excluded, and no
+concrete NVIDIA behavior is invented. Cosmetic completeness is MINOR/NOTE. If
+a delta packet cannot support independent review, request the explicit full-review
 fallback; never approve insufficient context.
 
 Write findings and exactly:

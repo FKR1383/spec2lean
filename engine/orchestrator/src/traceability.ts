@@ -51,7 +51,7 @@ export type TraceabilityEvidence = {
   locator: TraceabilityLocator
   quotation?: string
   alignedFromEvidenceId?: string
-  alignmentMethod?: "EXACT_QUOTE_TOKEN_MATCH"
+  alignmentMethod?: "EXACT_QUOTE_TOKEN_MATCH" | "PAGE_HINTED_EXACT_QUOTE_TOKEN_MATCH" | "DISTINCTIVE_TOKEN_WINDOW_MATCH"
 }
 
 export type TraceabilityClaim = {
@@ -59,6 +59,24 @@ export type TraceabilityClaim = {
   classification: TraceabilityClassification
   statement: string
   evidenceIds: string[]
+  dependencyIds: string[]
+  humanApprovalDependencies: string[]
+  origin: "SEMANTICS" | "ARCHITECTURE"
+  stateAffecting?: boolean
+  unresolved: boolean
+}
+
+export type TraceabilityUncertainty = {
+  semanticId: string
+  statement: string
+  origin: "SEMANTICS" | "ARCHITECTURE"
+  stateAffecting?: boolean
+  unresolved: true
+  benchmarkDisposition?: {
+    mode: "AUTO_APPROVE"
+    policy: "CONSERVATIVE_BOUNDED_SCOPE"
+    humanApproved: false
+  }
 }
 
 export type TraceabilityEntry = {
@@ -74,6 +92,16 @@ export type TraceabilityEntry = {
   claims: TraceabilityClaim[]
   evidence: TraceabilityEvidence[]
   unresolvedReferences: string[]
+  coverage: {
+    directClaimIds: string[]
+    transitiveClaimIds: string[]
+    sourceFactIds: string[]
+    projectBoundaryIds: string[]
+    officialEvidenceIds: string[]
+    pdfEvidenceIds: string[]
+    projectEvidenceIds: string[]
+    unresolvedDependencyIds: string[]
+  }
 }
 
 export type ArtifactFingerprint = {
@@ -82,9 +110,9 @@ export type ArtifactFingerprint = {
 }
 
 export type TraceabilityManifest = {
-  schemaVersion: 2
+  schemaVersion: 3
   manifestType: "spec2lean_evidence_manifest"
-  generator: "spec2lean-traceability-v2"
+  generator: "spec2lean-traceability-v3"
   runId: string
   language: string
   specificationVersion: string
@@ -97,13 +125,22 @@ export type TraceabilityManifest = {
   sourceBundles: ArtifactFingerprint[]
   theoremDocument?: ArtifactFingerprint
   entries: TraceabilityEntry[]
+  semanticUncertainties: TraceabilityUncertainty[]
   diagnostics: {
     declarationsWithoutReferences: string[]
     unresolvedReferences: string[]
+    declarationsWithoutEvidencePath: string[]
+    claimsWithoutDependencyPath: string[]
+    sourceFactsWithoutOfficialEvidence: string[]
+    assumptionsWithoutApprovalDependency: string[]
+    unresolvedOpenQuestions: string[]
     pdfAlignment?: {
+      eligible: number
       matched: number
       ambiguous: string[]
       unmatched: string[]
+      coverageRatio: number
+      failure?: string
     }
   }
 }
@@ -189,6 +226,11 @@ function collectArchitectureClaims(
       classification: item.classification,
       statement: item.statement,
       evidenceIds: [evidenceId],
+      dependencyIds: item.dependencyIds,
+      humanApprovalDependencies: item.humanApprovalDependencies,
+      origin: item.origin,
+      stateAffecting: item.stateAffecting,
+      unresolved: item.unresolved,
     })
     evidence.set(evidenceId, {
       evidenceId,
@@ -219,6 +261,11 @@ function collectClaims(
         classification: item.classification,
         statement: item.statement,
         evidenceIds: item.evidenceIds,
+        dependencyIds: item.dependencyIds,
+        humanApprovalDependencies: item.humanApprovalDependencies,
+        origin: item.origin,
+        stateAffecting: item.stateAffecting,
+        unresolved: item.unresolved,
       })
     }
   }
@@ -534,6 +581,37 @@ export function unresolvedReferenceTokens(comment: string, known: Set<string>): 
   return [...new Set(tokens.filter((token) => !known.has(token)))].sort((a, b) => a.localeCompare(b))
 }
 
+function claimClosure(
+  directIds: string[],
+  claims: Map<string, TraceabilityClaim>,
+): { claims: TraceabilityClaim[]; unresolvedDependencyIds: string[] } {
+  const selected = new Map<string, TraceabilityClaim>()
+  const unresolved = new Set<string>()
+  const pending = [...directIds]
+  while (pending.length > 0) {
+    const id = pending.pop()!
+    if (selected.has(id)) continue
+    const claim = claims.get(id)
+    if (claim === undefined) {
+      unresolved.add(id)
+      continue
+    }
+    selected.set(id, claim)
+    for (const dependencyId of claim.dependencyIds) {
+      if (claims.has(dependencyId)) pending.push(dependencyId)
+      else unresolved.add(dependencyId)
+    }
+  }
+  return {
+    claims: [...selected.values()].sort((left, right) => left.semanticId.localeCompare(right.semanticId)),
+    unresolvedDependencyIds: [...unresolved].sort((left, right) => left.localeCompare(right)),
+  }
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right))
+}
+
 export type BuildTraceabilityInput = {
   runId: string
   documentRole?: "SEMANTICS" | "PROOFS"
@@ -590,6 +668,8 @@ export async function buildTraceabilityManifest(
     theoremPath === undefined ? undefined : readRepositoryFile(theoremPath),
   ])
   const semanticDocument: unknown = JSON.parse(semanticData.toString("utf8"))
+  const strictSemanticIr = isRecord(semanticDocument) && semanticDocument.schemaVersion === 2 &&
+    Array.isArray(semanticDocument.semanticClaims)
   const claims = new Map<string, TraceabilityClaim>()
   collectClaims(semanticDocument, semanticPath, claims)
   const evidence = new Map<string, TraceabilityEvidence>()
@@ -621,13 +701,20 @@ export async function buildTraceabilityManifest(
   )
   if (sourceManifestPath === undefined) throw new Error("Run has no source manifest")
   const sourceManifest = await fingerprint(sourceManifestPath)
-  const pdfAlignment = input.includePdfRenditions
-    ? await alignEvidenceToOfficialPdf({
+  let pdfAlignment: Awaited<ReturnType<typeof alignEvidenceToOfficialPdf>> | undefined
+  let pdfAlignmentFailure: string | undefined
+  if (input.includePdfRenditions) {
+    try {
+      pdfAlignment = await alignEvidenceToOfficialPdf({
         evidence: [...evidence.values()],
         sourceManifestPath: sourceManifest.path,
         sourceManifestSha256: sourceManifest.sha256,
       })
-    : undefined
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (!message.includes("no hash-bound official PDF artifact")) pdfAlignmentFailure = message
+    }
+  }
   const pdfRenditions = new Map(
     (pdfAlignment?.renditions ?? []).map((item) => [item.alignedFromEvidenceId!, item]),
   )
@@ -639,20 +726,23 @@ export async function buildTraceabilityManifest(
       ...(theoremBinding?.semanticIds ?? []).filter((id) => claims.has(id)),
     ])].sort((left, right) => left.localeCompare(right))
     const directEvidenceIds = referencedIds(declaration.comment, evidence.keys())
-    const selectedClaims = semanticIds.flatMap((id) => {
-      const claim = claims.get(id)
-      return claim === undefined ? [] : [claim]
-    })
-    const evidenceIds = [...new Set([
+    const closure = claimClosure(semanticIds, claims)
+    const selectedClaims = closure.claims
+    const evidenceIds = uniqueSorted([
       ...directEvidenceIds,
       ...selectedClaims.flatMap((claim) => claim.evidenceIds),
-    ])].sort((left, right) => left.localeCompare(right))
+    ])
     const selectedEvidence = evidenceIds.flatMap((id) => {
       const item = evidence.get(id)
       if (item === undefined) return []
       const pdf = pdfRenditions.get(id)
       return pdf === undefined ? [item] : [item, pdf]
     })
+    const officialEvidenceIds = uniqueSorted(selectedEvidence
+      .filter((item) => item.sourceKind === "HTML" || item.sourceKind === "PDF")
+      .map((item) => item.evidenceId))
+    const projectEvidenceIds = uniqueSorted(selectedEvidence
+      .filter((item) => item.sourceKind === "ARTIFACT").map((item) => item.evidenceId))
     return {
       entryId: `${declaration.kind}:${declaration.name}:${declaration.startLine}`,
       declarationKind: declaration.kind,
@@ -668,14 +758,46 @@ export async function buildTraceabilityManifest(
       unresolvedReferences: [...new Set([
         ...unresolvedReferenceTokens(declaration.comment, knownIds),
         ...(theoremBinding?.semanticIds ?? []).filter((id) => !claims.has(id)),
+        ...closure.unresolvedDependencyIds,
       ])].sort((left, right) => left.localeCompare(right)),
+      coverage: {
+        directClaimIds: semanticIds,
+        transitiveClaimIds: selectedClaims.map((claim) => claim.semanticId),
+        sourceFactIds: selectedClaims.filter((claim) => claim.classification === "SOURCE_FACT").map((claim) => claim.semanticId),
+        projectBoundaryIds: selectedClaims.filter((claim) => ["DESIGN_DEPENDENCY", "ASSUMPTION", "OPEN_QUESTION"].includes(claim.classification)).map((claim) => claim.semanticId),
+        officialEvidenceIds,
+        pdfEvidenceIds: selectedEvidence.filter((item) => item.sourceKind === "PDF").map((item) => item.evidenceId),
+        projectEvidenceIds,
+        unresolvedDependencyIds: closure.unresolvedDependencyIds,
+      },
     }
   })
+  const benchmarkWaived =
+    run.benchmark?.autoApprove === true &&
+    (run.gates.A === "benchmark_auto_advanced" ||
+      run.gates.B === "benchmark_auto_advanced")
+  const semanticUncertainties: TraceabilityUncertainty[] = [...claims.values()]
+    .filter((claim) =>
+      claim.classification === "OPEN_QUESTION" && claim.unresolved
+    )
+    .map((claim) => ({
+      semanticId: claim.semanticId,
+      statement: claim.statement,
+      origin: claim.origin,
+      stateAffecting: claim.stateAffecting,
+      unresolved: true as const,
+      benchmarkDisposition: !benchmarkWaived ? undefined : {
+        mode: "AUTO_APPROVE" as const,
+        policy: "CONSERVATIVE_BOUNDED_SCOPE" as const,
+        humanApproved: false as const,
+      },
+    }))
+    .sort((left, right) => left.semanticId.localeCompare(right.semanticId))
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     manifestType: "spec2lean_evidence_manifest",
-    generator: "spec2lean-traceability-v2",
+    generator: "spec2lean-traceability-v3",
     runId: run.runId,
     language: run.language,
     specificationVersion: run.specVersion,
@@ -693,13 +815,39 @@ export async function buildTraceabilityManifest(
       ? undefined
       : { path: theoremPath, sha256: sha256(theoremData) },
     entries,
+    semanticUncertainties,
     diagnostics: {
       declarationsWithoutReferences: entries
         .filter((entry) => entry.semanticIds.length === 0 && entry.evidence.length === 0)
         .map((entry) => entry.declarationName),
       unresolvedReferences: [...new Set(entries.flatMap((entry) => entry.unresolvedReferences))]
         .sort((left, right) => left.localeCompare(right)),
-      pdfAlignment: pdfAlignment?.metrics,
+      declarationsWithoutEvidencePath: entries
+        .filter((entry) => entry.coverage.officialEvidenceIds.length === 0 && entry.coverage.projectEvidenceIds.length === 0)
+        .map((entry) => entry.declarationName),
+      claimsWithoutDependencyPath: strictSemanticIr ? uniqueSorted([...claims.values()]
+        .filter((claim) => claim.classification === "DERIVED_INTERPRETATION" && claim.dependencyIds.length === 0)
+        .map((claim) => claim.semanticId)) : [],
+      sourceFactsWithoutOfficialEvidence: strictSemanticIr ? uniqueSorted([...claims.values()]
+        .filter((claim) => claim.classification === "SOURCE_FACT" && claim.origin === "SEMANTICS")
+        .filter((claim) => !claim.evidenceIds.some((id) => {
+          const item = evidence.get(id)
+          return item?.sourceKind === "HTML" || item?.sourceKind === "PDF"
+        }))
+        .map((claim) => claim.semanticId)) : [],
+      assumptionsWithoutApprovalDependency: strictSemanticIr ? uniqueSorted([...claims.values()]
+        .filter((claim) => claim.classification === "ASSUMPTION" && claim.origin === "SEMANTICS" && claim.humanApprovalDependencies.length === 0)
+        .map((claim) => claim.semanticId)) : [],
+      unresolvedOpenQuestions: semanticUncertainties.map((item) => item.semanticId),
+      pdfAlignment: !input.includePdfRenditions || (pdfAlignment === undefined && pdfAlignmentFailure === undefined)
+        ? undefined : pdfAlignment?.metrics ?? {
+        eligible: [...evidence.values()].filter((item) => item.sourceKind === "HTML" && item.quotation !== undefined).length,
+        matched: 0,
+        ambiguous: [],
+        unmatched: [],
+        coverageRatio: 0,
+        failure: pdfAlignmentFailure ?? "unknown PDF alignment failure",
+      },
     },
   }
 }
@@ -764,7 +912,8 @@ export async function verifyTraceabilityManifest(
   }
   const supportedVersion =
     (legacy.schemaVersion === 1 && legacy.generator === "spec2lean-traceability-v1") ||
-    (legacy.schemaVersion === 2 && legacy.generator === "spec2lean-traceability-v2")
+    (legacy.schemaVersion === 2 && legacy.generator === "spec2lean-traceability-v2") ||
+    (legacy.schemaVersion === 3 && legacy.generator === "spec2lean-traceability-v3")
   if (!supportedVersion || manifest.manifestType !== "spec2lean_evidence_manifest") {
     issues.push("unsupported traceability manifest schema")
   }
@@ -806,6 +955,23 @@ export async function verifyTraceabilityManifest(
   }
   for (const reference of manifest.diagnostics.unresolvedReferences) {
     issues.push(`unresolved provenance reference: ${reference}`)
+  }
+  if (manifest.schemaVersion === 3) {
+    for (const declaration of manifest.diagnostics.declarationsWithoutEvidencePath) {
+      issues.push(`Lean declaration has no transitive source or project evidence path: ${declaration}`)
+    }
+    for (const semanticId of manifest.diagnostics.claimsWithoutDependencyPath) {
+      issues.push(`derived interpretation has no dependency path: ${semanticId}`)
+    }
+    for (const semanticId of manifest.diagnostics.sourceFactsWithoutOfficialEvidence) {
+      issues.push(`semantic SOURCE_FACT has no official HTML/PDF evidence: ${semanticId}`)
+    }
+    for (const semanticId of manifest.diagnostics.assumptionsWithoutApprovalDependency) {
+      issues.push(`semantic ASSUMPTION has no human-approval dependency: ${semanticId}`)
+    }
+    if (manifest.diagnostics.pdfAlignment?.failure !== undefined) {
+      issues.push(`official PDF alignment failed: ${manifest.diagnostics.pdfAlignment.failure}`)
+    }
   }
   return [...new Set(issues)].sort((left, right) => left.localeCompare(right))
 }

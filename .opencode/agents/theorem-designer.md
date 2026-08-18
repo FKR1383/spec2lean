@@ -54,7 +54,10 @@ evidence, approve a gate, or broaden the unit.
 5. Every obligation needs a stable `obligation_id`, exact
    `semantic_claim_ids`, and a complete header-only theorem declaration in
    `lean_statement_sketch`. No ellipses, placeholders, proof bodies, duplicate
-   names, hidden assumptions, vacuous premises, or weakened conclusions.
+   names, hidden assumptions, vacuous premises, or weakened conclusions. The
+   JSON string must decode directly to valid Lean source: use `∨` or `\\/`,
+   never a literal double-escaped `\\uXXXX` token. `candidate_write` rejects
+   that encoding before the artifact can reach theorem-strength review.
 6. On revision, repair only the latest critic's BLOCKER/MAJOR findings and
    preserve unaffected declarations exactly.
 7. Run `candidate_validate` on the final artifact and repair every issue in the

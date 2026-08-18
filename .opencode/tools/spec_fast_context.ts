@@ -24,6 +24,8 @@ type RetrievalProfile = {
   context: {
     targetMaxLines: number
     sharedMaxLines: number
+    architectureTargetMaxLines: number
+    architectureSharedMaxLines: number
     sharedSections: Array<{
       anchor: string
       purpose: string
@@ -124,6 +126,12 @@ async function load(worktree: string): Promise<Loaded> {
       !Number.isInteger(profile.context.sharedMaxLines) ||
       profile.context.sharedMaxLines <= 0 ||
       profile.context.sharedMaxLines > 80 ||
+      !Number.isInteger(profile.context.architectureTargetMaxLines) ||
+      profile.context.architectureTargetMaxLines <= 0 ||
+      profile.context.architectureTargetMaxLines > profile.context.targetMaxLines ||
+      !Number.isInteger(profile.context.architectureSharedMaxLines) ||
+      profile.context.architectureSharedMaxLines <= 0 ||
+      profile.context.architectureSharedMaxLines > profile.context.sharedMaxLines ||
       profile.context.sharedSections.length === 0 ||
       profile.context.sharedSections.some(
         (section) =>
@@ -241,6 +249,33 @@ function boundedContext(
   }
 }
 
+function compactArchitectureContext(
+  lines: string[],
+  section: Section,
+  maxLines: number,
+) {
+  const actualEnd = Math.min(section.endLine, section.startLine + maxLines - 1)
+  const selected = lines.slice(section.startLine - 1, actualEnd)
+  const renderedLines = selected
+    .map((line, index) => ({
+      line: section.startLine + index,
+      text: stripHtml(line),
+    }))
+    .filter((item) => item.text.length > 0)
+
+  return {
+    anchor: section.anchor,
+    heading: section.heading,
+    startLine: section.startLine,
+    endLine: actualEnd,
+    sectionEndLine: section.endLine,
+    truncated: actualEnd < section.endLine,
+    lineNumberedRenderedText: renderedLines
+      .map((item) => `${item.line}: ${item.text}`)
+      .join("\n"),
+  }
+}
+
 export default tool({
   description:
     "Return a deterministic, hash-verified PTX 9.3 evidence context for one " +
@@ -253,11 +288,19 @@ export default tool({
       .min(1)
       .max(120)
       .describe("PTX formalization unit, for example not.b32 or xor.b32"),
+    purpose: tool.schema
+      .enum(["evidence", "architecture"])
+      .optional()
+      .describe(
+        "Use architecture for the compact architecture-stage view; " +
+        "evidence is the default full citation view for curation and critique.",
+      ),
   },
 
   async execute(args, context) {
     try {
       const loaded = await load(context.worktree)
+      const purpose = args.purpose ?? "evidence"
 
       const mnemonic =
         args.unit.trim().toLowerCase().split(".")[0]
@@ -307,11 +350,17 @@ export default tool({
 
         return section
           ? [{
-              ...boundedContext(
-                loaded.lines,
-                section,
-                loaded.profile.context.sharedMaxLines,
-              ),
+              ...(purpose === "architecture"
+                ? compactArchitectureContext(
+                    loaded.lines,
+                    section,
+                    loaded.profile.context.architectureSharedMaxLines,
+                  )
+                : boundedContext(
+                    loaded.lines,
+                    section,
+                    loaded.profile.context.sharedMaxLines,
+                  )),
               purpose: sharedSection.purpose,
             }]
           : []
@@ -329,11 +378,18 @@ export default tool({
         source: loaded.index.source,
         unit: args.unit,
         mnemonic,
-        target: boundedContext(
-          loaded.lines,
-          resolution.section,
-          loaded.profile.context.targetMaxLines,
-        ),
+        purpose,
+        target: purpose === "architecture"
+          ? compactArchitectureContext(
+              loaded.lines,
+              resolution.section,
+              loaded.profile.context.architectureTargetMaxLines,
+            )
+          : boundedContext(
+              loaded.lines,
+              resolution.section,
+              loaded.profile.context.targetMaxLines,
+            ),
         shared,
         policy: {
           interpretationPerformed: false,

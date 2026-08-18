@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { access, readFile } from "node:fs/promises"
 import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -14,6 +15,7 @@ import { artifactContractForRun } from "./artifact-contract.js"
 import { verifyExpectedArtifact } from "./artifact-verify.js"
 import { recoverResultFromVerifiedArtifact } from "./artifact-recovery.js"
 import { normalizeCriticResultFromReview } from "./critic-disposition.js"
+import { architectureQuestionTriageRequiresRevision } from "./architecture-review.js"
 import {
   abortSession,
   ProviderRetryBudgetExceededError,
@@ -51,6 +53,7 @@ import {
 import {
   retryRun,
   transitionRun,
+  type AgentFailureClass,
   type FormalizationStage,
   type RunState,
 } from "./workflow.js"
@@ -62,19 +65,11 @@ async function buildPipelineTraceabilityManifest(
   run: RunState,
   documentRole: "SEMANTICS" | "PROOFS",
 ) {
-  try {
-    return await buildTraceabilityManifest({
-      runId: run.runId,
-      documentRole,
-      includePdfRenditions: true,
-    })
-  } catch (error) {
-    console.warn(
-      `[spec2lean] optional PDF evidence alignment unavailable; ` +
-      `building the hash-bound HTML/artifact manifest: ${error instanceof Error ? error.message : String(error)}`,
-    )
-    return await buildTraceabilityManifest({ runId: run.runId, documentRole })
-  }
+  return await buildTraceabilityManifest({
+    runId: run.runId,
+    documentRole,
+    includePdfRenditions: true,
+  })
 }
 
 type TraceabilityExecutionMetrics = NonNullable<
@@ -169,6 +164,33 @@ async function fileExists(repoRelativePath: string): Promise<boolean> {
   }
 }
 
+type ArtifactFingerprint = {
+  exists: boolean
+  sha256?: string
+}
+
+async function artifactFingerprint(
+  repoRelativePath: string,
+): Promise<ArtifactFingerprint> {
+  try {
+    const content = await readFile(resolve(REPO_ROOT, repoRelativePath))
+    return {
+      exists: true,
+      sha256: createHash("sha256").update(content).digest("hex"),
+    }
+  } catch {
+    return { exists: false }
+  }
+}
+
+function artifactChanged(
+  before: ArtifactFingerprint | undefined,
+  after: ArtifactFingerprint,
+): boolean {
+  if (before === undefined) return after.exists
+  return after.exists && (!before.exists || before.sha256 !== after.sha256)
+}
+
 function repairContractLines(run: RunState): string[] {
   const repairContract: Partial<Record<FormalizationStage, {
     pattern: string
@@ -241,9 +263,18 @@ export function buildGeneralPrompt(
   const revisionTargets =
     plan.revisionStages.length === 0 ? "(none)" : plan.revisionStages.join(", ")
   const latestEvent = run.history.at(-1)
-  const currentRetryReason = latestEvent?.from === run.stage && latestEvent.to === run.stage
-    ? latestEvent.reason
-    : undefined
+  const latestSubstantiveRetry = [...(run.executions ?? [])]
+    .reverse()
+    .find((execution) =>
+      execution.stage === run.stage &&
+      execution.outcome === "RETRY" &&
+      execution.failureClass !== "PROVIDER_RETRY_BUDGET_EXCEEDED"
+    )
+  const currentRetryReason = latestSubstantiveRetry?.response.slice(-4_000) ??
+    (latestEvent?.from === run.stage && latestEvent.to === run.stage &&
+      !latestEvent.reason.includes("provider retry exceeded")
+      ? latestEvent.reason
+      : undefined)
 
   return [
     "# Spec2Lean Automated Agentic Run",
@@ -275,6 +306,21 @@ export function buildGeneralPrompt(
     "# Stage Task",
     "",
     plan.task,
+    ...(plan.agent.endsWith("-critic")
+      ? [
+          "",
+          "# Machine-checkable finding accountability",
+          "",
+          "Every nonzero BLOCKER/MAJOR/MINOR/NOTE count must have exactly one explicit finding entry per counted item.",
+          "Each entry must contain its own line `Severity: BLOCKER|MAJOR|MINOR|NOTE` followed by a concrete description and affected artifact/claim/declaration.",
+          "The number of Severity lines for each class must exactly equal the final numeric disposition count.",
+          "Do not report a nonzero count whose finding is left implicit in surrounding prose.",
+          "If BLOCKER or MAJOR is nonzero, return REVISE to one of the exact allowed producer revision stages; do not RETRY the critic.",
+          "If BLOCKER and MAJOR are zero and PRE_GATE_REVISION_REQUIRED is false, return SUCCESS to the exact success stage.",
+          "RETRY is reserved for a technical inability to write or validate the review artifact, never for repairing an upstream semantic/Lean/theorem artifact.",
+          "The review artifact, numeric disposition, PRE_GATE marker, and SPEC2LEAN_RESULT must agree exactly.",
+        ]
+      : []),
     ...(currentRetryReason === undefined
       ? []
       : [
@@ -437,6 +483,9 @@ type ProofPromptContext = {
   total: number
 }
 
+const MAX_PROOF_TARGETS_PER_AGENT_TURN = 8
+const MAX_PROOF_TARGET_STATEMENT_CHARACTERS = 20_000
+
 async function buildProofPrompt(
   run: RunState,
   preflightDiagnostics?: string,
@@ -479,8 +528,11 @@ async function buildProofPrompt(
   if (!repairMode) {
     let statementCharacters = 0
     for (const item of summary.missing) {
-      if (batchTargets.length >= 4) break
-      if (batchTargets.length > 0 && statementCharacters + item.statement.length > 12_000) break
+      if (batchTargets.length >= MAX_PROOF_TARGETS_PER_AGENT_TURN) break
+      if (
+        batchTargets.length > 0 &&
+        statementCharacters + item.statement.length > MAX_PROOF_TARGET_STATEMENT_CHARACTERS
+      ) break
       batchTargets.push(item)
       statementCharacters += item.statement.length
     }
@@ -870,6 +922,7 @@ export async function executeTick(
           model: executionModel.full,
           sessionId,
           expectedArtifact: artifact.outputPath,
+          artifactBaseline: await artifactFingerprint(artifact.outputPath),
         },
       }
       await saveRun(run)
@@ -887,8 +940,9 @@ export async function executeTick(
 
     let response = ""
     let result: AgentResult | undefined
-    let failureClass: "PROVIDER_RETRY_BUDGET_EXCEEDED" | undefined
+    let failureClass: AgentFailureClass | undefined
     let traceability: TraceabilityExecutionMetrics | undefined
+    let proofProgress: NonNullable<RunState["executions"]>[number]["progress"]
 
     try {
       response = await waitForAgentResult(runtime.runtime.server.url, sessionId, {
@@ -922,28 +976,52 @@ export async function executeTick(
 
       await abortSession(runtime.runtime.server.url, sessionId).catch(() => {})
       response = `[ORCHESTRATOR_RECOVERY] ${message}`
-      if (error instanceof ProviderRetryBudgetExceededError) {
-        failureClass = "PROVIDER_RETRY_BUDGET_EXCEEDED"
-      }
-      result = await recoverResultFromVerifiedArtifact(run) ?? {
-        outcome: "RETRY",
-        nextStage: run.stage,
-        summary: error instanceof ProviderRetryBudgetExceededError
-          ? `OpenCode provider retry exceeded the bounded ${error.retryBudgetMs}ms budget: ${error.providerMessage}. The stalled session was aborted; the stage remains safely resumable and no semantic conclusion was inferred from the provider failure.`
-          : `Agent execution ended without a usable stage result (${message}). The same stage is safely resumable; any written artifact will be verified before another agent is started.`,
+      const recoveredResult = await recoverResultFromVerifiedArtifact(run)
+      if (recoveredResult !== undefined) {
+        result = recoveredResult
+      } else {
+        if (error instanceof ProviderRetryBudgetExceededError) {
+          failureClass = "PROVIDER_RETRY_BUDGET_EXCEEDED"
+        } else if (message.includes("reason=length")) {
+          failureClass = "OUTPUT_LENGTH_EXCEEDED"
+        }
+        result = {
+          outcome: "RETRY",
+          nextStage: run.stage,
+          summary: error instanceof ProviderRetryBudgetExceededError
+            ? `OpenCode provider retry exceeded the bounded ${error.retryBudgetMs}ms budget: ${error.providerMessage}. The stalled session was aborted; the stage remains safely resumable and no semantic conclusion was inferred from the provider failure.`
+            : message.includes("reason=length")
+              ? "OpenCode terminated the response at its output-length limit before a usable artifact/result was completed. Retry once in strict bounded-output recovery mode: use only the deterministic stage inputs, do not inspect other units, stay within the stated artifact budget, write once, validate, and return the protocol result."
+              : `Agent execution ended without a usable stage result (${message}). The same stage is safely resumable; any written artifact will be verified before another agent is started.`,
+        }
       }
     }
 
     if (!result) throw new Error("No agent result available")
 
-    if (plan.agent.endsWith("-critic") && result.outcome === "REVISE") {
+    if (plan.agent.endsWith("-critic")) {
       try {
         const review = await readFile(resolve(REPO_ROOT, artifact.outputPath), "utf8")
         result = normalizeCriticResultFromReview(
           result,
           review,
           plan.successStage,
+          plan.revisionStages[0],
         )
+        if (
+          run.stage === "ARCHITECTURE_CRITIQUE" &&
+          result.outcome === "SUCCESS" &&
+          architectureQuestionTriageRequiresRevision(review)
+        ) {
+          result = {
+            outcome: "REVISE",
+            nextStage: "ARCHITECTURE",
+            summary:
+              "Deterministic Gate-A triage requires architecture repair: one or more " +
+              "state-affecting open questions are speculative, out of scope, or must be reclassified. " +
+              `Original summary: ${result.summary}`,
+          }
+        }
       } catch {
         // Missing/unreadable review artifacts remain REVISE. Artifact
         // verification must never be bypassed by disposition normalization.
@@ -954,6 +1032,18 @@ export async function executeTick(
     if (run.stage === "PROOF_GENERATION") {
       const local = await finalizeProofStageLocally(run)
       result = reconcileProofStageResult(result, local)
+      const afterSummary = await proofTargetSummary(run)
+      const declaredBefore = proofContext === undefined
+        ? afterSummary.declared
+        : proofContext.total - proofContext.remaining
+      if (result.outcome === "RETRY" && afterSummary.declared > declaredBefore) {
+        proofProgress = {
+          kind: "PROOF_BATCH_CONTINUATION",
+          declarationsBefore: declaredBefore,
+          declarationsAfter: afterSummary.declared,
+          declarationsTotal: afterSummary.total,
+        }
+      }
       if (result.outcome === "SUCCESS") {
         await installProofPackage(run)
         try {
@@ -1060,29 +1150,40 @@ export async function executeTick(
 
     result = normalizeAgentDecision(run, result)
     const nextStage = validateAgentDecision(run, result)
-    let nextRun = result.outcome === "RETRY"
-      ? retryRun(run, `${plan.agent} retry: ${result.summary}`)
-      : transitionRun(run, nextStage, `${plan.agent}: ${result.summary}`)
+    const producedArtifact = artifactChanged(
+      run.activeExecution?.artifactBaseline,
+      await artifactFingerprint(artifact.outputPath),
+    )
+    const execution = {
+      startedAt: run.activeExecution?.startedAt,
+      at: new Date().toISOString(),
+      stage: run.stage,
+      agent: plan.agent,
+      model: executionModel.full,
+      sessionId,
+      outcome: result.outcome,
+      nextStage,
+      response: response || (submitted ? "[no textual response]" : "[resumed session]"),
+      artifactProduced: producedArtifact,
+      ...(failureClass === undefined ? {} : { failureClass }),
+      ...(proofProgress === undefined ? {} : { progress: proofProgress }),
+      ...(traceability === undefined ? {} : { traceability }),
+    }
+    let nextRun = failureClass === "PROVIDER_RETRY_BUDGET_EXCEEDED"
+      ? {
+          ...run,
+          updatedAt: new Date().toISOString(),
+        }
+      : result.outcome === "RETRY"
+        ? retryRun(run, `${plan.agent} retry: ${result.summary}`)
+        : transitionRun(run, nextStage, `${plan.agent}: ${result.summary}`)
 
     nextRun = {
       ...nextRun,
       activeExecution: undefined,
       executions: [
         ...(run.executions ?? []),
-        {
-          startedAt: run.activeExecution?.startedAt,
-          at: new Date().toISOString(),
-          stage: run.stage,
-          agent: plan.agent,
-          model: executionModel.full,
-          sessionId,
-          outcome: result.outcome,
-          nextStage,
-          response: response || (submitted ? "[no textual response]" : "[resumed session]"),
-          artifactProduced: await fileExists(artifact.outputPath),
-          ...(failureClass === undefined ? {} : { failureClass }),
-          ...(traceability === undefined ? {} : { traceability }),
-        },
+        execution,
       ],
     }
 

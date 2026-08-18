@@ -20,6 +20,12 @@ import {
 } from "node:path"
 
 import { artifactContractForRun } from "../../engine/orchestrator/src/artifact-contract.ts"
+import { duplicateJsonKeyIssues } from "../../engine/orchestrator/src/json-integrity.ts"
+import {
+  candidatePathBudgetIssues,
+  MAX_ARCHITECTURE_BYTES,
+  MAX_CANDIDATE_WRITE_BYTES,
+} from "../../engine/orchestrator/src/artifact-limits.ts"
 import { verifyExpectedArtifact } from "../../engine/orchestrator/src/artifact-verify.ts"
 import {
   buildProvenanceCatalog,
@@ -35,12 +41,12 @@ import {
   buildTraceabilityManifest,
   verifyTraceabilityManifest,
 } from "../../engine/orchestrator/src/traceability.ts"
+import { theoremContractEncodingIssues } from "../../engine/orchestrator/src/theorem-contract.ts"
 
 const TOOL_VERSION = 1
 const TIMEOUT_MS = 3_000
 
 const MAX_READ_BYTES = 1024 * 1024
-const MAX_WRITE_BYTES = 512 * 1024
 const MAX_READ_LINES = 200
 const MAX_OUTPUT_CHARACTERS = 80_000
 const MAX_DIFF_LINES = 1_000
@@ -484,35 +490,21 @@ export const read = tool({
   },
 })
 
-export const write = tool({
-  description:
-    "Atomically create or replace a bounded text artifact under candidates/. " +
-    "Replacement requires the expected current SHA-256 value.",
+type WriteArgs = {
+  path: string
+  content: string
+  mode: "create" | "replace"
+  expectedSha256?: string
+}
 
-  args: {
-    path: tool.schema
-      .string()
-      .min(1)
-      .max(300)
-      .describe("Destination path under candidates/"),
+type WriteContext = {
+  worktree: string
+  agent: string
+  sessionID: string
+  messageID: string
+}
 
-    content: tool.schema
-      .string()
-      .max(MAX_WRITE_BYTES)
-      .describe("Complete UTF-8 artifact content"),
-
-    mode: tool.schema
-      .enum(["create", "replace"])
-      .describe("Create a new file or replace an existing version"),
-
-    expectedSha256: tool.schema
-      .string()
-      .regex(/^[a-f0-9]{64}$/)
-      .optional()
-      .describe("Required current SHA-256 when mode is replace"),
-  },
-
-  async execute(args, context) {
+async function writeCandidate(args: WriteArgs, context: WriteContext) {
     let temporaryPath: string | undefined
 
     try {
@@ -523,19 +515,42 @@ export const write = tool({
 
       const content = Buffer.from(args.content, "utf8")
 
-      if (content.length > MAX_WRITE_BYTES) {
+      if (content.length > MAX_CANDIDATE_WRITE_BYTES) {
         throw new Error(
-          `content exceeds the ${MAX_WRITE_BYTES}-byte limit`,
+          `content exceeds the ${MAX_CANDIDATE_WRITE_BYTES}-byte limit`,
         )
       }
 
+      const budgetIssues = candidatePathBudgetIssues(
+        artifact.relativePath,
+        args.content,
+      )
+      if (budgetIssues.length > 0) {
+        throw new Error(budgetIssues.join(" | "))
+      }
+
       if (extname(artifact.relativePath).toLowerCase() === ".json") {
+        let parsed: unknown
         try {
-          JSON.parse(args.content)
+          parsed = JSON.parse(args.content)
         } catch (error) {
           throw new Error(
             `invalid JSON; artifact was not written: ${error instanceof Error ? error.message : String(error)}`,
           )
+        }
+        const duplicateIssues = duplicateJsonKeyIssues(args.content)
+        if (duplicateIssues.length > 0) {
+          throw new Error(
+            `duplicate JSON object keys are not allowed; artifact was not written: ${duplicateIssues.join(" | ")}`,
+          )
+        }
+        if (/(^|\/)theorems\/obligations-v\d+\.json$/.test(artifact.relativePath)) {
+          const encodingIssues = theoremContractEncodingIssues(parsed)
+          if (encodingIssues.length > 0) {
+            throw new Error(
+              `invalid Lean theorem source encoding; artifact was not written: ${encodingIssues.join(" | ")}`,
+            )
+          }
         }
       }
 
@@ -617,6 +632,73 @@ export const write = tool({
         },
       })
     }
+}
+
+const writePathSchema = tool.schema
+  .string()
+  .min(1)
+  .max(300)
+  .describe("Destination path under candidates/")
+
+const writeModeSchema = tool.schema
+  .enum(["create", "replace"])
+  .describe("Create a new file or replace an existing version")
+
+const expectedWriteHashSchema = tool.schema
+  .string()
+  .regex(/^[a-f0-9]{64}$/)
+  .optional()
+  .describe("Required current SHA-256 when mode is replace")
+
+export const write = tool({
+  description:
+    "Atomically create or replace a bounded text artifact under candidates/. " +
+    "Replacement requires the expected current SHA-256 value.",
+
+  args: {
+    path: writePathSchema,
+    content: tool.schema
+      .string()
+      .max(MAX_CANDIDATE_WRITE_BYTES)
+      .describe("Complete UTF-8 artifact content"),
+    mode: writeModeSchema,
+    expectedSha256: expectedWriteHashSchema,
+  },
+
+  async execute(args, context) {
+    return await writeCandidate(args, context)
+  },
+})
+
+export const architecture_write = tool({
+  description:
+    "Atomically write one compact architecture foundation artifact. The tool " +
+    `schema enforces the ${MAX_ARCHITECTURE_BYTES}-byte architecture budget ` +
+    "before model output can grow into an unbounded candidate payload.",
+
+  args: {
+    path: writePathSchema,
+    content: tool.schema
+      .string()
+      .max(MAX_ARCHITECTURE_BYTES)
+      .describe("Complete compact architecture artifact content"),
+    mode: writeModeSchema,
+    expectedSha256: expectedWriteHashSchema,
+  },
+
+  async execute(args, context) {
+    if (!/(^|\/)architecture\/foundation-v\d+\.md$/.test(args.path)) {
+      return jsonResult({
+        ok: false,
+        tool: "candidate_architecture_write",
+        version: TOOL_VERSION,
+        error: {
+          code: "ARCHITECTURE_WRITE_FAILED",
+          message: "candidate_architecture_write may write only architecture/foundation-vN.md",
+        },
+      })
+    }
+    return await writeCandidate(args, context)
   },
 })
 

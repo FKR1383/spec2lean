@@ -3,6 +3,12 @@ import { PIPELINE_AGENTS } from "./batch-store.js"
 
 type Agent = { name?: string }
 type Session = { id?: string }
+type ToolDescription = {
+  id: string
+  parameters?: {
+    properties?: { content?: { maxLength?: number } }
+  }
+}
 
 let runtime: Awaited<ReturnType<typeof startOpenCode>> | undefined
 const sessionIds: string[] = []
@@ -10,6 +16,18 @@ const sessionIds: string[] = []
 try {
   runtime = await startOpenCode()
   const registry = unwrap<Agent[]>(await runtime.runtime.client.app.agents())
+  const toolIds = unwrap<string[]>(await runtime.runtime.client.tool.ids())
+  const toolDescriptions = unwrap<ToolDescription[]>(
+    await runtime.runtime.client.tool.list({
+      query: {
+        provider: runtime.model.providerID,
+        model: runtime.model.modelID,
+      },
+    }),
+  )
+  const architectureWriter = toolDescriptions.find(
+    (tool) => tool.id === "candidate_architecture_write",
+  )
   const names = new Set(registry.flatMap((agent) =>
     typeof agent.name === "string" ? [agent.name] : []
   ))
@@ -27,6 +45,8 @@ try {
   sessionIds.push(...sessions.flatMap((session) => session.id ? [session.id] : []))
   const ok =
     missingAgents.length === 0 &&
+    toolIds.includes("candidate_architecture_write") &&
+    architectureWriter?.parameters?.properties?.content?.maxLength === 32 * 1024 &&
     sessionIds.length === sessions.length &&
     new Set(sessionIds).size === sessions.length
   console.log(JSON.stringify({
@@ -38,6 +58,9 @@ try {
     concurrentSessionsCreated: sessionIds.length,
     uniqueSessionIds: new Set(sessionIds).size,
     missingAgents,
+    architectureWriterRegistered: toolIds.includes("candidate_architecture_write"),
+    architectureWriterMaxBytes:
+      architectureWriter?.parameters?.properties?.content?.maxLength,
   }, null, 2))
   if (!ok) process.exitCode = 1
 } finally {

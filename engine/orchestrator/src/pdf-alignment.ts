@@ -25,9 +25,11 @@ type PdfPage = {
 }
 
 export type PdfAlignmentMetrics = {
+  eligible: number
   matched: number
   ambiguous: string[]
   unmatched: string[]
+  coverageRatio: number
 }
 
 function decodeXml(value: string): string {
@@ -88,15 +90,23 @@ type Match = {
   words: PdfWord[]
 }
 
+type PdfToken = { token: string; word: PdfWord }
+const pageTokenCache = new WeakMap<PdfPage, PdfToken[]>()
+
+function pageTokens(page: PdfPage): PdfToken[] {
+  const cached = pageTokenCache.get(page)
+  if (cached !== undefined) return cached
+  const tokens = page.words.flatMap((word) => tokenize(word.text).map((token) => ({ token, word })))
+  pageTokenCache.set(page, tokens)
+  return tokens
+}
+
 function matchesForQuotation(pages: PdfPage[], quotation: string): Match[] {
   const target = tokenize(quotation)
   if (target.length === 0) return []
   const matches: Match[] = []
   for (const page of pages) {
-    const tokens: Array<{ token: string; word: PdfWord }> = []
-    for (const word of page.words) {
-      for (const token of tokenize(word.text)) tokens.push({ token, word })
-    }
+    const tokens = pageTokens(page)
     for (let start = 0; start <= tokens.length - target.length; start += 1) {
       let equal = true
       for (let offset = 0; offset < target.length; offset += 1) {
@@ -113,8 +123,50 @@ function matchesForQuotation(pages: PdfPage[], quotation: string): Match[] {
   }
   return matches
 }
+type ResolvedMatch = {
+  match: Match
+  method: NonNullable<TraceabilityEvidence["alignmentMethod"]>
+}
 
-function rendition(evidence: TraceabilityEvidence, match: Match, pdfPath: string, pdfSha256: string): TraceabilityEvidence {
+function resolveMatch(
+  pages: PdfPage[],
+  evidence: TraceabilityEvidence,
+): ResolvedMatch | "AMBIGUOUS" | undefined {
+  const quotation = evidence.quotation ?? ""
+  if (quotation.trim().length === 0) return undefined
+  const exact = matchesForQuotation(pages, quotation)
+  if (exact.length === 1) return { match: exact[0]!, method: "EXACT_QUOTE_TOKEN_MATCH" }
+  if (exact.length > 1 && evidence.locator.page !== undefined) {
+    const hinted = exact.filter((candidate) => Math.abs(candidate.page.page - evidence.locator.page!) <= 2)
+    if (hinted.length === 1) return { match: hinted[0]!, method: "PAGE_HINTED_EXACT_QUOTE_TOKEN_MATCH" }
+  }
+  const tokens = tokenize(quotation)
+  const windowSizes = [...new Set([Math.min(24, tokens.length), Math.min(16, tokens.length), Math.min(12, tokens.length), Math.min(8, tokens.length), Math.min(6, tokens.length)])]
+  for (const size of windowSizes.filter((candidate) => candidate >= (evidence.locator.page === undefined ? 8 : 6))) {
+    const starts = [...new Set([
+      0,
+      Math.max(0, Math.floor((tokens.length - size) / 2)),
+      Math.max(0, tokens.length - size),
+    ])]
+    for (const start of starts) {
+      const window = tokens.slice(start, start + size).join(" ")
+      if (window.length === 0) continue
+      const matches = matchesForQuotation(pages, window)
+      const hinted = evidence.locator.page === undefined ? matches :
+        matches.filter((candidate) => Math.abs(candidate.page.page - evidence.locator.page!) <= 2)
+      if (hinted.length === 1) return { match: hinted[0]!, method: "DISTINCTIVE_TOKEN_WINDOW_MATCH" }
+    }
+  }
+  return exact.length > 1 ? "AMBIGUOUS" : undefined
+}
+
+function rendition(
+  evidence: TraceabilityEvidence,
+  match: Match,
+  pdfPath: string,
+  pdfSha256: string,
+  alignmentMethod: NonNullable<TraceabilityEvidence["alignmentMethod"]>,
+): TraceabilityEvidence {
   const xMin = Math.min(...match.words.map((word) => word.xMin))
   const yMin = Math.min(...match.words.map((word) => word.yMin))
   const xMax = Math.max(...match.words.map((word) => word.xMax))
@@ -137,7 +189,7 @@ function rendition(evidence: TraceabilityEvidence, match: Match, pdfPath: string
     },
     quotation: evidence.quotation,
     alignedFromEvidenceId: evidence.evidenceId,
-    alignmentMethod: "EXACT_QUOTE_TOKEN_MATCH",
+    alignmentMethod,
   }
 }
 
@@ -191,23 +243,27 @@ export async function alignEvidenceToOfficialPdf(input: {
   const renditions: TraceabilityEvidence[] = []
   const ambiguous: string[] = []
   const unmatched: string[] = []
-  for (const evidence of input.evidence) {
-    if (evidence.quotation === undefined || evidence.quotation.trim().length === 0) {
-      unmatched.push(evidence.evidenceId)
-      continue
-    }
-    const matches = matchesForQuotation(pages, evidence.quotation)
-    if (matches.length === 1) {
-      renditions.push(rendition(evidence, matches[0]!, pdfPath, artifact.sha256))
-    } else if (matches.length > 1) {
-      ambiguous.push(evidence.evidenceId)
-    } else {
-      unmatched.push(evidence.evidenceId)
-    }
+  const eligible = input.evidence.filter((item) =>
+    item.sourceKind === "HTML" && item.quotation !== undefined && item.quotation.trim().length > 0)
+  const sectionPageHints = new Map(eligible.flatMap((item) =>
+    item.locator.section !== undefined && item.locator.page !== undefined
+      ? [[item.locator.section, item.locator.page] as const] : []))
+  for (const evidence of eligible) {
+    const inferredPage = evidence.locator.section === undefined ? undefined : sectionPageHints.get(evidence.locator.section)
+    const alignedEvidence = evidence.locator.page !== undefined || inferredPage === undefined
+      ? evidence : { ...evidence, locator: { ...evidence.locator, page: inferredPage } }
+    const resolved = resolveMatch(pages, alignedEvidence)
+    if (resolved === "AMBIGUOUS") ambiguous.push(evidence.evidenceId)
+    else if (resolved === undefined) unmatched.push(evidence.evidenceId)
+    else renditions.push(rendition(
+      evidence, resolved.match, pdfPath, artifact.sha256, resolved.method,
+    ))
   }
   return {
     renditions,
     metrics: {
+      eligible: eligible.length,
+      coverageRatio: eligible.length === 0 ? 1 : renditions.length / eligible.length,
       matched: renditions.length,
       ambiguous: ambiguous.sort((left, right) => left.localeCompare(right)),
       unmatched: unmatched.sort((left, right) => left.localeCompare(right)),

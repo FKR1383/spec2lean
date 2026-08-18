@@ -1,5 +1,7 @@
 import { validateTheoremObligationDocument } from "./theorem-contract.js"
+import { artifactBudgetIssues } from "./artifact-limits.js"
 import {
+  reviewFindingAccountabilityIssues,
   reviewDispositionCounts,
   reviewExplicitlyReady,
   reviewExplicitlyRequiresRevision,
@@ -103,6 +105,33 @@ function validateSourceBundle(document: unknown): string[] {
           issues.push(`duplicate source bundle fragment_id: ${fragment.fragment_id}`)
         } else fragmentIds.add(fragment.fragment_id)
         if (!nonEmptyString(fragment.document_id)) issues.push(`fragment ${index} has no document_id`)
+        const sourceDocument = (Array.isArray(document.source_documents) ? document.source_documents : [])
+          .filter(isRecord)
+          .find((source) => source.document_id === fragment.document_id)
+        if (sourceDocument === undefined) {
+          issues.push(`fragment ${index} references unknown document_id: ${String(fragment.document_id)}`)
+        } else {
+          if (sourceDocument.kind !== fragment.source_kind) {
+            issues.push(`fragment ${index} source_kind does not match its source document`)
+          }
+          if (sourceDocument.sha256 !== fragment.source_sha256) {
+            issues.push(`fragment ${index} source_sha256 does not match its source document`)
+          }
+        }
+        const quoteTokens = nonEmptyString(fragment.exact_quote)
+          ? fragment.exact_quote.trim().split(/\s+/).filter(Boolean) : []
+        if (quoteTokens.length < 4) {
+          issues.push(`fragment ${index} exact_quote is too short to be reliable evidence`)
+        }
+        if (isRecord(fragment.locator)) {
+          if (fragment.source_kind === "HTML" && !nonEmptyString(fragment.locator.anchor) &&
+            !Number.isInteger(fragment.locator.start_line)) {
+            issues.push(`HTML fragment ${index} needs an anchor or start_line locator`)
+          }
+          if (fragment.source_kind === "PDF" && !Number.isInteger(fragment.locator.page)) {
+            issues.push(`PDF fragment ${index} needs a page locator`)
+          }
+        }
         if (!["PDF", "HTML"].includes(String(fragment.source_kind))) {
           issues.push(`fragment ${index} has invalid source_kind; expected PDF|HTML`)
         }
@@ -125,6 +154,9 @@ function validateSourceBundle(document: unknown): string[] {
         if (!isRecord(gap) || !nonEmptyString(gap.gap_id) ||
           !["LOAD_BEARING", "NON_LOAD_BEARING"].includes(String(gap.impact))) {
           issues.push(`evidence gap ${index} must have gap_id and LOAD_BEARING|NON_LOAD_BEARING impact`)
+        }
+        if (isRecord(gap) && gap.impact === "LOAD_BEARING") {
+          issues.push(`source bundle has unresolved LOAD_BEARING evidence gap: ${String(gap.gap_id)}`)
         }
       }
     }
@@ -212,6 +244,35 @@ function validateLegacySemantics(document: unknown): string[] {
       if (!Array.isArray(document[field])) issues.push(`full semantics v2 has no ${field} array`)
     }
     if (!isRecord(document.operation)) issues.push("full semantics v2 has no operation object")
+    const claimIds = new Set<string>()
+    for (const [index, claim] of canonicalClaims.entries()) {
+      const id = claim.semanticId
+      if (!nonEmptyString(id)) continue
+      if (claimIds.has(id)) issues.push(`duplicate semanticId: ${id}`)
+      else claimIds.add(id)
+    }
+    for (const claim of canonicalClaims) {
+      const id = nonEmptyString(claim.semanticId) ? claim.semanticId : "unknown semantic claim"
+      const dependencies = Array.isArray(claim.dependencyIds) ? claim.dependencyIds.filter(nonEmptyString) : []
+      for (const dependencyId of dependencies) {
+        if (!claimIds.has(dependencyId)) issues.push(`${id} references unknown dependencyId: ${dependencyId}`)
+      }
+    }
+    const visitSemanticReferences = (value: unknown): void => {
+      if (Array.isArray(value)) {
+        for (const item of value) visitSemanticReferences(item)
+        return
+      }
+      if (!isRecord(value)) return
+      const references = Array.isArray(value.semanticClaimIds) ? value.semanticClaimIds.filter(nonEmptyString) : []
+      for (const semanticId of references) {
+        if (!claimIds.has(semanticId)) issues.push(`semantic surface references unknown semanticId: ${semanticId}`)
+      }
+      for (const child of Object.values(value)) visitSemanticReferences(child)
+    }
+    for (const field of ["syntaxForms", "operands", "operation", "stateEffects", "preconditions", "proofFamilies"]) {
+      visitSemanticReferences(document[field])
+  }
   }
   return issues
 }
@@ -234,6 +295,7 @@ function validateCriticMarkdown(source: string): string[] {
         "critic revision marker must be true exactly when BLOCKER or MAJOR count is non-zero",
       )
     }
+    issues.push(...reviewFindingAccountabilityIssues(source))
   }
   return issues
 }
@@ -243,12 +305,13 @@ function validateArchitectureMarkdown(source: string): string[] {
   for (const [label, pattern] of [
     ["scope", /scope|bounded/i],
     ["source facts", /source fact|evidence/i],
-    ["design dependencies", /design dependency|design choice|architecture decision/i],
+    ["design dependencies", /design dependenc(?:y|ies)|design choice|architecture decision/i],
     ["assumptions/open questions", /assumption|open question|ambiguit/i],
     ["Gate A", /gate\s*a/i],
   ] as const) {
     if (!pattern.test(source)) issues.push(`architecture artifact is missing ${label}`)
   }
+  issues.push(...artifactBudgetIssues("ARCHITECTURE", source))
   issues.push(...validateArchitectureIndex(source))
   return issues
 }
@@ -287,10 +350,49 @@ export function validateArtifactContent(
         ? []
         : validateLegacySemantics(parsedJson)
     case "LEAN_FORMALIZATION":
-      return validateLeanNamespace(run, source)
+      return [...validateLeanNamespace(run, source), ...validateLeanModuleQuality(run, source)]
     case "THEOREM_GENERATION":
       return validateTheoremObligationDocument(parsedJson).issues
     default:
       return []
   }
+}
+
+function validateLeanModuleQuality(run: RunState, source: string): string[] {
+  const issues: string[] = []
+  const header = source.match(/\/-!([\s\S]*?)-\//)?.[1]
+  if (header === undefined) {
+    issues.push("Lean mapping lacks a module doc header (`/-! ... -/`)")
+  } else {
+    const required = [
+      ["unit", new RegExp(`\\bUnit\\s*:\\s*${run.unit.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\b`, "i")],
+      ["semantic authority", /\bSemantic authority\s*:\s*\S+/i],
+      ["architecture authority", /\bArchitecture authority\s*:\s*\S+/i],
+      ["scope status", /\bScope status\s*:\s*(?:BOUNDED_COMPLETE|BOUNDED_PARTIAL)\b/i],
+      ["supported forms", /\bSupported forms\s*:\s*\S+/i],
+      ["excluded forms", /\bExcluded forms\s*:\s*\S+/i],
+      ["evidence policy", /\bEvidence policy\s*:\s*\S+/i],
+    ] as const
+    for (const [label, pattern] of required) {
+      if (!pattern.test(header)) issues.push(`Lean module header lacks ${label}`)
+    }
+  }
+  if (/\b(?:theorem|lemma)\b[^\n]*!=/.test(source)) {
+    issues.push("Lean theorem statements must use propositional `≠`, not Boolean `!=`")
+  }
+
+  const declarationPattern = /^\s*(?:private\s+)?(?:def|abbrev)\s+([A-Za-z_][A-Za-z0-9_']*)/gm
+  for (const match of source.matchAll(declarationPattern)) {
+    const name = match[1]
+    if (name === undefined) continue
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    const references = source.match(new RegExp(`\\b${escaped}\\b`, "g"))?.length ?? 0
+    if (references <= 1 && !new RegExp(`spec2lean-keep\\s*:\\s*${escaped}\\b`, "i").test(source)) {
+      issues.push(
+        `unused Lean declaration ${name}; remove it, use it, or add ` +
+        `\`-- spec2lean-keep: ${name} — <theorem/API rationale>\``,
+      )
+    }
+  }
+  return issues
 }

@@ -45,6 +45,10 @@ reads/writes/frame behavior, errors/undefined behavior, and host/version scope.
 Do not force a register-machine representation onto a non-machine language.
 If the authorized semantics is insufficient or inconsistent, return BLOCKED;
 never fill the gap with a convenient Lean design.
+For a runtime CONSERVATIVE_BOUNDED_SCOPE waiver, implement only
+source-established cases and encode disputed cases as an explicit precondition
+or partial/underspecified relation. Keep the OPEN_QUESTION visible and mark the
+module BOUNDED_PARTIAL; never choose an arbitrary result.
 
 # Lean contract
 
@@ -56,6 +60,20 @@ never fill the gap with a convenient Lean design.
 - A compiling model proves internal validity, not source faithfulness.
 - Write an executable and/or relational form only when authorized semantics
   calls for it; preserve every relevant branch.
+- Begin the file with one `/-! ... -/` module header containing these exact
+  labels: `Unit:`, `Semantic authority:`, `Architecture authority:`,
+  `Scope status: BOUNDED_COMPLETE|BOUNDED_PARTIAL`, `Supported forms:`,
+  `Excluded forms:`, and `Evidence policy:`. `BOUNDED_PARTIAL` is mandatory
+  whenever any source-visible legal form is intentionally excluded or open.
+- Implement every legal form listed for every operand position. A narrower
+  Lean constructor set is a semantic change, not simplification. If the IR is
+  narrower than source evidence without an explicit approved boundary, BLOCK.
+- Keep comments factual: distinguish official SOURCE_FACT support from
+  DERIVED_INTERPRETATION, DESIGN_DEPENDENCY, and ASSUMPTION.
+- Do not leave unused helper `def`/`abbrev` declarations. Remove them, use them,
+  or add `-- spec2lean-keep: NAME — <theorem/API rationale>`.
+- Derive typeclasses required by actual notation and validation; prefer
+  propositional `≠` in propositions and reserve `!=` for Boolean computation.
 
 # Provenance and execution
 

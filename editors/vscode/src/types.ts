@@ -21,7 +21,7 @@ export type Evidence = {
   locator: EvidenceLocator
   quotation?: string
   alignedFromEvidenceId?: string
-  alignmentMethod?: "EXACT_QUOTE_TOKEN_MATCH"
+  alignmentMethod?: "EXACT_QUOTE_TOKEN_MATCH" | "PAGE_HINTED_EXACT_QUOTE_TOKEN_MATCH" | "DISTINCTIVE_TOKEN_WINDOW_MATCH"
 }
 
 export type Claim = {
@@ -34,6 +34,23 @@ export type Claim = {
     | "OPEN_QUESTION"
   statement: string
   evidenceIds: string[]
+  dependencyIds?: string[]
+  humanApprovalDependencies?: string[]
+  origin?: "SEMANTICS" | "ARCHITECTURE"
+  stateAffecting?: boolean
+}
+
+export type SemanticUncertainty = {
+  semanticId: string
+  statement: string
+  origin: "SEMANTICS" | "ARCHITECTURE"
+  stateAffecting?: boolean
+  unresolved: true
+  benchmarkDisposition?: {
+    mode: "AUTO_APPROVE"
+    policy: "CONSERVATIVE_BOUNDED_SCOPE"
+    humanApproved: false
+  }
 }
 
 export type EvidenceEntry = {
@@ -46,10 +63,20 @@ export type EvidenceEntry = {
   claims: Claim[]
   evidence: Evidence[]
   unresolvedReferences: string[]
+  coverage?: {
+    directClaimIds: string[]
+    transitiveClaimIds: string[]
+    sourceFactIds: string[]
+    projectBoundaryIds: string[]
+    officialEvidenceIds: string[]
+    pdfEvidenceIds: string[]
+    projectEvidenceIds: string[]
+    unresolvedDependencyIds: string[]
+  }
 }
 
 export type EvidenceManifest = {
-  schemaVersion: 1 | 2
+  schemaVersion: 1 | 2 | 3
   manifestType: "spec2lean_evidence_manifest"
   generator: string
   runId: string
@@ -65,13 +92,22 @@ export type EvidenceManifest = {
   sourceBundles?: ArtifactFingerprint[]
   theoremDocument?: ArtifactFingerprint
   entries: EvidenceEntry[]
+  semanticUncertainties?: SemanticUncertainty[]
   diagnostics: {
     declarationsWithoutReferences: string[]
     unresolvedReferences: string[]
+    declarationsWithoutEvidencePath?: string[]
+    claimsWithoutDependencyPath?: string[]
+    sourceFactsWithoutOfficialEvidence?: string[]
+    assumptionsWithoutApprovalDependency?: string[]
+    unresolvedOpenQuestions?: string[]
     pdfAlignment?: {
+      eligible?: number
       matched: number
       ambiguous: string[]
       unmatched: string[]
+      coverageRatio?: number
+      failure?: string
     }
   }
 }
@@ -88,6 +124,7 @@ export type EvidenceViewModel = {
   leanPath: string
   entry: EvidenceEntry
   diagnostics: EvidenceManifest["diagnostics"]
+  semanticUncertainties: SemanticUncertainty[]
   evidence: Array<Evidence & {
     sourceUri: string
     sourceVerified: boolean

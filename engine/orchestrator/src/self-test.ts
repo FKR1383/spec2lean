@@ -6,6 +6,15 @@ import { parseAgentResult } from "./agent-result.js"
 import { normalizeAgentDecision } from "./agent-decision.js"
 import { recoverResultFromVerifiedArtifact } from "./artifact-recovery.js"
 import {
+  artifactBudgetIssues,
+  MAX_ARCHITECTURE_BYTES,
+} from "./artifact-limits.js"
+import { validateArtifactContent } from "./artifact-content.js"
+import {
+  architectureQuestionTriageRequiresRevision,
+  validateArchitectureQuestionTriage,
+} from "./architecture-review.js"
+import {
   benchmarkDecisionLocation,
   recordBenchmarkAutoAdvance,
 } from "./benchmark-decision-record.js"
@@ -38,15 +47,18 @@ import {
 } from "./pipeline-config.js"
 import {
   normalizeCriticResultFromReview,
+  reviewFindingAccountabilityIssues,
   reviewDispositionCounts,
   reviewExplicitlyReady,
   reviewExplicitlyRequiresRevision,
 } from "./critic-disposition.js"
+import { duplicateJsonKeyIssues } from "./json-integrity.js"
 import {
   artifactPathsForGate,
   verifyHumanDecisionRecord,
   writeHumanDecisionRecord,
 } from "./human-decision-record.js"
+import { advanceBenchmarkGate } from "./gate-runtime.js"
 import { verifyLeanFile } from "./lean-local.js"
 import { packageTransform } from "./lean-package.js"
 import {
@@ -77,12 +89,20 @@ import {
 } from "./runner.js"
 import {
   compareProofWithApprovedTheorems,
+  normalizeLeanStatementSurfaceSyntax,
+  theoremContractEncodingIssues,
   theoremStrengthReviewAuditIssues,
   validateTheoremObligationDocument,
 } from "./theorem-contract.js"
 import { loadAgentModel, loadProjectModel, REPO_ROOT } from "./repo.js"
 import { saveRun } from "./run-store.js"
 import { withRepositoryLock } from "./repository-lock.js"
+import {
+  consecutiveOutputLengthFailureCount,
+  isProviderAvailabilityFailure,
+  outputLengthRetryLimitReached,
+  semanticRetryState,
+} from "./retry-policy.js"
 import { runSemanticIrSelfTests } from "./semantic-ir-self-test.js"
 import { runSemanticV2SelfTests } from "./semantic-v2-self-test.js"
 import {
@@ -265,6 +285,29 @@ assert(
   ).length === 0,
   "proof preserves the exact approved theorem statement",
 )
+const escapedOperatorInput = {
+  schema_version: 1,
+  theorem_obligations: [{
+    obligation_id: "T-ESCAPED",
+    lean_statement_sketch: String.raw`theorem escaped_or (p q : Prop) : p \u2228 q -> p \u2228 q`,
+  }],
+}
+const escapedOperatorContract = validateTheoremObligationDocument(escapedOperatorInput)
+assert(
+  escapedOperatorContract.issues.length === 0 &&
+    compareProofWithApprovedTheorems(
+      escapedOperatorContract.declarations,
+      String.raw`theorem escaped_or (p q : Prop) : p \/ q → p ∨ q := by intro h; exact h`,
+    ).length === 0 &&
+    normalizeLeanStatementSurfaceSyntax(String.raw`p \u2228 q`) === "p ∨ q",
+  "theorem contract canonicalizes JSON escapes and parser-equivalent Lean operators",
+)
+assert(
+  theoremContractEncodingIssues(escapedOperatorInput).some((issue) =>
+    issue.includes("literal \\uXXXX escape")
+  ),
+  "candidate theorem writer can reject literal double-escaped Unicode before review",
+)
 assert(
   compareProofWithApprovedTheorems(
     theoremContract.declarations,
@@ -323,7 +366,7 @@ const pipelineRun = (suffix: string, stage: RunState["stage"]): RunState => ({
   unitSlug: `${suffix}-b32`,
   leanModuleName: `${suffix[0]!.toUpperCase()}${suffix.slice(1)}B32`,
   sourceManifest: "documents/sources/nvidia/ptx/9.3/source-manifest.json",
-  artifactRoot: `candidates/ptx/9.3/units/${suffix}-b32`,
+  artifactRoot: `candidates/pipeline-self-tests/${pipelineFixtureId}/${suffix}`,
   stage,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
@@ -392,6 +435,91 @@ try {
     rm(resolve(REPO_ROOT, `runs/${run.runId}`), { recursive: true, force: true })
   ))
 }
+const semanticParkFixtureId = `pipeline-semantic-park-${randomUUID()}`
+const semanticParkRun: RunState = {
+  ...pipelineRun("semantic", "WAITING_GATE_A"),
+  runId: `${semanticParkFixtureId}-run`,
+  artifactRoot: `candidates/pipeline-self-tests/${semanticParkFixtureId}/semantic`,
+  benchmark: { autoApprove: true, startedAtUtc: "2026-01-01T00:00:00.000Z" },
+}
+const semanticParkArchitecture = [
+  "# Semantic park fixture",
+  "## Official source facts",
+  "- OQ-1 is a test-only unresolved question.",
+  "<!-- SPEC2LEAN_ARCHITECTURE_INDEX",
+  JSON.stringify({
+    schemaVersion: 1,
+    entries: [{
+      semanticId: "OQ-1",
+      classification: "OPEN_QUESTION",
+      statement: "A load-bearing state question requires human review.",
+      evidenceIds: [],
+      dependencyIds: [],
+      stateAffecting: true,
+      status: "OPEN",
+    }],
+  }),
+  "-->",
+].join("\n")
+const semanticParkReview = [
+  "# Architecture critique",
+  "BLOCKER: 0",
+  "MAJOR: 0",
+  "MINOR: 0",
+  "NOTE: 0",
+  "PRE_GATE_REVISION_REQUIRED: false",
+  "<!-- SPEC2LEAN_GATE_A_OQ_TRIAGE",
+  JSON.stringify({
+    schemaVersion: 1,
+    entries: [{
+      semanticId: "OQ-1",
+      disposition: "GENUINE_HUMAN_REVIEW",
+      rationale: "The bounded state transition cannot be selected without human semantics.",
+    }],
+  }),
+  "-->",
+].join("\n")
+const semanticWaiverLocation = benchmarkDecisionLocation(semanticParkRun, "A")
+try {
+  await mkdir(resolve(REPO_ROOT, `${semanticParkRun.artifactRoot}/architecture`), { recursive: true })
+  await mkdir(resolve(REPO_ROOT, `${semanticParkRun.artifactRoot}/reviews`), { recursive: true })
+  await writeFile(
+    resolve(REPO_ROOT, `${semanticParkRun.artifactRoot}/architecture/foundation-v1.md`),
+    semanticParkArchitecture,
+  )
+  await writeFile(
+    resolve(REPO_ROOT, `${semanticParkRun.artifactRoot}/reviews/architecture-critic-v1.md`),
+    semanticParkReview,
+  )
+  await saveRun(semanticParkRun)
+  const semanticAdvance = await advanceBenchmarkGate(semanticParkRun)
+  assert(semanticAdvance !== undefined, "benchmark gate advances with a semantic waiver")
+  const semanticWaiver = JSON.parse(
+    await readFile(resolve(REPO_ROOT, semanticAdvance.reviewPath), "utf8"),
+  ) as {
+    semanticAssumptions?: Array<{
+      semanticId?: string
+      policy?: string
+      unresolved?: boolean
+      humanApproved?: boolean
+    }>
+  }
+  assert(
+    semanticAdvance.run.stage === "SOURCE_CURATION" &&
+      semanticWaiver.semanticAssumptions?.[0]?.semanticId === "OQ-1" &&
+      semanticWaiver.semanticAssumptions[0]?.policy === "CONSERVATIVE_BOUNDED_SCOPE" &&
+      semanticWaiver.semanticAssumptions[0]?.unresolved === true &&
+      semanticWaiver.semanticAssumptions[0]?.humanApproved === false,
+    "benchmark continuation records an unresolved conservative non-human semantic waiver",
+  )
+} finally {
+  await unlink(resolve(REPO_ROOT, semanticWaiverLocation.reviewPath)).catch(() => undefined)
+  await rm(resolve(REPO_ROOT, `runs/${semanticParkRun.runId}`), { recursive: true, force: true })
+  await rm(
+    resolve(REPO_ROOT, `candidates/pipeline-self-tests/${semanticParkFixtureId}`),
+    { recursive: true, force: true },
+  )
+}
 let activeLockedOperations = 0
 let maximumLockedOperations = 0
 await mapWithConcurrency([1, 2], 2, async () => {
@@ -409,8 +537,17 @@ const nonBlockingCriticResult = normalizeCriticResultFromReview(
     nextStage: "ARCHITECTURE",
     summary: "non-blocking wording changes",
   },
-  "- **Severity:** MINOR\n- **Severity:** NOTE\n",
+  [
+    "Severity: MINOR",
+    "Severity: NOTE",
+    "BLOCKER: 0",
+    "MAJOR: 0",
+    "MINOR: 1",
+    "NOTE: 1",
+    "PRE_GATE_REVISION_REQUIRED: false",
+  ].join("\n"),
   "WAITING_GATE_A",
+  "ARCHITECTURE",
 )
 assert(
   nonBlockingCriticResult.outcome === "SUCCESS" &&
@@ -423,14 +560,71 @@ const majorCriticResult = normalizeCriticResultFromReview(
     nextStage: "ARCHITECTURE",
     summary: "source-faithfulness defect",
   },
-  "- **Severity:** MAJOR\n",
+  [
+    "Severity: MAJOR",
+    "BLOCKER: 0",
+    "MAJOR: 1",
+    "MINOR: 0",
+    "NOTE: 0",
+    "PRE_GATE_REVISION_REQUIRED: true",
+  ].join("\n"),
   "WAITING_GATE_A",
+  "ARCHITECTURE",
 )
 assert(
   majorCriticResult.outcome === "REVISE",
   "BLOCKER/MAJOR critic reviews still require revision",
 )
+const criticSuccessWithMajor = normalizeCriticResultFromReview(
+  {
+    outcome: "SUCCESS",
+    nextStage: "WAITING_GATE_B",
+    summary: "incorrect success",
+  },
+  [
+    "Severity: MAJOR",
+    "BLOCKER: 0",
+    "MAJOR: 1",
+    "MINOR: 0",
+    "NOTE: 0",
+    "PRE_GATE_REVISION_REQUIRED: true",
+  ].join("\n"),
+  "WAITING_GATE_B",
+  "SEMANTIC_EXTRACTION",
+)
+assert(
+  criticSuccessWithMajor.outcome === "REVISE" &&
+    criticSuccessWithMajor.nextStage === "SEMANTIC_EXTRACTION",
+  "blocking review counts override an inconsistent critic SUCCESS",
+)
+const criticRetryWithReadyArtifact = normalizeCriticResultFromReview(
+  {
+    outcome: "RETRY",
+    nextStage: "SEMANTIC_CRITIQUE",
+    summary: "terminal result disagrees with durable review",
+  },
+  [
+    "BLOCKER: 0",
+    "MAJOR: 0",
+    "MINOR: 0",
+    "NOTE: 0",
+    "PRE_GATE_REVISION_REQUIRED: false",
+  ].join("\n"),
+  "WAITING_GATE_B",
+  "SEMANTIC_EXTRACTION",
+)
+assert(
+  criticRetryWithReadyArtifact.outcome === "REVISE" &&
+    criticRetryWithReadyArtifact.nextStage === "SEMANTIC_EXTRACTION",
+  "complete critic artifact/result conflicts route upstream instead of retrying the critic",
+)
 const machineReadableReview = [
+  "Finding 1",
+  "Severity: MINOR",
+  "Finding 2",
+  "Severity: MINOR",
+  "Finding 3",
+  "Severity: NOTE",
   "BLOCKER: 0",
   "MAJOR: 0",
   "MINOR: 2",
@@ -446,6 +640,19 @@ assert(
     reviewExplicitlyReady(machineReadableReview) &&
     !reviewExplicitlyRequiresRevision(machineReadableReview),
   "critic disposition block is machine-readable and explicitly ready",
+)
+assert(
+  reviewFindingAccountabilityIssues(machineReadableReview).length === 0 &&
+    reviewFindingAccountabilityIssues(
+      machineReadableReview.replace("Severity: NOTE\n", ""),
+    ).some((issue) => issue.includes("NOTE count is 1")),
+  "critic review must describe every nonzero counted finding explicitly",
+)
+assert(
+  duplicateJsonKeyIssues(
+    '{"semanticClaims":[{"lifecycle":{"status":"ACTIVE","status":"ACTIVE"}}]}',
+  ).some((issue) => issue.includes("$.semanticClaims[0].lifecycle")),
+  "JSON integrity validation rejects duplicate keys instead of silently keeping the last value",
 )
 assert(
   !reviewExplicitlyReady("Not ready for human gate") &&
@@ -595,11 +802,17 @@ try {
     resolve(REPO_ROOT, criticPath),
     [
       "# Architecture review",
+      "Finding 1",
+      "Severity: MINOR",
+      "A bounded non-blocking documentation observation.",
       "BLOCKER: 0",
       "MAJOR: 0",
       "MINOR: 1",
       "NOTE: 0",
       "PRE_GATE_REVISION_REQUIRED: false",
+      "<!-- SPEC2LEAN_GATE_A_OQ_TRIAGE",
+      '{"schemaVersion":1,"entries":[]}',
+      "-->",
     ].join("\n"),
   )
   const recoveredCritic = await recoverResultFromVerifiedArtifact(criticRecoveryRun)
@@ -854,6 +1067,11 @@ assert(
   "PTX shared retrieval sections",
 )
 assert(
+  (retrievalProfile.context as { architectureTargetMaxLines?: number })
+    ?.architectureTargetMaxLines === 80,
+  "PTX architecture retrieval has a smaller deterministic target budget",
+)
+assert(
   retrievalProfile.policy?.interpretationPerformed === false &&
     retrievalProfile.policy?.humanApprovalImplied === false,
   "retrieval profile does not claim semantic approval",
@@ -1004,12 +1222,18 @@ assert(
     pipelineRuntimeSource.includes("loadRunForPipelineRouting") &&
     pipelineRuntimeSource.includes("prepareSemanticV2Run(run)") &&
     pipelineRuntimeSource.includes("await executeTick(lease.runId") &&
-    pipelineRuntimeSource.includes("manifestGenerationIncludedInServiceMs: true"),
+    pipelineRuntimeSource.includes("manifestGenerationIncludedInServiceMs: true") &&
+    pipelineRuntimeSource.includes('"PARKED_SEMANTIC_REVIEW"'),
   "pipeline pins language inputs, isolates agent queues over one shared runtime, executes bounded ticks, and measures manifest work",
 )
 const runnerSource = await readFile(
   resolve(REPO_ROOT, "engine/orchestrator/src/runner.ts"),
   "utf8",
+)
+assert(
+  runnerSource.includes("architectureQuestionTriageRequiresRevision") &&
+    runnerSource.includes('nextStage: "ARCHITECTURE"'),
+  "architecture critic SUCCESS cannot bypass deterministic remove/reclassify triage",
 )
 assert(
   runnerSource.includes("run.activeExecution.model === executionModel.full") &&
@@ -1092,6 +1316,37 @@ for (const pipelineAgent of PIPELINE_AGENTS) {
     `${pipelineAgent} can run and is instructed to run same-session deterministic validation`,
   )
 }
+const architectPrompt = await readFile(
+  resolve(REPO_ROOT, ".opencode/agents/spec-architect.md"),
+  "utf8",
+)
+assert(
+  architectPrompt.includes("steps: 24") &&
+    ["read: deny", "glob: deny", "grep: deny", "list: deny"].every(
+      (permission) => architectPrompt.includes(permission),
+    ) &&
+    architectPrompt.includes('purpose="architecture"') &&
+    architectPrompt.includes("candidate_architecture_write: allow") &&
+    architectPrompt.includes("candidate_write: deny") &&
+    architectPrompt.includes("at most one bounded replacement") &&
+    architectPrompt.includes("Specification silence about every imaginable flag") &&
+    architectPrompt.includes("SOURCE_FACT is an index root"),
+  "architecture agent has bounded retrieval, exploration, and repair contracts",
+)
+const architectureCriticPrompt = await readFile(
+  resolve(REPO_ROOT, ".opencode/agents/architecture-critic.md"),
+  "utf8",
+)
+assert(
+  architectureCriticPrompt.includes("steps: 24") &&
+  architectureCriticPrompt.includes("read: deny") &&
+    architectureCriticPrompt.includes("internal index roots") &&
+    architectureCriticPrompt.includes("Lack of source support alone is not a defect") &&
+    architectureCriticPrompt.includes("Do not manufacture an OPEN_QUESTION") &&
+    architectureCriticPrompt.includes("SPEC2LEAN_GATE_A_OQ_TRIAGE") &&
+    architectureCriticPrompt.includes("REMOVE_OR_RECLASSIFY"),
+  "architecture critic shares the architect classification and applicability policy",
+)
 for (const generatingAgent of [
   "spec-architect",
   "source-curator",
@@ -1158,6 +1413,8 @@ const candidateTool = await readFile(
 assert(
   candidateTool.includes("JSON.parse(args.content)") &&
     candidateTool.includes("invalid JSON; artifact was not written") &&
+    candidateTool.includes("candidate_architecture_write") &&
+    candidateTool.includes("MAX_ARCHITECTURE_BYTES") &&
     candidateTool.includes("candidate_validate") &&
     candidateTool.includes("verifyTraceabilityManifest"),
   "candidate tools validate JSON before write and run same-session stage/traceability checks",
@@ -1262,6 +1519,219 @@ assert(
   ].join("\n")).some((issue) => issue.includes("unknown evidenceId")),
   "canonical architecture index rejects invented provenance references",
 )
+const boundedStateArchitectureIndex = [
+  "<!-- SPEC2LEAN_ARCHITECTURE_INDEX",
+  JSON.stringify({
+    schemaVersion: 1,
+    entries: [
+      {
+        semanticId: "SF-1",
+        classification: "SOURCE_FACT",
+        statement: "The instruction writes its destination.",
+        evidenceIds: [],
+        dependencyIds: [],
+        stateAffecting: true,
+        status: "RESOLVED",
+      },
+      {
+        semanticId: "OQ-1",
+        classification: "OPEN_QUESTION",
+        statement: "The source does not decide an applicable external state question.",
+        evidenceIds: ["SF-1"],
+        dependencyIds: ["SF-1"],
+        stateAffecting: true,
+        status: "OPEN",
+      },
+      {
+        semanticId: "D-1",
+        classification: "DESIGN_DEPENDENCY",
+        statement: "The bounded project model contains only the destination state.",
+        evidenceIds: ["SF-1"],
+        dependencyIds: ["SF-1", "OQ-1"],
+        stateAffecting: true,
+        status: "RESOLVED",
+      },
+    ],
+  }),
+  "-->",
+].join("\n")
+assert(
+  validateArchitectureIndex(boundedStateArchitectureIndex).length === 0,
+  "architecture index permits an explicit project boundary without resolving its source question",
+)
+const genuineQuestionReview = [
+  "BLOCKER: 0",
+  "MAJOR: 0",
+  "MINOR: 0",
+  "NOTE: 0",
+  "PRE_GATE_REVISION_REQUIRED: false",
+  "<!-- SPEC2LEAN_GATE_A_OQ_TRIAGE",
+  JSON.stringify({
+    schemaVersion: 1,
+    entries: [{
+      semanticId: "OQ-1",
+      disposition: "GENUINE_HUMAN_REVIEW",
+      rationale: "The source-level question is applicable and remains load-bearing.",
+    }],
+  }),
+  "-->",
+].join("\n")
+assert(
+  validateArchitectureQuestionTriage(
+    boundedStateArchitectureIndex,
+    genuineQuestionReview,
+  ).length === 0 &&
+    !architectureQuestionTriageRequiresRevision(genuineQuestionReview),
+  "Gate-A triage preserves a genuine state-affecting human semantic boundary",
+)
+const removableQuestionReview = genuineQuestionReview
+  .replace("MAJOR: 0", "MAJOR: 1")
+  .replace("PRE_GATE_REVISION_REQUIRED: false", "PRE_GATE_REVISION_REQUIRED: true")
+  .replace("GENUINE_HUMAN_REVIEW", "REMOVE_OR_RECLASSIFY")
+assert(
+  validateArchitectureQuestionTriage(
+    boundedStateArchitectureIndex,
+    removableQuestionReview,
+  ).length === 0 &&
+    architectureQuestionTriageRequiresRevision(removableQuestionReview),
+  "Gate-A triage deterministically routes speculative or misclassified questions back to architecture",
+)
+assert(
+  validateArchitectureQuestionTriage(
+    boundedStateArchitectureIndex,
+    genuineQuestionReview.replace("OQ-1", "OQ-UNKNOWN"),
+  ).some((issue) => issue.includes("unknown or non-state-affecting")),
+  "Gate-A triage rejects invented open-question IDs",
+)
+const invalidArchitectureRelations = [
+  "<!-- SPEC2LEAN_ARCHITECTURE_INDEX",
+  JSON.stringify({
+    schemaVersion: 1,
+    entries: [
+      {
+        semanticId: "SF-1",
+        classification: "SOURCE_FACT",
+        statement: "fact",
+        evidenceIds: ["SF-1"],
+        dependencyIds: [],
+        stateAffecting: true,
+        status: "RESOLVED",
+      },
+      {
+        semanticId: "OQ-1",
+        classification: "OPEN_QUESTION",
+        statement: "question",
+        evidenceIds: [],
+        dependencyIds: [],
+        stateAffecting: true,
+        status: "OPEN",
+      },
+      {
+        semanticId: "DI-1",
+        classification: "DERIVED_INTERPRETATION",
+        statement: "derived",
+        evidenceIds: ["OQ-1"],
+        dependencyIds: ["OQ-1"],
+        stateAffecting: true,
+        status: "RESOLVED",
+      },
+    ],
+  }),
+  "-->",
+].join("\n")
+const invalidArchitectureIssues = validateArchitectureIndex(invalidArchitectureRelations)
+assert(
+  invalidArchitectureIssues.some((issue) => issue.includes("SOURCE_FACT must be an internal")) &&
+    invalidArchitectureIssues.some((issue) => issue.includes("depends on open entry")) &&
+    invalidArchitectureIssues.some((issue) => issue.includes("evidenceId is not a SOURCE_FACT")),
+  "architecture validator rejects root misuse and resolved derivations from open questions",
+)
+const compactArchitectureFixture = [
+  "# Fixture",
+  "## Bounded scope and exclusions",
+  "## Official source facts",
+  "## Design dependencies",
+  "## Fact-to-design mapping",
+  "## Assumptions and open questions",
+  "## Behavior and state effects",
+  "## Validation and theorem families",
+  "## Gate A checklist",
+  "<!-- SPEC2LEAN_ARCHITECTURE_INDEX",
+  '{"schemaVersion":1,"entries":[]}',
+  "-->",
+].join("\n")
+assert(
+  validateArtifactContent({ stage: "ARCHITECTURE" } as RunState, compactArchitectureFixture).length === 0,
+  "architecture validator accepts the exact plural Design dependencies heading",
+)
+assert(
+  artifactBudgetIssues(
+    "ARCHITECTURE",
+    "x".repeat(MAX_ARCHITECTURE_BYTES + 1),
+  ).some((issue) => issue.includes("byte budget")),
+  "architecture artifact byte budget is deterministic",
+)
+const leanQualityIssues = validateArtifactContent({
+  stage: "LEAN_FORMALIZATION",
+  language: "ptx",
+  unit: "quality.b32",
+  leanModuleName: "QualityB32",
+} as RunState, [
+  "import Spec2Lean.Basic",
+  "namespace Spec2Lean",
+  "namespace PTX",
+  "namespace QualityB32",
+  "-- spec2lean: SF-1",
+  "def deadHelper := true",
+].join("\n"))
+assert(leanQualityIssues.some((issue) => issue.includes("module doc header")) &&
+  leanQualityIssues.some((issue) => issue.includes("unused Lean declaration deadHelper")), "Lean quality validation rejects undocumented scope and dead helpers")
+const outputLengthExecutions = [
+  { failureClass: "OUTPUT_LENGTH_EXCEEDED" },
+  { failureClass: "OUTPUT_LENGTH_EXCEEDED" },
+] as RunState["executions"]
+assert(
+  outputLengthExecutions !== undefined &&
+    consecutiveOutputLengthFailureCount(outputLengthExecutions, 0) === 0 &&
+    consecutiveOutputLengthFailureCount(outputLengthExecutions, 1) === 1 &&
+    outputLengthRetryLimitReached(outputLengthExecutions, 2),
+  "output-length recovery permits one bounded retry and then stops unchanged repetition",
+)
+const providerRetryExecutions = [
+  {
+    stage: "SEMANTIC_EXTRACTION",
+    outcome: "RETRY",
+    failureClass: "PROVIDER_RETRY_BUDGET_EXCEEDED",
+  },
+  {
+    stage: "SEMANTIC_EXTRACTION",
+    outcome: "RETRY",
+    failureClass: "PROVIDER_RETRY_BUDGET_EXCEEDED",
+  },
+] as RunState["executions"]
+assert(
+  providerRetryExecutions !== undefined &&
+    isProviderAvailabilityFailure(providerRetryExecutions.at(-1)) &&
+    semanticRetryState(providerRetryExecutions, "SEMANTIC_EXTRACTION")
+      .consecutiveRetries === 0,
+  "provider availability failures do not consume semantic retry budget",
+)
+const mixedRetryExecutions = [
+  {
+    stage: "SEMANTIC_CRITIQUE",
+    outcome: "RETRY",
+  },
+  ...(providerRetryExecutions ?? []).map((execution) => ({
+    ...execution,
+    stage: "SEMANTIC_CRITIQUE" as const,
+  })),
+] as RunState["executions"]
+assert(
+  mixedRetryExecutions !== undefined &&
+    semanticRetryState(mixedRetryExecutions, "SEMANTIC_CRITIQUE")
+      .consecutiveRetries === 1,
+  "durable retry reconstruction skips provider failures but preserves real critic retries",
+)
 const blankSeparatedDeclaration = parseLeanDeclarations([
   "-- spec2lean: SF-1",
   "",
@@ -1346,7 +1816,7 @@ const pdfViewPath = traceabilityManifestPath({
   ...traceabilityManifest,
   diagnostics: {
     ...traceabilityManifest.diagnostics,
-    pdfAlignment: { matched: 1, ambiguous: [], unmatched: [] },
+    pdfAlignment: { eligible: 1, matched: 1, ambiguous: [], unmatched: [], coverageRatio: 1 },
   },
 })
 assert(

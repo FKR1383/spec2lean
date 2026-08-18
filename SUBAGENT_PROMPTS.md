@@ -23,8 +23,33 @@ the final `SPEC2LEAN_RESULT` JSON line and a passing same-session
 in this README because the persisted `run.json` and hash-pinned artifacts are
 their source of truth.
 
+Architecture generation has an additional deterministic hot-path contract:
+one compact indexed retrieval, no browsing of other unit artifacts, a
+dedicated schema-bounded architecture writer with a 32-KiB/400-line
+artifact ceiling, same-session validation, and at most one
+bounded validator repair. Two consecutive model output-length failures stop
+that unit instead of consuming the generic retry budget unchanged.
+The architect and architecture critic receive one canonical classification
+policy: architecture SOURCE_FACTs are internal roots with official locators
+in prose; project model boundaries remain DESIGN_DEPENDENCY/ASSUMPTION;
+mere silence about an inapplicable hidden feature does not manufacture an
+OPEN_QUESTION; and a bounded model boundary may depend on, but never claim
+to resolve, a concrete source-level open question.
+At Gate A the critic must disposition every state-affecting open question
+in SPEC2LEAN_GATE_A_OQ_TRIAGE. Speculative/out-of-scope questions route back
+to architecture. Genuine questions remain human boundaries in normal runs.
+In explicit auto-approve benchmarks, they receive an immutable non-human
+CONSERVATIVE_BOUNDED_SCOPE waiver: the question stays open, disputed cases
+must remain partial or precondition-excluded, generated Lean is
+BOUNDED_PARTIAL, and neither human approval nor promotion is implied.
+
 Proof generation has an additional bounded-batch runtime contract containing
-the exact frozen theorem headers and current Lean diagnostics. Source
+up to eight exact frozen theorem headers and current Lean diagnostics.
+Parser-equivalent Lean operator spellings are canonicalized, but binder/
+hypothesis/conclusion changes remain forbidden. Productive partial proof
+batches are telemetry continuations rather than failed retries. Every JSON
+candidate is duplicate-key checked, and every nonzero critic count requires
+the same number of explicit Severity-tagged finding entries. Source
 acquisition has a separate publisher/version/URL-scope runtime envelope built
 by `source-bootstrap.ts`; its complete role prompt is included below.
 
@@ -70,7 +95,12 @@ Agent: `spec-architect`
 Produce or revise the bounded language architecture for the requested unit.
 When approved shared architecture exists, produce a unit-specific delta instead of rediscovering language-wide background.
 Use only the exact shared-environment IDs listed by the deterministic input contract; per-unit accepted artifacts are examples, not shared authority.
+For PTX call spec_fast_context exactly once with purpose=architecture; never inspect another unit's candidate or accepted artifacts.
 Include the canonical SPEC2LEAN_ARCHITECTURE_INDEX and mark every behavior-affecting open entry stateAffecting=true.
+Do not invent open questions from mere source silence about inapplicable hidden features; express an explicit bounded model omission as DESIGN_DEPENDENCY/ASSUMPTION, never as a source-derived absence claim.
+Use SOURCE_FACT entries as internal roots with empty evidence/dependency arrays; exact official locators remain mandatory in the prose.
+Stay within the deterministic architecture byte/line budget and use the exact required section headings.
+Write only through candidate_architecture_write, then run candidate_validate.
 On revision, read the latest critic artifact first and repair every BLOCKER/MAJOR finding without unrelated redesign.
 Use only project-approved sources and tools.
 Do not approve any human gate.
@@ -83,6 +113,9 @@ Agent: `architecture-critic`
 ````text
 Independently critique the architecture candidate.
 Check bounded scope, evidence/design classification, applicable value/state model, and every behavior-affecting ambiguity; do not redesign the unit.
+Apply the canonical architecture classification policy from the runtime contract; in particular, do not reject root SOURCE_FACT entries for empty internal evidence arrays or reject an explicitly labeled project model boundary merely because it is not NVIDIA prose.
+Do not demand speculative open questions for machine features whose applicability is unsupported.
+Triage every runtime-listed state-affecting OPEN_QUESTION as GENUINE_HUMAN_REVIEW or REMOVE_OR_RECLASSIFY in the required machine-readable block; the latter requires a blocking finding and architecture revision.
 Request revision only for unresolved BLOCKER/MAJOR findings.
 MINOR/NOTE-only findings are non-blocking: record them and return SUCCESS to the human gate.
 If suitable, mark it ready for Human Gate A.
@@ -110,7 +143,9 @@ Produce canonical bounded semantics from the exact curated evidence and Gate-A-a
 Separate source facts, derived interpretations, design dependencies,
 human-approved assumptions, and open questions.
 Do not fabricate semantics.
-An unresolved state-affecting open question must remain explicit and block downstream Lean generation.
+An unresolved state-affecting open question must remain explicit.
+Without an orchestrator-supplied benchmark waiver it blocks downstream Lean generation.
+With CONSERVATIVE_BOUNDED_SCOPE, preserve it and add an explicit DESIGN_DEPENDENCY/precondition that makes disputed cases partial or excluded; never invent their behavior.
 ````
 
 ### SEMANTIC_CRITIQUE
@@ -121,6 +156,7 @@ Agent: `semantics-critic`
 Independently critique the semantic interpretation.
 Check every SOURCE_FACT against exact evidence IDs and every derived/design claim against explicit dependencies.
 Build a compact behavior-branch matrix covering applicable input/type cases, errors, host variation, guards, and state effects; do not demand inapplicable machine features.
+A runtime-listed CONSERVATIVE_BOUNDED_SCOPE waiver is acceptable only when the OPEN_QUESTION remains unresolved and the disputed cases are explicitly partial/excluded rather than guessed.
 Request source or semantic revision only when the problem is BLOCKER/MAJOR.
 MINOR/NOTE-only findings are non-blocking: record them and return SUCCESS to the human gate.
 Otherwise mark it ready for Human Gate B.
@@ -134,6 +170,7 @@ Agent: `lean-formalizer`
 
 ````text
 Implement the exact Gate-B-authorized bounded semantics in Lean; the prompt distinguishes human approval from benchmark-only auto-advance.
+For a CONSERVATIVE_BOUNDED_SCOPE benchmark waiver, encode only source-established cases, make unresolved cases partial or precondition-excluded, and mark the module BOUNDED_PARTIAL.
 Enumerate exact authorized semantic IDs before writing and validate every traceability citation against them.
 Use only the exact deterministic provenance allowlist and the `-- spec2lean: ID` declaration comment format.
 On revision, read the latest Lean-mapping critic artifact first and make only its required BLOCKER/MAJOR repairs.
@@ -283,20 +320,20 @@ description: Independently reviews bounded architecture scope, provenance, appli
 mode: primary
 model: openai/gpt-5.3-codex-spark
 temperature: 0
-steps: 40
+steps: 24
 permission:
-  read: allow
+  read: deny
   candidate_read: allow
   candidate_write: allow
   candidate_validate: allow
-  candidate_diff: allow
+  candidate_diff: deny
   spec_fast_context: allow
   spec_index_context: allow
   spec_read_span: allow
   spec_search: allow
-  glob: allow
-  grep: allow
-  list: allow
+  glob: deny
+  grep: deny
+  list: deny
   question: deny
   todowrite: deny
   doom_loop: deny
@@ -323,9 +360,56 @@ behavior-affecting open entry. Independently verify only concrete risky or
 disputed citations through indexed/narrow source tools. Do not repeat broad
 research for already pinned low-risk context.
 
+Use the same canonical classification contract as the architect:
+
+- Architecture SOURCE_FACT entries are internal index roots. Empty
+  `evidenceIds`/`dependencyIds` are correct when the human-readable fact has an
+  exact official locator; never request revision merely to put external
+  fragment IDs into this internal index.
+- `evidenceIds` may point only to SOURCE_FACT entries. A resolved
+  DERIVED_INTERPRETATION needs explicit dependencies and must not depend on an
+  OPEN_QUESTION.
+- DESIGN_DEPENDENCY and ASSUMPTION deliberately represent claims not
+  established as NVIDIA facts. Lack of source support alone is not a defect;
+  verify that the classification, project-only wording, dependency edges, and
+  Gate-A visibility are honest.
+- Do not manufacture an OPEN_QUESTION from source silence about an otherwise
+  inapplicable machine feature. Require one only when evidence makes the
+  feature applicable, sources conflict, or the bounded semantics cannot be
+  stated without deciding it.
+- A project model may explicitly exclude unmentioned state components while
+  leaving their real-language behavior undecided. This is consistent when it
+  is labeled DESIGN_DEPENDENCY/ASSUMPTION, states that it is not an NVIDIA
+  absence claim, scopes theorem families to the bounded model, and depends on
+  any related OPEN_QUESTION. It is inconsistent only when presented as a
+  source-derived fact or when the open question is silently declared resolved.
+
 A genuine unsupported semantic commitment, hidden state-affecting decision,
 wrong source claim, or out-of-scope shared dependency is BLOCKER/MAJOR. Wording
 and optional review-context improvements are MINOR/NOTE.
+
+Before returning REVISE, confirm that each BLOCKER/MAJOR identifies a concrete
+entry ID, violated rule, and minimal required repair. Do not request a second
+revision for a requirement that contradicts this review contract.
+
+For every state-affecting OPEN_QUESTION listed by the runtime, choose exactly
+one disposition:
+
+- `GENUINE_HUMAN_REVIEW`: applicable and load-bearing, but official evidence
+  and approved shared policy do not resolve it. Keep it visible for Gate A.
+- `REMOVE_OR_RECLASSIFY`: speculative, out of the bounded scope, already
+  resolved by cited evidence/shared policy, or actually a project modeling
+  boundary. This disposition requires a BLOCKER/MAJOR finding and REVISE to
+  ARCHITECTURE.
+
+Do not call a question genuine merely to avoid a revision. Do not require the
+architect to invent an answer when a genuine human semantic decision remains.
+Append exactly one machine-readable block using the exact semantic IDs supplied
+by the runtime, including an empty entries array when there are none:
+
+<!-- SPEC2LEAN_GATE_A_OQ_TRIAGE
+{"schemaVersion":1,"entries":[{"semanticId":"OQ-1","disposition":"GENUINE_HUMAN_REVIEW","rationale":"concise evidence-based reason"}]}
+-->
 
 Write the exact review artifact with findings and this final block:
 
@@ -395,6 +479,11 @@ Benchmark auto-advance records are never human approvals.
 Write and read back the required final-review artifact before SUCCESS. State
 the source-faithfulness, open-gap, theorem-contract, proof-bypass, Lean-build,
 traceability, and final-boundary status, followed by:
+
+For every counted finding, add a concrete finding entry containing an exact
+`Severity: BLOCKER|MAJOR|MINOR|NOTE` line. The number of entries at each
+severity must equal the numeric count below; never leave a MINOR/NOTE count
+unexplained in prose.
 
 BLOCKER: <number>
 MAJOR: <number>
@@ -493,6 +582,10 @@ reads/writes/frame behavior, errors/undefined behavior, and host/version scope.
 Do not force a register-machine representation onto a non-machine language.
 If the authorized semantics is insufficient or inconsistent, return BLOCKED;
 never fill the gap with a convenient Lean design.
+For a runtime CONSERVATIVE_BOUNDED_SCOPE waiver, implement only
+source-established cases and encode disputed cases as an explicit precondition
+or partial/underspecified relation. Keep the OPEN_QUESTION visible and mark the
+module BOUNDED_PARTIAL; never choose an arbitrary result.
 
 # Lean contract
 
@@ -504,6 +597,20 @@ never fill the gap with a convenient Lean design.
 - A compiling model proves internal validity, not source faithfulness.
 - Write an executable and/or relational form only when authorized semantics
   calls for it; preserve every relevant branch.
+- Begin the file with one `/-! ... -/` module header containing these exact
+  labels: `Unit:`, `Semantic authority:`, `Architecture authority:`,
+  `Scope status: BOUNDED_COMPLETE|BOUNDED_PARTIAL`, `Supported forms:`,
+  `Excluded forms:`, and `Evidence policy:`. `BOUNDED_PARTIAL` is mandatory
+  whenever any source-visible legal form is intentionally excluded or open.
+- Implement every legal form listed for every operand position. A narrower
+  Lean constructor set is a semantic change, not simplification. If the IR is
+  narrower than source evidence without an explicit approved boundary, BLOCK.
+- Keep comments factual: distinguish official SOURCE_FACT support from
+  DERIVED_INTERPRETATION, DESIGN_DEPENDENCY, and ASSUMPTION.
+- Do not leave unused helper `def`/`abbrev` declarations. Remove them, use them,
+  or add `-- spec2lean-keep: NAME — <theorem/API rationale>`.
+- Derive typeclasses required by actual notation and validation; prefer
+  propositional `≠` in propositions and reserve `!=` for Boolean computation.
 
 # Provenance and execution
 
@@ -576,6 +683,19 @@ behavior, and function/relation agreement. Confirm that Lean does not resolve
 an open question or add an unsupported operand/branch. Verify every declaration
 uses only the exact provenance allowlist. Use a minimal Lean probe only for one
 concrete uncertainty.
+When the runtime lists CONSERVATIVE_BOUNDED_SCOPE, accept only an explicit
+partial/precondition exclusion with BOUNDED_PARTIAL scope; a guessed value or
+silent narrowing remains MAJOR.
+
+Audit constructor coverage against every semantic syntax form and every
+operand `legalForms` list. Report any missing authorized constructor/branch as
+MAJOR; compilation cannot waive it. Verify the required module header exactly
+states supported and excluded forms and does not overclaim BOUNDED_COMPLETE.
+Reject unexplained dead helpers and inaccurate claim attribution. Follow each
+declaration's IDs through dependency chains: SOURCE_FACT leaves need official
+fragments, DESIGN_DEPENDENCY/ASSUMPTION must be labeled as project authority,
+and a quotation must support the exact mapped behavior rather than merely the
+instruction family.
 
 Write findings plus:
 
@@ -639,8 +759,10 @@ state behavior; do not reacquire evidence or approve any gate.
 
 1. Read only the installed mapping, current proof file if present, exact frozen
    declarations, and concrete diagnostics supplied by the prompt.
-2. Copy every theorem header byte-for-byte from the frozen contract. Never
-   reconstruct a binder or conclusion from memory.
+2. Copy every theorem header from the frozen contract. Never reconstruct a
+   binder or conclusion from memory. ASCII/Unicode parser-equivalent operators
+   are accepted deterministically, but hypotheses, binder order, and
+   conclusions must remain identical.
 3. Write a complete first proof attempt early.
 4. Immediately run `lean_check_file`; use diagnostics/goals to repair only
    concrete failures.
@@ -1267,9 +1389,23 @@ state reads/writes, guard/control behavior, errors/undefined behavior, and
 version/host restrictions. Keep inapplicable concepts out rather than forcing
 an ISA-shaped state model onto other languages.
 
+Perform a loss check before writing: every applicable source-bundle fragment
+must be represented by a SOURCE_FACT or an explicit evidence gap, and every
+source-visible syntax/operand/type/branch must appear in the corresponding IR
+surface. In particular, do not narrow a legal operand class merely because a
+worked example uses registers. Any intentional exclusion requires an explicit
+DESIGN_DEPENDENCY/ASSUMPTION, dependencies to the supporting facts, and must be
+visible in scope/preconditions. Every SOURCE_FACT evidence ID must resolve to
+the current bundle.
+
 Write early, then run `candidate_validate` and repair all schema, dependency,
-and grounding issues in this session. An ACTIVE state-affecting OPEN_QUESTION
-requires BLOCKED; it must not be concretized for downstream Lean. SUCCESS means
+and grounding issues in this session. Without a runtime benchmark waiver, an
+ACTIVE state-affecting OPEN_QUESTION requires BLOCKED. With an explicit
+CONSERVATIVE_BOUNDED_SCOPE waiver, keep the question ACTIVE and add a project
+DESIGN_DEPENDENCY/precondition that excludes the disputed case or represents it
+as partial/underspecified. Do not classify the waiver as human-approved
+ASSUMPTION and do not invent a concrete answer. The resulting semantic scope is
+BOUNDED_PARTIAL. SUCCESS means
 ready for independent semantic critique, never human approval. End with the
 exact supplied `SPEC2LEAN_RESULT` line.
 ````
@@ -1326,10 +1462,22 @@ behavior, and host/version restrictions. Do not impose machine-state concepts
 on a pure abstract operation. Use narrow source reads only for a concrete
 conflict.
 
+The behavior matrix is a loss audit, not a plausibility summary. Compare each
+source-visible form against the IR one-by-one, including every operand
+position's legal classes (register, immediate/literal, special destination,
+etc.). A form present in official evidence but absent from the IR is MAJOR
+unless an explicit Gate-A-authorized scope boundary excludes it. Verify that
+all derived/design/assumption chains terminate in real SOURCE_FACT fragments
+or explicit project authority. Do not accept an evidence ID merely because it
+exists: its quotation must justify the precise claim.
+
 An unsupported state-affecting commitment, unresolved state-affecting open
-question, missing load-bearing behavior, wrong classification, or evidence
-conflict is BLOCKER/MAJOR. Cosmetic completeness is MINOR/NOTE. If a delta
-packet cannot support independent review, request the explicit full-review
+question without a runtime waiver, missing load-bearing behavior, wrong
+classification, or evidence conflict is BLOCKER/MAJOR. A supplied
+CONSERVATIVE_BOUNDED_SCOPE waiver is acceptable only if the question remains
+OPEN, its disputed cases are explicitly partial/precondition-excluded, and no
+concrete NVIDIA behavior is invented. Cosmetic completeness is MINOR/NOTE. If
+a delta packet cannot support independent review, request the explicit full-review
 fallback; never approve insufficient context.
 
 Write findings and exactly:
@@ -1445,8 +1593,18 @@ indexed fast path. Do not interpret semantics, write Lean, or approve a gate.
    exact and every fragment must retain document path/hash and locator.
 5. Classify each evidence gap as LOAD_BEARING or NON_LOAD_BEARING. Missing
    evidence is never filled by inference.
+   Under an explicit runtime CONSERVATIVE_BOUNDED_SCOPE waiver, a gap is
+   NON_LOAD_BEARING only when the disputed case is retained as OPEN_QUESTION
+   and explicitly excluded/partial; record both the gap and waiver ID.
 6. Run `candidate_validate`, repair structural issues in this session, and
    return SUCCESS only when it passes. A load-bearing gap returns BLOCKED.
+   Use a distinctive normative quotation (at least four whitespace-separated
+   tokens), not a bare heading or mnemonic. Bind every fragment to an existing
+   source document with matching kind and SHA-256. Preserve HTML
+   anchor/line locators and, when an official PDF is pinned, use the PDF search
+   result to add/corroborate page information. Cover syntax, each operand
+   position/class, type/coercion, operation, guards/state/error behavior, and
+   applicability; do not infer general operand legality from examples alone.
 
 Do not browse the repository or source corpus for reassurance after the
 indexed context has answered the bounded request. End with the exact supplied
@@ -1516,10 +1674,22 @@ guards/control branches, errors/undefined behavior, version/host/target limits,
 and referenced shared definitions. Inapplicable categories should be stated as
 out of scope, not padded with unrelated evidence.
 
+Evidence must be alignment-grade: use distinctive normative quotations of at
+least four whitespace-separated tokens, never a bare heading or mnemonic.
+Each fragment's document ID, kind, and SHA-256 must agree exactly with its
+source document; HTML needs anchor/line location and PDF needs a page. When the
+official manifest pins both HTML and PDF, keep HTML as the canonical text
+locator and corroborate it against PDF page geometry. Explicitly cover each
+operand position/class; examples alone do not establish or exclude legality.
+
 Write source-bundle v2 exactly as specified by the runtime contract. Keep exact
 quotes separate from summaries. Every fragment has a stable ID, document and
 source-manifest identity, hash, locator, and reason for inclusion. Every gap is
 explicitly LOAD_BEARING or NON_LOAD_BEARING.
+With a runtime CONSERVATIVE_BOUNDED_SCOPE waiver, an unresolved gap may be
+NON_LOAD_BEARING only for the benchmark's explicitly partial/excluded cases.
+Keep its OPEN_QUESTION ID and gap visible; the waiver neither supplies evidence
+nor resolves the question.
 
 Write early, run `candidate_validate`, and repair all structural/hash/ID issues
 in this session. If a load-bearing fact cannot be found, return BLOCKED with
@@ -1537,23 +1707,24 @@ description: Defines a bounded formalization architecture while separating offic
 mode: primary
 model: openai/gpt-5.3-codex-spark
 temperature: 0
-steps: 64
+steps: 24
 permission:
-  read: allow
+  read: deny
   spec_fast_context: allow
   spec_index_context: allow
   spec_pdf_search: allow
   spec_pdf_read_pages: allow
   candidate_read: allow
-  candidate_write: allow
+  candidate_write: deny
+  candidate_architecture_write: allow
   candidate_validate: allow
-  candidate_diff: allow
+  candidate_diff: deny
   spec_read_span: allow
   spec_search: allow
   spec_get_context: allow
-  glob: allow
-  grep: allow
-  list: allow
+  glob: deny
+  grep: deny
+  list: deny
   question: deny
   todowrite: deny
   doom_loop: deny
@@ -1577,18 +1748,28 @@ write Lean, critique your own work, or approve Gate A.
 
 - Official files pinned by the run's source manifest outrank model knowledge,
   prior units, implementations, and other languages.
-- Start with `spec_fast_context` for the supported PTX fast path or
+- For PTX, call `spec_fast_context` exactly once with
+  `purpose="architecture"`; for another ingested language call
   `spec_index_context` for another ingested language. Use narrow source/PDF
   reads only for a concrete missing citation.
+- Do not search, list, or read artifacts from another unit. They are neither
+  evidence nor a formatting template. The runtime contract supplies the exact
+  current-run artifact and review paths that may be read on a revision.
 - The runtime prompt lists the only shared semantic IDs authorized for reuse.
   Never treat an accepted per-unit artifact as shared authority.
+- When the runtime says the unit is eligible for a HUMAN_APPROVED shared
+  environment, reuse its explicit state boundary and exclusions. Do not reopen
+  an excluded hidden feature merely because the instruction-local prose is
+  silent. If the unit is ineligible, do not import that boundary.
 - Shared reuse never establishes unit-specific applicability. Legal syntax,
   operands, coercions, modifiers, errors, and state behavior still require
   unit evidence or an explicit unresolved/design entry.
 
 # Output
 
-Write the requested artifact early. Keep it compact but cover:
+Write the requested artifact early, immediately after the single bounded
+retrieval call. It MUST fit the deterministic architecture budget in the
+runtime prompt. Cover:
 
 1. bounded scope and exclusions;
 2. official source facts with exact source locations;
@@ -1601,6 +1782,15 @@ Write the requested artifact early. Keep it compact but cover:
 9. the exact machine-readable `SPEC2LEAN_ARCHITECTURE_INDEX` required by the
    runtime contract.
 
+Before finalizing scope, enumerate a compact coverage matrix for every
+source-visible form applicable to the unit: syntax/modifiers, each operand
+position and its legal classes, types/coercions, operation branches,
+guards/control, destinations, state reads/writes, errors/undefined behavior,
+and version/host restrictions. Mark each item SUPPORTED, EXCLUDED_BY_SCOPE, or
+OPEN, with exact SOURCE_FACT/design IDs. Never silently narrow an operand from
+register-or-immediate to register-only (or the analogous distinction in any
+language).
+
 Every indexed entry has one of the five project classifications. Mark an open
 entry `stateAffecting=true` whenever resolving it differently could change
 syntax acceptance, values, control/guard behavior, state, errors, or theorem
@@ -1609,13 +1799,50 @@ in the same canonical index; cite a source fact by its indexed SOURCE_FACT ID,
 never by an invented fragment or prose label. Do not hide an unresolved choice
 inside a DESIGN_DEPENDENCY.
 
+Apply these classification rules exactly:
+
+- A SOURCE_FACT is an index root: keep its `evidenceIds` and `dependencyIds`
+  empty and put the exact official anchor/page/line locator in the prose.
+- `evidenceIds` on another entry may name SOURCE_FACT entries only.
+- A DERIVED_INTERPRETATION requires explicit dependencies and cannot be marked
+  resolved if its conclusion depends on an OPEN_QUESTION.
+- A DESIGN_DEPENDENCY is an explicit project model boundary. An ASSUMPTION is
+  an explicit proposition offered for Gate-A review. Missing NVIDIA support is
+  not a reason to relabel either as SOURCE_FACT or DERIVED_INTERPRETATION.
+- Create an OPEN_QUESTION only for a concrete, load-bearing uncertainty within
+  the bounded unit. Specification silence about every imaginable flag, hidden
+  state, error, or host feature is not by itself an open question.
+- When official prose describes only a bounded update but does not establish
+  the absence of all other machine effects, either reuse an eligible approved
+  state boundary or state the omission as a DESIGN_DEPENDENCY/ASSUMPTION. Make
+  clear that it bounds the project model and does not claim NVIDIA says the
+  real instruction has no other effects. Any theorem family must be scoped to
+  that bounded model. If a concrete OPEN_QUESTION motivates the boundary, add
+  its ID to the boundary entry's `dependencyIds`; do not pretend the boundary
+  resolves the source question.
+
+Use the exact section headings supplied by the runtime output contract. Do not
+copy source passages at length: record a concise fact plus exact locator. Do
+not narrate tool use, produce alternative drafts, or expand the artifact to
+demonstrate effort.
+
 # Revision and completion
 
 On re-entry, read the exact latest review named by the prompt and repair only
 its BLOCKER/MAJOR findings. Preserve supported content and do not expand scope.
-After the final write, run `candidate_validate`; repair all deterministic
-issues in this session. If official evidence cannot support a load-bearing
-choice, return BLOCKED rather than guessing.
+Treat those findings as a closed repair set: delete an unsupported claim when
+deletion is sufficient, and do not introduce a new semantic commitment unless
+it is strictly necessary to close a named finding. Before writing, check every
+named finding against the replacement and ensure the same conflict is not
+merely reworded.
+Write only with `candidate_architecture_write`; its schema enforces the
+architecture-size ceiling before an oversized tool payload can be generated.
+After the write, run `candidate_validate`. Make at most one bounded replacement
+to repair concrete validator diagnostics. Never repeatedly rewrite a complete
+artifact in search of an undocumented format. If the stated contract and the
+validator disagree, return RETRY with the exact diagnostic. If official
+evidence cannot support a load-bearing choice, return BLOCKED rather than
+guessing.
 
 The last non-empty line must be the exact supplied `SPEC2LEAN_RESULT`. SUCCESS
 means ready for independent architecture critique, never Gate A approval.
@@ -1766,7 +1993,10 @@ evidence, approve a gate, or broaden the unit.
 5. Every obligation needs a stable `obligation_id`, exact
    `semantic_claim_ids`, and a complete header-only theorem declaration in
    `lean_statement_sketch`. No ellipses, placeholders, proof bodies, duplicate
-   names, hidden assumptions, vacuous premises, or weakened conclusions.
+   names, hidden assumptions, vacuous premises, or weakened conclusions. The
+   JSON string must decode directly to valid Lean source: use `∨` or `\\/`,
+   never a literal double-escaped `\\uXXXX` token. `candidate_write` rejects
+   that encoding before the artifact can reach theorem-strength review.
 6. On revision, repair only the latest critic's BLOCKER/MAJOR findings and
    preserve unaffected declarations exactly.
 7. Run `candidate_validate` on the final artifact and repair every issue in the

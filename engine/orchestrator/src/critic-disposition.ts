@@ -42,26 +42,83 @@ export function reviewFindingSeverities(review: string): FindingSeverity[] {
     .map((match) => match[1]!.toUpperCase() as FindingSeverity)
 }
 
+export function reviewFindingAccountabilityIssues(review: string): string[] {
+  const counts = reviewDispositionCounts(review)
+  if (counts === undefined) return []
+  const severities = reviewFindingSeverities(review)
+  const tagged = (severity: FindingSeverity): number =>
+    severities.filter((item) => item === severity).length
+  const issues: string[] = []
+  for (const severity of ["BLOCKER", "MAJOR", "MINOR", "NOTE"] as const) {
+    const actual = tagged(severity)
+    if (actual !== counts[severity]) {
+      issues.push(
+        `${severity} count is ${counts[severity]} but ${actual} explicit ` +
+        `Severity: ${severity} finding entries were provided`,
+      )
+    }
+  }
+  return issues
+}
+
 /**
  * Enforce the critic prompt's severity/disposition contract without making a
- * semantic judgement of our own. The critic still classifies every finding;
- * the orchestrator only prevents an internally inconsistent MINOR/NOTE-only
- * review from causing another model revision cycle.
+ * semantic judgement of our own. The structured review is the critic's
+ * durable decision: blocking findings route upstream, non-blocking findings
+ * proceed, and a RETRY paired with a complete review is conservatively routed
+ * upstream rather than spinning the critic on an artifact/result conflict.
  */
 export function normalizeCriticResultFromReview(
   result: AgentResult,
   review: string,
   successStage: FormalizationStage,
+  defaultRevisionStage?: FormalizationStage,
 ): AgentResult {
-  if (result.outcome !== "REVISE") return result
-
   const severities = reviewFindingSeverities(review)
   const counts = reviewDispositionCounts(review)
-  if (
-    (severities.length === 0 && counts === undefined) ||
+  if (counts === undefined) return result
+
+  const blocking =
     severities.some((severity) => severity === "BLOCKER" || severity === "MAJOR") ||
-    (counts !== undefined && (counts.BLOCKER > 0 || counts.MAJOR > 0))
-  ) {
+    counts.BLOCKER > 0 ||
+    counts.MAJOR > 0 ||
+    reviewExplicitlyRequiresRevision(review)
+
+  if (blocking) {
+    if (result.outcome === "BLOCKED") return result
+    const nextStage = result.outcome === "REVISE"
+      ? result.nextStage
+      : defaultRevisionStage
+    if (nextStage === undefined) return result
+    return {
+      outcome: "REVISE",
+      nextStage,
+      summary:
+        `Critic disposition normalized deterministically: the review records ` +
+        `${counts.BLOCKER} BLOCKER and ${counts.MAJOR} MAJOR finding(s), so the ` +
+        `producer must revise the artifact. Original summary: ${result.summary}`,
+    }
+  }
+
+  if (!reviewExplicitlyReady(review)) return result
+
+  if (result.outcome === "SUCCESS") return result
+  if (result.outcome === "BLOCKED") return result
+
+  if (result.outcome === "RETRY") {
+    if (defaultRevisionStage === undefined) return result
+    return {
+      outcome: "REVISE",
+      nextStage: defaultRevisionStage,
+      summary:
+        `Critic artifact/result conflict resolved conservatively: the complete ` +
+        `review is ready but the terminal result requested RETRY. The producer ` +
+        `must receive one bounded revision rather than repeating the critic. ` +
+        `Original summary: ${result.summary}`,
+    }
+  }
+
+  if (result.outcome !== "REVISE") {
     return result
   }
 
@@ -70,7 +127,7 @@ export function normalizeCriticResultFromReview(
     nextStage: successStage,
     summary:
       `Critic disposition normalized deterministically: the review contains ` +
-      `${severities.length || ((counts?.MINOR ?? 0) + (counts?.NOTE ?? 0))} explicit finding(s), all MINOR/NOTE and therefore ` +
+      `${severities.length || (counts.MINOR + counts.NOTE)} explicit finding(s), all MINOR/NOTE and therefore ` +
       `non-blocking under the review policy. Original summary: ${result.summary}`,
   }
 }

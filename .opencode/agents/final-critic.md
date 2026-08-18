@@ -47,6 +47,11 @@ Write and read back the required final-review artifact before SUCCESS. State
 the source-faithfulness, open-gap, theorem-contract, proof-bypass, Lean-build,
 traceability, and final-boundary status, followed by:
 
+For every counted finding, add a concrete finding entry containing an exact
+`Severity: BLOCKER|MAJOR|MINOR|NOTE` line. The number of entries at each
+severity must equal the numeric count below; never leave a MINOR/NOTE count
+unexplained in prose.
+
 BLOCKER: <number>
 MAJOR: <number>
 MINOR: <number>

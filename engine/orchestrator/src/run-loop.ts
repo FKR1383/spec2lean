@@ -1,10 +1,15 @@
 import { startOpenCode } from "./opencode.js"
 import {
   advanceBenchmarkGate,
-  benchmarkGateReadinessIssues,
+  benchmarkGateParking,
   waitingGateForStage,
 } from "./gate-runtime.js"
 import { loadRun } from "./run-store.js"
+import {
+  consecutiveOutputLengthFailureCount,
+  isProviderAvailabilityFailure,
+  outputLengthRetryLimitReached,
+} from "./retry-policy.js"
 import { proofTargetSummary } from "./proof-plan.js"
 import { executeTick } from "./runner.js"
 import type { FormalizationStage } from "./workflow.js"
@@ -66,6 +71,7 @@ async function main(): Promise<void> {
           runId,
           gate: autoAdvance.gate,
           reviewPath: autoAdvance.reviewPath,
+          semanticAssumptions: autoAdvance.semanticAssumptions,
           fromStage: before.stage,
           toStage: next.stage,
           revision: next.revision,
@@ -74,19 +80,18 @@ async function main(): Promise<void> {
       }
 
       if (waitingGate !== undefined) {
-        const readinessIssues = await benchmarkGateReadinessIssues(before)
+        const parking = await benchmarkGateParking(before)
         console.log(JSON.stringify({
-          ok: readinessIssues.length === 0,
+          ok: parking === undefined,
           stopped: true,
-          reason: readinessIssues.length === 0
-            ? "HUMAN_APPROVAL_REQUIRED"
-            : "BENCHMARK_SEMANTIC_REVIEW_REQUIRED",
+          reason: parking?.reason ?? "HUMAN_APPROVAL_REQUIRED",
           runId,
           stage: before.stage,
+          gate: waitingGate,
           ticks,
-          ...(readinessIssues.length === 0 ? {} : { issues: readinessIssues }),
+          ...(parking === undefined ? {} : { issues: parking.issues }),
         }, null, 2))
-        if (readinessIssues.length > 0) process.exitCode = 2
+        if (parking !== undefined) process.exitCode = 2
         return
       }
 
@@ -143,8 +148,25 @@ async function main(): Promise<void> {
         return
       }
 
-      ticks += 1
       const after = await loadRun(runId)
+      const last = after.executions?.at(-1)
+
+      if (isProviderAvailabilityFailure(last)) {
+        console.log(JSON.stringify({
+          ok: false,
+          stopped: true,
+          resumable: true,
+          reason: "PROVIDER_UNAVAILABLE",
+          runId,
+          stage: after.stage,
+          ticks,
+          hint: `Provider capacity was unavailable; resume ${runId} later without spending semantic retry budget.`,
+        }, null, 2))
+        process.exitCode = 2
+        return
+      }
+
+      ticks += 1
 
       if (after.revision <= before.revision) {
         console.log(JSON.stringify({
@@ -159,7 +181,6 @@ async function main(): Promise<void> {
         return
       }
 
-      const last = after.executions?.at(-1)
       const retried =
         after.stage === before.stage &&
         last?.outcome === "RETRY"
@@ -214,6 +235,24 @@ async function main(): Promise<void> {
           revisionTarget: after.stage,
           revisionExecutions: stageRevisionCount,
           hint: `Inspect the latest critic artifact, then explicitly resume ${runId} if another bounded repair cycle is justified.`,
+        }, null, 2))
+        process.exitCode = 2
+        return
+      }
+
+      const consecutiveOutputLengthFailures = consecutiveOutputLengthFailureCount(
+        after.executions ?? [],
+        consecutiveRetries,
+      )
+      if (outputLengthRetryLimitReached(after.executions ?? [], consecutiveRetries)) {
+        console.log(JSON.stringify({
+          ok: false,
+          stopped: true,
+          reason: "OUTPUT_LENGTH_RETRY_LIMIT_REACHED",
+          runId,
+          stage: after.stage,
+          consecutiveOutputLengthFailures,
+          hint: "The bounded recovery attempt also exhausted model output. Inspect the stage prompt/tool trace; do not retry unchanged.",
         }, null, 2))
         process.exitCode = 2
         return

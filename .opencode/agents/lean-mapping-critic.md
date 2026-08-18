@@ -42,6 +42,19 @@ behavior, and function/relation agreement. Confirm that Lean does not resolve
 an open question or add an unsupported operand/branch. Verify every declaration
 uses only the exact provenance allowlist. Use a minimal Lean probe only for one
 concrete uncertainty.
+When the runtime lists CONSERVATIVE_BOUNDED_SCOPE, accept only an explicit
+partial/precondition exclusion with BOUNDED_PARTIAL scope; a guessed value or
+silent narrowing remains MAJOR.
+
+Audit constructor coverage against every semantic syntax form and every
+operand `legalForms` list. Report any missing authorized constructor/branch as
+MAJOR; compilation cannot waive it. Verify the required module header exactly
+states supported and excluded forms and does not overclaim BOUNDED_COMPLETE.
+Reject unexplained dead helpers and inaccurate claim attribution. Follow each
+declaration's IDs through dependency chains: SOURCE_FACT leaves need official
+fragments, DESIGN_DEPENDENCY/ASSUMPTION must be labeled as project authority,
+and a quotation must support the exact mapped behavior rather than merely the
+instruction family.
 
 Write findings plus:
 

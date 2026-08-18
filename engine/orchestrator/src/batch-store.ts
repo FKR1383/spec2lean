@@ -10,6 +10,15 @@ export type BatchRunEntry = {
   lastExitCode?: number
   lastObservedStage?: string
   lastError?: string
+  lastStatus?:
+    | "RUNNING"
+    | "COMPLETE"
+    | "WAITING_HUMAN"
+    | "PARKED_SEMANTIC_REVIEW"
+    | "STOPPED"
+    | "BLOCKED"
+    | "NO_RUNNABLE_WORK"
+  blockingIssues?: string[]
 }
 
 export const PIPELINE_POOLS = [
@@ -76,6 +85,7 @@ export type PipelineJobMetric = {
   queueWaitMs: number
   serviceMs: number
   outcome?: string
+  productiveProgress?: boolean
   manifestCountBefore: number
   manifestCountAfter: number
   manifestGenerationIncludedInServiceMs: true

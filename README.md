@@ -246,6 +246,21 @@ environment before dispatch. Normal human gates park only their own unit;
 `--auto-approve` retains benchmark-only decision records and never creates a
 human approval. Deterministic Lean checks and declaration/theorem evidence
 manifest generation remain inside their existing stage boundaries.
+An applicable state-affecting open question is never auto-approved or silently
+resolved. In normal runs it remains a human review boundary. In
+`--auto-approve` benchmark runs, a critic-confirmed genuine question receives
+an immutable non-human `CONSERVATIVE_BOUNDED_SCOPE` waiver: the question stays
+OPEN, disputed cases must be precondition-excluded or modeled as
+partial/underspecified, and the generated module is `BOUNDED_PARTIAL`.
+The waiver is not an NVIDIA fact, human approval, or promotion authority.
+Deterministic readiness failures still produce `PARKED_SEMANTIC_REVIEW`.
+Evidence manifests expose all unresolved questions at run level, and the VS
+Code evidence view labels benchmark waivers as `NOT HUMAN APPROVED`.
+Proof batches contain up to eight exact authorized declarations. Surface-level
+Lean notation differences are normalized deterministically without permitting
+hypothesis or conclusion changes, while productive partial batches are counted
+as `proofContinuations` rather than failures. Candidate JSON with duplicate
+keys and critic counts without explicit `Severity:` findings are rejected.
 If the shared server transport fails, affected leases remain resumable and the
 scheduler performs a bounded server restart instead of changing agent routing
 or duplicating unit state.
@@ -308,6 +323,15 @@ A promotion-safe manifest requires every discovered Lean declaration to have
 resolved semantic, source, theorem-obligation, or reviewed architecture-design
 provenance. Older incomplete runs remain inspectable but fail validation until
 their provenance is reviewed and repaired.
+
+Schema-v3 manifests follow each declaration's direct claim IDs transitively
+through DERIVED_INTERPRETATION, DESIGN_DEPENDENCY, ASSUMPTION, and
+OPEN_QUESTION dependencies to official SOURCE_FACT fragments or explicit
+project authority. They report source-fact, approval, dependency, and
+per-declaration evidence-path gaps separately. HTML remains the exact
+hash-bound canonical locator; PDF renditions are corroborating views with
+explicit eligible/matched/ambiguous/unmatched counts. The GUI opens a verified
+PDF rendition first when one exists and warns when PDF coverage is partial.
 
 ## Development checks
 

@@ -119,6 +119,14 @@ never silently mixed into an in-flight batch. Human gates consume no worker
 and park only the affected unit. Benchmark auto-advance uses the same
 deterministic decision-record implementation as the single-run loop.
 
+For Gate A, the architecture critic must disposition every state-affecting
+open question. A speculative, out-of-scope, evidence-resolved, or misclassified
+question routes back to architecture; only a concrete load-bearing question
+may reach the human boundary. In an auto-approve batch, such a genuine boundary
+is reported per unit as `PARKED_SEMANTIC_REVIEW` with exact IDs and rationales.
+Other runnable units continue independently. Parking is not acceptance and is
+not counted as successful benchmark completion.
+
 `batch-report` includes per-agent and per-stage service/queue-wait mean/p95,
 worker utilization, throughput, retry/revision totals, execution models, and whether
 traceability-manifest creation occurred inside measured stage service time.
@@ -212,10 +220,16 @@ without waiting for a long artificial timeout.
 OpenCode provider backoff is distinct from a Spec2Lean semantic `RETRY`.
 Provider retry waits are bounded to 60 seconds by default, then the stalled
 session is aborted and recorded with failure class
-`PROVIDER_RETRY_BUDGET_EXCEEDED`. Override the bound explicitly when needed:
+`PROVIDER_RETRY_BUDGET_EXCEEDED`. This availability event does not increment
+the run revision, consume the semantic stage-retry budget, or advance an
+artifact version. A stage-pipelined batch pauses with resumable
+`PROVIDER_UNAVAILABLE` instead of repeatedly spending every unit's retry
+budget. Resume the same run or batch after provider capacity returns. Override
+the per-request wait bound explicitly when needed:
 
 ```bash
 ./spec2lean resume --run <run-id> --provider-retry-budget-seconds 90
+./spec2lean resume-batch --batch <batch-id>
 ```
 
 The performance report counts these provider failures separately from agent
@@ -251,6 +265,20 @@ labels every finding `MINOR`/`NOTE` but returns `REVISE`. A stage is also
 bounded to three critic-requested revision cycles by default; override with
 `--max-stage-revisions N` only after inspecting the latest review artifact.
 
+Architecture generation and critique share one classification policy.
+`SOURCE_FACT` entries are internal index roots with empty reference arrays and
+exact official locators in the prose. `DERIVED_INTERPRETATION` entries require
+closed dependencies. A bounded modeling exclusion belongs under
+`DESIGN_DEPENDENCY` or `ASSUMPTION`; it is not rejected merely because NVIDIA
+does not state it. Mere silence about an otherwise inapplicable hidden feature
+does not create an `OPEN_QUESTION`. When a concrete source question does
+motivate a bounded project model, the model boundary may depend on that open
+entry but must not claim to resolve it. The deterministic index validator
+enforces the structural part of this contract before independent critique.
+The critic's `SPEC2LEAN_GATE_A_OQ_TRIAGE` block is cross-checked against the
+hash-pinned architecture, so missing, invented, or silently ignored question
+IDs cannot reach Gate A.
+
 ## PTX source retrieval profile
 
 PTX 9.3 deterministic retrieval policy is versioned in
@@ -258,6 +286,15 @@ PTX 9.3 deterministic retrieval policy is versioned in
 source manifest, local index schema/cache path, context bounds, and shared
 section anchors used by `spec_fast_context`. The profile explicitly performs
 retrieval only; it is not a semantic interpretation or human approval.
+
+The architecture stage requests the compact `purpose=architecture` view. It
+returns line-numbered rendered text with smaller target/shared bounds and omits
+duplicated raw HTML. The architect cannot browse other units, has a bounded
+tool-step budget, and must keep its review candidate within 32 KiB/400 lines.
+The dedicated `candidate_architecture_write` schema and the orchestrator
+validator both enforce that artifact budget. A second consecutive model
+output-length failure stops the affected unit for diagnosis instead of
+repeating the same expensive retry four times.
 
 Rebuild the local hash-verified index with:
 
@@ -335,7 +372,7 @@ session:
 
 1. extract the human-approved theorem declarations from the obligation artifact;
 2. locally check any existing proof artifact first;
-3. give the Proof Engineer a bounded batch (at most four declarations and a
+3. give the Proof Engineer a bounded batch (at most eight declarations and a
    fixed statement-size budget), or concrete diagnostics for a noncompiling
    batch;
 4. re-run `lake env lean` locally;
@@ -348,6 +385,19 @@ obligation artifact before completion, so a compiling proof cannot silently
 add assumptions or weaken a result. This also prevents long speculative
 proof-planning sessions from consuming the entire model context before a proof
 file is written.
+
+Canonical comparison normalizes only parser-equivalent Lean surface notation
+such as `∨` versus `\\/`, `→` versus `->`, and a legacy literal `\\u2228`
+escape. It does not reorder binders, add hypotheses, or alter conclusions.
+New theorem artifacts containing a literal double-escaped Unicode token are
+rejected by `candidate_write` before review. Productive partial proof batches
+are reported as `proofContinuations`, not failed retries, and reset the stage
+stall counter.
+
+All JSON candidates are scanned for duplicate object keys before publication
+and again during deterministic artifact verification. Critic reports similarly
+must contain one explicit `Severity: ...` entry for every nonzero disposition
+count, preventing unexplained MINOR/NOTE totals from passing validation.
 
 ## Final promotion and Git milestone
 

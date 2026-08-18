@@ -23,10 +23,20 @@ type BenchmarkDecisionRecord = {
   humanConfirmationRecorded: false
   gateApprovalPerformed: false
   promotionPerformed: false
+  semanticAssumptions: BenchmarkSemanticAssumption[]
   provenance: {
     controller: "spec2lean-cli"
     command: "formalize --auto-approve"
   }
+}
+
+export type BenchmarkSemanticAssumption = {
+  semanticId: string
+  statement: string
+  rationale: string
+  policy: "CONSERVATIVE_BOUNDED_SCOPE"
+  unresolved: true
+  humanApproved: false
 }
 
 export type BenchmarkDecisionLocation = {
@@ -77,6 +87,7 @@ function sameArtifacts(
 export async function recordBenchmarkAutoAdvance(
   run: RunState,
   gate: GateName,
+  semanticAssumptions: BenchmarkSemanticAssumption[] = [],
 ): Promise<{ recovered: boolean; reviewPath: string }> {
   if (run.benchmark?.autoApprove !== true) {
     throw new Error("Benchmark auto-advance is not enabled for this run")
@@ -105,6 +116,7 @@ export async function recordBenchmarkAutoAdvance(
       humanConfirmationRecorded: false,
       gateApprovalPerformed: false,
       promotionPerformed: false,
+      semanticAssumptions,
       provenance: {
         controller: "spec2lean-cli",
         command: "formalize --auto-approve",
@@ -135,6 +147,7 @@ export async function recordBenchmarkAutoAdvance(
     record.humanConfirmationRecorded !== false ||
     record.gateApprovalPerformed !== false ||
     record.promotionPerformed !== false ||
+    JSON.stringify(record.semanticAssumptions ?? []) !== JSON.stringify(semanticAssumptions) ||
     !sameArtifacts(record.artifacts, artifacts)
   ) {
     throw new Error(`Benchmark decision record verification failed: ${reviewPath}`)

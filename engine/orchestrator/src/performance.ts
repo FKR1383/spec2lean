@@ -8,6 +8,7 @@ type Metric = {
   transitions: number
   executions: number
   retries: number
+  proofContinuations: number
   providerRetries: number
 }
 
@@ -24,6 +25,7 @@ export async function buildPerfReport(runId: string): Promise<Record<string, unk
         transitions: 0,
         executions: 0,
         retries: 0,
+        proofContinuations: 0,
         providerRetries: 0,
       }
       metrics.set(stage, value)
@@ -51,7 +53,9 @@ export async function buildPerfReport(runId: string): Promise<Record<string, unk
     } else {
       current.unmeasuredExecutions += 1
     }
-    if (execution.outcome === "RETRY") current.retries += 1
+    if (execution.progress?.kind === "PROOF_BATCH_CONTINUATION") {
+      current.proofContinuations += 1
+    } else if (execution.outcome === "RETRY") current.retries += 1
     if (execution.failureClass === "PROVIDER_RETRY_BUDGET_EXCEEDED") current.providerRetries += 1
   }
 
@@ -62,6 +66,7 @@ export async function buildPerfReport(runId: string): Promise<Record<string, unk
     unmeasuredExecutions: current.unmeasuredExecutions,
     executions: current.executions,
     retries: current.retries,
+    proofContinuations: current.proofContinuations,
     providerRetries: current.providerRetries,
     transitions: current.transitions,
   })).sort((left, right) => right.seconds - left.seconds)
@@ -81,7 +86,12 @@ export async function buildPerfReport(runId: string): Promise<Record<string, unk
     ).toFixed(1)),
     wallClockSeconds: Number(((Date.parse(run.updatedAt) - Date.parse(run.createdAt)) / 1000).toFixed(1)),
     agentExecutions: (run.executions ?? []).length,
-    retryExecutions: (run.executions ?? []).filter((execution) => execution.outcome === "RETRY").length,
+    retryExecutions: (run.executions ?? []).filter(
+      (execution) => execution.outcome === "RETRY" && execution.progress === undefined,
+    ).length,
+    proofContinuationExecutions: (run.executions ?? []).filter(
+      (execution) => execution.progress?.kind === "PROOF_BATCH_CONTINUATION",
+    ).length,
     revisionExecutions: (run.executions ?? []).filter((execution) => execution.outcome === "REVISE").length,
     activeAgentSeconds: Number((
       [...metrics.values()].reduce((total, stage) => total + stage.agentMilliseconds, 0) / 1000
@@ -92,6 +102,9 @@ export async function buildPerfReport(runId: string): Promise<Record<string, unk
     ),
     providerRetryExecutions: (run.executions ?? []).filter(
       (execution) => execution.failureClass === "PROVIDER_RETRY_BUDGET_EXCEEDED",
+    ).length,
+    outputLengthExecutions: (run.executions ?? []).filter(
+      (execution) => execution.failureClass === "OUTPUT_LENGTH_EXCEEDED",
     ).length,
     semanticV2: semanticV2Telemetry(run),
     executionModels: Object.fromEntries(
