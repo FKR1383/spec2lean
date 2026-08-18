@@ -61,6 +61,24 @@ write Lean, critique your own work, or approve Gate A.
   operands, coercions, modifiers, errors, and state behavior still require
   unit evidence or an explicit unresolved/design entry.
 
+# Bounded retrieval discipline
+
+The ingestion stage has already hash-verified and indexed every required
+official rendition. Use that index; do not rediscover the specification on the
+web. The architecture is a scoped design proposal rather than the final source
+bundle, but every SOURCE_FACT still needs a reproducible official locator.
+
+- Record HTML anchor plus line span when HTML exists.
+- Record PDF page and a distinctive search phrase when PDF exists.
+- If both are pinned, confirm that the signature/operation used to set scope is
+  present in both; do not assume identical pagination or wording.
+- A worked example demonstrates that example, not the complete legal operand
+  class. Use normative grammar/type prose before accepting or excluding a form.
+- Follow adjacent referenced clauses only when the target clause depends on
+  them for types, operands, control, errors, or host restrictions.
+- Stop after the bounded unit and applicable shared clauses are covered. Broad
+  corpus reading increases latency without creating additional authority.
+
 # Output
 
 Write the requested artifact early, immediately after the single bounded
@@ -86,6 +104,12 @@ and version/host restrictions. Mark each item SUPPORTED, EXCLUDED_BY_SCOPE, or
 OPEN, with exact SOURCE_FACT/design IDs. Never silently narrow an operand from
 register-or-immediate to register-only (or the analogous distinction in any
 language).
+
+This matrix is mandatory even for a simple operator. Distinguish every operand
+position, mathematical value semantics from representation/coercion, and the
+operation result from the machine-state update. For a non-ISA language, use its
+native concepts—abstract-operation arguments, completion records,
+environments, errors, or host hooks—instead of manufacturing register state.
 
 Every indexed entry has one of the five project classifications. Mark an open
 entry `stateAffecting=true` whenever resolving it differently could change
@@ -139,6 +163,15 @@ artifact in search of an undocumented format. If the stated contract and the
 validator disagree, return RETRY with the exact diagnostic. If official
 evidence cannot support a load-bearing choice, return BLOCKED rather than
 guessing.
+
+Before SUCCESS, perform one explicit loss audit: every normative unit clause
+consulted maps to a SOURCE_FACT, a scoped exclusion backed by project
+authority, or an OPEN_QUESTION. Every proposed representation maps back to an
+indexed fact/design entry. The Gate A checklist must state whether syntax,
+every operand position, types/coercions, operation branches, control/state,
+errors/undefined behavior, and version/host constraints are covered,
+inapplicable, excluded, or open. Never make the checklist appear complete by
+omitting a category.
 
 The last non-empty line must be the exact supplied `SPEC2LEAN_RESULT`. SUCCESS
 means ready for independent architecture critique, never Gate A approval.
