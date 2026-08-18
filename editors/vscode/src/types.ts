@@ -76,7 +76,7 @@ export type EvidenceEntry = {
 }
 
 export type EvidenceManifest = {
-  schemaVersion: 1 | 2 | 3
+  schemaVersion: 1 | 2 | 3 | 4
   manifestType: "spec2lean_evidence_manifest"
   generator: string
   runId: string
@@ -94,11 +94,14 @@ export type EvidenceManifest = {
   entries: EvidenceEntry[]
   semanticUncertainties?: SemanticUncertainty[]
   diagnostics: {
+    requiredOfficialRenditions?: Array<"HTML" | "PDF">
     declarationsWithoutReferences: string[]
     unresolvedReferences: string[]
     declarationsWithoutEvidencePath?: string[]
     claimsWithoutDependencyPath?: string[]
     sourceFactsWithoutOfficialEvidence?: string[]
+    sourceFactsWithoutHtmlEvidence?: string[]
+    sourceFactsWithoutPdfEvidence?: string[]
     assumptionsWithoutApprovalDependency?: string[]
     unresolvedOpenQuestions?: string[]
     pdfAlignment?: {

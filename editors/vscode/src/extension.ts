@@ -79,7 +79,7 @@ class ManifestIndex {
     for (const uri of files) {
       try {
         const manifest = JSON.parse(await readFile(uri.fsPath, "utf8")) as EvidenceManifest
-        if ([1, 2, 3].includes(manifest.schemaVersion) && manifest.manifestType === "spec2lean_evidence_manifest") {
+        if ([1, 2, 3, 4].includes(manifest.schemaVersion) && manifest.manifestType === "spec2lean_evidence_manifest") {
           loaded.push({
             manifestPath: relative(root, uri.fsPath).split(sep).join("/"),
             manifest,
@@ -437,6 +437,8 @@ class EvidencePanel {
       if (next.entry.coverage?.unresolvedDependencyIds.length) warnings.push('Unresolved dependency IDs: ' + next.entry.coverage.unresolvedDependencyIds.join(', '));
       if (next.semanticUncertainties.length) warnings.push('Unresolved semantic questions remain: ' + next.semanticUncertainties.map((item) => item.semanticId).join(', ') + '.');
       if (next.diagnostics.pdfAlignment?.failure) warnings.push('PDF alignment failed: ' + next.diagnostics.pdfAlignment.failure);
+      if (next.diagnostics.sourceFactsWithoutHtmlEvidence?.length) warnings.push('SOURCE_FACT claims missing required HTML evidence: ' + next.diagnostics.sourceFactsWithoutHtmlEvidence.join(', ') + '.');
+      if (next.diagnostics.sourceFactsWithoutPdfEvidence?.length) warnings.push('SOURCE_FACT claims missing required PDF evidence: ' + next.diagnostics.sourceFactsWithoutPdfEvidence.join(', ') + '.');
       if (next.diagnostics.pdfAlignment?.coverageRatio !== undefined && next.diagnostics.pdfAlignment.coverageRatio < 1) warnings.push('PDF corroboration is partial: ' + next.diagnostics.pdfAlignment.matched + '/' + (next.diagnostics.pdfAlignment.eligible ?? '?') + ' official fragments aligned; HTML evidence remains hash-bound.');
       if (next.entry.semanticIds.length === 0 && next.entry.evidence.length === 0) warnings.push('This declaration has no provenance reference.');
       if (next.entry.unresolvedReferences.length) warnings.push('Unresolved IDs: ' + next.entry.unresolvedReferences.join(', '));
