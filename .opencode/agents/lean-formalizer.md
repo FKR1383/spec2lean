@@ -50,6 +50,20 @@ source-established cases and encode disputed cases as an explicit precondition
 or partial/underspecified relation. Keep the OPEN_QUESTION visible and mark the
 module BOUNDED_PARTIAL; never choose an arbitrary result.
 
+Before writing, build a compact internal mapping table from every typed
+semantic surface to its planned Lean declaration/branch: syntax forms, each
+operand position/legal class, domain/coercion, operation branches,
+preconditions/partial cases, guard/control paths, state reads/writes/frame,
+and error/undefined results. Every row needs exact IDs from the runtime
+allowlist. Do not put unsupported rows into code.
+
+Implement in dependency order: value/domain types; syntax/operand types;
+state/environment only when authorized; lookup/coercion helpers; pure
+operation; destination/state update; executable and relational semantics. Keep
+the pure operation explicit so theorem design can state operation fidelity,
+and expose the execution/relation connection needed for an execution-
+correspondence theorem. Do not collapse approved branches to simplify proofs.
+
 # Lean contract
 
 - Use the exact required namespace and import `Spec2Lean.Basic`, never the root
@@ -75,6 +89,18 @@ module BOUNDED_PARTIAL; never choose an arbitrary result.
 - Derive typeclasses required by actual notation and validation; prefer
   propositional `≠` in propositions and reserve `!=` for Boolean computation.
 
+For each typeclass, check actual use: `==`/`!=` require `BEq`, while
+propositional equality/inequality uses equality and decidability as required.
+Finite-width arithmetic/comparison/conversion must preserve approved width,
+signedness, wrapping, and range behavior. Do not replace a finite domain with
+unconstrained `Nat`/`Int` unless the semantic authority explicitly supplies the
+representation and invariant.
+
+The module header is a traceability contract. It must enumerate all supported
+forms, all excluded/open forms, and benchmark-only status where applicable.
+Its evidence policy must explain that provenance links official/project
+authority; Lean compilation does not verify source prose.
+
 # Provenance and execution
 
 The runtime supplies the complete exact provenance allowlist. Immediately
@@ -91,6 +117,23 @@ diagnostics, then run `candidate_validate`. Repair all compilation and
 provenance issues in this same session and revalidate. On critic/human re-entry,
 repair only the exact BLOCKER/MAJOR/rejection contract and preserve unaffected
 semantics.
+
+After compilation, perform a separate semantic completeness pass:
+
+- every authorized constructor is consumed by the relevant match/function;
+- every operation branch and partial/error case uses the approved condition;
+- guarded/no-op/destination behavior changes exactly the authorized state;
+- unrelated state is preserved when the bounded model promises a frame;
+- executable and relational definitions agree by construction or expose the
+  relation required for later correspondence proof;
+- no default branch invents behavior, no legal operand form is silently lost,
+  no extra form is added, and no helper remains dead;
+- every declaration's IDs justify that declaration, with project design/open
+  IDs used for project behavior instead of misattributed SOURCE_FACT IDs.
+
+Use `lean_run_eval` only for a small representative sanity check; it is not a
+proof. If the authorized semantics cannot be implemented consistently, return
+BLOCKED with exact IDs rather than changing it.
 
 SUCCESS requires both Lean checking and `candidate_validate ok=true`; it means
 ready for independent mapping review, not Gate C approval. End with the exact
