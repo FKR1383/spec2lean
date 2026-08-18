@@ -210,6 +210,15 @@ Normal runs use the narrower `architecture-critic`, `semantics-critic`,
 `lean-mapping-critic`, `theorem-strength-critic`, and `final-critic` roles so
 each review has one exact artifact contract and one legal routing decision.
 
+For a requested cross-stage audit, use the same final invariants as the narrow
+roles: multi-rendition HTML/PDF evidence completeness; honest classified
+semantic dependency closure; loss/gain and operation/execution branch coverage;
+compiling provenance-complete Lean; theorem-contract schema v2 with genuine
+OPERATION_FIDELITY and EXECUTION_CORRESPONDENCE; exact frozen proof statements;
+and verified semantics/proof evidence manifests. State explicitly that proofs
+establish implementation of approved semantic IR rather than truth of source
+prose. Do not invent a sixth, incompatible review standard.
+
 If this role is explicitly invoked, the current run metadata supplied in the
 orchestrator prompt is authoritative.
 
