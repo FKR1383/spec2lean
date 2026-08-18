@@ -1486,8 +1486,9 @@ assert(
     candidateTool.includes("candidate_architecture_write") &&
     candidateTool.includes("MAX_ARCHITECTURE_BYTES") &&
     candidateTool.includes("candidate_validate") &&
-    candidateTool.includes("verifyTraceabilityManifest"),
-  "candidate tools validate JSON before write and run same-session stage/traceability checks",
+    candidateTool.includes("verifyTraceabilityManifest") &&
+    candidateTool.includes("source bundle is missing the exact hash-bound official"),
+  "candidate tools validate JSON, required source renditions, and same-session stage/traceability checks",
 )
 
 const leanVerifierSmoke = await verifyLeanFile("lean/Spec2Lean/PTX/MovB32.lean")

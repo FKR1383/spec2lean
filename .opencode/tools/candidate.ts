@@ -735,6 +735,7 @@ export const validate = tool({
           issues.push("source bundle language/version/unit identity does not match the run")
         }
         const documents = new Map<string, { path: string; sha256: string; kind: string }>()
+        const documentRecords: Array<{ path: string; sha256: string; kind: string }> = []
         for (const [index, value] of (Array.isArray(bundle.source_documents)
           ? bundle.source_documents : []).entries()) {
           if (typeof value !== "object" || value === null || Array.isArray(value)) continue
@@ -751,6 +752,11 @@ export const validate = tool({
               sha256: document.sha256,
               kind: document.kind,
             })
+            documentRecords.push({
+              path: document.local_path,
+              sha256: document.sha256,
+              kind: document.kind.toUpperCase(),
+            })
           } catch (error) {
             issues.push(`source document ${index} is invalid: ${error instanceof Error ? error.message : String(error)}`)
           }
@@ -766,6 +772,50 @@ export const validate = tool({
             issues.push(`fragment ${index} source_sha256 does not match its source document`)
           } else if (fragment.source_kind !== document.kind) {
             issues.push(`fragment ${index} source_kind does not match its source document`)
+          }
+        }
+        const sourceManifestPath = run.sourceManifest ?? (run.language.toLowerCase() === "ptx"
+          ? `documents/sources/nvidia/ptx/${run.specVersion}/source-manifest.json`
+          : undefined)
+        if (sourceManifestPath === undefined) {
+          issues.push("run has no source manifest for source-bundle rendition validation")
+        } else {
+          try {
+            const manifestAbsolute = await resolveOfficialSourceFile(
+              context.worktree,
+              sourceManifestPath,
+            )
+            const manifest = JSON.parse(await readFile(manifestAbsolute, "utf8")) as UnknownRecord
+            const artifacts = (Array.isArray(manifest.artifacts) ? manifest.artifacts : [])
+              .filter((value): value is UnknownRecord =>
+                typeof value === "object" && value !== null && !Array.isArray(value))
+              .filter((artifact) => ["HTML", "PDF"].includes(String(artifact.kind).toUpperCase()))
+            for (const artifact of artifacts) {
+              const kind = String(artifact.kind).toUpperCase()
+              const artifactSha256 = typeof artifact.sha256 === "string" ? artifact.sha256 : undefined
+              const localPath = typeof artifact.local_path === "string"
+                ? relative(
+                    await realpath(context.worktree),
+                    resolve(dirname(manifestAbsolute), artifact.local_path),
+                  ).split(sep).join("/")
+                : undefined
+              if (artifactSha256 === undefined || localPath === undefined) {
+                issues.push(`source manifest has invalid required ${kind} artifact identity`)
+                continue
+              }
+              if (!documentRecords.some((document) =>
+                document.kind === kind &&
+                document.sha256 === artifactSha256 &&
+                document.path === localPath)) {
+                issues.push(
+                  `source bundle is missing the exact hash-bound official ${kind} rendition from the source manifest`,
+                )
+              }
+            }
+          } catch (error) {
+            issues.push(
+              `source manifest rendition validation failed: ${error instanceof Error ? error.message : String(error)}`,
+            )
           }
         }
       }
