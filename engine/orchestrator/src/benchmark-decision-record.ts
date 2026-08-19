@@ -51,13 +51,45 @@ function gateSlug(gate: GateName): string {
 export function benchmarkDecisionLocation(
   run: RunState,
   gate: GateName,
+  version = 1,
 ): BenchmarkDecisionLocation {
+  if (!Number.isSafeInteger(version) || version < 1) {
+    throw new Error(`Invalid benchmark decision record version: ${version}`)
+  }
   const unitId = `${run.language}-${run.unitSlug}`
-  const reviewId = `${run.runId}-${gateSlug(gate)}-benchmark-auto-v1`
+  const reviewId = `${run.runId}-${gateSlug(gate)}-benchmark-auto-v${version}`
   return {
     reviewId,
     reviewPath: `reviews/${unitId}/benchmark-auto/${reviewId}.json`,
   }
+}
+
+function recordIdentityIsValid(
+  record: Partial<BenchmarkDecisionRecord>,
+  run: RunState,
+  gate: GateName,
+  reviewId: string,
+): boolean {
+  return record.schemaVersion === 1 &&
+    record.recordType === "benchmark_gate_auto_advance" &&
+    record.reviewId === reviewId &&
+    record.unitId === `${run.language}-${run.unitSlug}` &&
+    record.runId === run.runId &&
+    record.gate === gate &&
+    record.decision === "auto_advanced" &&
+    record.humanConfirmationRecorded === false &&
+    record.gateApprovalPerformed === false &&
+    record.promotionPerformed === false
+}
+
+async function readBenchmarkDecisionRecord(
+  destination: string,
+): Promise<Partial<BenchmarkDecisionRecord>> {
+  const metadata = await lstat(destination)
+  if (metadata.isSymbolicLink() || !metadata.isFile()) {
+    throw new Error("Benchmark decision record is not a regular file")
+  }
+  return JSON.parse(await readFile(destination, "utf8")) as Partial<BenchmarkDecisionRecord>
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -93,10 +125,37 @@ export async function recordBenchmarkAutoAdvance(
     throw new Error("Benchmark auto-advance is not enabled for this run")
   }
 
-  const { reviewId, reviewPath } = benchmarkDecisionLocation(run, gate)
   const artifacts = await artifactFingerprintsForGate(run, gate)
-  const destination = await resolveReviewDestination(reviewPath)
-  const recovered = await exists(destination)
+  let selected: {
+    reviewId: string
+    reviewPath: string
+    destination: string
+    recovered: boolean
+  } | undefined
+
+  for (let version = 1; version < 1_000; version += 1) {
+    const location = benchmarkDecisionLocation(run, gate, version)
+    const destination = await resolveReviewDestination(location.reviewPath)
+    if (!(await exists(destination))) {
+      selected = { ...location, destination, recovered: false }
+      break
+    }
+    const record = await readBenchmarkDecisionRecord(destination)
+    if (!recordIdentityIsValid(record, run, gate, location.reviewId)) {
+      throw new Error(`Benchmark decision record verification failed: ${location.reviewPath}`)
+    }
+    if (
+      JSON.stringify(record.semanticAssumptions ?? []) === JSON.stringify(semanticAssumptions) &&
+      sameArtifacts(record.artifacts, artifacts)
+    ) {
+      selected = { ...location, destination, recovered: true }
+      break
+    }
+  }
+  if (selected === undefined) {
+    throw new Error(`Too many benchmark decision records for ${run.runId} ${gate}`)
+  }
+  const { reviewId, reviewPath, destination, recovered } = selected
 
   if (!recovered) {
     const record: BenchmarkDecisionRecord = {
@@ -129,24 +188,9 @@ export async function recordBenchmarkAutoAdvance(
     )
   }
 
-  const metadata = await lstat(destination)
-  if (metadata.isSymbolicLink() || !metadata.isFile()) {
-    throw new Error("Benchmark decision record is not a regular file")
-  }
-  const record = JSON.parse(
-    await readFile(destination, "utf8"),
-  ) as Partial<BenchmarkDecisionRecord>
+  const record = await readBenchmarkDecisionRecord(destination)
   if (
-    record.schemaVersion !== 1 ||
-    record.recordType !== "benchmark_gate_auto_advance" ||
-    record.reviewId !== reviewId ||
-    record.unitId !== `${run.language}-${run.unitSlug}` ||
-    record.runId !== run.runId ||
-    record.gate !== gate ||
-    record.decision !== "auto_advanced" ||
-    record.humanConfirmationRecorded !== false ||
-    record.gateApprovalPerformed !== false ||
-    record.promotionPerformed !== false ||
+    !recordIdentityIsValid(record, run, gate, reviewId) ||
     JSON.stringify(record.semanticAssumptions ?? []) !== JSON.stringify(semanticAssumptions) ||
     !sameArtifacts(record.artifacts, artifacts)
   ) {

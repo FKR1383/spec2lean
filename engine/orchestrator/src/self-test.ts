@@ -1128,6 +1128,41 @@ try {
   await unlink(resolve(REPO_ROOT, benchmarkLocation.reviewPath)).catch(() => undefined)
 }
 
+const benchmarkReentryId = `benchmark-reentry-self-test-${randomUUID()}`
+const benchmarkReentryRoot = `candidates/self-test/${benchmarkReentryId}`
+const benchmarkReentryRun: RunState = {
+  ...benchmarkRun,
+  runId: benchmarkReentryId,
+  unit: "benchmark.reentry",
+  unitSlug: benchmarkReentryId,
+  artifactRoot: benchmarkReentryRoot,
+}
+const benchmarkReentryV1 = benchmarkDecisionLocation(benchmarkReentryRun, "A", 1)
+const benchmarkReentryV2 = benchmarkDecisionLocation(benchmarkReentryRun, "A", 2)
+try {
+  await mkdir(resolve(REPO_ROOT, `${benchmarkReentryRoot}/architecture`), { recursive: true })
+  await mkdir(resolve(REPO_ROOT, `${benchmarkReentryRoot}/reviews`), { recursive: true })
+  await writeFile(resolve(REPO_ROOT, `${benchmarkReentryRoot}/architecture/foundation-v1.md`), "first architecture\n")
+  await writeFile(resolve(REPO_ROOT, `${benchmarkReentryRoot}/reviews/architecture-critic-v1.md`), "first review\n")
+  const first = await recordBenchmarkAutoAdvance(benchmarkReentryRun, "A")
+  await writeFile(resolve(REPO_ROOT, `${benchmarkReentryRoot}/architecture/foundation-v2.md`), "revised architecture\n")
+  await writeFile(resolve(REPO_ROOT, `${benchmarkReentryRoot}/reviews/architecture-critic-v2.md`), "revised review\n")
+  const revised = await recordBenchmarkAutoAdvance(benchmarkReentryRun, "A")
+  const recoveredRevised = await recordBenchmarkAutoAdvance(benchmarkReentryRun, "A")
+  assert(
+    first.reviewPath === benchmarkReentryV1.reviewPath && !first.recovered &&
+      revised.reviewPath === benchmarkReentryV2.reviewPath && !revised.recovered &&
+      recoveredRevised.reviewPath === benchmarkReentryV2.reviewPath && recoveredRevised.recovered,
+    "benchmark gate re-entry versions changed artifact bindings and recovers an identical latest decision",
+  )
+} finally {
+  await rm(resolve(REPO_ROOT, benchmarkReentryRoot), { recursive: true, force: true })
+  await rm(
+    resolve(REPO_ROOT, `reviews/${benchmarkReentryRun.language}-${benchmarkReentryRun.unitSlug}`),
+    { recursive: true, force: true },
+  )
+}
+
 const semanticIrMetrics = await runSemanticIrSelfTests()
 const semanticV2Metrics = await runSemanticV2SelfTests()
 
