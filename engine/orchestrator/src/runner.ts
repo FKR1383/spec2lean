@@ -47,6 +47,7 @@ import { planForRun } from "./stage-plan.js"
 import { buildStageInputContext } from "./stage-context.js"
 import {
   buildTraceabilityManifest,
+  semanticEvidenceRenditionIssues,
   verifyTraceabilityManifest,
   writeTraceabilityManifest,
 } from "./traceability.js"
@@ -75,6 +76,26 @@ async function buildPipelineTraceabilityManifest(
 type TraceabilityExecutionMetrics = NonNullable<
   NonNullable<RunState["executions"]>[number]["traceability"]
 >
+
+function resetGatesAfterSourceRepair(run: RunState): RunState {
+  return {
+    ...run,
+    gates: {
+      ...run.gates,
+      B: "pending",
+      C: "pending",
+      THEOREM_STRENGTH: "pending",
+      FINAL: "pending",
+    },
+  }
+}
+
+function isOfficialRenditionIssue(issue: string): boolean {
+  return issue.startsWith("semantic SOURCE_FACT lacks required official HTML evidence:") ||
+    issue.startsWith("semantic SOURCE_FACT lacks required official PDF evidence:") ||
+    issue.startsWith("semantic SOURCE_FACT has no official HTML/PDF evidence:") ||
+    issue.startsWith("official PDF alignment failed:")
+}
 
 async function generateVerifiedTraceability(
   run: RunState,
@@ -202,7 +223,14 @@ function repairContractLines(run: RunState): string[] {
     },
     SOURCE_CURATION: {
       pattern: `${run.artifactRoot}/reviews/semantics-critic-v*.md`,
-      from: ["SEMANTIC_EXTRACTION", "SEMANTIC_CRITIQUE", "WAITING_GATE_B", "BLOCKED"],
+      from: [
+        "SEMANTIC_EXTRACTION",
+        "SEMANTIC_CRITIQUE",
+        "WAITING_GATE_B",
+        "LEAN_FORMALIZATION",
+        "PROOF_GENERATION",
+        "BLOCKED",
+      ],
     },
     SEMANTIC_EXTRACTION: {
       pattern: `${run.artifactRoot}/reviews/semantics-critic-v*.md`,
@@ -716,6 +744,67 @@ export async function executeTick(
   const dryRun = options.dryRun ?? false
   let run = await loadRun(runId)
 
+  if (
+    run.semanticV2?.mode !== "DELTA_FAST_PATH" &&
+    ["SEMANTIC_EXTRACTION", "LEAN_FORMALIZATION", "PROOF_GENERATION"].includes(run.stage)
+  ) {
+    let evidenceIssues: string[] = []
+    try {
+      evidenceIssues = await semanticEvidenceRenditionIssues({ runId: run.runId })
+    } catch {
+      // A fresh semantic stage has no semantic artifact yet. Normal stage
+      // validation remains authoritative once the producer writes one.
+    }
+    if (evidenceIssues.length > 0) {
+      const fromStage = run.stage
+      const detail = evidenceIssues.join(" | ")
+      if (dryRun) {
+        console.log(JSON.stringify({
+          dryRun: true,
+          runId: run.runId,
+          stage: fromStage,
+          localRepairTo: "SOURCE_CURATION",
+          issues: evidenceIssues,
+        }, null, 2))
+        return
+      }
+      let next = transitionRun(
+        run,
+        "SOURCE_CURATION",
+        `deterministic evidence preflight routed the repair to source curation: ${detail}`,
+      )
+      next = resetGatesAfterSourceRepair(next)
+      next = {
+        ...next,
+        activeExecution: undefined,
+        executions: [
+          ...(run.executions ?? []),
+          {
+            at: new Date().toISOString(),
+            stage: fromStage,
+            agent: "orchestrator-evidence-preflight",
+            sessionId: "local",
+            outcome: "REVISE",
+            nextStage: "SOURCE_CURATION",
+            response: detail,
+          },
+        ],
+      }
+      await saveRun(next)
+      console.log(JSON.stringify({
+        ok: true,
+        runId: next.runId,
+        agent: "orchestrator-evidence-preflight",
+        outcome: "REVISE",
+        fromStage,
+        toStage: "SOURCE_CURATION",
+        revision: next.revision,
+        summary: detail,
+      }, null, 2))
+      return
+    }
+  }
+
   if (run.stage === "SEMANTIC_EXTRACTION") {
     const prepared = await prepareSemanticV2Run(run)
     if (prepared !== run) {
@@ -1065,10 +1154,20 @@ export async function executeTick(
     } else if (result.outcome === "SUCCESS" || result.outcome === "REVISE") {
       const verification = await verifyExpectedArtifact(run)
       if (!verification.ok) {
-        result = {
-          outcome: "RETRY",
-          nextStage: run.stage,
-          summary: `Agent reported SUCCESS but artifact verification failed: ${verification.issues.join(" | ")}`,
+        const renditionIssues = verification.issues.filter(isOfficialRenditionIssue)
+        if (run.stage === "SEMANTIC_EXTRACTION" && renditionIssues.length > 0) {
+          run = resetGatesAfterSourceRepair(run)
+          result = {
+            outcome: "REVISE",
+            nextStage: "SOURCE_CURATION",
+            summary: `Semantic evidence is incomplete; deterministic validation routed the repair to source curation: ${renditionIssues.join(" | ")}`,
+          }
+        } else {
+          result = {
+            outcome: "RETRY",
+            nextStage: run.stage,
+            summary: `Agent reported SUCCESS but artifact verification failed: ${verification.issues.join(" | ")}`,
+          }
         }
       } else if (
         result.outcome === "SUCCESS" &&

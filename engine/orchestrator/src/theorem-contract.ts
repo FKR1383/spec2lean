@@ -147,7 +147,49 @@ export function canonicalTheoremStatement(declaration: string): string {
   const statement = assignment === undefined
     ? withoutComments
     : withoutComments.slice(0, assignment)
-  return normalizeLeanStatementSurfaceSyntax(statement).replace(/\s+/g, " ").trim()
+  return normalizeLeanWhitespace(normalizeLeanStatementSurfaceSyntax(statement))
+}
+
+/** Collapse layout-only whitespace without changing whitespace inside strings. */
+function normalizeLeanWhitespace(source: string): string {
+  let output = ""
+  let index = 0
+  let inString = false
+  let escaped = false
+  let pendingSpace = false
+
+  while (index < source.length) {
+    const current = source[index]!
+    if (inString) {
+      output += current
+      if (escaped) escaped = false
+      else if (current === "\\") escaped = true
+      else if (current === '"') inString = false
+      index += 1
+      continue
+    }
+    if (current === '"') {
+      if (pendingSpace && output.length > 0 && !"([{".includes(output.at(-1)!)) output += " "
+      pendingSpace = false
+      inString = true
+      output += current
+      index += 1
+      continue
+    }
+    if (/\s/.test(current)) {
+      pendingSpace = true
+      index += 1
+      continue
+    }
+    if (pendingSpace && output.length > 0 &&
+      !"([{".includes(output.at(-1)!) && !")]},".includes(current)) {
+      output += " "
+    }
+    pendingSpace = false
+    output += current
+    index += 1
+  }
+  return output.trim()
 }
 
 /**

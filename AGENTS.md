@@ -26,7 +26,7 @@ the current run explicitly depends on them.
 ## Model Policy
 
 The project model is configured in `opencode.json`. Automated agents currently
-use `openai/gpt-5.3-codex-spark` through the explicitly enabled `openai`
+use `openai/gpt-5.4-mini` through the explicitly enabled `openai`
 provider. Keep every routed agent definition aligned with that project model
 unless both are deliberately changed together.
 

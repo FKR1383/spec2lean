@@ -1,7 +1,7 @@
 ---
 description: Independently checks semantic-to-Lean fidelity, branch coverage, compilation, and provenance before Gate C
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 48
 permission:

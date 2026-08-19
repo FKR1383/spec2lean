@@ -1,7 +1,7 @@
 ---
 description: Reviews exact theorem declarations for truth, strength, non-vacuity, semantic coverage, and contract completeness
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 48
 permission:

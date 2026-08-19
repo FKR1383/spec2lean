@@ -1,7 +1,7 @@
 ---
 description: Produces a canonical bounded source bundle from deterministic indexed context without broad research
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 32
 permission:
@@ -51,6 +51,13 @@ semantics, write Lean, or approve a gate.
 5. Write the requested immutable source-bundle v2 early, then validate once.
    Repair only concrete schema/hash/locator/coverage diagnostics and validate
    again. Do not repeatedly research a complete bounded context.
+
+On deterministic re-entry from a downstream evidence check, treat every named
+SOURCE_FACT/rendition diagnostic as the exact repair contract. Add or correct
+evidence in the missing official rendition, or preserve a sufficiently
+distinctive exact HTML quotation that the deterministic PDF aligner verifies.
+Merely listing the PDF document or citing a page without a PDF fragment does
+not satisfy the repair.
 
 # Mandatory evidence inventory
 

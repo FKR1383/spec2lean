@@ -245,6 +245,7 @@ const transitions:
 
   LEAN_FORMALIZATION: [
     "LEAN_MAPPING_CRITIQUE",
+    "SOURCE_CURATION",
     "BLOCKED",
     "FAILED",
   ],
@@ -285,6 +286,7 @@ const transitions:
 
   PROOF_GENERATION: [
     "PROOF_GENERATION",
+    "SOURCE_CURATION",
     "FINAL_CRITIQUE",
     "BLOCKED",
     "FAILED",

@@ -1,7 +1,7 @@
 ---
 description: Independently reviews bounded architecture scope, provenance, applicability, and behavior-affecting gaps before Gate A
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 24
 permission:

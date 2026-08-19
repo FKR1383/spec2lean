@@ -1,7 +1,7 @@
 ---
 description: Converts a bounded official source bundle into canonical classified semantics without writing Lean
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 72
 permission:

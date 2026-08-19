@@ -1,7 +1,7 @@
 ---
 description: Independently reviews classified bounded semantics against the exact architecture and source bundle before Gate B
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 48
 permission:

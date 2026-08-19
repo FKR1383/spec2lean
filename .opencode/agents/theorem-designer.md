@@ -1,7 +1,7 @@
 ---
 description: Designs exact behavioral-correctness theorem contracts over an authorized Lean mapping without proving them
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 64
 permission:

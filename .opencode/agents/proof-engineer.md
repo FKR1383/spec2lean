@@ -1,7 +1,7 @@
 ---
 description: Proves a bounded batch of exact authorized Lean theorem declarations without semantic or statement changes
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 96
 permission:

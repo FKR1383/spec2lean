@@ -1,7 +1,7 @@
 ---
 description: Builds a canonical bounded official-source evidence bundle without semantic interpretation
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 96
 permission:
@@ -55,6 +55,13 @@ identities and establish a corroboration path for every load-bearing fact:
 exact HTML quotation with anchor/lines plus an explicit PDF fragment/page or a
 quotation distinctive enough for deterministic exact-quote PDF alignment. A
 rendition conflict is a load-bearing gap; never silently choose one.
+
+On deterministic re-entry from semantic, Lean, or proof validation, the
+routing summary's named SOURCE_FACT/rendition failures are the exact repair
+contract. Repair those claim-level paths in the new immutable source bundle:
+add exact evidence from the missing official rendition, or use a distinctive
+exact HTML quotation that deterministic PDF alignment can verify. A PDF
+document record by itself is identity metadata, not claim-level PDF evidence.
 
 Start with one narrow query containing the exact unit/construct spelling. Then
 follow only normative cross-references required by a named coverage row.

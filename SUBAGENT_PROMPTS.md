@@ -330,7 +330,7 @@ Source of truth: `.opencode/agents/architecture-critic.md`
 ---
 description: Independently reviews bounded architecture scope, provenance, applicability, and behavior-affecting gaps before Gate A
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 24
 permission:
@@ -469,7 +469,7 @@ Source of truth: `.opencode/agents/final-critic.md`
 ---
 description: Performs the final independent aggregation check over reviewed artifacts, Lean proofs, and deterministic traceability
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 40
 permission:
@@ -571,7 +571,7 @@ Source of truth: `.opencode/agents/latency-probe.md`
 ---
 description: Minimal no-tool agent used only to measure model service latency
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 1
 permission:
@@ -609,7 +609,7 @@ Source of truth: `.opencode/agents/lean-formalizer.md`
 ---
 description: Implements one Gate-B-authorized semantic unit as traceable Lean definitions without changing its meaning
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 72
 permission:
@@ -756,7 +756,7 @@ Source of truth: `.opencode/agents/lean-mapping-critic.md`
 ---
 description: Independently checks semantic-to-Lean fidelity, branch coverage, compilation, and provenance before Gate C
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 48
 permission:
@@ -860,7 +860,7 @@ Source of truth: `.opencode/agents/proof-engineer.md`
 ---
 description: Proves a bounded batch of exact authorized Lean theorem declarations without semantic or statement changes
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 96
 permission:
@@ -973,7 +973,7 @@ Source of truth: `.opencode/agents/repair-agent.md`
 ---
 description: Repairs bounded technical Lean failures while routing semantic and architectural failures back to review
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 48
 permission:
@@ -1217,7 +1217,7 @@ Source of truth: `.opencode/agents/semantic-critic.md`
 ---
 description: Independently checks source evidence, semantic interpretations, Lean definitions, theorem obligations, and proofs for faithfulness and strength
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 64
 permission:
@@ -1475,7 +1475,7 @@ Source of truth: `.opencode/agents/semantic-extractor-delta.md`
 ---
 description: Produces a typed unit semantic delta against an eligible human-approved shared environment
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 40
 permission:
@@ -1568,7 +1568,7 @@ Source of truth: `.opencode/agents/semantic-extractor.md`
 ---
 description: Converts a bounded official source bundle into canonical classified semantics without writing Lean
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 72
 permission:
@@ -1679,7 +1679,7 @@ Source of truth: `.opencode/agents/semantics-critic.md`
 ---
 description: Independently reviews classified bounded semantics against the exact architecture and source bundle before Gate B
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 48
 permission:
@@ -1784,7 +1784,7 @@ Source of truth: `.opencode/agents/source-acquirer.md`
 ---
 description: Discovers a version-matched official specification source without interpreting it
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 16
 permission:
@@ -1886,7 +1886,7 @@ Source of truth: `.opencode/agents/source-curator-fast.md`
 ---
 description: Produces a canonical bounded source bundle from deterministic indexed context without broad research
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 32
 permission:
@@ -1936,6 +1936,13 @@ semantics, write Lean, or approve a gate.
 5. Write the requested immutable source-bundle v2 early, then validate once.
    Repair only concrete schema/hash/locator/coverage diagnostics and validate
    again. Do not repeatedly research a complete bounded context.
+
+On deterministic re-entry from a downstream evidence check, treat every named
+SOURCE_FACT/rendition diagnostic as the exact repair contract. Add or correct
+evidence in the missing official rendition, or preserve a sufficiently
+distinctive exact HTML quotation that the deterministic PDF aligner verifies.
+Merely listing the PDF document or citing a page without a PDF fragment does
+not satisfy the repair.
 
 # Mandatory evidence inventory
 
@@ -1990,7 +1997,7 @@ Source of truth: `.opencode/agents/source-curator.md`
 ---
 description: Builds a canonical bounded official-source evidence bundle without semantic interpretation
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 96
 permission:
@@ -2044,6 +2051,13 @@ identities and establish a corroboration path for every load-bearing fact:
 exact HTML quotation with anchor/lines plus an explicit PDF fragment/page or a
 quotation distinctive enough for deterministic exact-quote PDF alignment. A
 rendition conflict is a load-bearing gap; never silently choose one.
+
+On deterministic re-entry from semantic, Lean, or proof validation, the
+routing summary's named SOURCE_FACT/rendition failures are the exact repair
+contract. Repair those claim-level paths in the new immutable source bundle:
+add exact evidence from the missing official rendition, or use a distinctive
+exact HTML quotation that deterministic PDF alignment can verify. A PDF
+document record by itself is identity metadata, not claim-level PDF evidence.
 
 Start with one narrow query containing the exact unit/construct spelling. Then
 follow only normative cross-references required by a named coverage row.
@@ -2104,7 +2118,7 @@ Source of truth: `.opencode/agents/spec-architect.md`
 ---
 description: Defines a bounded formalization architecture while separating official facts, derivations, project design, assumptions, and open questions
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 24
 permission:
@@ -2288,7 +2302,7 @@ Source of truth: `.opencode/agents/spec-manager.md`
 ---
 description: Manages the sequential Spec2Lean workflow, dependencies, human gates, and artifact lifecycle without acting as semantic authority
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 32
 permission:
@@ -2392,7 +2406,7 @@ Source of truth: `.opencode/agents/theorem-designer.md`
 ---
 description: Designs exact behavioral-correctness theorem contracts over an authorized Lean mapping without proving them
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 64
 permission:
@@ -2517,7 +2531,7 @@ Source of truth: `.opencode/agents/theorem-strength-critic.md`
 ---
 description: Reviews exact theorem declarations for truth, strength, non-vacuity, semantic coverage, and contract completeness
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 48
 permission:

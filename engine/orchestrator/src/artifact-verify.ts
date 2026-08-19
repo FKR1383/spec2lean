@@ -11,6 +11,7 @@ import { latestObligationPath, proofTargets } from "./proof-plan.js"
 import { latestVersionedArtifact } from "./provenance-catalog.js"
 import { REPO_ROOT } from "./repo.js"
 import { theoremStrengthReviewAuditIssues } from "./theorem-contract.js"
+import { semanticEvidenceRenditionIssues } from "./traceability.js"
 import type { RunState } from "./workflow.js"
 
 export type ArtifactVerification = {
@@ -108,6 +109,14 @@ export async function verifyExpectedArtifact(run: RunState): Promise<ArtifactVer
   }
   if (run.stage === "SEMANTIC_EXTRACTION" && run.semanticV2?.mode !== "DELTA_FAST_PATH") {
     issues.push(...await semanticEvidenceIntegrityIssues(run, parsedJson))
+    try {
+      issues.push(...await semanticEvidenceRenditionIssues({
+        runId: run.runId,
+        semanticDocument: parsedJson,
+      }))
+    } catch (error) {
+      issues.push(`could not verify semantic official-rendition coverage: ${error instanceof Error ? error.message : String(error)}`)
+    }
   }
 
   if (run.stage === "ARCHITECTURE_CRITIQUE") {

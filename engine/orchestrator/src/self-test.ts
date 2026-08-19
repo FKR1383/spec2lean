@@ -354,6 +354,30 @@ assert(
     normalizeLeanStatementSurfaceSyntax(String.raw`p \u2228 q`) === "p ∨ q",
   "theorem contract canonicalizes JSON escapes and parser-equivalent Lean operators",
 )
+const layoutOnlyContract = validateTheoremObligationDocument({
+  schema_version: 1,
+  theorem_obligations: [{
+    obligation_id: "T-LAYOUT",
+    lean_statement_sketch: [
+      "theorem layout_only (n : Nat) :",
+      "  n = (let x := n",
+      "       x)",
+    ].join("\n"),
+  }],
+})
+assert(
+  layoutOnlyContract.issues.length === 0 &&
+    compareProofWithApprovedTheorems(
+      layoutOnlyContract.declarations,
+      [
+        "theorem layout_only (n : Nat) : n = (",
+        "  let x := n",
+        "  x",
+        ") := by rfl",
+      ].join("\n"),
+    ).length === 0,
+  "theorem contract ignores parser-equivalent whitespace next to delimiters",
+)
 assert(
   theoremContractEncodingIssues(escapedOperatorInput).some((issue) =>
     issue.includes("literal \\uXXXX escape")
@@ -731,6 +755,11 @@ assert(
 )
 assert(canTransition("ARCHITECTURE_CRITIQUE", "WAITING_GATE_A"), "Gate A transition")
 assert(!canTransition("ARCHITECTURE", "LEAN_FORMALIZATION"), "illegal stage skip rejected")
+assert(
+  canTransition("LEAN_FORMALIZATION", "SOURCE_CURATION") &&
+    canTransition("PROOF_GENERATION", "SOURCE_CURATION"),
+  "downstream deterministic provenance failures can return to their source owner",
+)
 assert(
   !providerRetryBudgetExceeded(1_000, 60_999, DEFAULT_PROVIDER_RETRY_BUDGET_MS),
   "provider retry remains active before the bounded budget",
@@ -1355,8 +1384,8 @@ for (const agentFile of agentFiles) {
   assert(!text.includes("Do not prove properties for another PTX instruction."), `${agentFile} no stale proof lock`)
 }
 assert(
-  (await loadAgentModel("proof-engineer")).full === "openai/gpt-5.3-codex-spark",
-  "proof engineer uses the configured Spark benchmark model",
+  (await loadAgentModel("proof-engineer")).full === "openai/gpt-5.4-mini",
+  "proof engineer uses the configured GPT-5.4 mini benchmark model",
 )
 for (const criticAgent of [
   "architecture-critic",
@@ -1734,6 +1763,47 @@ const compactArchitectureFixture = [
 assert(
   validateArtifactContent({ stage: "ARCHITECTURE" } as RunState, compactArchitectureFixture).length === 0,
   "architecture validator accepts the exact plural Design dependencies heading",
+)
+const sourceBundleWithoutPdfFragment = {
+  schema_version: 2,
+  bundle_id: "fixture",
+  language: "ptx",
+  specification_version: "9.3",
+  unit: "fixture.b32",
+  source_documents: [
+    {
+      document_id: "html",
+      publisher: "NVIDIA",
+      kind: "HTML",
+      local_path: "documents/fixture.html",
+      sha256: "a".repeat(64),
+    },
+    {
+      document_id: "pdf",
+      publisher: "NVIDIA",
+      kind: "PDF",
+      local_path: "documents/fixture.pdf",
+      sha256: "b".repeat(64),
+    },
+  ],
+  fragments: [{
+    fragment_id: "F-HTML",
+    document_id: "html",
+    source_kind: "HTML",
+    source_sha256: "a".repeat(64),
+    exact_quote: "four stable source tokens",
+    reason_for_inclusion: "fixture",
+    locator: { anchor: "fixture" },
+  }],
+  evidence_gaps: [],
+}
+assert(
+  validateArtifactContent(
+    { stage: "SOURCE_CURATION" } as RunState,
+    JSON.stringify(sourceBundleWithoutPdfFragment),
+    sourceBundleWithoutPdfFragment,
+  ).some((issue) => issue.includes("contains no PDF evidence fragment")),
+  "source bundle cannot claim an official rendition without any evidence from it",
 )
 assert(
   artifactBudgetIssues(

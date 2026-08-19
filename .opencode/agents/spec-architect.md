@@ -1,7 +1,7 @@
 ---
 description: Defines a bounded formalization architecture while separating official facts, derivations, project design, assumptions, and open questions
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 24
 permission:

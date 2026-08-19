@@ -93,6 +93,13 @@ function validateSourceBundle(document: unknown): string[] {
     if (!Array.isArray(document.fragments) || document.fragments.length === 0) {
       issues.push("source bundle v2 must contain a non-empty fragments array")
     } else {
+      const declaredKinds = new Set(
+        (Array.isArray(document.source_documents) ? document.source_documents : [])
+          .filter(isRecord)
+          .map((source) => String(source.kind ?? "").toUpperCase())
+          .filter((kind) => kind === "HTML" || kind === "PDF"),
+      )
+      const evidencedKinds = new Set<string>()
       const fragmentIds = new Set<string>()
       for (const [index, fragment] of document.fragments.entries()) {
         if (!isRecord(fragment)) {
@@ -134,6 +141,8 @@ function validateSourceBundle(document: unknown): string[] {
         }
         if (!["PDF", "HTML"].includes(String(fragment.source_kind))) {
           issues.push(`fragment ${index} has invalid source_kind; expected PDF|HTML`)
+        } else {
+          evidencedKinds.add(String(fragment.source_kind))
         }
         if (!nonEmptyString(fragment.exact_quote)) issues.push(`fragment ${index} has no exact_quote`)
         if (!nonEmptyString(fragment.source_sha256) || !/^[a-f0-9]{64}$/i.test(fragment.source_sha256)) {
@@ -144,6 +153,11 @@ function validateSourceBundle(document: unknown): string[] {
         }
         if (!isRecord(fragment.locator) || Object.keys(fragment.locator).length === 0) {
           issues.push(`fragment ${index} has no non-empty locator`)
+        }
+      }
+      for (const kind of declaredKinds) {
+        if (!evidencedKinds.has(kind)) {
+          issues.push(`source bundle declares an official ${kind} rendition but contains no ${kind} evidence fragment`)
         }
       }
     }

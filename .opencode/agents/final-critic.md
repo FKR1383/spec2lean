@@ -1,7 +1,7 @@
 ---
 description: Performs the final independent aggregation check over reviewed artifacts, Lean proofs, and deterministic traceability
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 40
 permission:

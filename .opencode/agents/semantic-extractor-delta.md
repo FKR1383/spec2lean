@@ -1,7 +1,7 @@
 ---
 description: Produces a typed unit semantic delta against an eligible human-approved shared environment
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 40
 permission:

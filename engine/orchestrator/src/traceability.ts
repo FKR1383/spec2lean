@@ -626,6 +626,110 @@ export type BuildTraceabilityInput = {
   includePdfRenditions?: boolean
 }
 
+export type SemanticEvidenceRenditionInput = {
+  runId: string
+  semanticDocument?: unknown
+  semanticPath?: string
+  sourceBundlePaths?: string[]
+  includePdfRenditions?: boolean
+}
+
+/**
+ * Validate claim-level official-rendition coverage before Lean is generated.
+ * This deliberately uses the same PDF alignment mechanism as the final
+ * traceability manifest, so an HTML quotation that deterministically aligns
+ * to the official PDF is accepted rather than forcing duplicate evidence.
+ */
+export async function semanticEvidenceRenditionIssues(
+  input: SemanticEvidenceRenditionInput,
+): Promise<string[]> {
+  const run = await loadRun(input.runId)
+  const semanticPath = input.semanticPath ?? await latestVersionedFile(
+    `${run.artifactRoot}/semantics`,
+    [/^semantics-v(\d+)\.json$/],
+  )
+  const semanticDocument = input.semanticDocument ?? JSON.parse(
+    (await readRepositoryFile(semanticPath)).toString("utf8"),
+  ) as unknown
+  if (!isRecord(semanticDocument) || semanticDocument.schemaVersion !== 2 ||
+    !Array.isArray(semanticDocument.semanticClaims)) return []
+
+  const sourceBundlePaths = input.sourceBundlePaths ?? [await latestVersionedFile(
+    `${run.artifactRoot}/source-bundles`,
+    [/^source-bundle-v(\d+)\.json$/],
+  )]
+  const claims = new Map<string, TraceabilityClaim>()
+  collectClaims(semanticDocument, semanticPath, claims)
+  const evidence = new Map<string, TraceabilityEvidence>()
+  for (const path of sourceBundlePaths) {
+    const bundle = JSON.parse((await readRepositoryFile(path)).toString("utf8")) as unknown
+    for (const [id, item] of collectEvidence(bundle)) evidence.set(id, item)
+  }
+
+  const sourceManifestPath = run.sourceManifest ?? (
+    run.language.toLowerCase() === "ptx"
+      ? `documents/sources/nvidia/ptx/${run.specVersion}/source-manifest.json`
+      : undefined
+  )
+  if (sourceManifestPath === undefined) throw new Error("Run has no source manifest")
+  const sourceManifest = await fingerprint(sourceManifestPath)
+  const sourceManifestValue = JSON.parse(
+    (await readRepositoryFile(sourceManifestPath)).toString("utf8"),
+  ) as UnknownRecord
+  const officialKinds = new Set(
+    (Array.isArray(sourceManifestValue.artifacts) ? sourceManifestValue.artifacts : [])
+      .filter(isRecord)
+      .map((artifact) => String(artifact.kind ?? "").toUpperCase())
+      .filter((kind): kind is "HTML" | "PDF" => kind === "HTML" || kind === "PDF"),
+  )
+  const includePdf = input.includePdfRenditions ?? true
+  let pdfAlignment: Awaited<ReturnType<typeof alignEvidenceToOfficialPdf>> | undefined
+  let pdfAlignmentFailure: string | undefined
+  if (includePdf && officialKinds.has("PDF")) {
+    try {
+      pdfAlignment = await alignEvidenceToOfficialPdf({
+        evidence: [...evidence.values()],
+        sourceManifestPath: sourceManifest.path,
+        sourceManifestSha256: sourceManifest.sha256,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (!message.includes("no hash-bound official PDF artifact")) pdfAlignmentFailure = message
+    }
+  }
+  const pdfAlignedIds = new Set(
+    (pdfAlignment?.renditions ?? []).flatMap((item) =>
+      item.alignedFromEvidenceId === undefined ? [] : [item.alignedFromEvidenceId]
+    ),
+  )
+  const sourceFacts = [...claims.values()].filter((claim) =>
+    claim.classification === "SOURCE_FACT" && claim.origin === "SEMANTICS"
+  )
+  const hasKind = (claim: TraceabilityClaim, kind: "HTML" | "PDF"): boolean =>
+    claim.evidenceIds.some((id) =>
+      evidence.get(id)?.sourceKind === kind || (kind === "PDF" && pdfAlignedIds.has(id))
+    )
+  const issues: string[] = []
+  for (const claim of sourceFacts) {
+    if (!claim.evidenceIds.some((id) => {
+      const kind = evidence.get(id)?.sourceKind
+      return kind === "HTML" || kind === "PDF"
+    })) {
+      issues.push(`semantic SOURCE_FACT has no official HTML/PDF evidence: ${claim.semanticId}`)
+    }
+    if (officialKinds.has("HTML") && !hasKind(claim, "HTML")) {
+      issues.push(`semantic SOURCE_FACT lacks required official HTML evidence: ${claim.semanticId}`)
+    }
+    if (includePdf && officialKinds.has("PDF") && !hasKind(claim, "PDF")) {
+      issues.push(`semantic SOURCE_FACT lacks required official PDF evidence: ${claim.semanticId}`)
+    }
+  }
+  if (pdfAlignmentFailure !== undefined) {
+    issues.push(`official PDF alignment failed: ${pdfAlignmentFailure}`)
+  }
+  return uniqueSorted(issues)
+}
+
 export async function buildTraceabilityManifest(
   input: BuildTraceabilityInput,
 ): Promise<TraceabilityManifest> {

@@ -1,7 +1,7 @@
 ---
 description: Repairs bounded technical Lean failures while routing semantic and architectural failures back to review
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 48
 permission:

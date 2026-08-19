@@ -1,7 +1,7 @@
 ---
 description: Implements one Gate-B-authorized semantic unit as traceable Lean definitions without changing its meaning
 mode: primary
-model: openai/gpt-5.3-codex-spark
+model: openai/gpt-5.4-mini
 temperature: 0
 steps: 72
 permission:
