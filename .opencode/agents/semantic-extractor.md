@@ -79,6 +79,15 @@ DESIGN_DEPENDENCY/ASSUMPTION, dependencies to the supporting facts, and must be
 visible in scope/preconditions. Every SOURCE_FACT evidence ID must resolve to
 the current bundle.
 
+For every SOURCE_FACT, establish claim-level coverage for every official
+rendition required by the source manifest. Cite exact current-bundle HTML and
+PDF fragment IDs when both exist; an exact HTML quotation is sufficient for
+the PDF side only when `candidate_validate` confirms deterministic PDF
+alignment. A PDF document record alone is not evidence. If the current bundle
+cannot supply a required rendition for a claim, return REVISE to
+SOURCE_CURATION with the exact missing fact instead of changing fragment IDs
+or weakening the claim.
+
 Also perform a gain check: every semantic constructor, branch, precondition,
 state component, nondeterministic choice, or error outcome must be supported by
 a SOURCE_FACT dependency or explicit Gate-A-authorized project boundary. A

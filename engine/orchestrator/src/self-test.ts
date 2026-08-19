@@ -45,6 +45,7 @@ import {
   poolForStage,
   selectPipelineCandidate,
 } from "./pipeline-config.js"
+import { stageRevisionCount } from "./pipeline-runtime.js"
 import {
   normalizeCriticResultFromReview,
   reviewFindingAccountabilityIssues,
@@ -86,6 +87,8 @@ import {
   buildGeneralPrompt,
   buildTheoremStrengthContractContext,
   executionAgentForRun,
+  shouldPreflightExistingSemanticEvidence,
+  shouldRecoverStaleSemanticPreflight,
 } from "./runner.js"
 import {
   compareProofWithApprovedTheorems,
@@ -757,8 +760,77 @@ assert(canTransition("ARCHITECTURE_CRITIQUE", "WAITING_GATE_A"), "Gate A transit
 assert(!canTransition("ARCHITECTURE", "LEAN_FORMALIZATION"), "illegal stage skip rejected")
 assert(
   canTransition("LEAN_FORMALIZATION", "SOURCE_CURATION") &&
-    canTransition("PROOF_GENERATION", "SOURCE_CURATION"),
-  "downstream deterministic provenance failures can return to their source owner",
+    canTransition("PROOF_GENERATION", "SOURCE_CURATION") &&
+    canTransition("LEAN_FORMALIZATION", "SEMANTIC_EXTRACTION") &&
+    canTransition("PROOF_GENERATION", "SEMANTIC_EXTRACTION"),
+  "downstream deterministic provenance failures can return to semantic or source ownership",
+)
+assert(
+  !shouldPreflightExistingSemanticEvidence({
+    stage: "SEMANTIC_EXTRACTION",
+    semanticV2: { mode: "LEGACY_FALLBACK" },
+  }) &&
+    shouldPreflightExistingSemanticEvidence({
+      stage: "LEAN_FORMALIZATION",
+      semanticV2: { mode: "LEGACY_FALLBACK" },
+    }),
+  "fresh source bundles reach the semantic producer before stale-semantics evidence validation",
+)
+assert(
+  stageRevisionCount({
+    executions: [
+      {
+        at: "2026-01-01T00:00:00.000Z",
+        stage: "SEMANTIC_EXTRACTION",
+        agent: "orchestrator-evidence-preflight",
+        sessionId: "local",
+        outcome: "REVISE",
+        nextStage: "SOURCE_CURATION",
+        response: "stale semantics fixture",
+      },
+      {
+        at: "2026-01-01T00:00:01.000Z",
+        stage: "SEMANTIC_EXTRACTION",
+        agent: "orchestrator-evidence-preflight",
+        sessionId: "local",
+        outcome: "REVISE",
+        nextStage: "SOURCE_CURATION",
+        response: "stale semantics fixture",
+      },
+    ],
+  } as RunState) === 0,
+  "deterministic evidence routing does not consume semantic critic revision budget",
+)
+const stalePreflightRun = pipelineRun("stale", "SOURCE_CURATION")
+stalePreflightRun.executions = [
+  {
+    at: "2026-01-01T00:00:00.000Z",
+    stage: "SOURCE_CURATION",
+    agent: "source-curator-fast",
+    sessionId: "fixture",
+    outcome: "SUCCESS",
+    nextStage: "SEMANTIC_EXTRACTION",
+    response: "validated replacement source bundle",
+  },
+  {
+    at: "2026-01-01T00:00:01.000Z",
+    stage: "SEMANTIC_EXTRACTION",
+    agent: "orchestrator-evidence-preflight",
+    sessionId: "local",
+    outcome: "REVISE",
+    nextStage: "SOURCE_CURATION",
+    response: "semantic SOURCE_FACT references old fragment IDs",
+  },
+]
+stalePreflightRun.history = [{
+  at: "2026-01-01T00:00:01.000Z",
+  from: "SEMANTIC_EXTRACTION",
+  to: "SOURCE_CURATION",
+  reason: "deterministic evidence preflight routed the repair to source curation: stale fixture",
+}]
+assert(
+  shouldRecoverStaleSemanticPreflight(stalePreflightRun),
+  "runs stranded by the old stale-semantics preflight resume at the semantic producer without another source rewrite",
 )
 assert(
   !providerRetryBudgetExceeded(1_000, 60_999, DEFAULT_PROVIDER_RETRY_BUDGET_MS),

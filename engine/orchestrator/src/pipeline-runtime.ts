@@ -280,11 +280,14 @@ async function failedPipelineJob(
   }
 }
 
-function stageRevisionCount(run: RunState): number {
+export function stageRevisionCount(run: RunState): number {
   const last = run.executions?.at(-1)
   if (last?.outcome !== "REVISE") return 0
   return (run.executions ?? []).filter(
-    (execution) => execution.stage === last.stage && execution.outcome === "REVISE",
+    (execution) =>
+      execution.stage === last.stage &&
+      execution.outcome === "REVISE" &&
+      execution.agent !== "orchestrator-evidence-preflight",
   ).length
 }
 

@@ -77,6 +77,7 @@ export const STAGE_PLANS:
     ],
     task: [
       "Produce canonical bounded semantics from the exact curated evidence and Gate-A-authorized architecture.",
+      "For every SOURCE_FACT, cite current-bundle evidence that covers every official rendition required by the source manifest; direct PDF fragments or deterministic PDF alignment from an exact HTML quotation are acceptable.",
       "Separate source facts, derived interpretations, design dependencies,",
       "human-approved assumptions, and open questions.",
       "Do not fabricate semantics.",

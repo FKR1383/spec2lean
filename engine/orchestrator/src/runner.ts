@@ -77,7 +77,7 @@ type TraceabilityExecutionMetrics = NonNullable<
   NonNullable<RunState["executions"]>[number]["traceability"]
 >
 
-function resetGatesAfterSourceRepair(run: RunState): RunState {
+function resetGatesAfterSemanticRepair(run: RunState): RunState {
   return {
     ...run,
     gates: {
@@ -95,6 +95,35 @@ function isOfficialRenditionIssue(issue: string): boolean {
     issue.startsWith("semantic SOURCE_FACT lacks required official PDF evidence:") ||
     issue.startsWith("semantic SOURCE_FACT has no official HTML/PDF evidence:") ||
     issue.startsWith("official PDF alignment failed:")
+}
+
+export function shouldPreflightExistingSemanticEvidence(
+  run: {
+    stage: FormalizationStage
+    semanticV2?: { mode: NonNullable<RunState["semanticV2"]>["mode"] }
+  },
+): boolean {
+  // At SEMANTIC_EXTRACTION the latest semantics may intentionally be stale:
+  // SOURCE_CURATION can have just written a new immutable bundle with new
+  // fragment IDs. The semantic producer must get one chance to bind the new
+  // bundle before claim-level rendition validation runs.
+  return run.semanticV2?.mode !== "DELTA_FAST_PATH" &&
+    (run.stage === "LEAN_FORMALIZATION" || run.stage === "PROOF_GENERATION")
+}
+
+export function shouldRecoverStaleSemanticPreflight(run: RunState): boolean {
+  const lastExecution = run.executions?.at(-1)
+  const precedingExecution = run.executions?.at(-2)
+  const lastEvent = run.history.at(-1)
+  return run.stage === "SOURCE_CURATION" &&
+    precedingExecution?.stage === "SOURCE_CURATION" &&
+    precedingExecution.outcome === "SUCCESS" &&
+    lastExecution?.agent === "orchestrator-evidence-preflight" &&
+    lastExecution.stage === "SEMANTIC_EXTRACTION" &&
+    lastExecution.outcome === "REVISE" &&
+    lastEvent?.from === "SEMANTIC_EXTRACTION" &&
+    lastEvent.to === "SOURCE_CURATION" &&
+    lastEvent.reason.startsWith("deterministic evidence preflight routed the repair to source curation:")
 }
 
 async function generateVerifiedTraceability(
@@ -234,7 +263,13 @@ function repairContractLines(run: RunState): string[] {
     },
     SEMANTIC_EXTRACTION: {
       pattern: `${run.artifactRoot}/reviews/semantics-critic-v*.md`,
-      from: ["SEMANTIC_CRITIQUE", "WAITING_GATE_B", "BLOCKED"],
+      from: [
+        "SEMANTIC_CRITIQUE",
+        "WAITING_GATE_B",
+        "LEAN_FORMALIZATION",
+        "PROOF_GENERATION",
+        "BLOCKED",
+      ],
     },
     LEAN_FORMALIZATION: {
       pattern: `${run.artifactRoot}/reviews/lean-mapping-critic-v*.md`,
@@ -744,10 +779,52 @@ export async function executeTick(
   const dryRun = options.dryRun ?? false
   let run = await loadRun(runId)
 
-  if (
-    run.semanticV2?.mode !== "DELTA_FAST_PATH" &&
-    ["SEMANTIC_EXTRACTION", "LEAN_FORMALIZATION", "PROOF_GENERATION"].includes(run.stage)
-  ) {
+  if (shouldRecoverStaleSemanticPreflight(run)) {
+    const summary =
+      "Recovered a source bundle that was already validated before a stale-semantics preflight; " +
+      "the semantic producer must now bind its SOURCE_FACT evidence IDs to that bundle."
+    if (dryRun) {
+      console.log(JSON.stringify({
+        dryRun: true,
+        runId: run.runId,
+        stage: run.stage,
+        localRecoveryTo: "SEMANTIC_EXTRACTION",
+        summary,
+      }, null, 2))
+      return
+    }
+    const next = transitionRun(run, "SEMANTIC_EXTRACTION", summary)
+    const saved = {
+      ...next,
+      activeExecution: undefined,
+      executions: [
+        ...(run.executions ?? []),
+        {
+          at: new Date().toISOString(),
+          stage: "SOURCE_CURATION" as const,
+          agent: "orchestrator-stale-semantics-recovery",
+          sessionId: "local",
+          outcome: "SUCCESS",
+          nextStage: "SEMANTIC_EXTRACTION" as const,
+          response: summary,
+        },
+      ],
+    }
+    await saveRun(saved)
+    console.log(JSON.stringify({
+      ok: true,
+      runId: saved.runId,
+      agent: "orchestrator-stale-semantics-recovery",
+      outcome: "SUCCESS",
+      fromStage: "SOURCE_CURATION",
+      toStage: "SEMANTIC_EXTRACTION",
+      revision: saved.revision,
+      summary,
+    }, null, 2))
+    return
+  }
+
+  if (shouldPreflightExistingSemanticEvidence(run)) {
     let evidenceIssues: string[] = []
     try {
       evidenceIssues = await semanticEvidenceRenditionIssues({ runId: run.runId })
@@ -763,17 +840,17 @@ export async function executeTick(
           dryRun: true,
           runId: run.runId,
           stage: fromStage,
-          localRepairTo: "SOURCE_CURATION",
+          localRepairTo: "SEMANTIC_EXTRACTION",
           issues: evidenceIssues,
         }, null, 2))
         return
       }
       let next = transitionRun(
         run,
-        "SOURCE_CURATION",
-        `deterministic evidence preflight routed the repair to source curation: ${detail}`,
+        "SEMANTIC_EXTRACTION",
+        `deterministic evidence preflight routed the repair to semantic extraction: ${detail}`,
       )
-      next = resetGatesAfterSourceRepair(next)
+      next = resetGatesAfterSemanticRepair(next)
       next = {
         ...next,
         activeExecution: undefined,
@@ -785,7 +862,7 @@ export async function executeTick(
             agent: "orchestrator-evidence-preflight",
             sessionId: "local",
             outcome: "REVISE",
-            nextStage: "SOURCE_CURATION",
+            nextStage: "SEMANTIC_EXTRACTION",
             response: detail,
           },
         ],
@@ -797,7 +874,7 @@ export async function executeTick(
         agent: "orchestrator-evidence-preflight",
         outcome: "REVISE",
         fromStage,
-        toStage: "SOURCE_CURATION",
+        toStage: "SEMANTIC_EXTRACTION",
         revision: next.revision,
         summary: detail,
       }, null, 2))
@@ -1156,11 +1233,15 @@ export async function executeTick(
       if (!verification.ok) {
         const renditionIssues = verification.issues.filter(isOfficialRenditionIssue)
         if (run.stage === "SEMANTIC_EXTRACTION" && renditionIssues.length > 0) {
-          run = resetGatesAfterSourceRepair(run)
-          result = {
-            outcome: "REVISE",
-            nextStage: "SOURCE_CURATION",
-            summary: `Semantic evidence is incomplete; deterministic validation routed the repair to source curation: ${renditionIssues.join(" | ")}`,
+          if (!(result.outcome === "REVISE" && result.nextStage === "SOURCE_CURATION")) {
+            result = {
+              outcome: "RETRY",
+              nextStage: "SEMANTIC_EXTRACTION",
+              summary:
+                "Semantic SOURCE_FACT references do not yet provide the required official-rendition paths. " +
+                "Bind each claim to exact current-bundle HTML/PDF fragment IDs (or an HTML fragment accepted by deterministic PDF alignment). " +
+                `Only route to SOURCE_CURATION if the current bundle cannot supply that evidence: ${renditionIssues.join(" | ")}`,
+            }
           }
         } else {
           result = {
