@@ -20,6 +20,8 @@ output.
 official HTML/PDF specification
         │
         ├─ one-time hash verification and retrieval indexing
+        ├─ reuse approved language/version semantic + Lean core when eligible
+        │  (first unsupported language/version records BOOTSTRAP_CANDIDATE)
         ▼
 bounded architecture ── independent architecture critique ── Human Gate A
         ▼
@@ -36,8 +38,10 @@ accepted, hash-pinned artifact bundle
 
 Every stage is resumable. Candidate revisions are immutable, provider failures
 that write nothing do not inflate artifact versions, and proof work is split
-into bounded batches. The theorem contract requires behavioral operation
-fidelity and execution correspondence, and exact statements are checked
+into bounded batches. New runs default to `FULL_INSTRUCTION`; partial scope
+must be encoded by a named executable precondition rather than prose. The
+theorem contract requires independent algorithm, range, guard, state-update,
+frame, operation-fidelity, and execution-correspondence theorems. Exact statements are checked
 deterministically so a compiling proof cannot add assumptions or weaken an
 approved result.
 
@@ -52,8 +56,9 @@ approved result.
   generated human-review catalog.
 - `.opencode/tools/`: restricted source, candidate, review, and Lean tools used
   by agents instead of unrestricted shell edits.
-- `language_packs/`: versioned acquisition, retrieval, and shared-semantic
-  policy. A language pack is policy, not proof or automatic approval.
+- `language_packs/`: versioned acquisition, retrieval, shared-semantic policy,
+  and optional hash-bound reusable language/version cores. A language pack is
+  policy, not proof or automatic approval.
 - `ir/`: JSON schemas for source bundles, semantic composition, theorem
   contracts, traceability, and feedback.
 - `lean/`: the checked Lean package and only accepted installed modules.
@@ -269,8 +274,8 @@ mapping queue.
 it does not change worker identity. `--agent-workers proof-engineer=2` is an
 explicit per-agent throughput override; every registered role defaults to one.
 The scheduler records durable unit leases and queue/service telemetry, and
-hash-pins the source manifest, retrieval index, semantic profile, and shared
-environment before dispatch. Normal human gates park only their own unit;
+hash-pins the source manifest, retrieval index, semantic profile, shared
+environment, and language core before dispatch. Normal human gates park only their own unit;
 `--auto-approve` retains benchmark-only decision records and never creates a
 human approval. Deterministic Lean checks and declaration/theorem evidence
 manifest generation remain inside their existing stage boundaries.
@@ -279,7 +284,7 @@ resolved. In normal runs it remains a human review boundary. In
 `--auto-approve` benchmark runs, a critic-confirmed genuine question receives
 an immutable non-human `CONSERVATIVE_BOUNDED_SCOPE` waiver: the question stays
 OPEN, disputed cases must be precondition-excluded or modeled as
-partial/underspecified, and the generated module is `BOUNDED_PARTIAL`.
+partial/underspecified, and the generated module is `PARTIAL_EXPLICIT`.
 The waiver is not an NVIDIA fact, human approval, or promotion authority.
 Deterministic readiness failures still produce `PARKED_SEMANTIC_REVIEW`.
 Evidence manifests expose all unresolved questions at run level, and the VS
@@ -302,6 +307,8 @@ unit.
 The GUI does not rediscover evidence. It consumes the immutable manifest
 produced by the pipeline and shows the relationship between a Lean declaration,
 semantic/design claims, exact HTML lines, and matching PDF pages/bounding boxes.
+Schema-v5 manifests also show the completeness matrix, language-core binding,
+encoded exclusions, and required proof kinds.
 
 The simplest launcher packages and installs the local extension, opens the
 repository, and opens a candidate Lean file:
@@ -358,7 +365,7 @@ resolved semantic, source, theorem-obligation, or reviewed architecture-design
 provenance. Older incomplete runs remain inspectable but fail validation until
 their provenance is reviewed and repaired.
 
-Schema-v4 manifests follow each declaration's direct claim IDs transitively
+Schema-v5 manifests follow each declaration's direct claim IDs transitively
 through DERIVED_INTERPRETATION, DESIGN_DEPENDENCY, ASSUMPTION, and
 OPEN_QUESTION dependencies to official SOURCE_FACT fragments or explicit
 project authority. They report source-fact, approval, dependency, and
@@ -370,19 +377,23 @@ renditions instead of inventing a box.
 
 ## Semantic and proof contracts
 
-Source bundle v2 stores hash-pinned source documents, exact quotations,
-locators, inclusion reasons, and explicit load-bearing/non-load-bearing gaps.
-Semantic IR v2 separates `SOURCE_FACT`, `DERIVED_INTERPRETATION`,
+Source bundle v3 stores hash-pinned source documents, exact quotations,
+HTML/PDF locators, a nine-dimension closure matrix, and explicit
+load-bearing/non-load-bearing gaps. Type, operand, and edge-case gaps cannot
+advance. Semantic IR v3 separates `SOURCE_FACT`, `DERIVED_INTERPRETATION`,
 `DESIGN_DEPENDENCY`, `ASSUMPTION`, and `OPEN_QUESTION`, supports a separately
-human-approved shared environment plus unit delta, and deterministically
-materializes the complete review view. Ineligible units fall back to full
-semantics rather than importing out-of-scope shared claims.
+human-approved shared environment plus a hash-bound reusable Lean language core
+and unit delta, and deterministically materializes the complete review view.
+The first unsupported language/version uses `BOOTSTRAP_CANDIDATE`; a human must
+review its shared semantics before later units may reuse it. Ineligible units
+fall back to full semantics rather than importing out-of-scope shared claims.
 
-Theorem contract v2 requires each obligation to carry a correctness kind,
-rationale, exact semantic claim IDs, and a complete frozen Lean declaration.
-Every unit must include genuine `OPERATION_FIDELITY` and
-`EXECUTION_CORRESPONDENCE` obligations; guard, state, frame, determinism,
-partiality, and scope obligations are added when applicable. Proof generation
+Theorem contract v3 maps every semantic proof-requirement ID to exactly one
+independent frozen Lean declaration. Every unit must include genuine
+`OPERATION_FIDELITY`, `ALGORITHM_FIDELITY`, `RESULT_RANGE`, `GUARD_BEHAVIOR`,
+`STATE_UPDATE`, `FRAME_PROPERTY`, and `EXECUTION_CORRESPONDENCE` obligations.
+Specification and implementation symbols must be distinct, and reflexive
+self-unfolding theorems are rejected. Proof generation
 may batch work, but final completion requires every exact declaration,
 compilation, no prohibited bypass, and a valid proof evidence manifest.
 

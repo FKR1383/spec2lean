@@ -115,11 +115,26 @@ export function normalizeInstructionSemanticDelta(
       .map((operand) => ({
         ...withSortedClaimIds(operand),
         legalForms: sortedStrings(operand.legalForms),
+        typeDomains: operand.typeDomains === undefined ? undefined : sortedStrings(operand.typeDomains),
+        coercions: operand.coercions === undefined ? undefined : sortedStrings(operand.coercions),
       }))
       .sort((left, right) =>
         left.position - right.position || left.operandId.localeCompare(right.operandId),
       ),
-    operation: withSortedClaimIds(delta.operation),
+    operation: {
+      ...withSortedClaimIds(delta.operation),
+      inputDomains: delta.operation.inputDomains === undefined
+        ? undefined
+        : [...delta.operation.inputDomains],
+      branches: delta.operation.branches === undefined
+        ? undefined
+        : delta.operation.branches.map(withSortedClaimIds)
+          .sort((left, right) => left.branchId.localeCompare(right.branchId)),
+      edgeCases: delta.operation.edgeCases === undefined
+        ? undefined
+        : delta.operation.edgeCases.map(withSortedClaimIds)
+          .sort((left, right) => left.caseId.localeCompare(right.caseId)),
+    },
     stateEffects: delta.stateEffects
       .map(withSortedClaimIds)
       .sort((left, right) => left.effectId.localeCompare(right.effectId)),
@@ -132,6 +147,17 @@ export function normalizeInstructionSemanticDelta(
         blockedBySemanticIds: sortedStrings(family.blockedBySemanticIds),
       }))
       .sort((left, right) => left.proofFamilyId.localeCompare(right.proofFamilyId)),
+    coverage: delta.coverage === undefined ? undefined : delta.coverage.map((item) => ({
+      ...item,
+      semanticClaimIds: sortedStrings(item.semanticClaimIds),
+      encodedPreconditionIds: sortedStrings(item.encodedPreconditionIds),
+    })).sort((left, right) => left.dimension.localeCompare(right.dimension)),
+    proofRequirements: delta.proofRequirements === undefined
+      ? undefined
+      : delta.proofRequirements.map((item) => ({
+          ...item,
+          semanticClaimIds: sortedStrings(item.semanticClaimIds),
+        })).sort((left, right) => left.requirementId.localeCompare(right.requirementId)),
   }
 }
 

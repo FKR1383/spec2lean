@@ -13,6 +13,10 @@ export type TheoremContract = {
 
 export const CORRECTNESS_KINDS = [
   "OPERATION_FIDELITY",
+  "ALGORITHM_FIDELITY",
+  "RESULT_RANGE",
+  "EDGE_CASE_BEHAVIOR",
+  "TYPE_DOMAIN",
   "EXECUTION_CORRESPONDENCE",
   "GUARD_BEHAVIOR",
   "STATE_UPDATE",
@@ -304,8 +308,8 @@ function obligationRecords(input: unknown): UnknownRecord[] {
 export function validateTheoremObligationDocument(input: unknown): TheoremContract {
   const issues: string[] = []
   if (!isRecord(input)) return { declarations: [], issues: ["obligation artifact must be a JSON object"] }
-  if (input.schema_version !== 1 && input.schema_version !== 2) {
-    issues.push("schema_version must be 1 or 2")
+  if (![1, 2, 3].includes(input.schema_version as number)) {
+    issues.push("schema_version must be 1, 2, or 3")
   }
   if (!Array.isArray(input.theorem_obligations) || input.theorem_obligations.length === 0) {
     issues.push("theorem_obligations must be a non-empty array")
@@ -320,7 +324,7 @@ export function validateTheoremObligationDocument(input: unknown): TheoremContra
     if (typeof obligation.obligation_id !== "string" || obligation.obligation_id.trim().length === 0) {
       issues.push(`theorem obligation ${index} has no obligation_id`)
     }
-    if (input.schema_version === 2) {
+    if (input.schema_version === 2 || input.schema_version === 3) {
       if (!CORRECTNESS_KINDS.includes(obligation.correctness_kind as CorrectnessKind)) {
         issues.push(`${obligationId} has an invalid correctness_kind`)
       } else {
@@ -335,6 +339,15 @@ export function validateTheoremObligationDocument(input: unknown): TheoremContra
       }
       if (typeof obligation.correctness_rationale !== "string" || obligation.correctness_rationale.trim().length < 20) {
         issues.push(`${obligationId} must explain its correctness_rationale`)
+      }
+      if (input.schema_version === 3) {
+        for (const field of ["proof_requirement_ids", "independent_specification_symbols", "implementation_symbols"] as const) {
+          if (!Array.isArray(obligation[field]) ||
+            (field === "proof_requirement_ids" && obligation[field].length === 0) ||
+            obligation[field].some((item) => typeof item !== "string" || item.trim().length === 0)) {
+            issues.push(`${obligationId} must define ${field} as a string array`)
+          }
+        }
       }
     }
     const sketch = obligation.lean_statement_sketch
@@ -353,7 +366,7 @@ export function validateTheoremObligationDocument(input: unknown): TheoremContra
     declarations.push(...extracted)
   }
 
-  if (input.schema_version === 2) {
+  if (input.schema_version === 2 || input.schema_version === 3) {
     for (const kind of REQUIRED_CORRECTNESS_KINDS) {
       if (!correctnessKinds.has(kind)) {
         issues.push(`theorem contract lacks required correctness_kind ${kind}`)
@@ -367,7 +380,7 @@ export function validateTheoremObligationDocument(input: unknown): TheoremContra
       boundary.trim().length < 40
     ) {
       issues.push(
-        "schema_version 2 must state the source_faithfulness_boundary: proofs establish implementation of approved semantics, not truth of source prose",
+        "schema_version 2/3 must state the source_faithfulness_boundary: proofs establish implementation of approved semantics, not truth of source prose",
       )
     }
   }

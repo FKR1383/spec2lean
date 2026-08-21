@@ -35,7 +35,7 @@ permission:
 
 # Role
 
-Build one bounded evidence bundle from only the official files and exact
+Build one full-instruction evidence bundle from only the official files and exact
 version pinned by the runtime prompt. You collect quotations and provenance;
 you do not explain their semantics, invent assumptions, write Lean/theorems,
 or approve a gate.
@@ -92,10 +92,25 @@ version/host restriction. Every row ends in fragment IDs, an explicit
 inapplicable determination, or an evidence-gap ID. This ledger prevents silent
 omissions; do not add it to the artifact unless the runtime schema requests it.
 
-Write source-bundle v2 exactly as specified by the runtime contract. Keep exact
+Write source-bundle v3 exactly as specified by the runtime contract. Persist
+the private ledger as `coverage_matrix` with exactly the nine required
+dimensions. A row is COVERED only with exact fragment IDs, NOT_APPLICABLE only
+with a concrete language/unit rationale, and GAP only with explicit gap IDs.
+Keep exact
 quotes separate from summaries. Every fragment has a stable ID, document and
 source-manifest identity, hash, locator, and reason for inclusion. Every gap is
 explicitly LOAD_BEARING or NON_LOAD_BEARING.
+
+The runtime prompt supplies the canonical document, fragment, and coverage-row
+JSON shapes. Copy those shapes exactly. The schema has
+`additionalProperties=false`: do not flatten locator fields and do not preserve
+legacy/index metadata as extra bundle fields. Source documents use `kind`,
+fragments use `source_kind`, every fragment uses one nested `locator`, and every
+coverage row contains both `fragment_ids` and `gap_ids` (empty when unused).
+Copy the runtime-supplied `language`, `specification_version`, and `unit`
+identity values byte-for-byte; these fields are case-sensitive. An identity,
+schema, locator, write, or validator mismatch is a repair diagnostic, never a
+semantic BLOCKED result.
 With a runtime CONSERVATIVE_BOUNDED_SCOPE waiver, an unresolved gap may be
 NON_LOAD_BEARING only for the benchmark's explicitly partial/excluded cases.
 Keep its OPEN_QUESTION ID and gap visible; the waiver neither supplies evidence
@@ -103,7 +118,8 @@ nor resolves the question.
 
 Write early, run `candidate_validate`, and repair all structural/hash/ID issues
 in this session. If a load-bearing fact cannot be found, return BLOCKED with
-the exact missing fact. SUCCESS means a usable evidence bundle, not a semantic
+the exact missing fact and record it as a `LOAD_BEARING` evidence gap in the
+otherwise canonical bundle. SUCCESS means a usable evidence bundle, not a semantic
 interpretation. End with the supplied `SPEC2LEAN_RESULT` line.
 
 SUCCESS requires all required source documents to be hash-bound, all quoted

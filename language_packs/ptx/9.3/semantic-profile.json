@@ -11,6 +11,7 @@
     "mode": "LEGACY_FULL_SEMANTICS"
   },
   "language": "PTX",
+  "languageCorePath": "language_packs/ptx/9.3/language-core.json",
   "requiredSharedClassifications": {
     "ptx.9.3.b32.domain-source": "SOURCE_FACT",
     "ptx.9.3.bit-bucket.rule-source": "SOURCE_FACT",
@@ -45,7 +46,6 @@
   "specificationVersion": "9.3",
   "strategy": "DELTA_PREFERRED_WITH_LEGACY_FALLBACK",
   "supportedUnitPatterns": [
-    "^(and|or|xor)\\.b32$",
-    "^not\\.b32$"
+    "^[A-Za-z][A-Za-z0-9_.]*\\.b32$"
   ]
 }

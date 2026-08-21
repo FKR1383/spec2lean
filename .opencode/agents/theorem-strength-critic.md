@@ -43,13 +43,24 @@ premises. Look actively for hidden assumptions or a theorem whose premise
 already states its conclusion. Use a minimal Lean probe/counterexample only
 when truth is not syntactically clear; compilation alone does not prove truth.
 
-First audit the schema-v2 correctness contract. Every obligation must have a
+First audit the schema-v3 correctness contract. Every obligation must have a
 valid `correctness_kind`, meaningful rationale, and exact semantic claim IDs.
-The set must include genuine OPERATION_FIDELITY and
+The set must include genuine OPERATION_FIDELITY, ALGORITHM_FIDELITY,
+RESULT_RANGE, GUARD_BEHAVIOR, STATE_UPDATE, FRAME_PROPERTY, and
 EXECUTION_CORRESPONDENCE statements. Reject a relabeled syntax/type/reflexivity
 lemma that does not establish its advertised kind. Verify the stated
 source-faithfulness boundary: proofs implement approved semantic IR; they do
 not prove the publisher prose itself.
+
+Require exact coverage of every semantics `proofRequirements` kind. For
+each requirement ID, require exactly one distinct obligation with the same kind
+and all of the requirement's semantic claim IDs. For
+OPERATION_FIDELITY, ALGORITHM_FIDELITY, RESULT_RANGE, and EDGE_CASE_BEHAVIOR,
+the independent specification and implementation symbol sets must be nonempty,
+distinct, and both occur in the theorem. Reject an implementation definition
+unfolded against itself. EXECUTION_CORRESPONDENCE must mention both executable
+and relational definitions from the Lean model contract; a constructor
+characterization of the relation alone is insufficient.
 
 Review with a semantic-to-theorem matrix:
 
@@ -59,7 +70,7 @@ Review with a semantic-to-theorem matrix:
   actual operation and authorized guards/state/errors, rather than assuming the
   conclusion;
 - guard, update, frame, determinism, and partiality obligations cover applicable
-  branches without overclaiming BOUNDED_PARTIAL scope;
+  branches without overclaiming PARTIAL_EXPLICIT scope;
 - semantic IDs actually justify each theorem statement and later provide a
   complete evidence-manifest path.
 
@@ -68,6 +79,14 @@ premises, relation hypotheses identical to conclusions, unconstrained outputs,
 existentials satisfied by arbitrary witnesses, and determinism claims made
 trivial by functional definitions without testing semantic correspondence.
 Truth is necessary; strength and relevance are separate requirements.
+
+For every declaration with a runtime-supplied deterministic behavior-branch
+inventory, inspect every exact branch ID. Check the theorem premises against
+that constructor/pattern, including positive versus negated guards and absent
+guards. Emit the required `SPEC2LEAN_THEOREM_BEHAVIOR_AUDIT` JSON block. Mark
+PASS only after every listed branch is compatible with the conclusion and use
+`counterexample: "NONE_FOUND"`; otherwise mark FAIL, give the smallest concrete
+constructor/input counterexample, and record a BLOCKER or MAJOR finding.
 
 The review must reproduce exactly the supplied audit header:
 

@@ -14,7 +14,7 @@
     "evidence_gaps"
   ],
   "properties": {
-    "schema_version": { "const": 2 },
+    "schema_version": { "enum": [2, 3] },
     "bundle_id": { "type": "string", "minLength": 1 },
     "language": { "type": "string", "minLength": 1 },
     "specification_version": { "type": "string", "minLength": 1 },
@@ -86,6 +86,29 @@
           "impact": { "enum": ["LOAD_BEARING", "NON_LOAD_BEARING"] }
         }
       }
+    },
+    "coverage_matrix": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["dimension", "status", "fragment_ids", "gap_ids", "rationale"],
+        "properties": {
+          "dimension": { "enum": ["SYNTAX", "OPERANDS", "TYPES", "OPERATION_BRANCHES", "EDGE_CASES", "GUARDS", "STATE_EFFECTS", "ERRORS", "VERSION_APPLICABILITY"] },
+          "status": { "enum": ["COVERED", "NOT_APPLICABLE", "GAP"] },
+          "fragment_ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+          "gap_ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+          "rationale": { "type": "string", "minLength": 1 }
+        }
+      }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "schema_version": { "const": 3 } } },
+      "then": { "required": ["coverage_matrix"] }
+    }
+  ]
 }

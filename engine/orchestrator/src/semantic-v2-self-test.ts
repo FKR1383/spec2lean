@@ -66,6 +66,7 @@ function fixtureProfile(shared: SharedSemanticEnvironment): SemanticProfile {
     schemaVersion: 1,
     language: "PTX",
     specificationVersion: "9.3",
+    languageCorePath: "language_packs/ptx/9.3/language-core.json",
     strategy: "DELTA_PREFERRED_WITH_LEGACY_FALLBACK",
     sharedEnvironmentPath: "tests/fixtures/semantic-ir/shared-environment.valid.json",
     supportedUnitPatterns: ["^and\\.b32$"],
@@ -146,6 +147,26 @@ export async function runSemanticV2SelfTests(): Promise<{
     artifactContractForRun(fastRun).outputPath.endsWith("semantic-delta-v1.json"),
     "fast extraction contract requests a delta",
   )
+  const repairRun = await prepareSemanticV2Run({
+    ...fastRun,
+    executions: [{
+      startedAt: "2026-01-01T00:00:01.000Z",
+      at: "2026-01-01T00:00:02.000Z",
+      stage: "SEMANTIC_EXTRACTION",
+      agent: "semantic-extractor-delta",
+      sessionId: "semantic-v2-repair-fixture",
+      outcome: "RETRY",
+      nextStage: "SEMANTIC_EXTRACTION",
+      response: "mandatory proof requirement missing",
+      artifactProduced: true,
+    }],
+  })
+  assert(
+    repairRun.semanticV2?.current?.attempt === 2 &&
+      repairRun.semanticV2.current.deltaPath.endsWith("semantic-delta-v2.json") &&
+      repairRun.semanticV2.events.at(-1)?.kind === "REPAIR_ATTEMPT",
+    "failed delta validation advances to a new immutable repair revision",
+  )
   const fastPrompt = buildGeneralPrompt(fastRun)
   assert(
     fastPrompt.includes("Generate ONLY the typed instruction-specific semantic delta"),
@@ -218,9 +239,9 @@ export async function runSemanticV2SelfTests(): Promise<{
   )
   const fallbackPrompt = buildGeneralPrompt(fallbackRun)
   assert(
-    fallbackPrompt.includes("Explicit Semantic v2 Fallback") &&
-      fallbackPrompt.includes("existing complete legacy semantic interpretation"),
-    "legacy full semantic fallback remains executable",
+    fallbackPrompt.includes("Explicit Semantic v3 Full-Semantics Fallback") &&
+      fallbackPrompt.includes("complete schemaVersion=3 full-instruction semantics"),
+    "full-semantics v3 fallback remains executable",
   )
   const fallbackTelemetry = semanticV2Telemetry(fallbackRun)
   assert(
@@ -243,7 +264,7 @@ export async function runSemanticV2SelfTests(): Promise<{
   assert(
     productionRun.semanticV2?.mode === "DELTA_FAST_PATH" &&
       artifactContractForRun(productionRun).outputPath.endsWith("semantic-delta-v1.json") &&
-      buildGeneralPrompt(productionRun).includes("Semantic Architecture v2 — DELTA FAST PATH"),
+      buildGeneralPrompt(productionRun).includes("Semantic Architecture v3 — LANGUAGE-CORE DELTA FAST PATH"),
     "current production profile executes the bounded delta semantic path",
   )
 

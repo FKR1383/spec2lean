@@ -103,7 +103,20 @@
     "operation": { "$ref": "#/$defs/operation" },
     "stateEffects": { "$ref": "#/$defs/stateEffects" },
     "preconditions": { "$ref": "#/$defs/preconditions" },
-    "proofFamilies": { "$ref": "#/$defs/proofFamilies" }
+    "proofFamilies": { "$ref": "#/$defs/proofFamilies" },
+    "scopeStatus": { "enum": ["FULL_INSTRUCTION", "PARTIAL_EXPLICIT"] },
+    "coverage": { "$ref": "#/$defs/completenessCoverage" },
+    "proofRequirements": { "$ref": "#/$defs/proofRequirements" }
+    ,"languageCore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "path", "sha256"],
+      "properties": {
+        "status": { "const": "REUSED_APPROVED" },
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" }
+      }
+    }
   },
   "$defs": {
     "claimIds": {
@@ -136,6 +149,8 @@
           "position": { "type": "integer", "minimum": 0 },
           "role": { "enum": ["DESTINATION", "SOURCE", "GUARD", "MODIFIER", "OTHER"] },
           "legalForms": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "typeDomains": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+          "coercions": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
           "semanticClaimIds": { "$ref": "#/$defs/claimIds" }
         }
       }
@@ -148,6 +163,36 @@
         "operationId": { "type": "string", "minLength": 1 },
         "normalizedMeaning": { "type": "string", "minLength": 1 },
         "pseudocode": { "type": "string" },
+        "inputDomains": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "outputDomain": { "type": "string", "minLength": 1 },
+        "branches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["branchId", "condition", "result", "semanticClaimIds"],
+            "properties": {
+              "branchId": { "type": "string", "minLength": 1 },
+              "condition": { "type": "string", "minLength": 1 },
+              "result": { "type": "string", "minLength": 1 },
+              "semanticClaimIds": { "$ref": "#/$defs/claimIds" }
+            }
+          }
+        },
+        "edgeCases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["caseId", "inputClass", "behavior", "semanticClaimIds"],
+            "properties": {
+              "caseId": { "type": "string", "minLength": 1 },
+              "inputClass": { "type": "string", "minLength": 1 },
+              "behavior": { "type": "string", "minLength": 1 },
+              "semanticClaimIds": { "$ref": "#/$defs/claimIds" }
+            }
+          }
+        },
         "semanticClaimIds": { "$ref": "#/$defs/claimIds" }
       }
     },
@@ -191,6 +236,38 @@
           "description": { "type": "string", "minLength": 1 },
           "semanticClaimIds": { "$ref": "#/$defs/claimIds" },
           "blockedBySemanticIds": { "$ref": "#/$defs/claimIds" }
+        }
+      }
+    },
+    "completenessCoverage": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["dimension", "status", "semanticClaimIds", "encodedPreconditionIds", "rationale"],
+        "properties": {
+          "dimension": { "enum": ["SYNTAX", "OPERANDS", "TYPES", "OPERATION_BRANCHES", "EDGE_CASES", "GUARDS", "STATE_EFFECTS", "ERRORS", "VERSION_APPLICABILITY"] },
+          "status": { "enum": ["COVERED", "NOT_APPLICABLE", "EXCLUDED_BY_ENCODED_PRECONDITION"] },
+          "semanticClaimIds": { "$ref": "#/$defs/claimIds" },
+          "encodedPreconditionIds": { "$ref": "#/$defs/claimIds" },
+          "rationale": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "proofRequirements": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["requirementId", "correctnessKind", "semanticClaimIds", "rationale"],
+        "properties": {
+          "requirementId": { "type": "string", "minLength": 1 },
+          "correctnessKind": { "enum": ["OPERATION_FIDELITY", "ALGORITHM_FIDELITY", "RESULT_RANGE", "EDGE_CASE_BEHAVIOR", "TYPE_DOMAIN", "EXECUTION_CORRESPONDENCE", "GUARD_BEHAVIOR", "STATE_UPDATE", "FRAME_PROPERTY", "DETERMINISM", "PARTIALITY", "SCOPE_BOUNDARY"] },
+          "semanticClaimIds": { "$ref": "#/$defs/claimIds" },
+          "rationale": { "type": "string", "minLength": 1 }
         }
       }
     }

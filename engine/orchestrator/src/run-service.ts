@@ -29,6 +29,7 @@ export async function createRun(input: CreateRunInput): Promise<RunState> {
 
   const run: RunState = {
     schemaVersion: 1,
+    qualityContractVersion: 1,
     runId,
     mode,
     language: input.language,

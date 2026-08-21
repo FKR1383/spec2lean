@@ -25,6 +25,7 @@ import {
   collectArchitectureProvenanceClaims,
   collectSemanticProvenanceClaims,
 } from "./provenance-catalog.js"
+import { parseLeanModelContract } from "./quality-contract.js"
 
 export type TraceabilityClassification =
   | "SOURCE_FACT"
@@ -110,9 +111,9 @@ export type ArtifactFingerprint = {
 }
 
 export type TraceabilityManifest = {
-  schemaVersion: 4
+  schemaVersion: 5
   manifestType: "spec2lean_evidence_manifest"
-  generator: "spec2lean-traceability-v4"
+  generator: "spec2lean-traceability-v5"
   runId: string
   language: string
   specificationVersion: string
@@ -126,6 +127,13 @@ export type TraceabilityManifest = {
   theoremDocument?: ArtifactFingerprint
   entries: TraceabilityEntry[]
   semanticUncertainties: TraceabilityUncertainty[]
+  qualityContract?: {
+    scopeStatus: string
+    languageCoreStatus: string
+    coverage: Array<{ dimension: string; status: string; rationale: string }>
+    encodedExclusions: string[]
+    proofRequirementKinds: string[]
+  }
   diagnostics: {
     requiredOfficialRenditions: Array<"HTML" | "PDF">
     declarationsWithoutReferences: string[]
@@ -615,6 +623,36 @@ function uniqueSorted(values: string[]): string[] {
   return [...new Set(values)].sort((left, right) => left.localeCompare(right))
 }
 
+function qualityContractSummary(
+  semantics: unknown,
+  leanSource: string,
+): TraceabilityManifest["qualityContract"] {
+  if (!isRecord(semantics) || typeof semantics.scopeStatus !== "string") return undefined
+  const leanContract = parseLeanModelContract(leanSource)
+  const coverage = (Array.isArray(semantics.coverage) ? semantics.coverage : [])
+    .filter(isRecord)
+    .map((item) => ({
+      dimension: String(item.dimension ?? "UNKNOWN"),
+      status: String(item.status ?? "UNKNOWN"),
+      rationale: String(item.rationale ?? ""),
+    }))
+  const proofRequirementKinds = uniqueSorted(
+    (Array.isArray(semantics.proofRequirements) ? semantics.proofRequirements : [])
+      .filter(isRecord)
+      .flatMap((item) => typeof item.correctnessKind === "string" ? [item.correctnessKind] : []),
+  )
+  return {
+    scopeStatus: semantics.scopeStatus,
+    languageCoreStatus: leanContract?.languageCoreStatus ??
+      (isRecord(semantics.languageCore) ? String(semantics.languageCore.status ?? "UNKNOWN") : "UNKNOWN"),
+    coverage,
+    encodedExclusions: uniqueSorted((leanContract?.encodedExclusions ?? []).flatMap((item) =>
+      typeof item.preconditionDeclaration === "string" ? [item.preconditionDeclaration] : []
+    )),
+    proofRequirementKinds,
+  }
+}
+
 export type BuildTraceabilityInput = {
   runId: string
   documentRole?: "SEMANTICS" | "PROOFS"
@@ -651,8 +689,11 @@ export async function semanticEvidenceRenditionIssues(
   const semanticDocument = input.semanticDocument ?? JSON.parse(
     (await readRepositoryFile(semanticPath)).toString("utf8"),
   ) as unknown
-  if (!isRecord(semanticDocument) || semanticDocument.schemaVersion !== 2 ||
-    !Array.isArray(semanticDocument.semanticClaims)) return []
+  if (!isRecord(semanticDocument) ||
+    !(
+      ([2, 3].includes(Number(semanticDocument.schemaVersion)) && Array.isArray(semanticDocument.semanticClaims)) ||
+      (semanticDocument.schemaVersion === 1 && Array.isArray(semanticDocument.claims))
+    )) return []
 
   const sourceBundlePaths = input.sourceBundlePaths ?? [await latestVersionedFile(
     `${run.artifactRoot}/source-bundles`,
@@ -775,8 +816,10 @@ export async function buildTraceabilityManifest(
     theoremPath === undefined ? undefined : readRepositoryFile(theoremPath),
   ])
   const semanticDocument: unknown = JSON.parse(semanticData.toString("utf8"))
-  const strictSemanticIr = isRecord(semanticDocument) && semanticDocument.schemaVersion === 2 &&
-    Array.isArray(semanticDocument.semanticClaims)
+  const strictSemanticIr = isRecord(semanticDocument) && (
+    ([2, 3].includes(Number(semanticDocument.schemaVersion)) && Array.isArray(semanticDocument.semanticClaims)) ||
+    (semanticDocument.schemaVersion === 1 && Array.isArray(semanticDocument.claims))
+  )
   const claims = new Map<string, TraceabilityClaim>()
   collectClaims(semanticDocument, semanticPath, claims)
   const evidence = new Map<string, TraceabilityEvidence>()
@@ -923,9 +966,9 @@ export async function buildTraceabilityManifest(
     .sort((left, right) => left.semanticId.localeCompare(right.semanticId))
 
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     manifestType: "spec2lean_evidence_manifest",
-    generator: "spec2lean-traceability-v4",
+    generator: "spec2lean-traceability-v5",
     runId: run.runId,
     language: run.language,
     specificationVersion: run.specVersion,
@@ -944,6 +987,7 @@ export async function buildTraceabilityManifest(
       : { path: theoremPath, sha256: sha256(theoremData) },
     entries,
     semanticUncertainties,
+    qualityContract: qualityContractSummary(semanticDocument, leanData.toString("utf8")),
     diagnostics: {
       requiredOfficialRenditions,
       declarationsWithoutReferences: entries
@@ -1052,7 +1096,8 @@ export async function verifyTraceabilityManifest(
     (legacy.schemaVersion === 1 && legacy.generator === "spec2lean-traceability-v1") ||
     (legacy.schemaVersion === 2 && legacy.generator === "spec2lean-traceability-v2") ||
     (legacy.schemaVersion === 3 && legacy.generator === "spec2lean-traceability-v3") ||
-    (legacy.schemaVersion === 4 && legacy.generator === "spec2lean-traceability-v4")
+    (legacy.schemaVersion === 4 && legacy.generator === "spec2lean-traceability-v4") ||
+    (legacy.schemaVersion === 5 && legacy.generator === "spec2lean-traceability-v5")
   if (!supportedVersion || manifest.manifestType !== "spec2lean_evidence_manifest") {
     issues.push("unsupported traceability manifest schema")
   }
@@ -1095,7 +1140,7 @@ export async function verifyTraceabilityManifest(
   for (const reference of manifest.diagnostics.unresolvedReferences) {
     issues.push(`unresolved provenance reference: ${reference}`)
   }
-  if (legacy.schemaVersion === 3 || legacy.schemaVersion === 4) {
+  if (legacy.schemaVersion === 3 || legacy.schemaVersion === 4 || legacy.schemaVersion === 5) {
     for (const declaration of manifest.diagnostics.declarationsWithoutEvidencePath) {
       issues.push(`Lean declaration has no transitive source or project evidence path: ${declaration}`)
     }
@@ -1105,7 +1150,7 @@ export async function verifyTraceabilityManifest(
     for (const semanticId of manifest.diagnostics.sourceFactsWithoutOfficialEvidence) {
       issues.push(`semantic SOURCE_FACT has no official HTML/PDF evidence: ${semanticId}`)
     }
-    if (legacy.schemaVersion === 4) {
+    if (legacy.schemaVersion === 4 || legacy.schemaVersion === 5) {
       for (const semanticId of manifest.diagnostics.sourceFactsWithoutHtmlEvidence) {
         issues.push(`semantic SOURCE_FACT lacks required official HTML evidence: ${semanticId}`)
       }

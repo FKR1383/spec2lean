@@ -54,7 +54,7 @@ export type PipelineAgent = (typeof PIPELINE_AGENTS)[number]
 export type PipelineAgentCaps = Record<PipelineAgent, number>
 
 export type PipelineDependency = {
-  role: "SOURCE_MANIFEST" | "SOURCE_INDEX" | "SEMANTIC_PROFILE" | "SHARED_ENVIRONMENT"
+  role: "SOURCE_MANIFEST" | "SOURCE_INDEX" | "SEMANTIC_PROFILE" | "SHARED_ENVIRONMENT" | "LANGUAGE_CORE"
   path: string
   sha256: string
 }

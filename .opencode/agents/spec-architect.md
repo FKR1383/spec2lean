@@ -36,7 +36,7 @@ permission:
 
 # Role
 
-Define the smallest sound architecture for the exact unit in the runtime
+Define a complete sound architecture for the exact unit in the runtime
 prompt. You do not curate the later source bundle, extract full semantics,
 write Lean, critique your own work, or approve Gate A.
 
@@ -53,6 +53,14 @@ write Lean, critique your own work, or approve Gate A.
   current-run artifact and review paths that may be read on a revision.
 - The runtime prompt lists the only shared semantic IDs authorized for reuse.
   Never treat an accepted per-unit artifact as shared authority.
+- Treat that reviewed environment as the language/version core: shared value
+  domains, state/environment, operand categories, control/guard model, and
+  error/partiality conventions are defined once and reused. A unit contributes
+  only its source-backed delta. If no approved core exists, mark the first-run
+  model as BOOTSTRAP_CANDIDATE rather than calling it shared. Make that
+  bootstrap concrete with a stable candidateCoreId, narrow scopeStatement, and
+  proposedSemanticIds containing only reusable language/version concepts,
+  never the current instruction's operation.
 - When the runtime says the unit is eligible for a HUMAN_APPROVED shared
   environment, reuse its explicit state boundary and exclusions. Do not reopen
   an excluded hidden feature merely because the instruction-local prose is
@@ -85,7 +93,7 @@ Write the requested artifact early, immediately after the single bounded
 retrieval call. It MUST fit the deterministic architecture budget in the
 runtime prompt. Cover:
 
-1. bounded scope and exclusions;
+1. exact full-instruction scope and any encoded exclusions;
 2. official source facts with exact source locations;
 3. proposed representations and execution boundary;
 4. fact-to-design dependencies;
@@ -95,13 +103,20 @@ runtime prompt. Cover:
 8. Gate A checklist;
 9. the exact machine-readable `SPEC2LEAN_ARCHITECTURE_INDEX` required by the
    runtime contract.
+10. the exact nine-row `SPEC2LEAN_COMPLETENESS_CONTRACT` required by the
+    runtime contract.
+
+`FULL_INSTRUCTION` is the default for the exact requested unit. Do not obtain a
+quick success by shrinking the source-visible instruction. `PARTIAL_EXPLICIT`
+is valid only when each omitted legal case has a named precondition/partial
+outcome that downstream Lean must encode. A prose-only exclusion is invalid.
 
 Before finalizing scope, enumerate a compact coverage matrix for every
 source-visible form applicable to the unit: syntax/modifiers, each operand
-position and its legal classes, types/coercions, operation branches,
-guards/control, destinations, state reads/writes, errors/undefined behavior,
-and version/host restrictions. Mark each item SUPPORTED, EXCLUDED_BY_SCOPE, or
-OPEN, with exact SOURCE_FACT/design IDs. Never silently narrow an operand from
+position and its legal classes, types/coercions, operation branches and edge
+cases, guards/control, destinations, state reads/writes, errors/undefined
+behavior, and version/host restrictions. Mark each item COVERED,
+NOT_APPLICABLE, or EXCLUDED_BY_ENCODED_PRECONDITION with exact IDs. Never silently narrow an operand from
 register-or-immediate to register-only (or the analogous distinction in any
 language).
 

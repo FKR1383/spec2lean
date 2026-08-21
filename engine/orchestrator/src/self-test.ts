@@ -9,7 +9,10 @@ import {
   artifactBudgetIssues,
   MAX_ARCHITECTURE_BYTES,
 } from "./artifact-limits.js"
-import { validateArtifactContent } from "./artifact-content.js"
+import {
+  sourceBundleIdentityIssues,
+  validateArtifactContent,
+} from "./artifact-content.js"
 import {
   architectureQuestionTriageRequiresRevision,
   validateArchitectureQuestionTriage,
@@ -28,6 +31,7 @@ import {
   artifactContractForRun,
   makeLeanModuleName,
   makeUnitSlug,
+  stageAttempt,
 } from "./artifact-contract.js"
 import { mapWithConcurrency } from "./batch-runtime.js"
 import {
@@ -53,6 +57,7 @@ import {
   reviewExplicitlyReady,
   reviewExplicitlyRequiresRevision,
 } from "./critic-disposition.js"
+import { criticStageOwnershipIssues } from "./stage-ownership.js"
 import { duplicateJsonKeyIssues } from "./json-integrity.js"
 import {
   artifactPathsForGate,
@@ -84,12 +89,36 @@ import {
   validateArchitectureIndex,
 } from "./provenance-catalog.js"
 import {
+  agentWaitBudgetMs,
   buildGeneralPrompt,
   buildTheoremStrengthContractContext,
   executionAgentForRun,
+  normalizeFastPathTerminalResult,
+  recoverNonAuthoritativeSemanticBlock,
+  recoverNonAuthoritativeSourceBlock,
+  semanticExtractionBlockAuthority,
+  sourceCurationBlockAuthority,
   shouldPreflightExistingSemanticEvidence,
   shouldRecoverStaleSemanticPreflight,
 } from "./runner.js"
+import {
+  buildStageInputContext,
+  stageInputArtifactAreas,
+} from "./stage-context.js"
+import {
+  artifactChainCompletenessIssues,
+  architectureCompletenessIssues,
+  COMPLETENESS_DIMENSIONS,
+  FULL_INSTRUCTION_REQUIRED_PROOF_KINDS,
+  leanModelContractIssues,
+  semanticCompletenessIssues,
+  sourceBundleCompletenessIssues,
+  theoremSemanticCoverageIssues,
+} from "./quality-contract.js"
+import {
+  leanBehaviorBranches,
+  theoremBehaviorAuditIssues,
+} from "./theorem-behavior-audit.js"
 import {
   compareProofWithApprovedTheorems,
   normalizeLeanStatementSurfaceSyntax,
@@ -103,6 +132,8 @@ import { withRepositoryLock } from "./repository-lock.js"
 import {
   consecutiveOutputLengthFailureCount,
   isProviderAvailabilityFailure,
+  noProgressRetryCount,
+  noProgressRetryLimitReached,
   outputLengthRetryLimitReached,
   semanticRetryState,
 } from "./retry-policy.js"
@@ -157,6 +188,173 @@ const protectedTreesBefore = {
 assert(makeUnitSlug("mov.b32") === "mov-b32", "unit slug")
 assert(makeLeanModuleName("mov.b32") === "MovB32", "Lean module name")
 assert(makeLeanLanguageName("ecmascript") === "ECMAScript", "ECMAScript Lean namespace")
+
+const qualityDimensions = COMPLETENESS_DIMENSIONS.map((dimension) => ({
+  dimension,
+  status: "COVERED",
+  semanticIds: ["SEM-COMPLETE"],
+  encodedBy: [],
+  rationale: `${dimension} is represented`,
+}))
+const qualityArchitecture = [
+  "<!-- SPEC2LEAN_COMPLETENESS_CONTRACT",
+  JSON.stringify({
+    schemaVersion: 1,
+    scopeStatus: "FULL_INSTRUCTION",
+    languageCore: {
+      status: "REUSED_APPROVED",
+      path: "language_packs/test/1/language-core.json",
+      sha256: "a".repeat(64),
+    },
+    dimensions: qualityDimensions,
+  }),
+  "-->",
+].join("\n")
+assert(architectureCompletenessIssues(qualityArchitecture).length === 0, "full architecture quality contract")
+
+const qualitySourceBundle = {
+  schema_version: 3,
+  source_documents: [{
+    document_id: "DOC-HTML",
+    kind: "HTML",
+    sha256: "b".repeat(64),
+  }],
+  fragments: [{
+    fragment_id: "FRAGMENT-1",
+    document_id: "DOC-HTML",
+    source_kind: "HTML",
+    source_sha256: "b".repeat(64),
+    locator: { anchor: "unit" },
+  }],
+  evidence_gaps: [],
+  coverage_matrix: COMPLETENESS_DIMENSIONS.map((dimension) => ({
+    dimension,
+    status: "COVERED",
+    fragment_ids: ["FRAGMENT-1"],
+    gap_ids: [],
+    rationale: `${dimension} evidence is closed`,
+  })),
+}
+assert(sourceBundleCompletenessIssues(qualitySourceBundle).length === 0, "source evidence closure contract")
+const mandatoryProofRequirements = FULL_INSTRUCTION_REQUIRED_PROOF_KINDS.map((correctnessKind, index) => ({
+  requirementId: `REQ-${index + 1}`,
+  correctnessKind,
+  semanticClaimIds: ["SEM-COMPLETE"],
+  rationale: `${correctnessKind} independently checks the approved behavior`,
+}))
+const qualitySemantics = {
+  schemaVersion: 3,
+  documentType: "spec2lean_full_semantics",
+  scopeStatus: "FULL_INSTRUCTION",
+  languageCore: {
+    status: "REUSED_APPROVED",
+    path: "language_packs/test/1/language-core.json",
+    sha256: "a".repeat(64),
+  },
+  semanticClaims: [{ semanticId: "SEM-COMPLETE" }],
+  syntaxForms: [{ syntaxId: "SYNTAX-1", form: "op d, a", semanticClaimIds: ["SEM-COMPLETE"] }],
+  operands: [{
+    operandId: "OPERAND-1",
+    name: "a",
+    position: 0,
+    role: "SOURCE",
+    legalForms: ["value"],
+    typeDomains: ["Word"],
+    coercions: [],
+    semanticClaimIds: ["SEM-COMPLETE"],
+  }],
+  operation: {
+    operationId: "OPERATION-1",
+    normalizedMeaning: "identity",
+    inputDomains: ["Word"],
+    outputDomain: "Word",
+    branches: [{ branchId: "BRANCH-1", condition: "always", result: "a", semanticClaimIds: ["SEM-COMPLETE"] }],
+    edgeCases: [{ caseId: "EDGE-1", inputClass: "boundary", behavior: "identity", semanticClaimIds: ["SEM-COMPLETE"] }],
+    semanticClaimIds: ["SEM-COMPLETE"],
+  },
+  stateEffects: [{ effectId: "EFFECT-1", component: "result", mode: "WRITE", condition: "always", semanticClaimIds: ["SEM-COMPLETE"] }],
+  preconditions: [],
+  coverage: COMPLETENESS_DIMENSIONS.map((dimension) => ({
+    dimension,
+    status: "COVERED",
+    semanticClaimIds: ["SEM-COMPLETE"],
+    encodedPreconditionIds: [],
+    rationale: `${dimension} is represented`,
+  })),
+  proofRequirements: mandatoryProofRequirements,
+}
+assert(semanticCompletenessIssues(qualitySemantics).length === 0, "semantic completeness and proof contract")
+assert(
+  artifactChainCompletenessIssues(qualityArchitecture, qualitySourceBundle, qualitySemantics).length === 0,
+  "architecture/source/semantics correspondence",
+)
+const sharedGuardSourceBundle = {
+  ...qualitySourceBundle,
+  coverage_matrix: qualitySourceBundle.coverage_matrix.map((row) =>
+    row.dimension === "GUARDS"
+      ? {
+          ...row,
+          status: "NOT_APPLICABLE",
+          fragment_ids: [],
+          rationale: "the unit section has no separate guard clause",
+        }
+      : row),
+}
+assert(
+  artifactChainCompletenessIssues(
+    qualityArchitecture,
+    sharedGuardSourceBundle,
+    qualitySemantics,
+  ).length === 0,
+  "instruction-local NOT_APPLICABLE does not veto shared-core semantic coverage",
+)
+const badLeanDomain = [
+  "import Spec2Lean.Basic",
+  "abbrev S32 := Int",
+  "def sourceSpec (x : S32) := x",
+  "def implementation (x : S32) := x",
+  "def execute (x : S32) := x",
+  "def Step (x y : S32) := y = x",
+  "/- SPEC2LEAN_LEAN_MODEL_CONTRACT",
+  JSON.stringify({
+    schemaVersion: 1,
+    scopeStatus: "FULL_INSTRUCTION",
+    languageCoreStatus: "BOOTSTRAP_CANDIDATE",
+    languageCoreImport: "",
+    domainBindings: [{
+      semanticDomainId: "SEM-COMPLETE",
+      leanType: "S32",
+      representation: "FIXED_WIDTH",
+      widthBits: 32,
+      providedByLanguageCore: false,
+    }],
+    encodedExclusions: [],
+    executableDefinitions: ["execute"],
+    relationalDefinitions: ["Step"],
+  }),
+  "-/",
+].join("\n")
+assert(
+  leanModelContractIssues(badLeanDomain, qualitySemantics).some((issue) => issue.includes("unbounded Int")),
+  "fixed-width domains reject unconstrained Int",
+)
+const tautologicalObligation = {
+  schema_version: 3,
+  theorem_obligations: [{
+    obligation_id: "OBL-TAUTOLOGY",
+    proof_requirement_ids: ["REQ-1"],
+    correctness_kind: "OPERATION_FIDELITY",
+    semantic_claim_ids: ["SEM-COMPLETE"],
+    independent_specification_symbols: ["sourceSpec"],
+    implementation_symbols: ["implementation"],
+    lean_statement_sketch: "theorem tautology (x : S32) : implementation x = implementation x",
+  }],
+}
+assert(
+  theoremSemanticCoverageIssues(tautologicalObligation, qualitySemantics, badLeanDomain)
+    .some((issue) => issue.includes("reflexive tautology")),
+  "tautological implementation theorem is rejected",
+)
 const acquisitionProfile = {
   schemaVersion: 1,
   language: "ecmascript",
@@ -422,6 +620,67 @@ assert(
     theoremContract.declarations,
   ).some((issue) => issue.includes("validated obligation contract contains 1")),
   "theorem-strength review audit rejects a false zero-declaration report",
+)
+
+const semanticCriticOwnershipRun = {
+  stage: "SEMANTIC_CRITIQUE",
+  artifactRoot: "candidates/ptx/9.3/units/fixture-b32",
+} as RunState
+assert(
+  !stageInputArtifactAreas("SEMANTIC_CRITIQUE").includes("lean") &&
+    !stageInputArtifactAreas("SEMANTIC_CRITIQUE").includes("theorems") &&
+    criticStageOwnershipIssues(
+      semanticCriticOwnershipRun,
+      "Affected: candidates/ptx/9.3/units/fixture-b32/lean/FixtureB32-v1.lean",
+    ).some((issue) => issue.includes("downstream/out-of-scope")) &&
+    criticStageOwnershipIssues(
+      semanticCriticOwnershipRun,
+      "Affected: candidates/ptx/9.3/units/fixture-b32/semantics/semantics-v1.json",
+    ).length === 0,
+  "semantic critics cannot route semantic repair against stale downstream Lean/theorem artifacts",
+)
+
+const behaviorFixture = [
+  "def exec (guard : Bool) (value : Bool) : Bool :=",
+  "  match guard, value with",
+  "  | true, true => true",
+  "  | true, false => false",
+  "  | false, _ => true",
+].join("\n")
+const behaviorBranches = leanBehaviorBranches(behaviorFixture)
+const behaviorTarget = {
+  name: "exec_guard_behavior",
+  statement: "theorem exec_guard_behavior (g v : Bool) : exec g v = true",
+  correctnessKind: "GUARD_BEHAVIOR" as const,
+}
+const completeBehaviorAudit = [
+  "MAJOR: 0",
+  "<!-- SPEC2LEAN_THEOREM_BEHAVIOR_AUDIT",
+  JSON.stringify({
+    schemaVersion: 1,
+    entries: [{
+      name: behaviorTarget.name,
+      correctnessKind: behaviorTarget.correctnessKind,
+      status: "PASS",
+      branchIdsChecked: behaviorBranches.map((branch) => branch.branchId),
+      counterexample: "NONE_FOUND",
+    }],
+  }),
+  "-->",
+].join("\n")
+assert(
+  behaviorBranches.length === 3 &&
+    theoremBehaviorAuditIssues(
+      completeBehaviorAudit,
+      [behaviorTarget],
+      behaviorBranches,
+    ).length === 0 &&
+    theoremBehaviorAuditIssues(
+      completeBehaviorAudit.replace(behaviorBranches[0]!.branchId, "OMITTED-BRANCH"),
+      [behaviorTarget],
+      behaviorBranches,
+    ).some((issue) => issue.includes("behavior audit omitted")),
+  "theorem-strength review must account for every explicit branch of referenced Lean definitions",
 )
 
 let activeBatchOperations = 0
@@ -1000,6 +1259,15 @@ const fastCuratorRun: RunState = {
   ...baseArtifactRun,
   stage: "SOURCE_CURATION",
 }
+const sourceCurationPrompt = await buildStageInputContext(fastCuratorRun)
+assert(
+  sourceCurationPrompt.includes("additionalProperties=false") &&
+    sourceCurationPrompt.includes('language="ptx", specification_version="9.3"') &&
+    sourceCurationPrompt.includes('Canonical source document shape: {"document_id"') &&
+    sourceCurationPrompt.includes('Canonical fragment shape: {"fragment_id"') &&
+    sourceCurationPrompt.includes("fragment_ids and gap_ids are mandatory arrays"),
+  "source curators receive the exact canonical v3 object shapes instead of inferring schema layout",
+)
 assert(
   pipelineAgentForRun(fastCuratorRun) === "source-curator-fast",
   "first PTX source pass is routed to its dedicated fast-curator worker",
@@ -1018,6 +1286,147 @@ assert(
     }],
   }) === "source-curator",
   "PTX source fallback moves to the separate full-curator worker",
+)
+const fastCuratorBlocked: RunState = {
+  ...fastCuratorRun,
+  stage: "BLOCKED",
+  executions: [{
+    at: "2026-01-01T00:00:01.000Z",
+    stage: "SOURCE_CURATION",
+    agent: "source-curator-fast",
+    sessionId: "fixture",
+    outcome: "BLOCKED",
+    nextStage: "BLOCKED",
+    response: "schema repair failed",
+    artifactProduced: true,
+  }],
+}
+const recoveredFastCurator = await recoverNonAuthoritativeSourceBlock(fastCuratorBlocked)
+assert(
+  recoveredFastCurator?.stage === "SOURCE_CURATION" &&
+    pipelineAgentForRun(recoveredFastCurator) === "source-curator",
+  "a legacy fast-curator BLOCKED run resumes through the authoritative full curator",
+)
+const normalizedFastBlock = normalizeFastPathTerminalResult(
+  fastCuratorRun,
+  "source-curator-fast",
+  {
+    outcome: "BLOCKED",
+    nextStage: "BLOCKED",
+    summary: "candidate schema mismatch",
+  },
+)
+assert(
+  normalizedFastBlock.outcome === "RETRY" &&
+    normalizedFastBlock.nextStage === "SOURCE_CURATION",
+  "a fast curator cannot turn structural failure into a terminal semantic block",
+)
+assert(
+  stageAttempt(fastCuratorBlocked, "SOURCE_CURATION") === 2,
+  "a produced BLOCKED artifact remains immutable and advances the next artifact version",
+)
+assert(
+  semanticExtractionBlockAuthority({
+    semanticClaims: [{
+      semanticId: "OQ-STATE",
+      classification: "OPEN_QUESTION",
+      stateAffecting: true,
+      lifecycle: { status: "ACTIVE" },
+    }],
+  }).includes("OQ-STATE") &&
+    semanticExtractionBlockAuthority({
+      semanticClaims: [{
+        semanticId: "OQ-NOTE",
+        classification: "OPEN_QUESTION",
+        stateAffecting: false,
+        lifecycle: { status: "ACTIVE" },
+      }],
+    }).length === 0,
+  "semantic terminal BLOCKED is reserved for active state-affecting open questions",
+)
+const structuralSemanticBlock: RunState = {
+  ...baseArtifactRun,
+  stage: "BLOCKED",
+  artifactRoot: "tests/fixtures/nonexistent-semantic-block",
+  executions: [{
+    at: "2026-01-01T00:00:01.000Z",
+    stage: "SEMANTIC_EXTRACTION",
+    agent: "semantic-extractor",
+    sessionId: "fixture",
+    outcome: "BLOCKED",
+    nextStage: "BLOCKED",
+    response: "coverage validator mismatch",
+    artifactProduced: true,
+  }],
+}
+assert(
+  (await recoverNonAuthoritativeSemanticBlock(structuralSemanticBlock))?.stage === "SEMANTIC_EXTRACTION",
+  "a structural semantic BLOCKED result deterministically resumes as a repair",
+)
+const legacyRevisionRun: RunState = {
+  ...baseArtifactRun,
+  stage: "SEMANTIC_EXTRACTION",
+  semanticV2: {
+    profilePath: "fixture-profile.json",
+    sharedEnvironmentPath: "fixture-environment.json",
+    mode: "LEGACY_FALLBACK",
+    missingRequiredSemanticIds: [],
+    current: {
+      attempt: 2,
+      deltaPath: "fixture/semantic-delta-v2.json",
+      materializedPath: "fixture/semantics-v2.json",
+      criticPacketPath: "fixture/critic-v2.json",
+    },
+    events: [],
+  },
+  executions: [
+    {
+      at: "2026-01-01T00:00:01.000Z",
+      stage: "SEMANTIC_EXTRACTION",
+      agent: "semantic-extractor-delta",
+      sessionId: "delta",
+      outcome: "RETRY",
+      nextStage: "SEMANTIC_EXTRACTION",
+      response: "invalid delta",
+      artifactProduced: true,
+    },
+    {
+      at: "2026-01-01T00:00:02.000Z",
+      stage: "SEMANTIC_EXTRACTION",
+      agent: "semantic-extractor",
+      sessionId: "full",
+      outcome: "BLOCKED",
+      nextStage: "BLOCKED",
+      response: "repairable coverage mismatch",
+      artifactProduced: true,
+    },
+  ],
+}
+assert(
+  artifactContractForRun(legacyRevisionRun).outputPath.endsWith("semantics-v4.json"),
+  "legacy semantic repair advances beyond reserved delta and existing full-semantic revisions",
+)
+assert(
+  sourceBundleIdentityIssues(fastCuratorRun, {
+    language: "PTX",
+    specification_version: "9.3",
+    unit: "cnot.b32",
+  }).join("\n").includes('expected "ptx", received "PTX"'),
+  "source identity diagnostics expose exact case-sensitive expected and received values",
+)
+const explicitLoadBearingGapBundle = {
+  evidence_gaps: [{ gap_id: "GAP-1", impact: "LOAD_BEARING" }],
+  coverage_matrix: [{ status: "GAP", gap_ids: ["GAP-1"] }],
+}
+assert(
+  sourceCurationBlockAuthority(explicitLoadBearingGapBundle, [
+    "source bundle has unresolved LOAD_BEARING evidence gap: GAP-1",
+  ]) &&
+    !sourceCurationBlockAuthority(explicitLoadBearingGapBundle, [
+      "source bundle has unresolved LOAD_BEARING evidence gap: GAP-1",
+      'source bundle identity mismatch for language: expected "ptx", received "PTX"',
+    ]),
+  "terminal source BLOCKED requires an explicit coverage-linked load-bearing gap and no structural/identity defect",
 )
 assert(
   pipelineAgentForRun({
@@ -1492,7 +1901,15 @@ for (const agentFile of agentFiles) {
 }
 assert(
   (await loadAgentModel("proof-engineer")).full === "openai/gpt-5.4-mini",
-  "proof engineer uses the configured GPT-5.4 mini benchmark model",
+  "proof engineer uses the configured GPT-5.4 mini model",
+)
+assert(
+  agentWaitBudgetMs("SEMANTIC_EXTRACTION", "semantic-extractor-delta") === 4 * 60 * 1000,
+  "semantic delta extraction has a bounded four-minute wait budget",
+)
+assert(
+  agentWaitBudgetMs("LEAN_FORMALIZATION", "lean-formalizer") === 8 * 60 * 1000,
+  "ordinary agent stages retain an eight-minute wait budget",
 )
 for (const criticAgent of [
   "architecture-critic",
@@ -1979,6 +2396,33 @@ assert(
     semanticRetryState(mixedRetryExecutions, "SEMANTIC_CRITIQUE")
       .consecutiveRetries === 1,
   "durable retry reconstruction skips provider failures but preserves real critic retries",
+)
+const repeatedNoProgressExecutions = [
+  {
+    stage: "PROOF_GENERATION",
+    outcome: "RETRY",
+    artifactProduced: true,
+    failureFingerprint: "same-lean-diagnostic",
+  },
+  {
+    stage: "PROOF_GENERATION",
+    outcome: "RETRY",
+    artifactProduced: true,
+    failureFingerprint: "same-lean-diagnostic",
+  },
+] as RunState["executions"]
+assert(
+  repeatedNoProgressExecutions !== undefined &&
+    noProgressRetryCount(repeatedNoProgressExecutions, "PROOF_GENERATION") === 2 &&
+    noProgressRetryLimitReached(repeatedNoProgressExecutions, "PROOF_GENERATION") &&
+    noProgressRetryCount([
+      ...repeatedNoProgressExecutions,
+      {
+        ...repeatedNoProgressExecutions[1]!,
+        failureFingerprint: "new-lean-diagnostic",
+      },
+    ], "PROOF_GENERATION") === 1,
+  "identical diagnostics stop after one bounded repair while a changed diagnostic resets the no-progress count",
 )
 const blankSeparatedDeclaration = parseLeanDeclarations([
   "-- spec2lean: SF-1",

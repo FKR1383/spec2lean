@@ -7,6 +7,12 @@ import {
   reviewExplicitlyRequiresRevision,
 } from "./critic-disposition.js"
 import { leanDeclarationNamespace, leanLanguageName } from "./lean-language.js"
+import {
+  architectureCompletenessIssues,
+  leanModelContractIssues,
+  semanticCompletenessIssues,
+  sourceBundleCompletenessIssues,
+} from "./quality-contract.js"
 import { validateArchitectureIndex } from "./provenance-catalog.js"
 import type { RunState } from "./workflow.js"
 
@@ -26,6 +32,25 @@ function isRecord(value: unknown): value is UnknownRecord {
 
 function nonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0
+}
+
+export function sourceBundleIdentityIssues(
+  run: Pick<RunState, "language" | "specVersion" | "unit">,
+  document: unknown,
+): string[] {
+  if (!isRecord(document)) return []
+  const expected = [
+    ["language", run.language],
+    ["specification_version", run.specVersion],
+    ["unit", run.unit],
+  ] as const
+  return expected.flatMap(([field, value]) =>
+    document[field] === value
+      ? []
+      : [
+          `source bundle identity mismatch for ${field}: expected ${JSON.stringify(value)}, received ${JSON.stringify(document[field])}`,
+        ]
+  )
 }
 
 function sourceEvidenceIds(document: UnknownRecord): Set<string> {
@@ -54,8 +79,8 @@ function sourceEvidenceIds(document: UnknownRecord): Set<string> {
 function validateSourceBundle(document: unknown): string[] {
   if (!isRecord(document)) return ["source bundle must be a JSON object"]
   const issues: string[] = []
-  if (![1, 2].includes(document.schema_version as number)) {
-    issues.push("source bundle schema_version must be 1 or 2")
+  if (![1, 2, 3].includes(document.schema_version as number)) {
+    issues.push("source bundle schema_version must be 1, 2, or 3")
   }
   if (!Array.isArray(document.source_documents) || document.source_documents.length === 0) {
     issues.push("source bundle must identify at least one source document")
@@ -66,7 +91,7 @@ function validateSourceBundle(document: unknown): string[] {
         issues.push(`source document ${index} must be an object`)
         continue
       }
-      if (document.schema_version === 2) {
+      if (document.schema_version === 2 || document.schema_version === 3) {
         if (!nonEmptyString(source.document_id)) {
           issues.push(`source document ${index} has no document_id`)
         } else if (documentIds.has(source.document_id)) {
@@ -74,7 +99,7 @@ function validateSourceBundle(document: unknown): string[] {
         } else documentIds.add(source.document_id)
         if (!nonEmptyString(source.publisher)) issues.push(`source document ${index} has no publisher`)
       }
-      if (document.schema_version === 2 && !["PDF", "HTML"].includes(String(source.kind))) {
+      if ((document.schema_version === 2 || document.schema_version === 3) && !["PDF", "HTML"].includes(String(source.kind))) {
         issues.push(`source document ${index} has invalid kind; expected PDF|HTML`)
       }
       if (!nonEmptyString(source.local_path)) issues.push(`source document ${index} has no local_path`)
@@ -86,7 +111,7 @@ function validateSourceBundle(document: unknown): string[] {
   if (sourceEvidenceIds(document).size === 0) {
     issues.push("source bundle contains no stable fragment/fact/evidence identifiers")
   }
-  if (document.schema_version === 2) {
+  if (document.schema_version === 2 || document.schema_version === 3) {
     for (const field of ["bundle_id", "language", "specification_version", "unit"] as const) {
       if (!nonEmptyString(document[field])) issues.push(`source bundle v2 has no ${field}`)
     }
@@ -247,7 +272,7 @@ function validateLegacySemantics(document: unknown): string[] {
       }
     }
   }
-  if (document.schemaVersion === 2) {
+  if (document.schemaVersion === 2 || document.schemaVersion === 3) {
     if (document.documentType !== "spec2lean_full_semantics") {
       issues.push("full semantics v2 has invalid documentType")
     }
@@ -350,7 +375,10 @@ export function validateArtifactContent(
 ): string[] {
   switch (run.stage) {
     case "ARCHITECTURE":
-      return validateArchitectureMarkdown(source)
+      return [
+        ...validateArchitectureMarkdown(source),
+        ...(run.qualityContractVersion === 1 ? architectureCompletenessIssues(source) : []),
+      ]
     case "ARCHITECTURE_CRITIQUE":
     case "SEMANTIC_CRITIQUE":
     case "LEAN_MAPPING_CRITIQUE":
@@ -358,15 +386,32 @@ export function validateArtifactContent(
     case "FINAL_CRITIQUE":
       return validateCriticMarkdown(source)
     case "SOURCE_CURATION":
-      return validateSourceBundle(parsedJson)
+      return [
+        ...validateSourceBundle(parsedJson),
+        ...sourceBundleIdentityIssues(run, parsedJson),
+        ...(run.qualityContractVersion === 1 ? sourceBundleCompletenessIssues(parsedJson) : []),
+      ]
     case "SEMANTIC_EXTRACTION":
       return run.semanticV2?.mode === "DELTA_FAST_PATH"
         ? []
-        : validateLegacySemantics(parsedJson)
+        : [
+            ...validateLegacySemantics(parsedJson),
+            ...(run.qualityContractVersion === 1 ? semanticCompletenessIssues(parsedJson) : []),
+          ]
     case "LEAN_FORMALIZATION":
-      return [...validateLeanNamespace(run, source), ...validateLeanModuleQuality(run, source)]
+      return [
+        ...validateLeanNamespace(run, source),
+        ...validateLeanModuleQuality(run, source),
+        ...(run.qualityContractVersion === 1 ? leanModelContractIssues(source) : []),
+      ]
     case "THEOREM_GENERATION":
-      return validateTheoremObligationDocument(parsedJson).issues
+      return [
+        ...validateTheoremObligationDocument(parsedJson).issues,
+        ...(run.qualityContractVersion === 1 &&
+          (!isRecord(parsedJson) || parsedJson.schema_version !== 3)
+          ? ["new theorem contracts must use schema_version 3"]
+          : []),
+      ]
     default:
       return []
   }
@@ -382,7 +427,9 @@ function validateLeanModuleQuality(run: RunState, source: string): string[] {
       ["unit", new RegExp(`\\bUnit\\s*:\\s*${run.unit.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\b`, "i")],
       ["semantic authority", /\bSemantic authority\s*:\s*\S+/i],
       ["architecture authority", /\bArchitecture authority\s*:\s*\S+/i],
-      ["scope status", /\bScope status\s*:\s*(?:BOUNDED_COMPLETE|BOUNDED_PARTIAL)\b/i],
+      ["scope status", run.qualityContractVersion === 1
+        ? /\bScope status\s*:\s*(?:FULL_INSTRUCTION|PARTIAL_EXPLICIT)\b/i
+        : /\bScope status\s*:\s*(?:BOUNDED_COMPLETE|BOUNDED_PARTIAL|FULL_INSTRUCTION|PARTIAL_EXPLICIT)\b/i],
       ["supported forms", /\bSupported forms\s*:\s*\S+/i],
       ["excluded forms", /\bExcluded forms\s*:\s*\S+/i],
       ["evidence policy", /\bEvidence policy\s*:\s*\S+/i],

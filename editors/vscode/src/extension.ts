@@ -79,7 +79,7 @@ class ManifestIndex {
     for (const uri of files) {
       try {
         const manifest = JSON.parse(await readFile(uri.fsPath, "utf8")) as EvidenceManifest
-        if ([1, 2, 3, 4].includes(manifest.schemaVersion) && manifest.manifestType === "spec2lean_evidence_manifest") {
+        if ([1, 2, 3, 4, 5].includes(manifest.schemaVersion) && manifest.manifestType === "spec2lean_evidence_manifest") {
           loaded.push({
             manifestPath: relative(root, uri.fsPath).split(sep).join("/"),
             manifest,
@@ -266,6 +266,7 @@ class EvidencePanel {
       leanPath: indexed.manifest.leanDocument.path,
       entry,
       diagnostics: indexed.manifest.diagnostics,
+      qualityContract: indexed.manifest.qualityContract,
       semanticUncertainties: indexed.manifest.semanticUncertainties ?? [],
       evidence,
     }
@@ -397,6 +398,7 @@ class EvidencePanel {
     <aside>
       <div id="provenanceWarning" class="warning" hidden></div>
       <h2>Open questions &amp; benchmark assumptions</h2><div id="uncertainties"></div>
+      <h2>Quality contract</h2><div id="quality"></div>
       <h2>Semantic claims</h2><div id="claims"></div>
       <h2>Evidence &amp; provenance</h2><div id="evidenceList"></div>
       <h2>Human feedback</h2>
@@ -442,6 +444,8 @@ class EvidencePanel {
       if (next.diagnostics.pdfAlignment?.coverageRatio !== undefined && next.diagnostics.pdfAlignment.coverageRatio < 1) warnings.push('PDF corroboration is partial: ' + next.diagnostics.pdfAlignment.matched + '/' + (next.diagnostics.pdfAlignment.eligible ?? '?') + ' official fragments aligned; HTML evidence remains hash-bound.');
       if (next.entry.semanticIds.length === 0 && next.entry.evidence.length === 0) warnings.push('This declaration has no provenance reference.');
       if (next.entry.unresolvedReferences.length) warnings.push('Unresolved IDs: ' + next.entry.unresolvedReferences.join(', '));
+      if (!next.qualityContract) warnings.push('No machine-readable full-instruction quality contract is present (legacy manifest).');
+      if (next.qualityContract?.scopeStatus !== 'FULL_INSTRUCTION') warnings.push('Scope is ' + next.qualityContract.scopeStatus + '; inspect encoded exclusions before accepting coverage.');
       const warning = byId('provenanceWarning'); warning.hidden = warnings.length === 0; text(warning, warnings.join(' '));
       const uncertainties = byId('uncertainties'); uncertainties.replaceChildren();
       for (const item of next.semanticUncertainties) {
@@ -453,6 +457,17 @@ class EvidencePanel {
         card.append(label, statement); uncertainties.append(card);
       }
       if (next.semanticUncertainties.length === 0) text(uncertainties, 'No unresolved semantic question is recorded for this manifest.');
+      const quality = byId('quality'); quality.replaceChildren();
+      if (next.qualityContract) {
+        const summary = document.createElement('div'); summary.className = 'card';
+        text(summary, 'Scope: ' + next.qualityContract.scopeStatus + ' · language core: ' + next.qualityContract.languageCoreStatus + ' · proof kinds: ' + next.qualityContract.proofRequirementKinds.join(', '));
+        quality.append(summary);
+        for (const row of next.qualityContract.coverage) {
+          const card = document.createElement('div'); card.className = 'card';
+          text(card, row.dimension + ' · ' + row.status + (row.rationale ? ' — ' + row.rationale : ''));
+          quality.append(card);
+        }
+      } else text(quality, 'Legacy manifest: no deterministic completeness matrix is recorded.');
       const claims = byId('claims'); claims.replaceChildren();
       for (const claim of next.entry.claims) {
         const card = document.createElement('div'); card.className = 'card';

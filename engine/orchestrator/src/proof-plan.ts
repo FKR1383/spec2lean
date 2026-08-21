@@ -16,7 +16,10 @@ export type ProofTarget = {
   statement: string
   strengthRisks: string[]
   semanticIds: string[]
+  proofRequirementIds: string[]
   correctnessKind?: CorrectnessKind
+  independentSpecificationSymbols: string[]
+  implementationSymbols: string[]
 }
 
 type ObligationArtifact = {
@@ -25,7 +28,10 @@ type ObligationArtifact = {
     lean_statement_sketch?: string
     strength_risks?: string[]
     semantic_claim_ids?: string[]
+    proof_requirement_ids?: string[]
     correctness_kind?: CorrectnessKind
+    independent_specification_symbols?: string[]
+    implementation_symbols?: string[]
   }>
 }
 
@@ -73,7 +79,10 @@ export async function proofTargets(run: RunState): Promise<ProofTarget[]> {
     id: string
     risks: string[]
     semanticIds: string[]
+    proofRequirementIds: string[]
     correctnessKind?: CorrectnessKind
+    independentSpecificationSymbols: string[]
+    implementationSymbols: string[]
   }>()
   for (const obligation of artifact.theorem_obligations ?? []) {
     const names = [...(obligation.lean_statement_sketch ?? "").matchAll(
@@ -84,7 +93,10 @@ export async function proofTargets(run: RunState): Promise<ProofTarget[]> {
         id: obligation.obligation_id ?? "UNKNOWN",
         risks: obligation.strength_risks ?? [],
         semanticIds: obligation.semantic_claim_ids ?? [],
+        proofRequirementIds: obligation.proof_requirement_ids ?? [],
         correctnessKind: obligation.correctness_kind,
+        independentSpecificationSymbols: obligation.independent_specification_symbols ?? [],
+        implementationSymbols: obligation.implementation_symbols ?? [],
       })
     }
   }
@@ -96,7 +108,10 @@ export async function proofTargets(run: RunState): Promise<ProofTarget[]> {
       statement: theorem.canonicalStatement,
       strengthRisks: obligation?.risks ?? [],
       semanticIds: obligation?.semanticIds ?? [],
+      proofRequirementIds: obligation?.proofRequirementIds ?? [],
       correctnessKind: obligation?.correctnessKind,
+      independentSpecificationSymbols: obligation?.independentSpecificationSymbols ?? [],
+      implementationSymbols: obligation?.implementationSymbols ?? [],
     })
   }
 

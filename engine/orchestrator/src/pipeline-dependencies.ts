@@ -56,10 +56,15 @@ export async function snapshotPipelineDependencies(input: {
   if (profile !== undefined) {
     const body = JSON.parse(
       await readFile(repositoryPath(profilePath), "utf8"),
-    ) as { sharedEnvironmentPath?: unknown }
+    ) as { sharedEnvironmentPath?: unknown; languageCorePath?: unknown }
     if (typeof body.sharedEnvironmentPath === "string") {
       dependencies.push(
         await optionalDependency("SHARED_ENVIRONMENT", body.sharedEnvironmentPath),
+      )
+    }
+    if (typeof body.languageCorePath === "string") {
+      dependencies.push(
+        await optionalDependency("LANGUAGE_CORE", body.languageCorePath),
       )
     }
   }

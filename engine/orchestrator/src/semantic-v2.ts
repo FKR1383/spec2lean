@@ -26,11 +26,20 @@ import {
   validateSharedSemanticEnvironment,
 } from "./semantic-ir/validate.js"
 import { REPO_ROOT } from "./repo.js"
+import { loadLanguageCore } from "./language-core.js"
+import { latestVersionedArtifact } from "./provenance-catalog.js"
+import { semanticEvidenceRenditionIssues } from "./traceability.js"
+import {
+  artifactChainCompletenessIssues,
+  architectureCompletenessContract,
+  semanticDeltaCompletenessIssues,
+} from "./quality-contract.js"
 import type { RunState, SemanticV2ArtifactSet } from "./workflow.js"
 
 export type SemanticProfile = {
   schemaVersion: 1
   language: string
+  languageCorePath: string
   specificationVersion: string
   strategy: "DELTA_PREFERRED_WITH_LEGACY_FALLBACK"
   sharedEnvironmentPath: string
@@ -113,6 +122,7 @@ export function validProfile(value: unknown): value is SemanticProfile {
   return isRecord(value) &&
     value.schemaVersion === 1 &&
     typeof value.language === "string" &&
+    typeof value.languageCorePath === "string" && value.languageCorePath.length > 0 &&
     typeof value.specificationVersion === "string" &&
     value.strategy === "DELTA_PREFERRED_WITH_LEGACY_FALLBACK" &&
     typeof value.sharedEnvironmentPath === "string" && value.sharedEnvironmentPath.length > 0 &&
@@ -261,6 +271,27 @@ export async function assessSemanticFastPath(run: RunState): Promise<SemanticEli
   const assessment = assessSemanticFastPathDocuments(run, profilePath, profileInput, environmentInput)
   if (!assessment.eligible || assessment.environment === undefined) return assessment
   try {
+    const core = await loadLanguageCore(profileInput.languageCorePath)
+    if (core.language.toLowerCase() !== run.language.toLowerCase() ||
+      core.specificationVersion !== run.specVersion ||
+      core.semanticEnvironment.path !== profileInput.sharedEnvironmentPath) {
+      throw new Error("language-core identity or semantic-environment binding mismatch")
+    }
+    if (run.qualityContractVersion === 1) {
+      const architecturePath = await latestVersionedArtifact(
+        `${run.artifactRoot}/architecture`,
+        [/^foundation-v(\d+)\.md$/],
+      )
+      const architecture = await readFile(ensureRepositoryRelative(architecturePath), "utf8")
+      const contract = architectureCompletenessContract(architecture)
+      const binding = isRecord(contract?.languageCore) ? contract.languageCore : undefined
+      const coreFileSha256 = sha256(await readFile(ensureRepositoryRelative(profileInput.languageCorePath)))
+      if (binding?.status !== "REUSED_APPROVED" ||
+        binding.path !== profileInput.languageCorePath ||
+        binding.sha256 !== coreFileSha256) {
+        throw new Error("architecture did not confirm eligibility for the exact hash-bound language core")
+      }
+    }
     await verifySharedEnvironmentFiles(
       run,
       assessment.environment,
@@ -270,7 +301,7 @@ export async function assessSemanticFastPath(run: RunState): Promise<SemanticEli
     return fallbackEligibility(
       profilePath,
       profileInput.sharedEnvironmentPath,
-      "SHARED_PROVENANCE_VERIFICATION_FAILED",
+      "LANGUAGE_CORE_OR_SHARED_PROVENANCE_VERIFICATION_FAILED",
       error instanceof Error ? error.message : String(error),
       profileInput.requiredSharedSemanticIds,
     )
@@ -291,7 +322,28 @@ function semanticArtifacts(run: RunState): SemanticV2ArtifactSet {
 export async function prepareSemanticV2Run(run: RunState): Promise<RunState> {
   if (run.stage !== "SEMANTIC_EXTRACTION") return run
   if (run.semanticV2?.mode === "LEGACY_FALLBACK") return run
-  if (run.semanticV2?.mode === "DELTA_FAST_PATH" && run.semanticV2.current !== undefined) return run
+  if (run.semanticV2?.mode === "DELTA_FAST_PATH" && run.semanticV2.current !== undefined) {
+    const expected = semanticArtifacts(run)
+    if (run.semanticV2.current.attempt === expected.attempt) return run
+    return {
+      ...run,
+      semanticV2: {
+        ...run.semanticV2,
+        current: expected,
+        events: [
+          ...run.semanticV2.events,
+          {
+            at: new Date().toISOString(),
+            kind: "REPAIR_ATTEMPT",
+            code: "DELTA_IMMUTABLE_REVISION_ADVANCED",
+            detail:
+              `Previous delta attempt ${run.semanticV2.current.attempt} did not validate; ` +
+              `repair output is ${expected.deltaPath}`,
+          },
+        ],
+      },
+    }
+  }
 
   const assessment = await assessSemanticFastPath(run)
   const now = new Date().toISOString()
@@ -597,6 +649,61 @@ export async function validateSemanticDeltaForRun(
           ),
         ],
       }
+    }
+    if (run.qualityContractVersion === 1) {
+      const completeness = semanticDeltaCompletenessIssues(deltaInput)
+      if (completeness.length > 0) return { ok: false, issues: completeness }
+      const profile = JSON.parse(
+        await readFile(ensureRepositoryRelative(run.semanticV2.profilePath), "utf8"),
+      ) as unknown
+      if (!validProfile(profile)) return { ok: false, issues: ["semantic profile became invalid"] }
+      await loadLanguageCore(profile.languageCorePath)
+      const coreSha256 = sha256(await readFile(ensureRepositoryRelative(profile.languageCorePath)))
+      const deltaCore = isRecord(deltaInput) && isRecord(deltaInput.languageCore)
+        ? deltaInput.languageCore
+        : undefined
+      if (deltaCore?.status !== "REUSED_APPROVED" ||
+        deltaCore.path !== profile.languageCorePath || deltaCore.sha256 !== coreSha256) {
+        return { ok: false, issues: ["semantic delta is not bound to the exact current language-core manifest"] }
+      }
+      const [architecturePath, sourceBundlePath] = await Promise.all([
+        latestVersionedArtifact(
+          `${run.artifactRoot}/architecture`,
+          [/^foundation-v(\d+)\.md$/],
+        ),
+        latestSourceBundle(run),
+      ])
+      const [architecture, sourceBundle] = await Promise.all([
+        readFile(ensureRepositoryRelative(architecturePath), "utf8"),
+        readFile(ensureRepositoryRelative(sourceBundlePath), "utf8")
+          .then((value) => JSON.parse(value) as unknown),
+      ])
+      const chainIssues = artifactChainCompletenessIssues(
+        architecture,
+        sourceBundle,
+        evaluation.view,
+      )
+      if (chainIssues.length > 0) return { ok: false, issues: chainIssues }
+      const delta = deltaInput as InstructionSemanticDelta
+      const evidenceById = new Map(delta.evidence.map((item) => [item.evidenceId, item]))
+      const renditionProjection = {
+        schemaVersion: 3,
+        documentType: "spec2lean_full_semantics",
+        semanticClaims: [...delta.claims, ...delta.refinements].map((claim) => ({
+          ...claim,
+          evidenceIds: claim.evidenceIds.flatMap((evidenceId) => {
+            const sourceBundleEvidenceId = evidenceById.get(evidenceId)?.sourceBundleEvidenceId
+            return sourceBundleEvidenceId === undefined ? [] : [sourceBundleEvidenceId]
+          }),
+        })),
+      }
+      const renditionIssues = await semanticEvidenceRenditionIssues({
+        runId: run.runId,
+        semanticDocument: renditionProjection,
+        sourceBundlePaths: [sourceBundlePath],
+        includePdfRenditions: true,
+      })
+      if (renditionIssues.length > 0) return { ok: false, issues: renditionIssues }
     }
     await verifyDeltaGrounding(run, deltaInput as InstructionSemanticDelta)
     return { ok: true, issues: [] }

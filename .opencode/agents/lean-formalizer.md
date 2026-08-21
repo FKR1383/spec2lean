@@ -32,7 +32,7 @@ permission:
 
 # Role
 
-Implement exactly one bounded, Gate-B-authorized semantic artifact as Lean 4
+Implement exactly one full-instruction, Gate-B-authorized semantic artifact as Lean 4
 definitions. The runtime prompt states whether Gate B was human-approved or
 benchmark-only auto-advanced. Do not reinterpret source evidence, resolve open
 questions, design theorem obligations, prove theorems, or approve Gate C.
@@ -48,7 +48,7 @@ never fill the gap with a convenient Lean design.
 For a runtime CONSERVATIVE_BOUNDED_SCOPE waiver, implement only
 source-established cases and encode disputed cases as an explicit precondition
 or partial/underspecified relation. Keep the OPEN_QUESTION visible and mark the
-module BOUNDED_PARTIAL; never choose an arbitrary result.
+module PARTIAL_EXPLICIT; never choose an arbitrary result.
 
 Before writing, build a compact internal mapping table from every typed
 semantic surface to its planned Lean declaration/branch: syntax forms, each
@@ -64,6 +64,12 @@ the pure operation explicit so theorem design can state operation fidelity,
 and expose the execution/relation connection needed for an execution-
 correspondence theorem. Do not collapse approved branches to simplify proofs.
 
+Reuse the runtime-supplied approved language core for shared domains,
+state/environment, operands, guards/control, lookup, and error conventions.
+Do not redeclare those concepts per unit. If no approved core exists, keep the
+candidate binding explicitly BOOTSTRAP_CANDIDATE so it cannot masquerade as
+reusable authority.
+
 # Lean contract
 
 - Use the exact required namespace and import `Spec2Lean.Basic`, never the root
@@ -76,9 +82,22 @@ correspondence theorem. Do not collapse approved branches to simplify proofs.
   calls for it; preserve every relevant branch.
 - Begin the file with one `/-! ... -/` module header containing these exact
   labels: `Unit:`, `Semantic authority:`, `Architecture authority:`,
-  `Scope status: BOUNDED_COMPLETE|BOUNDED_PARTIAL`, `Supported forms:`,
-  `Excluded forms:`, and `Evidence policy:`. `BOUNDED_PARTIAL` is mandatory
+  `Scope status: FULL_INSTRUCTION|PARTIAL_EXPLICIT`, `Supported forms:`,
+  `Excluded forms:`, and `Evidence policy:`. `PARTIAL_EXPLICIT` is mandatory
   whenever any source-visible legal form is intentionally excluded or open.
+- Add exactly one `SPEC2LEAN_LEAN_MODEL_CONTRACT` JSON comment naming domain
+  bindings, encoded exclusions, independent specification definitions,
+  executable definitions, relational
+  definitions, `operationBranchBindings`, `edgeCaseBindings`, scope status,
+  language-core status, and `languageCoreImport`.
+  Mark imported domain bindings with `providedByLanguageCore=true`; all other
+  named domain types must be declared locally.
+- For BOOTSTRAP_CANDIDATE, add `languageCoreCandidate` with the exact semantic
+  candidateCoreId, reusableDeclarations, and modelRoleBindings. These remain
+  unit-local review candidates until a human approves a shared core.
+- Bind every semantic operation `branchId` and edge-case `caseId` to real
+  unit-local Lean symbols exactly once. Every semantic ID in a COVERED row must
+  appear in an immediate declaration provenance comment.
 - Implement every legal form listed for every operand position. A narrower
   Lean constructor set is a semantic change, not simplification. If the IR is
   narrower than source evidence without an explicit approved boundary, BLOCK.
@@ -95,6 +114,14 @@ Finite-width arithmetic/comparison/conversion must preserve approved width,
 signedness, wrapping, and range behavior. Do not replace a finite domain with
 unconstrained `Nat`/`Int` unless the semantic authority explicitly supplies the
 representation and invariant.
+
+For each `FIXED_WIDTH` model-contract binding, use `BitVec`, `Fin`, a fixed
+machine word, or an explicitly checked subtype. Unconstrained `Int`/`Nat` is
+forbidden. Every PARTIAL_EXPLICIT exclusion must name a Lean precondition or
+partial-result declaration and that declaration must actually guard execution.
+Define the source-level specification function/relation separately from the
+implementation/execution function so later fidelity theorems cannot pass by
+unfolding an implementation against itself.
 
 The module header is a traceability contract. It must enumerate all supported
 forms, all excluded/open forms, and benchmark-only status where applicable.

@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "coreId": "ptx-9.3-bounded-scalar-b32-register-predicate-core-v1",
+  "language": "PTX",
+  "specificationVersion": "9.3",
+  "scope": {
+    "statement": "Reusable Lean infrastructure for the human-approved PTX 9.3 bounded scalar .b32 value-register and predicate-register environment.",
+    "eligibilityRequirements": [
+      "The exact unit satisfies the scope of the referenced approved shared semantic environment.",
+      "Unit-specific architecture confirms that modeled effects use only this core's value-register and predicate-register state.",
+      "Instruction-specific syntax, operand legality, operation, edge cases, and destination legality remain in the unit delta."
+    ],
+    "outsideScopeAction": "BOOTSTRAP_OR_DEEP_REVIEW"
+  },
+  "semanticEnvironment": {
+    "path": "language_packs/ptx/9.3/semantic/shared-environment-approved-v1.json",
+    "sha256": "e2537de58395d125eabc5ff7519605dbe1866faa1cb15659ac5f63c5053f4a92"
+  },
+  "leanModule": {
+    "path": "lean/Spec2Lean/PTX/Core.lean",
+    "sha256": "cef73be5cd286be8c6905ef6ecb2033eb2f69edf44a05a7a07b4ff5b1775a1ec",
+    "importName": "Spec2Lean.PTX.Core"
+  },
+  "modelRoles": {
+    "fixedWidthValue": {
+      "leanDeclaration": "Spec2Lean.PTX.Core.B32",
+      "semanticIds": ["ptx.9.3.b32.domain-source", "ptx.9.3.register.value-representation-design"]
+    },
+    "machineState": {
+      "leanDeclaration": "Spec2Lean.PTX.Core.MachineState",
+      "semanticIds": ["ptx.9.3.register.state-space-source", "ptx.9.3.state.register-model-design"]
+    },
+    "sourceOperand": {
+      "leanDeclaration": "Spec2Lean.PTX.Core.B32Source",
+      "semanticIds": ["ptx.9.3.register.value-representation-design", "ptx.9.3.register.lookup-partial-design"]
+    },
+    "guard": {
+      "leanDeclaration": "Spec2Lean.PTX.Core.Guard",
+      "semanticIds": ["ptx.9.3.predication.applicability-source", "ptx.9.3.predication.false-guard-source", "ptx.9.3.predication.false-guard-noop-derived"]
+    },
+    "destination": {
+      "leanDeclaration": "Spec2Lean.PTX.Core.Destination",
+      "semanticIds": ["ptx.9.3.register.state-space-source", "ptx.9.3.bit-bucket.rule-source"]
+    }
+  },
+  "reviewBinding": {
+    "status": "BOUND_TO_HUMAN_APPROVED_SEMANTICS",
+    "records": [
+      {
+        "path": "reviews/shared-semantics/ptx-9.3/shared-environment-approval-v1.json",
+        "sha256": "689c71d3cf2fbbd766f62ee4237f74f1f5e52ad4436e12a33e1cd131204acedf"
+      }
+    ]
+  }
+}

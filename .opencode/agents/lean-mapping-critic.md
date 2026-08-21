@@ -43,8 +43,17 @@ an open question or add an unsupported operand/branch. Verify every declaration
 uses only the exact provenance allowlist. Use a minimal Lean probe only for one
 concrete uncertainty.
 When the runtime lists CONSERVATIVE_BOUNDED_SCOPE, accept only an explicit
-partial/precondition exclusion with BOUNDED_PARTIAL scope; a guessed value or
+partial/precondition exclusion with PARTIAL_EXPLICIT scope; a guessed value or
 silent narrowing remains MAJOR.
+
+Validate the `SPEC2LEAN_LEAN_MODEL_CONTRACT` against semantic coverage. Reject
+missing or duplicate operation-branch/edge-case bindings and any COVERED
+semantic claim that reaches no Lean declaration. Reject
+unbounded `Int`/`Nat` for a fixed-width domain, a textual exclusion with no
+executed precondition, a missing approved language-core reuse, or executable
+and relational definitions that encode different branches/results.
+Require a separately declared source-level specification definition that does
+not depend on the implementation.
 
 Use a declaration/branch matrix rather than prose impressions. For every
 authorized syntax form and operand legal form, identify its Lean constructor
@@ -54,8 +63,9 @@ and frame promise, identify the executable/relational clause. Then run the gain
 audit: reject constructors, defaults, state fields, or outcomes with no
 semantic authority.
 
-Review the pure operation independently from state execution and verify their
-connection. The mapping must expose statements strong enough for later
+Review the independent source-level specification independently from the pure
+implementation and state execution, then verify their connections. A helper
+unfolded against its own body is not semantic fidelity. The mapping must expose statements strong enough for later
 OPERATION_FIDELITY and EXECUTION_CORRESPONDENCE theorems. A correct arithmetic
 or logical helper paired with an incorrect destination/guard update is not a
 faithful mapping.
@@ -63,7 +73,7 @@ faithful mapping.
 Audit constructor coverage against every semantic syntax form and every
 operand `legalForms` list. Report any missing authorized constructor/branch as
 MAJOR; compilation cannot waive it. Verify the required module header exactly
-states supported and excluded forms and does not overclaim BOUNDED_COMPLETE.
+states supported and excluded forms and does not overclaim FULL_INSTRUCTION.
 Reject unexplained dead helpers and inaccurate claim attribution. Follow each
 declaration's IDs through dependency chains: SOURCE_FACT leaves need official
 fragments, DESIGN_DEPENDENCY/ASSUMPTION must be labeled as project authority,

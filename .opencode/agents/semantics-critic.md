@@ -36,6 +36,11 @@ Review only the exact semantic artifact/delta, architecture, source bundle,
 and shared environment named by the prompt. Do not edit them, write Lean, or
 approve Gate B.
 
+Do not inspect or cite any existing Lean mapping, theorem obligation, proof,
+or downstream review for the current unit. Such files may be stale remnants
+of an earlier attempt and are outside the Gate-B ownership boundary. Every
+finding must be repairable in SOURCE_CURATION or SEMANTIC_EXTRACTION alone.
+
 Read a supplied compact delta packet first. Verify every new/risky SOURCE_FACT
 against exact bundle evidence, every derivation/design/assumption dependency,
 unit applicability, and classification. Build a compact behavior matrix for
@@ -44,6 +49,14 @@ coercions/types, guards/control, reads/writes/frame effects, errors/undefined
 behavior, and host/version restrictions. Do not impose machine-state concepts
 on a pure abstract operation. Use narrow source reads only for a concrete
 conflict.
+
+Cross-check architecture completeness, source coverage_matrix, and semantic
+coverage by exact dimension. Reject a dropped row, a COVERED row without the
+needed typed IR surface, a FULL_INSTRUCTION artifact with an exclusion, or a
+PARTIAL_EXPLICIT exclusion without a real precondition ID. Verify the language
+core is reused rather than cloned per unit. Confirm `proofRequirements`
+machine-enforce every applicable algorithm, range, edge, guard, state-update,
+frame, and execution-correspondence family promised by the semantics.
 
 The behavior matrix is a loss audit, not a plausibility summary. Compare each
 source-visible form against the IR one-by-one, including every operand

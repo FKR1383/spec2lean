@@ -14,7 +14,13 @@ import {
   MAX_ARCHITECTURE_LINES,
 } from "./artifact-limits.js"
 import { architectureStateAffectingOpenQuestions } from "./architecture-review.js"
+import { loadLanguageCore } from "./language-core.js"
+import { verifyLeanFile } from "./lean-local.js"
 import type { GateName, RunState } from "./workflow.js"
+import {
+  criticVisibleArtifactAreas,
+  type StageArtifactArea,
+} from "./stage-ownership.js"
 
 function sha256(value: Buffer | string): string {
   return createHash("sha256").update(value).digest("hex")
@@ -55,6 +61,12 @@ type SharedEnvironmentSummary = {
   scope: string
   semanticIds: string[]
   unitEligible: boolean
+  corePath: string
+  coreSha256: string
+  leanModulePath: string
+  leanModuleSha256: string
+  leanImportName: string
+  coreRoles: string[]
 }
 
 async function sharedEnvironmentSummary(run: RunState): Promise<SharedEnvironmentSummary | undefined> {
@@ -62,9 +74,13 @@ async function sharedEnvironmentSummary(run: RunState): Promise<SharedEnvironmen
   try {
     const profile = JSON.parse(await readFile(resolve(REPO_ROOT, profilePath), "utf8")) as {
       sharedEnvironmentPath?: unknown
+      languageCorePath?: unknown
       supportedUnitPatterns?: unknown
     }
-    if (typeof profile.sharedEnvironmentPath !== "string") return undefined
+    if (typeof profile.sharedEnvironmentPath !== "string" ||
+      typeof profile.languageCorePath !== "string") return undefined
+    const core = await loadLanguageCore(profile.languageCorePath)
+    if (core.semanticEnvironment.path !== profile.sharedEnvironmentPath) return undefined
     const source = await readFile(resolve(REPO_ROOT, profile.sharedEnvironmentPath), "utf8")
     const environment = JSON.parse(source) as {
       review?: { status?: unknown }
@@ -90,6 +106,14 @@ async function sharedEnvironmentSummary(run: RunState): Promise<SharedEnvironmen
       scope: String(environment.scope?.statement ?? "UNSPECIFIED"),
       semanticIds,
       unitEligible,
+      corePath: profile.languageCorePath,
+      coreSha256: sha256(await readFile(resolve(REPO_ROOT, profile.languageCorePath))),
+      leanModulePath: core.leanModule.path,
+      leanModuleSha256: core.leanModule.sha256,
+      leanImportName: core.leanModule.importName,
+      coreRoles: Object.entries(core.modelRoles)
+        .map(([role, value]) => `${role}=${value.leanDeclaration}`)
+        .sort((left, right) => left.localeCompare(right)),
     }
   } catch {
     return undefined
@@ -102,55 +126,134 @@ function artifactLine(label: string, artifact: ArtifactIdentity | undefined): st
     : `- ${label}: ${artifact.path} (sha256=${artifact.sha256})`
 }
 
+type StageInputArtifact = {
+  label: string
+  area: StageArtifactArea
+  artifact: ArtifactIdentity | undefined
+}
+
+function visibleStageInputArtifacts(
+  run: RunState,
+  artifacts: readonly StageInputArtifact[],
+): StageInputArtifact[] {
+  const visible = new Set(stageInputArtifactAreas(run.stage))
+  return artifacts.filter((entry) => visible.has(entry.area))
+}
+
+export function stageInputArtifactAreas(
+  stage: RunState["stage"],
+): readonly StageArtifactArea[] {
+  const criticAreas = criticVisibleArtifactAreas(stage)
+  if (criticAreas.length > 0) return criticAreas
+  const producerAreas: Partial<Record<RunState["stage"], readonly StageArtifactArea[]>> = {
+    ARCHITECTURE: ["architecture", "reviews"],
+    SOURCE_CURATION: ["architecture", "source-bundles", "reviews"],
+    SEMANTIC_EXTRACTION: ["architecture", "source-bundles", "semantics", "reviews"],
+    LEAN_FORMALIZATION: ["architecture", "semantics", "lean", "reviews"],
+    THEOREM_GENERATION: ["architecture", "semantics", "lean", "theorems", "reviews"],
+    PROOF_GENERATION: ["semantics", "lean", "theorems", "reviews"],
+  }
+  return producerAreas[stage] ?? [
+    "architecture",
+    "source-bundles",
+    "semantics",
+    "lean",
+    "theorems",
+    "reviews",
+  ]
+}
+
 /** Build the exact, compact stage input contract injected into the model call. */
 export async function buildStageInputContext(run: RunState): Promise<string> {
   const root = run.artifactRoot
+  const semanticPatterns = run.stage === "SEMANTIC_EXTRACTION" &&
+    run.semanticV2?.mode === "DELTA_FAST_PATH"
+    ? [/^semantic-delta-v(\d+)\.json$/]
+    : [/^semantics-v(\d+)\.json$/]
   const [architecture, architectureReview, sourceBundle, semantics, lean, obligations, shared] = await Promise.all([
     optionalLatest(`${root}/architecture`, [/^foundation-v(\d+)\.md$/]),
     optionalLatest(`${root}/reviews`, [/^architecture-critic-v(\d+)\.md$/]),
     optionalLatest(`${root}/source-bundles`, [/^source-bundle-v(\d+)\.json$/]),
-    optionalLatest(`${root}/semantics`, [/^semantics-v(\d+)\.json$/]),
+    optionalLatest(`${root}/semantics`, semanticPatterns),
     optionalLatest(`${root}/lean`, [new RegExp(`^${run.leanModuleName}-v(\\d+)\\.lean$`)]),
     optionalLatest(`${root}/theorems`, [/^obligations-v(\d+)\.json$/]),
     sharedEnvironmentSummary(run),
   ])
 
+  const availableArtifacts = visibleStageInputArtifacts(run, [
+    { label: "architecture", area: "architecture", artifact: architecture },
+    { label: "architecture critique", area: "reviews", artifact: architectureReview },
+    { label: "source bundle", area: "source-bundles", artifact: sourceBundle },
+    {
+      label: run.stage === "SEMANTIC_EXTRACTION" && run.semanticV2?.mode === "DELTA_FAST_PATH"
+        ? "previous semantic delta repair input"
+        : "semantic authority",
+      area: "semantics",
+      artifact: semantics,
+    },
+    { label: "Lean mapping", area: "lean", artifact: lean },
+    { label: "theorem obligations", area: "theorems", artifact: obligations },
+  ])
+  const visibleAreas = new Set(availableArtifacts.map((entry) => entry.area))
+
   const lines = [
     "# Deterministic Stage Input Contract",
     "",
-    artifactLine("architecture", architecture),
-    artifactLine("architecture critique", architectureReview),
-    artifactLine("source bundle", sourceBundle),
-    artifactLine("semantic authority", semantics),
-    artifactLine("Lean mapping", lean),
-    artifactLine("theorem obligations", obligations),
+    ...availableArtifacts.map((entry) => artifactLine(entry.label, entry.artifact)),
     `- Gate A authority: ${gateAuthority(run, "A")}`,
     `- Gate B authority: ${gateAuthority(run, "B")}`,
     `- Gate C authority: ${gateAuthority(run, "C")}`,
     `- Theorem authority: ${gateAuthority(run, "THEOREM_STRENGTH")}`,
     "",
     "Use exactly these versioned inputs. Do not select a different `latest` artifact by globbing.",
+    `Authorized current-unit artifact areas: ${[...visibleAreas].join(", ") || "NONE"}.`,
+    "Do not inspect or cite a current-unit artifact area omitted above, even if a stale file exists from an earlier run attempt.",
+    "A critic finding must be repairable by that critic's declared upstream revision target; never route a producer against a downstream artifact it does not own.",
     "A benchmark auto-advance authorizes pipeline continuation only; never call it human approval.",
   ]
+
+  if (run.stage === "LEAN_FORMALIZATION" && lean !== undefined) {
+    const previousCheck = await verifyLeanFile(lean.path, 90_000).catch((error) => ({
+      success: false,
+      output: error instanceof Error ? error.message : String(error),
+    }))
+    lines.push(
+      "",
+      "# Previous immutable Lean repair input",
+      "",
+      `Repair ${lean.path} into the newly requested immutable revision; do not overwrite it.`,
+      previousCheck.success
+        ? "The previous Lean file compiles; preserve its declarations and repair only remaining contract diagnostics."
+        : `Binding Lean diagnostic: ${previousCheck.output.slice(-8_000)}`,
+    )
+  }
 
   if (shared === undefined) {
     lines.push(
       "",
       "# Shared semantic reuse",
       "",
-      "No hash-bound HUMAN_APPROVED shared environment is available to this prompt.",
+      "No hash-bound HUMAN_APPROVED language semantic core is available to this prompt.",
+      "This is a first-language/core boundary. Mark languageCore.status=BOOTSTRAP_CANDIDATE and keep reusable model decisions explicit; never pretend they are already shared or approved.",
       "Prior unit artifacts are neither semantic dependencies nor default templates; do not inspect them unless the runtime explicitly supplies one as an input.",
     )
   } else {
     lines.push(
       "",
-      "# Shared semantic reuse",
+      "# Language semantic core reuse",
       "",
       `- Environment: ${shared.path} (sha256=${shared.sha256})`,
+      `- Language core manifest: ${shared.corePath} (sha256=${shared.coreSha256})`,
+      `- Lean core: ${shared.leanModulePath} (sha256=${shared.leanModuleSha256})`,
+      `- Required Lean import: import ${shared.leanImportName}`,
+      `- Model roles: ${shared.coreRoles.join(", ")}`,
       `- Review status: ${shared.reviewStatus}`,
       `- Scope: ${shared.scope}`,
-      `- Current unit eligible for this shared environment: ${shared.unitEligible}`,
+      `- Current unit matches the core candidate pattern: ${shared.unitEligible}`,
       `- Reusable active HUMAN_APPROVED IDs: ${shared.semanticIds.join(", ") || "NONE"}`,
+      "This environment is the build-once language core: units reuse it and describe only instruction/construct-specific deltas.",
+      "When eligible, the Lean mapping must import this exact core and must not redeclare any listed model role.",
+      "Pattern match is not semantic eligibility: architecture and its critic must verify every scope eligibility requirement and must use BOOTSTRAP_CANDIDATE/deep review when any requirement fails.",
       "Only those IDs may be treated as shared semantic dependencies, and only when the unit satisfies the stated scope.",
       "Do not import a per-unit accepted artifact as shared authority.",
     )
@@ -175,7 +278,7 @@ export async function buildStageInputContext(run: RunState): Promise<string> {
         "Preserve every listed ID as OPEN_QUESTION and visible provenance.",
         "Do not guess an NVIDIA behavior. Add an explicit project DESIGN_DEPENDENCY that limits the executable/relational model to source-established cases.",
         "A disputed input form or corner case must be excluded by an explicit precondition or represented as partial/underspecified; never assign it an arbitrary result.",
-        "Any source-visible exclusion makes the Lean module BOUNDED_PARTIAL and must appear in Supported forms, Excluded forms, Evidence policy, theorem scope, and traceability.",
+        "Any source-visible exclusion makes the Lean module PARTIAL_EXPLICIT and must appear in Supported forms, Excluded forms, Evidence policy, theorem scope, and traceability.",
         "A benchmark waiver is not a humanApprovalDependency and cannot authorize an ASSUMPTION classification or promotion.",
       )
     }
@@ -257,7 +360,13 @@ export async function buildStageInputContext(run: RunState): Promise<string> {
           `Semantic authority: ${catalog.semanticDocument.path}`,
           `Architecture authority: ${catalog.architectureDocument.path}`,
           "Also state Scope status, Supported forms, Excluded forms, and Evidence policy.",
-          "Use BOUNDED_PARTIAL if any source-visible form is excluded or unresolved; never hide narrowing in constructors.",
+          "Use FULL_INSTRUCTION by default. Use PARTIAL_EXPLICIT only when every exclusion is encoded by a named Lean precondition or partial-result declaration; never hide narrowing in constructors or prose.",
+          "Append one SPEC2LEAN_LEAN_MODEL_CONTRACT JSON comment with schemaVersion=1, scopeStatus, languageCoreStatus, languageCoreImport, domainBindings, encodedExclusions, operationBranchBindings, edgeCaseBindings, specificationDefinitions, executableDefinitions, and relationalDefinitions.",
+          "For each imported core domain, set providedByLanguageCore=true. For each unit-local domain, declare the named Lean type in this file.",
+          "For BOOTSTRAP_CANDIDATE, languageCoreCandidate must repeat the semantic candidateCoreId and list reusableDeclarations plus modelRoleBindings to real declarations; this is a review candidate, never reusable authority.",
+          "Bind every semantic operation branchId and edge-case caseId to exactly one list of real unit-local Lean symbols. Every semantic ID used by a COVERED row must occur in a declaration's immediate spec2lean provenance comment.",
+          "A FIXED_WIDTH domain binding must name its exact width and may not map to unbounded Int/Nat without a checked subtype invariant.",
+          "Reuse the approved language core when eligible. Do not redeclare its word/state/operand/guard model per unit.",
           "candidate_validate enforces this header and rejects unexplained unused def/abbrev declarations.",
         ]),
         "Run `candidate_validate` after the final write; SUCCESS is forbidden while it reports any issue.",
@@ -296,6 +405,14 @@ export async function buildStageInputContext(run: RunState): Promise<string> {
       '{"schemaVersion":1,"entries":[{"semanticId":"D-1","classification":"DESIGN_DEPENDENCY","statement":"...","evidenceIds":["SF-1"],"dependencyIds":["SF-1"],"stateAffecting":true,"status":"RESOLVED"}]}',
       "-->",
       "Index every architecture SOURCE_FACT, DERIVED_INTERPRETATION, DESIGN_DEPENDENCY, ASSUMPTION, and OPEN_QUESTION exactly once.",
+      "Default to FULL_INSTRUCTION for the exact requested unit. PARTIAL_EXPLICIT is allowed only when a legal case is represented by an explicit precondition/partial outcome, never by prose alone.",
+      "Append exactly one second canonical JSON comment:",
+      "<!-- SPEC2LEAN_COMPLETENESS_CONTRACT",
+      '{"schemaVersion":1,"scopeStatus":"FULL_INSTRUCTION","languageCore":{"status":"REUSED_APPROVED","path":"language_packs/.../language-core.json","sha256":"<64 hex>"},"dimensions":[{"dimension":"SYNTAX","status":"COVERED","semanticIds":["SF-1"],"encodedBy":[],"rationale":"..."}]}',
+      "-->",
+      "The dimensions array must contain exactly: SYNTAX, OPERANDS, TYPES, OPERATION_BRANCHES, EDGE_CASES, GUARDS, STATE_EFFECTS, ERRORS, VERSION_APPLICABILITY.",
+      "Use COVERED or NOT_APPLICABLE for FULL_INSTRUCTION. EXCLUDED_BY_ENCODED_PRECONDITION requires PARTIAL_EXPLICIT plus an encodedBy precondition ID.",
+      "For BOOTSTRAP_CANDIDATE, languageCore also requires candidateCoreId, scopeStatement, and proposedSemanticIds limited to genuinely reusable language/version concepts.",
       "Every evidenceIds/dependencyIds value must resolve to another entry in this same index; use SOURCE_FACT IDs as architecture evidence references.",
       "SOURCE_FACT entries must have empty evidenceIds and dependencyIds because they are the architecture evidence roots; cite their official locators in the human-readable section.",
       "Do one initial write, validate once, and make at most one bounded replacement for concrete diagnostics. If validation still fails, return RETRY with the exact issue instead of repeatedly rewriting.",
@@ -304,10 +421,16 @@ export async function buildStageInputContext(run: RunState): Promise<string> {
   if (run.stage === "SOURCE_CURATION") {
     lines.push(
       "",
-      "# Source-bundle v2 output contract",
+      "# Source-bundle v3 full-instruction contract",
       "",
       "Schema: ir/source/source-bundle-v2.schema.json",
-      "Use schema_version=2 with bundle_id, language, specification_version, unit, source_documents, fragments, and evidence_gaps.",
+      "Use schema_version=3 with bundle_id, language, specification_version, unit, source_documents, fragments, evidence_gaps, and coverage_matrix.",
+      `Case-sensitive run identity: language=${JSON.stringify(run.language)}, specification_version=${JSON.stringify(run.specVersion)}, unit=${JSON.stringify(run.unit)}. Copy these three values byte-for-byte; display capitalization such as PTX is not interchangeable with the run identity.`,
+      "The schema uses additionalProperties=false. Do not emit status, instruction_family, document_title, source_kind/url/size_bytes/read_in_this_curation_pass on source_documents, publisher/section_number/html_line_start/html_line_end/pdf_page/page/fragment_sha256/context_before/context_after/local_source_path on fragments, or any other undeclared key.",
+      "Canonical source document shape: {\"document_id\":\"...\",\"publisher\":\"...\",\"kind\":\"HTML|PDF\",\"local_path\":\"...\",\"sha256\":\"<64 hex>\"}.",
+      "Canonical fragment shape: {\"fragment_id\":\"...\",\"document_id\":\"...\",\"source_kind\":\"HTML|PDF\",\"source_sha256\":\"<document sha256>\",\"exact_quote\":\"at least four whitespace-separated tokens\",\"context\":\"optional\",\"locator\":{\"section\":\"optional\",\"heading\":\"optional\",\"anchor\":\"HTML optional\",\"start_line\":1,\"end_line\":1,\"page\":1},\"reason_for_inclusion\":\"...\"}. Keep only locator keys applicable to the rendition.",
+      "Canonical coverage row shape: {\"dimension\":\"SYNTAX\",\"status\":\"COVERED\",\"fragment_ids\":[\"...\"],\"gap_ids\":[],\"rationale\":\"...\"}. fragment_ids and gap_ids are mandatory arrays on every row, including NOT_APPLICABLE rows where both are empty.",
+      "coverage_matrix must contain exactly the nine completeness dimensions and classify each as COVERED, NOT_APPLICABLE, or GAP with fragment_ids/gap_ids and rationale.",
       "Every fragment requires fragment_id, document_id, exact_quote, source_sha256, reason_for_inclusion, and an HTML/PDF locator.",
       "When the source manifest pins both HTML and PDF, every load-bearing SOURCE_FACT needs an exact HTML quotation/anchor/line path and PDF corroboration by an explicit PDF fragment or deterministic exact-quote alignment.",
       "Do not call a source bundle complete when either required rendition is missing; candidate traceability generation enforces both paths.",
@@ -318,23 +441,34 @@ export async function buildStageInputContext(run: RunState): Promise<string> {
   if (run.stage === "THEOREM_GENERATION") {
     lines.push(
       "",
-      "# Theorem correctness contract v2",
+      "# Theorem correctness contract v3",
       "",
-      "Write schema_version=2 and a source_faithfulness_boundary statement.",
-      "Every theorem obligation requires correctness_kind, correctness_rationale, semantic_claim_ids, and one complete header-only Lean theorem declaration.",
+      "Write schema_version=3 and a source_faithfulness_boundary statement.",
+      "Every theorem obligation requires exactly one proof_requirement_id plus correctness_kind, correctness_rationale, semantic_claim_ids, independent_specification_symbols, implementation_symbols, and one complete header-only Lean theorem declaration.",
+      "Every semantics proofRequirements ID must map to exactly one independent theorem with the same correctness kind and all required semantic claim IDs.",
       "The contract must contain at least one OPERATION_FIDELITY obligation and one EXECUTION_CORRESPONDENCE obligation.",
+      "OPERATION/ALGORITHM/RANGE/EDGE obligations must compare a separately defined source-level specification symbol with implementation symbols; unfolding an implementation against itself is rejected.",
+      "EXECUTION_CORRESPONDENCE must mention both the executable and relational definitions named by SPEC2LEAN_LEAN_MODEL_CONTRACT.",
+      "Cover every mandatory semantics.proofRequirements correctnessKind exactly; source-derived range, edge, guard, state-update, and frame requirements may not be dropped.",
       "These prove that Lean implements the approved semantic IR. They do not prove that official source prose is itself true; that boundary remains evidence-, critic-, and gate-governed.",
-      "Additional applicable kinds are GUARD_BEHAVIOR, STATE_UPDATE, FRAME_PROPERTY, DETERMINISM, PARTIALITY, and SCOPE_BOUNDARY.",
+      "Additional applicable kinds are ALGORITHM_FIDELITY, RESULT_RANGE, EDGE_CASE_BEHAVIOR, TYPE_DOMAIN, GUARD_BEHAVIOR, STATE_UPDATE, FRAME_PROPERTY, DETERMINISM, PARTIALITY, and SCOPE_BOUNDARY.",
     )
   }
   if (run.stage === "SEMANTIC_EXTRACTION" && run.semanticV2?.mode !== "DELTA_FAST_PATH") {
     lines.push(
       "",
-      "# Full-semantics v2 output contract",
+      "# Full-semantics v3 full-instruction contract",
       "",
       "Schema: ir/semantic/full-semantics.schema.json",
-      "Use schemaVersion=2 and documentType=spec2lean_full_semantics.",
+      "Use schemaVersion=3 and documentType=spec2lean_full_semantics.",
       "Required arrays: semanticClaims, syntaxForms, operands, stateEffects, preconditions, proofFamilies; operation is required.",
+      "Every operand requires exhaustive legalForms, exact typeDomains, and explicit coercions. Operation requires inputDomains, outputDomain, explicit branches, and explicit edgeCases (or the corresponding coverage row must be NOT_APPLICABLE).",
+      "Also require scopeStatus, languageCore, the exact nine-row coverage array, and non-empty proofRequirements.",
+      "REUSED_APPROVED languageCore must contain the exact runtime-supplied core manifest path and SHA-256; otherwise use BOOTSTRAP_CANDIDATE without pretending reuse.",
+      "BOOTSTRAP_CANDIDATE must be concrete: include candidateCoreId, scopeStatement, eligibilityRequirements, reusableSemanticClaimIds, and proposedModelRoles. This enables one-time human review and later promotion without silently sharing a first unit.",
+      "Default scopeStatus=FULL_INSTRUCTION. PARTIAL_EXPLICIT requires every exclusion to use EXCLUDED_BY_ENCODED_PRECONDITION and name a real preconditionId.",
+      "proofRequirements is the machine-enforced bridge to theorem generation; include operation fidelity and execution correspondence plus every applicable algorithm/range/edge/guard/state/frame property.",
+      "Mandatory independent proof requirements are OPERATION_FIDELITY, ALGORITHM_FIDELITY, RESULT_RANGE, GUARD_BEHAVIOR, STATE_UPDATE, FRAME_PROPERTY, and EXECUTION_CORRESPONDENCE.",
       "Every semanticClaims entry uses semanticId, classification, statement, evidenceIds, dependencyIds, stateAffecting, humanApprovalDependencies, and lifecycle.",
       "SOURCE_FACT needs exact bundle evidence IDs; DERIVED_INTERPRETATION needs exact semantic dependencies; DESIGN_DEPENDENCY is never source prose.",
       "An ACTIVE OPEN_QUESTION with stateAffecting=true is a valid research blocker and must not be concretized by Lean.",

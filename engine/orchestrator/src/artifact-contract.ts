@@ -53,6 +53,11 @@ export function stageAttempt(
               execution.outcome === "RETRY" &&
               stage !== "PROOF_GENERATION" &&
               execution.artifactProduced !== false
+            ) ||
+            (
+              execution.outcome === "BLOCKED" &&
+              stage !== "PROOF_GENERATION" &&
+              execution.artifactProduced === true
             )
           ),
       )
@@ -83,13 +88,22 @@ export function artifactContractForRun(
   if (
     run.stage === "SEMANTIC_EXTRACTION" &&
     run.semanticV2?.mode === "LEGACY_FALLBACK" &&
-    run.semanticV2.current !== undefined &&
-    attempt <= run.semanticV2.current.attempt
+    run.semanticV2.current !== undefined
   ) {
     // Preserve the failed/superseded delta attempt and any partial
-    // deterministic outputs. The legacy agent always receives a fresh
-    // immutable semantics revision.
-    attempt = run.semanticV2.current.attempt + 1
+    // deterministic outputs. Each produced legacy artifact advances beyond
+    // the reserved delta/materialization revisions, even when version numbers
+    // have gaps.
+    const producedLegacyArtifacts = (run.executions ?? []).filter(
+      (execution) =>
+        execution.stage === "SEMANTIC_EXTRACTION" &&
+        execution.agent !== "semantic-extractor-delta" &&
+        execution.artifactProduced === true,
+    ).length
+    attempt = Math.max(
+      attempt,
+      run.semanticV2.current.attempt + 1 + producedLegacyArtifacts,
+    )
   }
 
   let outputPath: string

@@ -4,14 +4,20 @@ import {
   benchmarkGateParking,
   waitingGateForStage,
 } from "./gate-runtime.js"
-import { loadRun } from "./run-store.js"
+import { loadRun, saveRun } from "./run-store.js"
 import {
   consecutiveOutputLengthFailureCount,
   isProviderAvailabilityFailure,
+  noProgressRetryCount,
+  noProgressRetryLimitReached,
   outputLengthRetryLimitReached,
 } from "./retry-policy.js"
 import { proofTargetSummary } from "./proof-plan.js"
-import { executeTick } from "./runner.js"
+import {
+  executeTick,
+  recoverNonAuthoritativeSemanticBlock,
+  recoverNonAuthoritativeSourceBlock,
+} from "./runner.js"
 import type { FormalizationStage } from "./workflow.js"
 
 const TERMINAL_STAGES = new Set<FormalizationStage>([
@@ -56,8 +62,40 @@ async function main(): Promise<void> {
 
   try {
     while (true) {
-      const before = await loadRun(runId)
+      let before = await loadRun(runId)
       console.log(`[spec2lean] run=${runId} stage=${before.stage} revision=${before.revision}`)
+
+      const recoveredSourceBlock = await recoverNonAuthoritativeSourceBlock(before)
+      if (recoveredSourceBlock !== undefined) {
+        await saveRun(recoveredSourceBlock)
+        console.log(JSON.stringify({
+          ok: true,
+          deterministic: true,
+          recovered: true,
+          runId,
+          fromStage: before.stage,
+          toStage: recoveredSourceBlock.stage,
+          revision: recoveredSourceBlock.revision,
+          summary: recoveredSourceBlock.history.at(-1)?.reason,
+        }, null, 2))
+        before = recoveredSourceBlock
+      }
+
+      const recoveredSemanticBlock = await recoverNonAuthoritativeSemanticBlock(before)
+      if (recoveredSemanticBlock !== undefined) {
+        await saveRun(recoveredSemanticBlock)
+        console.log(JSON.stringify({
+          ok: true,
+          deterministic: true,
+          recovered: true,
+          runId,
+          fromStage: before.stage,
+          toStage: recoveredSemanticBlock.stage,
+          revision: recoveredSemanticBlock.revision,
+          summary: recoveredSemanticBlock.history.at(-1)?.reason,
+        }, null, 2))
+        before = recoveredSemanticBlock
+      }
 
       const waitingGate = waitingGateForStage(before.stage)
       const autoAdvance = await advanceBenchmarkGate(before)
@@ -253,6 +291,25 @@ async function main(): Promise<void> {
           stage: after.stage,
           consecutiveOutputLengthFailures,
           hint: "The bounded recovery attempt also exhausted model output. Inspect the stage prompt/tool trace; do not retry unchanged.",
+        }, null, 2))
+        process.exitCode = 2
+        return
+      }
+
+      const repeatedNoProgressRetries = noProgressRetryCount(
+        after.executions ?? [],
+        after.stage,
+      )
+      if (noProgressRetryLimitReached(after.executions ?? [], after.stage)) {
+        console.log(JSON.stringify({
+          ok: false,
+          stopped: true,
+          reason: "NO_PROGRESS_RETRY_LIMIT_REACHED",
+          runId,
+          stage: after.stage,
+          repeatedNoProgressRetries,
+          failureFingerprint: last?.failureFingerprint,
+          hint: "The bounded repair repeated the same diagnostic without artifact or proof-declaration progress; inspect or change the repair route/model instead of resuming unchanged.",
         }, null, 2))
         process.exitCode = 2
         return

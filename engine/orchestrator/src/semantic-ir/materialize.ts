@@ -169,6 +169,16 @@ export function materializeSemanticView(
     stateEffects: delta.stateEffects,
     preconditions: delta.preconditions,
     proofFamilies: delta.proofFamilies,
+    scopeStatus: delta.scopeStatus,
+    coverage: delta.coverage,
+    proofRequirements: delta.proofRequirements,
+    languageCore: {
+      status: "REUSED_APPROVED",
+      path: delta.languageCore?.path,
+      environmentId: shared.environmentId,
+      revision: shared.revision,
+      sha256: delta.languageCore?.sha256 ?? sharedEnvironmentSha256(shared),
+    },
     unresolvedStateAffectingSemanticIds,
   }
 }

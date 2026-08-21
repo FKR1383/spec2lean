@@ -93,6 +93,8 @@ export async function runSemanticIrSelfTests(): Promise<{
     "common.schema.json",
     "shared-environment.schema.json",
     "instruction-delta.schema.json",
+    "full-semantics.schema.json",
+    "language-core.schema.json",
     "semantic-profile.schema.json",
   ]) {
     JSON.parse(

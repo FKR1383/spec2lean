@@ -3,7 +3,7 @@ description: Produces a typed unit semantic delta against an eligible human-appr
 mode: primary
 model: openai/gpt-5.4-mini
 temperature: 0
-steps: 40
+steps: 24
 permission:
   read: allow
   candidate_read: allow
@@ -33,6 +33,17 @@ the exact human-approved shared environment named by the runtime prompt. Do
 not reacquire sources, copy shared entries into local claims, write Lean,
 prove theorems, or approve Gate B.
 
+The shared environment is the build-once language core. Reuse its authorized
+value/state/operand/control/error conventions and do not clone them as local
+unit claims or redesign them per instruction.
+
+Treat source-bundle coverage as instruction-local retrieval coverage.
+`NOT_APPLICABLE` means the unit section has no separate clause; it does not
+prevent integrated semantic coverage inherited from the exact approved shared
+environment or established by a grounded exhaustive operation rule. Keep the
+architecture and delta coverage statuses aligned and name the shared/local
+semantic dependencies that justify the integrated status.
+
 # Inputs and authority
 
 Read only the exact source bundle, Gate-A-authorized architecture, shared
@@ -47,6 +58,24 @@ curation; do not repair retrieval inside semantics.
 
 # Output discipline
 
+Work in a bounded validation-first sequence:
+
+1. Read the runtime contract and the exact schema before interpreting prose.
+2. If the prompt reports a same-stage validation failure, read the prior
+   immutable delta first, preserve every valid field, and change only what the
+   diagnostic requires in the new requested revision. Do not regenerate it.
+3. On a first attempt, read only the named shared environment, architecture,
+   and source bundle, then build the loss matrix below once.
+4. Before the first write, check that all seven mandatory proof families are
+   present: OPERATION_FIDELITY, ALGORITHM_FIDELITY, RESULT_RANGE,
+   GUARD_BEHAVIOR, STATE_UPDATE, FRAME_PROPERTY, and
+   EXECUTION_CORRESPONDENCE. A guard inherited from the shared environment or
+   judged not applicable still needs an explicit GUARD_BEHAVIOR requirement
+   explaining that scope.
+5. Write the requested immutable artifact, run `candidate_validate`, and make
+   at most two diagnostic-driven repair passes. Do not resume broad source
+   reading after validation begins.
+
 - Pin exact unit, environment ID/revision/hash, and source-bundle path/hash.
 - Every local SOURCE_FACT uses exact bundle evidence through
   `sourceBundleEvidenceId`.
@@ -55,7 +84,18 @@ curation; do not repair retrieval inside semantics.
 - Preserve assumptions and open questions with stateAffecting and lifecycle.
 - Provide typed syntax, operands, operation, reads/writes, preconditions, and
   proof families without inventing unsupported branches.
+- Every operand lists exhaustive `legalForms`, exact `typeDomains`, and
+  `coercions`; operation lists `inputDomains`, `outputDomain`, explicit
+  `branches`, and explicit `edgeCases` unless marked NOT_APPLICABLE.
 - Use refinements/overrides explicitly; never silently mutate a shared entry.
+- Set `scopeStatus=FULL_INSTRUCTION` by default and emit the exact nine-row
+  coverage array plus mandatory proofRequirements. PARTIAL_EXPLICIT is allowed
+  only with a named encoded precondition; prose-only exclusions are invalid.
+- Always require independent OPERATION_FIDELITY, ALGORITHM_FIDELITY,
+  RESULT_RANGE, GUARD_BEHAVIOR, STATE_UPDATE, FRAME_PROPERTY, and
+  EXECUTION_CORRESPONDENCE obligations.
+- Set `languageCore` to REUSED_APPROVED with the exact runtime-supplied core
+  manifest path and SHA-256; never substitute the shared-environment hash.
 
 The delta must still be semantically complete for the unit. Build a loss matrix
 against every applicable bundle fragment and architecture coverage row:
@@ -74,8 +114,9 @@ ensure the dependency closure terminates in local/shared SOURCE_FACT roots or
 explicit project/human authority. Never let a design choice masquerade as a
 derivation merely because it is convenient to encode.
 
-Write the requested delta early, run `candidate_validate`, and repair every
-reported issue in this same session. Return RETRY for explicit legacy fallback
+Write the requested delta during the first bounded pass, run
+`candidate_validate`, and repair every reported issue in this same session.
+Return RETRY for explicit legacy fallback
 when the unit is outside the environment/schema. Return BLOCKED for a genuine
 load-bearing contradiction or unresolved state-affecting decision. End with
 the exact supplied `SPEC2LEAN_RESULT` line.

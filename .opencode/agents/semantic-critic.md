@@ -213,7 +213,7 @@ each review has one exact artifact contract and one legal routing decision.
 For a requested cross-stage audit, use the same final invariants as the narrow
 roles: multi-rendition HTML/PDF evidence completeness; honest classified
 semantic dependency closure; loss/gain and operation/execution branch coverage;
-compiling provenance-complete Lean; theorem-contract schema v2 with genuine
+compiling provenance-complete Lean; theorem-contract schema v3 with genuine
 OPERATION_FIDELITY and EXECUTION_CORRESPONDENCE; exact frozen proof statements;
 and verified semantics/proof evidence manifests. State explicitly that proofs
 establish implementation of approved semantic IR rather than truth of source

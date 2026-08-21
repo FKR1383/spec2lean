@@ -76,7 +76,7 @@ export type EvidenceEntry = {
 }
 
 export type EvidenceManifest = {
-  schemaVersion: 1 | 2 | 3 | 4
+  schemaVersion: 1 | 2 | 3 | 4 | 5
   manifestType: "spec2lean_evidence_manifest"
   generator: string
   runId: string
@@ -93,6 +93,13 @@ export type EvidenceManifest = {
   theoremDocument?: ArtifactFingerprint
   entries: EvidenceEntry[]
   semanticUncertainties?: SemanticUncertainty[]
+  qualityContract?: {
+    scopeStatus: string
+    languageCoreStatus: string
+    coverage: Array<{ dimension: string; status: string; rationale: string }>
+    encodedExclusions: string[]
+    proofRequirementKinds: string[]
+  }
   diagnostics: {
     requiredOfficialRenditions?: Array<"HTML" | "PDF">
     declarationsWithoutReferences: string[]
@@ -127,6 +134,7 @@ export type EvidenceViewModel = {
   leanPath: string
   entry: EvidenceEntry
   diagnostics: EvidenceManifest["diagnostics"]
+  qualityContract?: EvidenceManifest["qualityContract"]
   semanticUncertainties: SemanticUncertainty[]
   evidence: Array<Evidence & {
     sourceUri: string

@@ -52,6 +52,7 @@ export type GateStatus =
 export type AgentFailureClass =
   | "PROVIDER_RETRY_BUDGET_EXCEEDED"
   | "OUTPUT_LENGTH_EXCEEDED"
+  | "AGENT_WAIT_BUDGET_EXCEEDED"
 
 export type RunEvent = {
   at: string
@@ -71,6 +72,9 @@ export type AgentExecution = {
   nextStage: FormalizationStage
   response: string
   artifactProduced?: boolean
+  artifactBeforeSha256?: string
+  artifactAfterSha256?: string
+  failureFingerprint?: string
   failureClass?: AgentFailureClass
   progress?: {
     kind: "PROOF_BATCH_CONTINUATION"
@@ -120,7 +124,7 @@ export type SemanticV2ArtifactSet = {
 
 export type SemanticV2Event = {
   at: string
-  kind: "ELIGIBILITY" | "FALLBACK" | "MATERIALIZED" | "CRITIC_FALLBACK"
+  kind: "ELIGIBILITY" | "FALLBACK" | "MATERIALIZED" | "CRITIC_FALLBACK" | "REPAIR_ATTEMPT"
   code: string
   detail: string
 }
@@ -143,6 +147,9 @@ export type SemanticV2State = {
 
 export type RunState = {
   schemaVersion: 1
+
+  /** New runs use the deterministic full-instruction quality contract. */
+  qualityContractVersion?: 1
 
   runId: string
   mode: WorkflowMode

@@ -133,6 +133,8 @@ export type OperandDefinition = {
   position: number
   role: "DESTINATION" | "SOURCE" | "GUARD" | "MODIFIER" | "OTHER"
   legalForms: string[]
+  typeDomains?: string[]
+  coercions?: string[]
   semanticClaimIds: string[]
 }
 
@@ -182,11 +184,44 @@ export type InstructionSemanticDelta = {
     operationId: string
     normalizedMeaning: string
     pseudocode?: string
+    inputDomains?: string[]
+    outputDomain?: string
+    branches?: Array<{
+      branchId: string
+      condition: string
+      result: string
+      semanticClaimIds: string[]
+    }>
+    edgeCases?: Array<{
+      caseId: string
+      inputClass: string
+      behavior: string
+      semanticClaimIds: string[]
+    }>
     semanticClaimIds: string[]
   }
   stateEffects: StateEffect[]
   preconditions: Precondition[]
   proofFamilies: ProofFamily[]
+  scopeStatus?: "FULL_INSTRUCTION" | "PARTIAL_EXPLICIT"
+  coverage?: Array<{
+    dimension: string
+    status: "COVERED" | "NOT_APPLICABLE" | "EXCLUDED_BY_ENCODED_PRECONDITION"
+    semanticClaimIds: string[]
+    encodedPreconditionIds: string[]
+    rationale: string
+  }>
+  proofRequirements?: Array<{
+    requirementId: string
+    correctnessKind: string
+    semanticClaimIds: string[]
+    rationale: string
+  }>
+  languageCore?: {
+    status: "REUSED_APPROVED"
+    path: string
+    sha256: string
+  }
 }
 
 export type MaterializedClaim = SemanticClaim & {
@@ -225,6 +260,16 @@ export type MaterializedSemanticView = {
   preconditions: Precondition[]
   proofFamilies: ProofFamily[]
   unresolvedStateAffectingSemanticIds: string[]
+  scopeStatus?: "FULL_INSTRUCTION" | "PARTIAL_EXPLICIT"
+  coverage?: InstructionSemanticDelta["coverage"]
+  proofRequirements?: InstructionSemanticDelta["proofRequirements"]
+  languageCore?: {
+    status: "REUSED_APPROVED"
+    path?: string
+    environmentId: string
+    revision: number
+    sha256: string
+  }
 }
 
 export type ValidationIssue = {

@@ -10,8 +10,20 @@ import { duplicateJsonKeyIssues } from "./json-integrity.js"
 import { latestObligationPath, proofTargets } from "./proof-plan.js"
 import { latestVersionedArtifact } from "./provenance-catalog.js"
 import { REPO_ROOT } from "./repo.js"
+import {
+  artifactChainCompletenessIssues,
+  leanModelContractIssues,
+  theoremSemanticCoverageIssues,
+} from "./quality-contract.js"
 import { theoremStrengthReviewAuditIssues } from "./theorem-contract.js"
+import {
+  leanBehaviorBranches,
+  theoremBehaviorAuditIssues,
+} from "./theorem-behavior-audit.js"
 import { semanticEvidenceRenditionIssues } from "./traceability.js"
+import { criticStageOwnershipIssues } from "./stage-ownership.js"
+import { loadLanguageCore } from "./language-core.js"
+import { validateSemanticDeltaForRun } from "./semantic-v2.js"
 import type { RunState } from "./workflow.js"
 
 export type ArtifactVerification = {
@@ -104,8 +116,15 @@ export async function verifyExpectedArtifact(run: RunState): Promise<ArtifactVer
   }
 
   issues.push(...validateArtifactContent(run, source, parsedJson))
+  if (run.stage.endsWith("_CRITIQUE")) {
+    issues.push(...criticStageOwnershipIssues(run, source))
+  }
   if (run.stage === "SOURCE_CURATION") {
     issues.push(...await sourceDocumentIntegrityIssues(parsedJson))
+  }
+  if (run.stage === "SEMANTIC_EXTRACTION" && run.semanticV2?.mode === "DELTA_FAST_PATH") {
+    const semantic = await validateSemanticDeltaForRun(run)
+    issues.push(...semantic.issues)
   }
   if (run.stage === "SEMANTIC_EXTRACTION" && run.semanticV2?.mode !== "DELTA_FAST_PATH") {
     issues.push(...await semanticEvidenceIntegrityIssues(run, parsedJson))
@@ -116,6 +135,88 @@ export async function verifyExpectedArtifact(run: RunState): Promise<ArtifactVer
       }))
     } catch (error) {
       issues.push(`could not verify semantic official-rendition coverage: ${error instanceof Error ? error.message : String(error)}`)
+    }
+    if (run.qualityContractVersion === 1) {
+      try {
+        const [architecturePath, sourceBundlePath] = await Promise.all([
+          latestVersionedArtifact(`${run.artifactRoot}/architecture`, [/^foundation-v(\d+)\.md$/]),
+          latestVersionedArtifact(`${run.artifactRoot}/source-bundles`, [/^source-bundle-v(\d+)\.json$/]),
+        ])
+        const [architecture, sourceBundle] = await Promise.all([
+          readFile(resolve(REPO_ROOT, architecturePath), "utf8"),
+          readFile(resolve(REPO_ROOT, sourceBundlePath), "utf8").then((value) => JSON.parse(value) as unknown),
+        ])
+        issues.push(...artifactChainCompletenessIssues(architecture, sourceBundle, parsedJson))
+        if (isRecord(parsedJson) && isRecord(parsedJson.languageCore) &&
+          parsedJson.languageCore.status === "REUSED_APPROVED") {
+          const profilePath = `language_packs/${run.language.toLowerCase()}/${run.specVersion}/semantic-profile.json`
+          const profile = JSON.parse(await readFile(resolve(REPO_ROOT, profilePath), "utf8")) as UnknownRecord
+          if (!nonEmptyString(profile.languageCorePath)) throw new Error("semantic profile has no languageCorePath")
+          await loadLanguageCore(profile.languageCorePath)
+          const coreSha256 = createHash("sha256")
+            .update(await readFile(resolve(REPO_ROOT, profile.languageCorePath)))
+            .digest("hex")
+          if (parsedJson.languageCore.path !== profile.languageCorePath ||
+            parsedJson.languageCore.sha256 !== coreSha256) {
+            issues.push("semantics is not bound to the exact current language-core manifest")
+          }
+        }
+      } catch (error) {
+        issues.push(`could not validate architecture/source/semantics coverage: ${String(error)}`)
+      }
+    }
+  }
+
+  if (run.qualityContractVersion === 1 && run.stage === "LEAN_FORMALIZATION") {
+    try {
+      const semanticsPath = await latestVersionedArtifact(
+        `${run.artifactRoot}/semantics`,
+        [/^semantics-v(\d+)\.json$/],
+      )
+      const semantics = JSON.parse(
+        await readFile(resolve(REPO_ROOT, semanticsPath), "utf8"),
+      ) as unknown
+      let expectedCoreImport: string | undefined
+      if (isRecord(semantics) && isRecord(semantics.languageCore) &&
+        semantics.languageCore.status === "REUSED_APPROVED") {
+        const profilePath = `language_packs/${run.language.toLowerCase()}/${run.specVersion}/semantic-profile.json`
+        const profile = JSON.parse(await readFile(resolve(REPO_ROOT, profilePath), "utf8")) as UnknownRecord
+        if (!nonEmptyString(profile.languageCorePath)) throw new Error("semantic profile has no languageCorePath")
+        const core = await loadLanguageCore(profile.languageCorePath)
+        const coreSha256 = createHash("sha256")
+          .update(await readFile(resolve(REPO_ROOT, profile.languageCorePath)))
+          .digest("hex")
+        if (semantics.languageCore.path !== profile.languageCorePath ||
+          semantics.languageCore.sha256 !== coreSha256) {
+          issues.push("semantics is not bound to the exact current language-core manifest")
+        }
+        expectedCoreImport = core.leanModule.importName
+      }
+      issues.push(...leanModelContractIssues(source, semantics, expectedCoreImport))
+    } catch (error) {
+      issues.push(`could not compare Lean model contract with semantics: ${String(error)}`)
+    }
+  }
+
+  if (run.qualityContractVersion === 1 && run.stage === "THEOREM_GENERATION") {
+    try {
+      const [semanticsPath, leanPath] = await Promise.all([
+        latestVersionedArtifact(
+          `${run.artifactRoot}/semantics`,
+          [/^semantics-v(\d+)\.json$/],
+        ),
+        latestVersionedArtifact(
+          `${run.artifactRoot}/lean`,
+          [new RegExp(`^${run.leanModuleName}-v(\\d+)\\.lean$`)],
+        ),
+      ])
+      const [semantics, leanSource] = await Promise.all([
+        readFile(resolve(REPO_ROOT, semanticsPath), "utf8").then((value) => JSON.parse(value) as unknown),
+        readFile(resolve(REPO_ROOT, leanPath), "utf8"),
+      ])
+      issues.push(...theoremSemanticCoverageIssues(parsedJson, semantics, leanSource))
+    } catch (error) {
+      issues.push(`could not validate theorem coverage against semantics and Lean: ${String(error)}`)
     }
   }
 
@@ -139,6 +240,16 @@ export async function verifyExpectedArtifact(run: RunState): Promise<ArtifactVer
       const obligationPath = await latestObligationPath(run)
       const targets = await proofTargets(run)
       issues.push(...theoremStrengthReviewAuditIssues(source, obligationPath, targets))
+      const leanPath = await latestVersionedArtifact(
+        `${run.artifactRoot}/lean`,
+        [new RegExp(`^${run.leanModuleName}-v(\\d+)\\.lean$`)],
+      )
+      const leanSource = await readFile(resolve(REPO_ROOT, leanPath), "utf8")
+      issues.push(...theoremBehaviorAuditIssues(
+        source,
+        targets,
+        leanBehaviorBranches(leanSource),
+      ))
     } catch (error) {
       issues.push(
         `could not validate theorem-strength review against its obligation contract: ${String(error)}`,

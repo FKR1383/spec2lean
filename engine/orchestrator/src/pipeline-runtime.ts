@@ -28,11 +28,16 @@ import { proofTargetSummary } from "./proof-plan.js"
 import { REPO_ROOT } from "./repo.js"
 import {
   isProviderAvailabilityFailure,
+  noProgressRetryLimitReached,
   outputLengthRetryLimitReached,
   semanticRetryState,
 } from "./retry-policy.js"
 import { withRepositoryLock } from "./repository-lock.js"
-import { executeTick } from "./runner.js"
+import {
+  executeTick,
+  recoverNonAuthoritativeSemanticBlock,
+  recoverNonAuthoritativeSourceBlock,
+} from "./runner.js"
 import { loadRun, saveRun } from "./run-store.js"
 import { prepareSemanticV2Run } from "./semantic-v2.js"
 import type { FormalizationStage, RunState } from "./workflow.js"
@@ -92,6 +97,16 @@ function processIsAlive(pid: number): boolean {
 
 async function loadRunForPipelineRouting(runId: string): Promise<RunState> {
   let run = await loadRun(runId)
+  const recoveredSourceBlock = await recoverNonAuthoritativeSourceBlock(run)
+  if (recoveredSourceBlock !== undefined) {
+    await saveRun(recoveredSourceBlock)
+    run = recoveredSourceBlock
+  }
+  const recoveredSemanticBlock = await recoverNonAuthoritativeSemanticBlock(run)
+  if (recoveredSemanticBlock !== undefined) {
+    await saveRun(recoveredSemanticBlock)
+    run = recoveredSemanticBlock
+  }
   if (run.stage === "SEMANTIC_EXTRACTION") {
     const prepared = await prepareSemanticV2Run(run)
     if (prepared !== run) {
@@ -611,6 +626,13 @@ export async function runPipelinedBatch(
             state.consecutiveRetries,
           )
         ) stopReason = "OUTPUT_LENGTH_RETRY_LIMIT_REACHED"
+        if (
+          stopReason === undefined &&
+          noProgressRetryLimitReached(
+            result.after.executions ?? [],
+            result.after.stage,
+          )
+        ) stopReason = "NO_PROGRESS_RETRY_LIMIT_REACHED"
         if (
           stopReason === undefined &&
           state.consecutiveRetries >= options.maxStageRetries

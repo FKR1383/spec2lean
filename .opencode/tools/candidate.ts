@@ -20,6 +20,7 @@ import {
 } from "node:path"
 
 import { artifactContractForRun } from "../../engine/orchestrator/src/artifact-contract.ts"
+import { sourceBundleIdentityIssues } from "../../engine/orchestrator/src/artifact-content.ts"
 import { duplicateJsonKeyIssues } from "../../engine/orchestrator/src/json-integrity.ts"
 import {
   candidatePathBudgetIssues,
@@ -730,10 +731,7 @@ export const validate = tool({
         const bundle = JSON.parse(
           await readFile(resolve(context.worktree, args.path), "utf8"),
         ) as UnknownRecord
-        if (bundle.language !== run.language ||
-          bundle.specification_version !== run.specVersion || bundle.unit !== run.unit) {
-          issues.push("source bundle language/version/unit identity does not match the run")
-        }
+        issues.push(...sourceBundleIdentityIssues(run, bundle))
         const documents = new Map<string, { path: string; sha256: string; kind: string }>()
         const documentRecords: Array<{ path: string; sha256: string; kind: string }> = []
         for (const [index, value] of (Array.isArray(bundle.source_documents)

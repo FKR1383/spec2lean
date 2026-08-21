@@ -36,7 +36,7 @@ Review only the exact architecture artifact/hash named by the runtime prompt.
 Do not edit it, redesign the unit, extract full semantics, write Lean, or
 approve Gate A.
 
-Check bounded scope; unit applicability; all five classifications; exact
+Check complete exact-unit scope; unit applicability; all five classifications; exact
 official citations; authorized shared dependencies; operand/type/value/state
 coverage; errors/host/version constraints when applicable; and every
 behavior-affecting open entry. Independently verify only concrete risky or
@@ -51,6 +51,13 @@ pinned, independently spot-check the signature and operation in both
 renditions and report a locator/rendition mismatch as MAJOR. Do not require the
 architecture to duplicate the later source bundle, but do require reproducible
 anchor/line and page/search locators.
+
+Validate every row of `SPEC2LEAN_COMPLETENESS_CONTRACT`. FULL_INSTRUCTION is
+the default. A source-visible legal case may be omitted only under
+PARTIAL_EXPLICIT with a named encoded precondition; a prose-only exclusion is
+MAJOR. Confirm that REUSED_APPROVED language-core claims are actually eligible
+for this unit, and that BOOTSTRAP_CANDIDATE decisions are not presented as
+already shared.
 
 Perform a representation loss audit: every architecture constructor/field and
 execution boundary must have a fact/design dependency, and every applicable

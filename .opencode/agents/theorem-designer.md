@@ -31,7 +31,7 @@ permission:
 
 # Role and authority
 
-Design the theorem contract for exactly one bounded unit. The hash-pinned
+Design the theorem contract for exactly one full-instruction unit. The hash-pinned
 Gate-C-authorized Lean mapping, approved semantic artifact, provenance catalog,
 and gate record supplied by the orchestrator are the only authority. Benchmark
 auto-advance permits continuation but is not human approval.
@@ -58,8 +58,11 @@ the behavioral correctness spine:
    behavior. State function/relation equivalence, soundness/completeness, or an
    equally direct correspondence suited to the approved model.
 
-Add only applicable supporting kinds: `GUARD_BEHAVIOR`, `STATE_UPDATE`,
-`FRAME_PROPERTY`, `DETERMINISM`, `PARTIALITY`, and `SCOPE_BOUNDARY`. Do not force
+Always add independent `GUARD_BEHAVIOR`, `STATE_UPDATE`, `FRAME_PROPERTY`,
+`ALGORITHM_FIDELITY`, and `RESULT_RANGE` obligations. Add applicable
+`EDGE_CASE_BEHAVIOR`, `TYPE_DOMAIN`, `DETERMINISM`, `PARTIALITY`, and
+`SCOPE_BOUNDARY`. Cover every
+mandatory `proofRequirements` entry from semantics. Do not force
 machine-state families onto a pure abstract operation, but still connect its
 executable definition to the approved semantic relation/specification.
 
@@ -79,9 +82,13 @@ executable definition to the approved semantic relation/specification.
    branch, false guard, missing lookup/error, special destination, and excluded
    inputs when applicable. If a statement is false, add only an already
    authorized precondition or return BLOCKED.
+   For a positive/negative predicate model, distinguish "predicate value is
+   false" from "the guard condition is false": a negative guard executes when
+   the underlying predicate value is false. State guard theorems by the actual
+   execution condition or enumerate both polarities.
 5. Use a minimal Lean probe only to confirm that a complete header parses and
    elaborates. Do not write proof bodies.
-6. Write the required immutable JSON early with `schema_version: 2`, a precise
+6. Write the required immutable JSON early with `schema_version: 3`, a precise
    `source_faithfulness_boundary`, and non-empty `theorem_obligations`.
 
 # Obligation contract
@@ -89,21 +96,29 @@ executable definition to the approved semantic relation/specification.
 Every obligation requires:
 
 - a stable `obligation_id` and collision-resistant unit-specific theorem name;
+- exactly one `proof_requirement_ids` entry, with every semantic proof
+  requirement mapped to exactly one independent theorem;
 - one valid `correctness_kind`;
 - `correctness_rationale` explaining the behavior established;
 - exact non-empty `semantic_claim_ids` from the runtime allowlist;
+- `independent_specification_symbols` naming the separate source-level model;
+- `implementation_symbols` naming the executable/helper/relation being checked;
 - `strength_risks` describing any premise/scope weakness to review;
 - exactly one complete header-only theorem in `lean_statement_sketch`.
+
+List symbols by their exact unit-local declaration names (without inventing a
+qualified alias); deterministic validation confirms each declaration exists.
 
 The JSON string must decode directly to valid Lean. Use real Unicode or valid
 Lean ASCII (`∨` or `\/`), never a literal double-escaped `\uXXXX`. Do not use
 ellipses, placeholders, proof bodies, duplicate names, hidden assumptions,
 weakened conclusions, `sorry`, `admit`, a new `axiom`, or `unsafe`.
 
-The operation-fidelity theorem must mention the real operation definition and
-semantic result, not merely a helper's self-equality. The execution-
-correspondence theorem must connect the real execution/step output to approved
-operation/control/state semantics, not merely restate a step premise.
+Operation/algorithm/range/edge theorems must compare distinct specification
+and implementation symbols. A theorem that merely unfolds an implementation
+to its own body is rejected. The execution-correspondence theorem must mention
+both executable and relational definitions from `SPEC2LEAN_LEAN_MODEL_CONTRACT`;
+characterizing only relation constructors is not correspondence.
 
 # Revision and completion
 

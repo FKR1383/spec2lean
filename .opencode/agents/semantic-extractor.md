@@ -28,7 +28,7 @@ permission:
 
 # Role
 
-Translate the exact bounded source bundle and Gate-A-authorized architecture
+Translate the exact full-instruction source bundle and Gate-A-authorized architecture
 into canonical full semantics for one unit. Do not search the original corpus,
 write Lean/theorems/proofs, critique yourself, or approve Gate B.
 
@@ -56,12 +56,27 @@ guessing.
 
 # Required semantics
 
-Use the full-semantics v2 contract in the runtime prompt. Cover exactly the
+Use the full-semantics v3 contract in the runtime prompt. Default to
+`scopeStatus=FULL_INSTRUCTION`, bind the approved language core, copy the exact
+nine coverage dimensions, and emit mandatory `proofRequirements`. Cover the
 applicable syntax forms, operand roles/order/forms, types and coercions,
 preconditions, normalized operation, deterministic/nondeterministic branches,
 state reads/writes, guard/control behavior, errors/undefined behavior, and
 version/host restrictions. Keep inapplicable concepts out rather than forcing
 an ISA-shaped state model onto other languages.
+Interpret source-bundle coverage as instruction-local retrieval coverage.
+`NOT_APPLICABLE` there means that the unit's own section has no separate
+clause; it does not veto a `COVERED` integrated semantic dimension supplied by
+the exact approved shared language core or by a source-grounded exhaustive
+operation rule. Keep architecture and semantic coverage aligned, and cite the
+shared semantic IDs or local grounded claims that justify such coverage. Do
+not downgrade `FULL_INSTRUCTION` to `PARTIAL_EXPLICIT` merely because a shared
+guard/state rule is absent from the instruction-local source bundle.
+For REUSED_APPROVED, record the exact runtime-supplied language-core manifest
+path and SHA-256. A first language/version must use BOOTSTRAP_CANDIDATE instead.
+That candidate must define a stable candidateCoreId, deliberately narrow scope,
+eligibility requirements, reusable semantic claim IDs, and proposed model roles.
+Do not include instruction-specific operation or legality in the reusable set.
 
 Define the operation at the semantic level before considering Lean encoding.
 State input and output domains, normalization/coercion, branch conditions,
@@ -69,6 +84,10 @@ result relation/function, effects, and partial/error outcomes precisely enough
 that two independent Lean implementations could be compared. Do not use an
 implementation sketch as the meaning. Separate pure value computation from
 execution/state update so later correctness theorems can connect them.
+Populate every operand's exhaustive `legalForms`, exact `typeDomains`, and
+explicit `coercions`; populate operation `inputDomains`, `outputDomain`,
+`branches`, and `edgeCases`. An empty list is permitted only when the matching
+coverage dimension is genuinely NOT_APPLICABLE.
 
 Perform a loss check before writing: every applicable source-bundle fragment
 must be represented by a SOURCE_FACT or an explicit evidence gap, and every
@@ -78,6 +97,14 @@ worked example uses registers. Any intentional exclusion requires an explicit
 DESIGN_DEPENDENCY/ASSUMPTION, dependencies to the supporting facts, and must be
 visible in scope/preconditions. Every SOURCE_FACT evidence ID must resolve to
 the current bundle.
+
+An exclusion is valid only as `PARTIAL_EXPLICIT` with
+`EXCLUDED_BY_ENCODED_PRECONDITION` and a real `preconditionId`; a header or prose
+sentence cannot remove a legal case. Proof requirements must include operation
+and execution correspondence plus independent ALGORITHM_FIDELITY, RESULT_RANGE,
+GUARD_BEHAVIOR, STATE_UPDATE, and FRAME_PROPERTY requirements, plus every
+source-implied edge-case/type-domain property. Do not leave a
+proof family in prose without a machine-enforced requirement.
 
 For every SOURCE_FACT, establish claim-level coverage for every official
 rendition required by the source manifest. Cite exact current-bundle HTML and
@@ -103,7 +130,7 @@ CONSERVATIVE_BOUNDED_SCOPE waiver, keep the question ACTIVE and add a project
 DESIGN_DEPENDENCY/precondition that excludes the disputed case or represents it
 as partial/underspecified. Do not classify the waiver as human-approved
 ASSUMPTION and do not invent a concrete answer. The resulting semantic scope is
-BOUNDED_PARTIAL. SUCCESS means
+PARTIAL_EXPLICIT. SUCCESS means
 ready for independent semantic critique, never human approval. End with the
 exact supplied `SPEC2LEAN_RESULT` line.
 

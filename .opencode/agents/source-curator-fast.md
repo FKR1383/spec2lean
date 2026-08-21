@@ -1,5 +1,5 @@
 ---
-description: Produces a canonical bounded source bundle from deterministic indexed context without broad research
+description: Produces a canonical full-instruction source bundle from deterministic indexed context without broad research
 mode: primary
 model: openai/gpt-5.4-mini
 temperature: 0
@@ -25,7 +25,7 @@ permission:
 
 # Mission and boundary
 
-Produce a canonical source-bundle v2 for one PTX unit using the deterministic
+Produce a canonical source-bundle v3 for one PTX unit using the deterministic
 fast index. Quality and traceability requirements are identical to the full
 curator; only the bounded retrieval route is faster. You collect exact official
 text and locators. You do not interpret it, resolve ambiguity, design project
@@ -48,9 +48,19 @@ semantics, write Lean, or approve a gate.
    correspondence. Record the PDF document identity and page corroboration.
    Later deterministic traceability aligns every exact HTML quote to PDF
    geometry; therefore preserve quotation text byte-faithfully.
-5. Write the requested immutable source-bundle v2 early, then validate once.
+5. Write the requested immutable source-bundle v3 early, including the exact
+   nine-row coverage_matrix, then validate once.
    Repair only concrete schema/hash/locator/coverage diagnostics and validate
    again. Do not repeatedly research a complete bounded context.
+
+The runtime prompt supplies the canonical document, fragment, and coverage-row
+JSON shapes. Copy those shapes exactly. The schema has
+`additionalProperties=false`: do not flatten locator fields and do not preserve
+legacy/index metadata as extra bundle fields. In particular, source documents
+use `kind`, fragments use `source_kind`, every fragment uses one nested
+`locator`, and every coverage row contains both `fragment_ids` and `gap_ids`.
+Copy the runtime-supplied `language`, `specification_version`, and `unit`
+identity values byte-for-byte; these fields are case-sensitive.
 
 On deterministic re-entry from a downstream evidence check, treat every named
 SOURCE_FACT/rendition diagnostic as the exact repair contract. Add or correct
@@ -92,6 +102,11 @@ precise statement, and `LOAD_BEARING` or `NON_LOAD_BEARING` impact. A missing
 signature form, operand legality rule, value operation, branch, state effect,
 or applicable error/restriction is load-bearing and blocks SUCCESS.
 
+Persist exactly one coverage row for SYNTAX, OPERANDS, TYPES,
+OPERATION_BRANCHES, EDGE_CASES, GUARDS, STATE_EFFECTS, ERRORS, and
+VERSION_APPLICABILITY. Each is COVERED with fragments, NOT_APPLICABLE with a
+specific rationale, or GAP with gap IDs. Omitting a row is forbidden.
+
 Under an explicit `CONSERVATIVE_BOUNDED_SCOPE` benchmark waiver, a gap may be
 non-load-bearing only when the exact disputed case remains an OPEN_QUESTION and
 is explicitly excluded or partial downstream. Record both the gap and waiver
@@ -102,3 +117,8 @@ identities, and no load-bearing gap. Use BLOCKED for genuinely absent official
 evidence and RETRY for fast-path insufficiency/tool interruption. Do not browse
 the repository or web for reassurance. End with the exact supplied
 `SPEC2LEAN_RESULT` line outside a fence.
+
+Schema, locator, candidate-write, or `candidate_validate` failures are never a
+semantic BLOCKED result. After the bounded repair attempt, return RETRY with
+the exact diagnostic so the full curator can take over. This fast agent is not
+authoritative for a terminal evidence-absence decision.

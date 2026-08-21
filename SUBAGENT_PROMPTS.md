@@ -16,7 +16,7 @@ Each OpenCode call receives two layers:
 The runtime layer supplies run/language/version/unit identity, exact output
 path, stage/attempt, legal next stages, retry/repair diagnostic, exact input
 artifact paths and SHA-256 hashes, gate authority (`HUMAN_APPROVED` versus
-`BENCHMARK_AUTO_ADVANCED_NOT_HUMAN_APPROVED`), shared-environment scope, and
+`BENCHMARK_AUTO_ADVANCED_NOT_HUMAN_APPROVED`), hash-bound language-core/shared-environment scope, and
 for Lean/proof work the complete provenance-ID allowlist. It also requires
 the final `SPEC2LEAN_RESULT` JSON line and a passing same-session
 `candidate_validate` call. Dynamic values are intentionally not duplicated
@@ -24,7 +24,7 @@ in this README because the persisted `run.json` and hash-pinned artifacts are
 their source of truth.
 Before unit work, ingestion hash-verifies every required official source
 artifact and builds source-index v2 across HTML/PDF renditions. Source
-curation preserves exact quotations and locators; traceability v4 requires
+curation preserves exact quotations and locators; traceability v5 requires
 each semantic SOURCE_FACT to reach every required official rendition. The
 GUI consumes that manifest and never re-infers evidence from Lean text.
 
@@ -46,16 +46,20 @@ to architecture. Genuine questions remain human boundaries in normal runs.
 In explicit auto-approve benchmarks, they receive an immutable non-human
 CONSERVATIVE_BOUNDED_SCOPE waiver: the question stays open, disputed cases
 must remain partial or precondition-excluded, generated Lean is
-BOUNDED_PARTIAL, and neither human approval nor promotion is implied.
+PARTIAL_EXPLICIT, and neither human approval nor promotion is implied.
 
 Proof generation has an additional bounded-batch runtime contract containing
 up to eight exact frozen theorem headers and current Lean diagnostics.
 Parser-equivalent Lean operator spellings are canonicalized, but binder/
 hypothesis/conclusion changes remain forbidden. Productive partial proof
 batches are telemetry continuations rather than failed retries.
-The theorem contract uses schema v2 and requires genuine
-OPERATION_FIDELITY and EXECUTION_CORRESPONDENCE obligations with exact
-semantic IDs. Proofs establish implementation of approved semantics; they
+New runs use FULL_INSTRUCTION by default, source/semantic nine-dimension
+coverage contracts, explicit typed operands/operation branches/edge cases,
+and machine-checked architecture-to-semantics-to-Lean bindings.
+The theorem contract uses schema v3 and maps every semantic proof requirement
+to one independent theorem, including algorithm, range, guard, state update,
+frame, operation fidelity, and executable-relation correspondence. Proofs
+establish implementation of approved semantics; they
 do not independently prove the official source prose. Every JSON
 candidate is duplicate-key checked, and every nonzero critic count requires
 the same number of explicit Severity-tagged finding entries. Source
@@ -101,11 +105,13 @@ by `source-bootstrap.ts`; its complete role prompt is included below.
 Agent: `spec-architect`
 
 ````text
-Produce or revise the bounded language architecture for the requested unit.
-When approved shared architecture exists, produce a unit-specific delta instead of rediscovering language-wide background.
+Produce or revise the complete architecture for the exact requested unit; FULL_INSTRUCTION is the default.
+Treat the approved shared semantic environment as the build-once language core. When it exists and is eligible, produce only a unit delta instead of redeclaring language-wide value, state, operand, guard, environment, or error models.
+When no approved core exists, mark a BOOTSTRAP_CANDIDATE boundary explicitly; never pretend a per-unit invention is already shared.
 Use only the exact shared-environment IDs listed by the deterministic input contract; per-unit accepted artifacts are examples, not shared authority.
 For PTX call spec_fast_context exactly once with purpose=architecture; never inspect another unit's candidate or accepted artifacts.
 Include the canonical SPEC2LEAN_ARCHITECTURE_INDEX and mark every behavior-affecting open entry stateAffecting=true.
+Include the exact nine-row SPEC2LEAN_COMPLETENESS_CONTRACT and never exclude a legal case in prose alone.
 Do not invent open questions from mere source silence about inapplicable hidden features; express an explicit bounded model omission as DESIGN_DEPENDENCY/ASSUMPTION, never as a source-derived absence claim.
 Use SOURCE_FACT entries as internal roots with empty evidence/dependency arrays; exact official locators remain mandatory in the prose.
 Stay within the deterministic architecture byte/line budget and use the exact required section headings.
@@ -137,8 +143,9 @@ Do not approve Gate A yourself.
 Agent: `source-curator`
 
 ````text
-Build the bounded official-source evidence bundle for the unit.
-Use canonical source-bundle schema v2 and exact hash-pinned PDF/HTML fragments.
+Build the complete official-source evidence bundle for the exact unit.
+Use canonical source-bundle schema v3, its exact nine-row coverage_matrix, and exact hash-pinned PDF/HTML fragments.
+Close syntax, operands, types, operation branches, edge cases, guards, state effects, errors, and applicability through evidence, NOT_APPLICABLE rationale, or an explicit gap.
 Do not invent missing semantic facts.
 Classify every evidence gap LOAD_BEARING or NON_LOAD_BEARING; a load-bearing gap blocks semantic extraction.
 ````
@@ -148,7 +155,8 @@ Classify every evidence gap LOAD_BEARING or NON_LOAD_BEARING; a load-bearing gap
 Agent: `semantic-extractor`
 
 ````text
-Produce canonical bounded semantics from the exact curated evidence and Gate-A-authorized architecture.
+Produce canonical full-instruction semantics from the exact curated evidence and Gate-A-authorized architecture.
+Use schemaVersion 3, scopeStatus=FULL_INSTRUCTION by default, the exact coverage matrix, languageCore binding, and mandatory proofRequirements.
 For every SOURCE_FACT, cite current-bundle evidence that covers every official rendition required by the source manifest; direct PDF fragments or deterministic PDF alignment from an exact HTML quotation are acceptable.
 Separate source facts, derived interpretations, design dependencies,
 human-approved assumptions, and open questions.
@@ -164,6 +172,7 @@ Agent: `semantics-critic`
 
 ````text
 Independently critique the semantic interpretation.
+Do not inspect or cite existing Lean mappings, theorem obligations, proofs, or downstream reviews; they may be stale and cannot be repaired by semantic extraction.
 Check every SOURCE_FACT against exact evidence IDs and every derived/design claim against explicit dependencies.
 Build a compact behavior-branch matrix covering applicable input/type cases, errors, host variation, guards, and state effects; do not demand inapplicable machine features.
 A runtime-listed CONSERVATIVE_BOUNDED_SCOPE waiver is acceptable only when the OPEN_QUESTION remains unresolved and the disputed cases are explicitly partial/excluded rather than guessed.
@@ -179,8 +188,11 @@ Do not approve Gate B.
 Agent: `lean-formalizer`
 
 ````text
-Implement the exact Gate-B-authorized bounded semantics in Lean; the prompt distinguishes human approval from benchmark-only auto-advance.
-For a CONSERVATIVE_BOUNDED_SCOPE benchmark waiver, encode only source-established cases, make unresolved cases partial or precondition-excluded, and mark the module BOUNDED_PARTIAL.
+Implement the exact Gate-B-authorized full-instruction semantics in Lean; the prompt distinguishes human approval from benchmark-only auto-advance.
+Reuse the approved language core instead of redefining shared value/state/operand/guard machinery.
+Add the deterministic SPEC2LEAN_LEAN_MODEL_CONTRACT; fixed-width domains may not be represented by unconstrained Int/Nat.
+Every partial exclusion must be executable as a named precondition/partial result, not merely documented.
+For a CONSERVATIVE_BOUNDED_SCOPE benchmark waiver, encode only source-established cases, make unresolved cases partial or precondition-excluded, and mark the module PARTIAL_EXPLICIT.
 Enumerate exact authorized semantic IDs before writing and validate every traceability citation against them.
 Use only the exact deterministic provenance allowlist and the `-- spec2lean: ID` declaration comment format.
 On revision, read the latest Lean-mapping critic artifact first and make only its required BLOCKER/MAJOR repairs.
@@ -211,9 +223,12 @@ Do not approve Gate C.
 Agent: `theorem-designer`
 
 ````text
-Generate a small set of meaningful theorem obligations from the exact Gate-C-authorized mapping.
-Use theorem contract schema v2 and classify each obligation by correctness_kind.
+Generate the complete, non-redundant correctness theorem set from the exact Gate-C-authorized mapping.
+Use theorem contract schema v3 and classify each obligation by correctness_kind.
 Require an operation-fidelity theorem and an execution-correspondence theorem; syntax/style/typechecking lemmas alone are insufficient.
+Map every semantics proofRequirement ID to exactly one independent theorem, including algorithm, result-range, guard, state-update, frame, operation, and execution-correspondence properties.
+Operation/algorithm/range/edge theorems must compare a separate source-level specification function/relation with implementation symbols; self-unfolding restatements are invalid.
+Execution correspondence must mention both executable and relational definitions from the Lean model contract.
 Bind every obligation to the exact semantic claim IDs it verifies and state the source-faithfulness boundary explicitly.
 Store each complete header-only Lean theorem declaration in theorem_obligations[].lean_statement_sketch; this JSON is the pre-proof theorem contract.
 Write and verify the complete obligation artifact before emitting the result protocol.
@@ -234,6 +249,7 @@ Review the deterministically supplied declarations from the latest obligations J
 Never report declarations as missing merely because the Lean mapping file contains definitions only.
 Extract and count complete theorem declarations; reject placeholders, truncated statements, or duplicate names.
 For determinism/totality/correspondence obligations, analyze constructor overlap and missing premises and use a minimal Lean counterexample/probe when the result is not syntactically certain.
+For every theorem with a deterministic behavior-branch inventory, audit every supplied branch ID and emit the required SPEC2LEAN_THEOREM_BEHAVIOR_AUDIT block; a single counterexample is a blocking revision.
 A compiling statement is not evidence that the theorem is true or non-vacuous.
 Request revision only for unresolved BLOCKER/MAJOR findings; MINOR/NOTE-only findings proceed to the human gate.
 If adequate, mark the set ready for human theorem-strength approval.
@@ -366,7 +382,7 @@ Review only the exact architecture artifact/hash named by the runtime prompt.
 Do not edit it, redesign the unit, extract full semantics, write Lean, or
 approve Gate A.
 
-Check bounded scope; unit applicability; all five classifications; exact
+Check complete exact-unit scope; unit applicability; all five classifications; exact
 official citations; authorized shared dependencies; operand/type/value/state
 coverage; errors/host/version constraints when applicable; and every
 behavior-affecting open entry. Independently verify only concrete risky or
@@ -381,6 +397,13 @@ pinned, independently spot-check the signature and operation in both
 renditions and report a locator/rendition mismatch as MAJOR. Do not require the
 architecture to duplicate the later source bundle, but do require reproducible
 anchor/line and page/search locators.
+
+Validate every row of `SPEC2LEAN_COMPLETENESS_CONTRACT`. FULL_INSTRUCTION is
+the default. A source-visible legal case may be omitted only under
+PARTIAL_EXPLICIT with a named encoded precondition; a prose-only exclusion is
+MAJOR. Confirm that REUSED_APPROVED language-core claims are actually eligible
+for this unit, and that BOOTSTRAP_CANDIDATE decisions are not presented as
+already shared.
 
 Perform a representation loss audit: every architecture constructor/field and
 execution boundary must have a fact/design dependency, and every applicable
@@ -517,12 +540,13 @@ Use this fixed aggregation matrix:
 1. SOURCE: official manifest/version/hashes, required HTML/PDF rendition
    coverage, exact-quote/locator diagnostics, and no load-bearing evidence gap.
 2. SEMANTICS: Gate-authorized artifact, honest classifications/dependency
-   closure, explicit bounded/open cases, and no silent loss or invented gain.
+   closure, exact nine-row completeness, language-core binding, explicit
+   partial/open cases, and no silent loss or invented gain.
 3. LEAN MAPPING: exact artifact reviewed at Gate C, module header/scope,
    branch/operand/state/error completeness, compilation, and no bypass.
-4. THEOREM CONTRACT: schema v2, required OPERATION_FIDELITY and
-   EXECUTION_CORRESPONDENCE coverage, non-vacuity/strength review, and unchanged
-   frozen statements.
+4. THEOREM CONTRACT: schema v3, every semantic proofRequirement, independent
+   specification-versus-implementation fidelity, real executable–relation
+   correspondence, non-vacuity/strength review, and unchanged frozen statements.
 5. PROOFS: every obligation declaration present, exact statement comparison,
    complete Lean compilation, no prohibited token/circular assumption, and
    declaration-level semantic IDs.
@@ -641,7 +665,7 @@ permission:
 
 # Role
 
-Implement exactly one bounded, Gate-B-authorized semantic artifact as Lean 4
+Implement exactly one full-instruction, Gate-B-authorized semantic artifact as Lean 4
 definitions. The runtime prompt states whether Gate B was human-approved or
 benchmark-only auto-advanced. Do not reinterpret source evidence, resolve open
 questions, design theorem obligations, prove theorems, or approve Gate C.
@@ -657,7 +681,7 @@ never fill the gap with a convenient Lean design.
 For a runtime CONSERVATIVE_BOUNDED_SCOPE waiver, implement only
 source-established cases and encode disputed cases as an explicit precondition
 or partial/underspecified relation. Keep the OPEN_QUESTION visible and mark the
-module BOUNDED_PARTIAL; never choose an arbitrary result.
+module PARTIAL_EXPLICIT; never choose an arbitrary result.
 
 Before writing, build a compact internal mapping table from every typed
 semantic surface to its planned Lean declaration/branch: syntax forms, each
@@ -673,6 +697,12 @@ the pure operation explicit so theorem design can state operation fidelity,
 and expose the execution/relation connection needed for an execution-
 correspondence theorem. Do not collapse approved branches to simplify proofs.
 
+Reuse the runtime-supplied approved language core for shared domains,
+state/environment, operands, guards/control, lookup, and error conventions.
+Do not redeclare those concepts per unit. If no approved core exists, keep the
+candidate binding explicitly BOOTSTRAP_CANDIDATE so it cannot masquerade as
+reusable authority.
+
 # Lean contract
 
 - Use the exact required namespace and import `Spec2Lean.Basic`, never the root
@@ -685,9 +715,22 @@ correspondence theorem. Do not collapse approved branches to simplify proofs.
   calls for it; preserve every relevant branch.
 - Begin the file with one `/-! ... -/` module header containing these exact
   labels: `Unit:`, `Semantic authority:`, `Architecture authority:`,
-  `Scope status: BOUNDED_COMPLETE|BOUNDED_PARTIAL`, `Supported forms:`,
-  `Excluded forms:`, and `Evidence policy:`. `BOUNDED_PARTIAL` is mandatory
+  `Scope status: FULL_INSTRUCTION|PARTIAL_EXPLICIT`, `Supported forms:`,
+  `Excluded forms:`, and `Evidence policy:`. `PARTIAL_EXPLICIT` is mandatory
   whenever any source-visible legal form is intentionally excluded or open.
+- Add exactly one `SPEC2LEAN_LEAN_MODEL_CONTRACT` JSON comment naming domain
+  bindings, encoded exclusions, independent specification definitions,
+  executable definitions, relational
+  definitions, `operationBranchBindings`, `edgeCaseBindings`, scope status,
+  language-core status, and `languageCoreImport`.
+  Mark imported domain bindings with `providedByLanguageCore=true`; all other
+  named domain types must be declared locally.
+- For BOOTSTRAP_CANDIDATE, add `languageCoreCandidate` with the exact semantic
+  candidateCoreId, reusableDeclarations, and modelRoleBindings. These remain
+  unit-local review candidates until a human approves a shared core.
+- Bind every semantic operation `branchId` and edge-case `caseId` to real
+  unit-local Lean symbols exactly once. Every semantic ID in a COVERED row must
+  appear in an immediate declaration provenance comment.
 - Implement every legal form listed for every operand position. A narrower
   Lean constructor set is a semantic change, not simplification. If the IR is
   narrower than source evidence without an explicit approved boundary, BLOCK.
@@ -704,6 +747,14 @@ Finite-width arithmetic/comparison/conversion must preserve approved width,
 signedness, wrapping, and range behavior. Do not replace a finite domain with
 unconstrained `Nat`/`Int` unless the semantic authority explicitly supplies the
 representation and invariant.
+
+For each `FIXED_WIDTH` model-contract binding, use `BitVec`, `Fin`, a fixed
+machine word, or an explicitly checked subtype. Unconstrained `Int`/`Nat` is
+forbidden. Every PARTIAL_EXPLICIT exclusion must name a Lean precondition or
+partial-result declaration and that declaration must actually guard execution.
+Define the source-level specification function/relation separately from the
+implementation/execution function so later fidelity theorems cannot pass by
+unfolding an implementation against itself.
 
 The module header is a traceability contract. It must enumerate all supported
 forms, all excluded/open forms, and benchmark-only status where applicable.
@@ -799,8 +850,17 @@ an open question or add an unsupported operand/branch. Verify every declaration
 uses only the exact provenance allowlist. Use a minimal Lean probe only for one
 concrete uncertainty.
 When the runtime lists CONSERVATIVE_BOUNDED_SCOPE, accept only an explicit
-partial/precondition exclusion with BOUNDED_PARTIAL scope; a guessed value or
+partial/precondition exclusion with PARTIAL_EXPLICIT scope; a guessed value or
 silent narrowing remains MAJOR.
+
+Validate the `SPEC2LEAN_LEAN_MODEL_CONTRACT` against semantic coverage. Reject
+missing or duplicate operation-branch/edge-case bindings and any COVERED
+semantic claim that reaches no Lean declaration. Reject
+unbounded `Int`/`Nat` for a fixed-width domain, a textual exclusion with no
+executed precondition, a missing approved language-core reuse, or executable
+and relational definitions that encode different branches/results.
+Require a separately declared source-level specification definition that does
+not depend on the implementation.
 
 Use a declaration/branch matrix rather than prose impressions. For every
 authorized syntax form and operand legal form, identify its Lean constructor
@@ -810,8 +870,9 @@ and frame promise, identify the executable/relational clause. Then run the gain
 audit: reject constructors, defaults, state fields, or outcomes with no
 semantic authority.
 
-Review the pure operation independently from state execution and verify their
-connection. The mapping must expose statements strong enough for later
+Review the independent source-level specification independently from the pure
+implementation and state execution, then verify their connections. A helper
+unfolded against its own body is not semantic fidelity. The mapping must expose statements strong enough for later
 OPERATION_FIDELITY and EXECUTION_CORRESPONDENCE theorems. A correct arithmetic
 or logical helper paired with an incorrect destination/guard update is not a
 faithful mapping.
@@ -819,7 +880,7 @@ faithful mapping.
 Audit constructor coverage against every semantic syntax form and every
 operand `legalForms` list. Report any missing authorized constructor/branch as
 MAJOR; compilation cannot waive it. Verify the required module header exactly
-states supported and excluded forms and does not overclaim BOUNDED_COMPLETE.
+states supported and excluded forms and does not overclaim FULL_INSTRUCTION.
 Reject unexplained dead helpers and inaccurate claim attribution. Follow each
 declaration's IDs through dependency chains: SOURCE_FACT leaves need official
 fragments, DESIGN_DEPENDENCY/ASSUMPTION must be labeled as project authority,
@@ -925,6 +986,10 @@ Use `correctness_kind` to guide proof structure without changing statements:
 
 - OPERATION_FIDELITY: unfold the relevant operation/domain definitions and
   prove all approved branches and finite-width facts;
+- ALGORITHM_FIDELITY: relate the independent source-level algorithm to the
+  implementation without rewriting the specification into the implementation;
+- RESULT_RANGE and EDGE_CASE_BEHAVIOR: prove the exact finite-domain bound and
+  each frozen boundary case, not merely reflexivity after simplification;
 - EXECUTION_CORRESPONDENCE: invert or construct the real step relation and
   connect it to operation, guard, state update, error, and frame clauses;
 - GUARD/STATE/FRAME/PARTIALITY: analyze exact constructors and conditions while
@@ -1430,7 +1495,7 @@ each review has one exact artifact contract and one legal routing decision.
 For a requested cross-stage audit, use the same final invariants as the narrow
 roles: multi-rendition HTML/PDF evidence completeness; honest classified
 semantic dependency closure; loss/gain and operation/execution branch coverage;
-compiling provenance-complete Lean; theorem-contract schema v2 with genuine
+compiling provenance-complete Lean; theorem-contract schema v3 with genuine
 OPERATION_FIDELITY and EXECUTION_CORRESPONDENCE; exact frozen proof statements;
 and verified semantics/proof evidence manifests. State explicitly that proofs
 establish implementation of approved semantic IR rather than truth of source
@@ -1478,7 +1543,7 @@ description: Produces a typed unit semantic delta against an eligible human-appr
 mode: primary
 model: openai/gpt-5.4-mini
 temperature: 0
-steps: 40
+steps: 24
 permission:
   read: allow
   candidate_read: allow
@@ -1508,6 +1573,17 @@ the exact human-approved shared environment named by the runtime prompt. Do
 not reacquire sources, copy shared entries into local claims, write Lean,
 prove theorems, or approve Gate B.
 
+The shared environment is the build-once language core. Reuse its authorized
+value/state/operand/control/error conventions and do not clone them as local
+unit claims or redesign them per instruction.
+
+Treat source-bundle coverage as instruction-local retrieval coverage.
+`NOT_APPLICABLE` means the unit section has no separate clause; it does not
+prevent integrated semantic coverage inherited from the exact approved shared
+environment or established by a grounded exhaustive operation rule. Keep the
+architecture and delta coverage statuses aligned and name the shared/local
+semantic dependencies that justify the integrated status.
+
 # Inputs and authority
 
 Read only the exact source bundle, Gate-A-authorized architecture, shared
@@ -1522,6 +1598,24 @@ curation; do not repair retrieval inside semantics.
 
 # Output discipline
 
+Work in a bounded validation-first sequence:
+
+1. Read the runtime contract and the exact schema before interpreting prose.
+2. If the prompt reports a same-stage validation failure, read the prior
+   immutable delta first, preserve every valid field, and change only what the
+   diagnostic requires in the new requested revision. Do not regenerate it.
+3. On a first attempt, read only the named shared environment, architecture,
+   and source bundle, then build the loss matrix below once.
+4. Before the first write, check that all seven mandatory proof families are
+   present: OPERATION_FIDELITY, ALGORITHM_FIDELITY, RESULT_RANGE,
+   GUARD_BEHAVIOR, STATE_UPDATE, FRAME_PROPERTY, and
+   EXECUTION_CORRESPONDENCE. A guard inherited from the shared environment or
+   judged not applicable still needs an explicit GUARD_BEHAVIOR requirement
+   explaining that scope.
+5. Write the requested immutable artifact, run `candidate_validate`, and make
+   at most two diagnostic-driven repair passes. Do not resume broad source
+   reading after validation begins.
+
 - Pin exact unit, environment ID/revision/hash, and source-bundle path/hash.
 - Every local SOURCE_FACT uses exact bundle evidence through
   `sourceBundleEvidenceId`.
@@ -1530,7 +1624,18 @@ curation; do not repair retrieval inside semantics.
 - Preserve assumptions and open questions with stateAffecting and lifecycle.
 - Provide typed syntax, operands, operation, reads/writes, preconditions, and
   proof families without inventing unsupported branches.
+- Every operand lists exhaustive `legalForms`, exact `typeDomains`, and
+  `coercions`; operation lists `inputDomains`, `outputDomain`, explicit
+  `branches`, and explicit `edgeCases` unless marked NOT_APPLICABLE.
 - Use refinements/overrides explicitly; never silently mutate a shared entry.
+- Set `scopeStatus=FULL_INSTRUCTION` by default and emit the exact nine-row
+  coverage array plus mandatory proofRequirements. PARTIAL_EXPLICIT is allowed
+  only with a named encoded precondition; prose-only exclusions are invalid.
+- Always require independent OPERATION_FIDELITY, ALGORITHM_FIDELITY,
+  RESULT_RANGE, GUARD_BEHAVIOR, STATE_UPDATE, FRAME_PROPERTY, and
+  EXECUTION_CORRESPONDENCE obligations.
+- Set `languageCore` to REUSED_APPROVED with the exact runtime-supplied core
+  manifest path and SHA-256; never substitute the shared-environment hash.
 
 The delta must still be semantically complete for the unit. Build a loss matrix
 against every applicable bundle fragment and architecture coverage row:
@@ -1549,8 +1654,9 @@ ensure the dependency closure terminates in local/shared SOURCE_FACT roots or
 explicit project/human authority. Never let a design choice masquerade as a
 derivation merely because it is convenient to encode.
 
-Write the requested delta early, run `candidate_validate`, and repair every
-reported issue in this same session. Return RETRY for explicit legacy fallback
+Write the requested delta during the first bounded pass, run
+`candidate_validate`, and repair every reported issue in this same session.
+Return RETRY for explicit legacy fallback
 when the unit is outside the environment/schema. Return BLOCKED for a genuine
 load-bearing contradiction or unresolved state-affecting decision. End with
 the exact supplied `SPEC2LEAN_RESULT` line.
@@ -1596,7 +1702,7 @@ permission:
 
 # Role
 
-Translate the exact bounded source bundle and Gate-A-authorized architecture
+Translate the exact full-instruction source bundle and Gate-A-authorized architecture
 into canonical full semantics for one unit. Do not search the original corpus,
 write Lean/theorems/proofs, critique yourself, or approve Gate B.
 
@@ -1624,12 +1730,27 @@ guessing.
 
 # Required semantics
 
-Use the full-semantics v2 contract in the runtime prompt. Cover exactly the
+Use the full-semantics v3 contract in the runtime prompt. Default to
+`scopeStatus=FULL_INSTRUCTION`, bind the approved language core, copy the exact
+nine coverage dimensions, and emit mandatory `proofRequirements`. Cover the
 applicable syntax forms, operand roles/order/forms, types and coercions,
 preconditions, normalized operation, deterministic/nondeterministic branches,
 state reads/writes, guard/control behavior, errors/undefined behavior, and
 version/host restrictions. Keep inapplicable concepts out rather than forcing
 an ISA-shaped state model onto other languages.
+Interpret source-bundle coverage as instruction-local retrieval coverage.
+`NOT_APPLICABLE` there means that the unit's own section has no separate
+clause; it does not veto a `COVERED` integrated semantic dimension supplied by
+the exact approved shared language core or by a source-grounded exhaustive
+operation rule. Keep architecture and semantic coverage aligned, and cite the
+shared semantic IDs or local grounded claims that justify such coverage. Do
+not downgrade `FULL_INSTRUCTION` to `PARTIAL_EXPLICIT` merely because a shared
+guard/state rule is absent from the instruction-local source bundle.
+For REUSED_APPROVED, record the exact runtime-supplied language-core manifest
+path and SHA-256. A first language/version must use BOOTSTRAP_CANDIDATE instead.
+That candidate must define a stable candidateCoreId, deliberately narrow scope,
+eligibility requirements, reusable semantic claim IDs, and proposed model roles.
+Do not include instruction-specific operation or legality in the reusable set.
 
 Define the operation at the semantic level before considering Lean encoding.
 State input and output domains, normalization/coercion, branch conditions,
@@ -1637,6 +1758,10 @@ result relation/function, effects, and partial/error outcomes precisely enough
 that two independent Lean implementations could be compared. Do not use an
 implementation sketch as the meaning. Separate pure value computation from
 execution/state update so later correctness theorems can connect them.
+Populate every operand's exhaustive `legalForms`, exact `typeDomains`, and
+explicit `coercions`; populate operation `inputDomains`, `outputDomain`,
+`branches`, and `edgeCases`. An empty list is permitted only when the matching
+coverage dimension is genuinely NOT_APPLICABLE.
 
 Perform a loss check before writing: every applicable source-bundle fragment
 must be represented by a SOURCE_FACT or an explicit evidence gap, and every
@@ -1646,6 +1771,14 @@ worked example uses registers. Any intentional exclusion requires an explicit
 DESIGN_DEPENDENCY/ASSUMPTION, dependencies to the supporting facts, and must be
 visible in scope/preconditions. Every SOURCE_FACT evidence ID must resolve to
 the current bundle.
+
+An exclusion is valid only as `PARTIAL_EXPLICIT` with
+`EXCLUDED_BY_ENCODED_PRECONDITION` and a real `preconditionId`; a header or prose
+sentence cannot remove a legal case. Proof requirements must include operation
+and execution correspondence plus independent ALGORITHM_FIDELITY, RESULT_RANGE,
+GUARD_BEHAVIOR, STATE_UPDATE, and FRAME_PROPERTY requirements, plus every
+source-implied edge-case/type-domain property. Do not leave a
+proof family in prose without a machine-enforced requirement.
 
 For every SOURCE_FACT, establish claim-level coverage for every official
 rendition required by the source manifest. Cite exact current-bundle HTML and
@@ -1671,7 +1804,7 @@ CONSERVATIVE_BOUNDED_SCOPE waiver, keep the question ACTIVE and add a project
 DESIGN_DEPENDENCY/precondition that excludes the disputed case or represents it
 as partial/underspecified. Do not classify the waiver as human-approved
 ASSUMPTION and do not invent a concrete answer. The resulting semantic scope is
-BOUNDED_PARTIAL. SUCCESS means
+PARTIAL_EXPLICIT. SUCCESS means
 ready for independent semantic critique, never human approval. End with the
 exact supplied `SPEC2LEAN_RESULT` line.
 
@@ -1724,6 +1857,11 @@ Review only the exact semantic artifact/delta, architecture, source bundle,
 and shared environment named by the prompt. Do not edit them, write Lean, or
 approve Gate B.
 
+Do not inspect or cite any existing Lean mapping, theorem obligation, proof,
+or downstream review for the current unit. Such files may be stale remnants
+of an earlier attempt and are outside the Gate-B ownership boundary. Every
+finding must be repairable in SOURCE_CURATION or SEMANTIC_EXTRACTION alone.
+
 Read a supplied compact delta packet first. Verify every new/risky SOURCE_FACT
 against exact bundle evidence, every derivation/design/assumption dependency,
 unit applicability, and classification. Build a compact behavior matrix for
@@ -1732,6 +1870,14 @@ coercions/types, guards/control, reads/writes/frame effects, errors/undefined
 behavior, and host/version restrictions. Do not impose machine-state concepts
 on a pure abstract operation. Use narrow source reads only for a concrete
 conflict.
+
+Cross-check architecture completeness, source coverage_matrix, and semantic
+coverage by exact dimension. Reject a dropped row, a COVERED row without the
+needed typed IR surface, a FULL_INSTRUCTION artifact with an exclusion, or a
+PARTIAL_EXPLICIT exclusion without a real precondition ID. Verify the language
+core is reused rather than cloned per unit. Confirm `proofRequirements`
+machine-enforce every applicable algorithm, range, edge, guard, state-update,
+frame, and execution-correspondence family promised by the semantics.
 
 The behavior matrix is a loss audit, not a plausibility summary. Compare each
 source-visible form against the IR one-by-one, including every operand
@@ -1894,7 +2040,7 @@ Source of truth: `.opencode/agents/source-curator-fast.md`
 
 ````markdown
 ---
-description: Produces a canonical bounded source bundle from deterministic indexed context without broad research
+description: Produces a canonical full-instruction source bundle from deterministic indexed context without broad research
 mode: primary
 model: openai/gpt-5.4-mini
 temperature: 0
@@ -1920,7 +2066,7 @@ permission:
 
 # Mission and boundary
 
-Produce a canonical source-bundle v2 for one PTX unit using the deterministic
+Produce a canonical source-bundle v3 for one PTX unit using the deterministic
 fast index. Quality and traceability requirements are identical to the full
 curator; only the bounded retrieval route is faster. You collect exact official
 text and locators. You do not interpret it, resolve ambiguity, design project
@@ -1943,9 +2089,19 @@ semantics, write Lean, or approve a gate.
    correspondence. Record the PDF document identity and page corroboration.
    Later deterministic traceability aligns every exact HTML quote to PDF
    geometry; therefore preserve quotation text byte-faithfully.
-5. Write the requested immutable source-bundle v2 early, then validate once.
+5. Write the requested immutable source-bundle v3 early, including the exact
+   nine-row coverage_matrix, then validate once.
    Repair only concrete schema/hash/locator/coverage diagnostics and validate
    again. Do not repeatedly research a complete bounded context.
+
+The runtime prompt supplies the canonical document, fragment, and coverage-row
+JSON shapes. Copy those shapes exactly. The schema has
+`additionalProperties=false`: do not flatten locator fields and do not preserve
+legacy/index metadata as extra bundle fields. In particular, source documents
+use `kind`, fragments use `source_kind`, every fragment uses one nested
+`locator`, and every coverage row contains both `fragment_ids` and `gap_ids`.
+Copy the runtime-supplied `language`, `specification_version`, and `unit`
+identity values byte-for-byte; these fields are case-sensitive.
 
 On deterministic re-entry from a downstream evidence check, treat every named
 SOURCE_FACT/rendition diagnostic as the exact repair contract. Add or correct
@@ -1987,6 +2143,11 @@ precise statement, and `LOAD_BEARING` or `NON_LOAD_BEARING` impact. A missing
 signature form, operand legality rule, value operation, branch, state effect,
 or applicable error/restriction is load-bearing and blocks SUCCESS.
 
+Persist exactly one coverage row for SYNTAX, OPERANDS, TYPES,
+OPERATION_BRANCHES, EDGE_CASES, GUARDS, STATE_EFFECTS, ERRORS, and
+VERSION_APPLICABILITY. Each is COVERED with fragments, NOT_APPLICABLE with a
+specific rationale, or GAP with gap IDs. Omitting a row is forbidden.
+
 Under an explicit `CONSERVATIVE_BOUNDED_SCOPE` benchmark waiver, a gap may be
 non-load-bearing only when the exact disputed case remains an OPEN_QUESTION and
 is explicitly excluded or partial downstream. Record both the gap and waiver
@@ -1997,6 +2158,11 @@ identities, and no load-bearing gap. Use BLOCKED for genuinely absent official
 evidence and RETRY for fast-path insufficiency/tool interruption. Do not browse
 the repository or web for reassurance. End with the exact supplied
 `SPEC2LEAN_RESULT` line outside a fence.
+
+Schema, locator, candidate-write, or `candidate_validate` failures are never a
+semantic BLOCKED result. After the bounded repair attempt, return RETRY with
+the exact diagnostic so the full curator can take over. This fast agent is not
+authoritative for a terminal evidence-absence decision.
 ````
 
 ## source-curator
@@ -2041,7 +2207,7 @@ permission:
 
 # Role
 
-Build one bounded evidence bundle from only the official files and exact
+Build one full-instruction evidence bundle from only the official files and exact
 version pinned by the runtime prompt. You collect quotations and provenance;
 you do not explain their semantics, invent assumptions, write Lean/theorems,
 or approve a gate.
@@ -2098,10 +2264,25 @@ version/host restriction. Every row ends in fragment IDs, an explicit
 inapplicable determination, or an evidence-gap ID. This ledger prevents silent
 omissions; do not add it to the artifact unless the runtime schema requests it.
 
-Write source-bundle v2 exactly as specified by the runtime contract. Keep exact
+Write source-bundle v3 exactly as specified by the runtime contract. Persist
+the private ledger as `coverage_matrix` with exactly the nine required
+dimensions. A row is COVERED only with exact fragment IDs, NOT_APPLICABLE only
+with a concrete language/unit rationale, and GAP only with explicit gap IDs.
+Keep exact
 quotes separate from summaries. Every fragment has a stable ID, document and
 source-manifest identity, hash, locator, and reason for inclusion. Every gap is
 explicitly LOAD_BEARING or NON_LOAD_BEARING.
+
+The runtime prompt supplies the canonical document, fragment, and coverage-row
+JSON shapes. Copy those shapes exactly. The schema has
+`additionalProperties=false`: do not flatten locator fields and do not preserve
+legacy/index metadata as extra bundle fields. Source documents use `kind`,
+fragments use `source_kind`, every fragment uses one nested `locator`, and every
+coverage row contains both `fragment_ids` and `gap_ids` (empty when unused).
+Copy the runtime-supplied `language`, `specification_version`, and `unit`
+identity values byte-for-byte; these fields are case-sensitive. An identity,
+schema, locator, write, or validator mismatch is a repair diagnostic, never a
+semantic BLOCKED result.
 With a runtime CONSERVATIVE_BOUNDED_SCOPE waiver, an unresolved gap may be
 NON_LOAD_BEARING only for the benchmark's explicitly partial/excluded cases.
 Keep its OPEN_QUESTION ID and gap visible; the waiver neither supplies evidence
@@ -2109,7 +2290,8 @@ nor resolves the question.
 
 Write early, run `candidate_validate`, and repair all structural/hash/ID issues
 in this session. If a load-bearing fact cannot be found, return BLOCKED with
-the exact missing fact. SUCCESS means a usable evidence bundle, not a semantic
+the exact missing fact and record it as a `LOAD_BEARING` evidence gap in the
+otherwise canonical bundle. SUCCESS means a usable evidence bundle, not a semantic
 interpretation. End with the supplied `SPEC2LEAN_RESULT` line.
 
 SUCCESS requires all required source documents to be hash-bound, all quoted
@@ -2163,7 +2345,7 @@ permission:
 
 # Role
 
-Define the smallest sound architecture for the exact unit in the runtime
+Define a complete sound architecture for the exact unit in the runtime
 prompt. You do not curate the later source bundle, extract full semantics,
 write Lean, critique your own work, or approve Gate A.
 
@@ -2180,6 +2362,14 @@ write Lean, critique your own work, or approve Gate A.
   current-run artifact and review paths that may be read on a revision.
 - The runtime prompt lists the only shared semantic IDs authorized for reuse.
   Never treat an accepted per-unit artifact as shared authority.
+- Treat that reviewed environment as the language/version core: shared value
+  domains, state/environment, operand categories, control/guard model, and
+  error/partiality conventions are defined once and reused. A unit contributes
+  only its source-backed delta. If no approved core exists, mark the first-run
+  model as BOOTSTRAP_CANDIDATE rather than calling it shared. Make that
+  bootstrap concrete with a stable candidateCoreId, narrow scopeStatement, and
+  proposedSemanticIds containing only reusable language/version concepts,
+  never the current instruction's operation.
 - When the runtime says the unit is eligible for a HUMAN_APPROVED shared
   environment, reuse its explicit state boundary and exclusions. Do not reopen
   an excluded hidden feature merely because the instruction-local prose is
@@ -2212,7 +2402,7 @@ Write the requested artifact early, immediately after the single bounded
 retrieval call. It MUST fit the deterministic architecture budget in the
 runtime prompt. Cover:
 
-1. bounded scope and exclusions;
+1. exact full-instruction scope and any encoded exclusions;
 2. official source facts with exact source locations;
 3. proposed representations and execution boundary;
 4. fact-to-design dependencies;
@@ -2222,13 +2412,20 @@ runtime prompt. Cover:
 8. Gate A checklist;
 9. the exact machine-readable `SPEC2LEAN_ARCHITECTURE_INDEX` required by the
    runtime contract.
+10. the exact nine-row `SPEC2LEAN_COMPLETENESS_CONTRACT` required by the
+    runtime contract.
+
+`FULL_INSTRUCTION` is the default for the exact requested unit. Do not obtain a
+quick success by shrinking the source-visible instruction. `PARTIAL_EXPLICIT`
+is valid only when each omitted legal case has a named precondition/partial
+outcome that downstream Lean must encode. A prose-only exclusion is invalid.
 
 Before finalizing scope, enumerate a compact coverage matrix for every
 source-visible form applicable to the unit: syntax/modifiers, each operand
-position and its legal classes, types/coercions, operation branches,
-guards/control, destinations, state reads/writes, errors/undefined behavior,
-and version/host restrictions. Mark each item SUPPORTED, EXCLUDED_BY_SCOPE, or
-OPEN, with exact SOURCE_FACT/design IDs. Never silently narrow an operand from
+position and its legal classes, types/coercions, operation branches and edge
+cases, guards/control, destinations, state reads/writes, errors/undefined
+behavior, and version/host restrictions. Mark each item COVERED,
+NOT_APPLICABLE, or EXCLUDED_BY_ENCODED_PRECONDITION with exact IDs. Never silently narrow an operand from
 register-or-immediate to register-only (or the analogous distinction in any
 language).
 
@@ -2446,7 +2643,7 @@ permission:
 
 # Role and authority
 
-Design the theorem contract for exactly one bounded unit. The hash-pinned
+Design the theorem contract for exactly one full-instruction unit. The hash-pinned
 Gate-C-authorized Lean mapping, approved semantic artifact, provenance catalog,
 and gate record supplied by the orchestrator are the only authority. Benchmark
 auto-advance permits continuation but is not human approval.
@@ -2473,8 +2670,11 @@ the behavioral correctness spine:
    behavior. State function/relation equivalence, soundness/completeness, or an
    equally direct correspondence suited to the approved model.
 
-Add only applicable supporting kinds: `GUARD_BEHAVIOR`, `STATE_UPDATE`,
-`FRAME_PROPERTY`, `DETERMINISM`, `PARTIALITY`, and `SCOPE_BOUNDARY`. Do not force
+Always add independent `GUARD_BEHAVIOR`, `STATE_UPDATE`, `FRAME_PROPERTY`,
+`ALGORITHM_FIDELITY`, and `RESULT_RANGE` obligations. Add applicable
+`EDGE_CASE_BEHAVIOR`, `TYPE_DOMAIN`, `DETERMINISM`, `PARTIALITY`, and
+`SCOPE_BOUNDARY`. Cover every
+mandatory `proofRequirements` entry from semantics. Do not force
 machine-state families onto a pure abstract operation, but still connect its
 executable definition to the approved semantic relation/specification.
 
@@ -2494,9 +2694,13 @@ executable definition to the approved semantic relation/specification.
    branch, false guard, missing lookup/error, special destination, and excluded
    inputs when applicable. If a statement is false, add only an already
    authorized precondition or return BLOCKED.
+   For a positive/negative predicate model, distinguish "predicate value is
+   false" from "the guard condition is false": a negative guard executes when
+   the underlying predicate value is false. State guard theorems by the actual
+   execution condition or enumerate both polarities.
 5. Use a minimal Lean probe only to confirm that a complete header parses and
    elaborates. Do not write proof bodies.
-6. Write the required immutable JSON early with `schema_version: 2`, a precise
+6. Write the required immutable JSON early with `schema_version: 3`, a precise
    `source_faithfulness_boundary`, and non-empty `theorem_obligations`.
 
 # Obligation contract
@@ -2504,21 +2708,29 @@ executable definition to the approved semantic relation/specification.
 Every obligation requires:
 
 - a stable `obligation_id` and collision-resistant unit-specific theorem name;
+- exactly one `proof_requirement_ids` entry, with every semantic proof
+  requirement mapped to exactly one independent theorem;
 - one valid `correctness_kind`;
 - `correctness_rationale` explaining the behavior established;
 - exact non-empty `semantic_claim_ids` from the runtime allowlist;
+- `independent_specification_symbols` naming the separate source-level model;
+- `implementation_symbols` naming the executable/helper/relation being checked;
 - `strength_risks` describing any premise/scope weakness to review;
 - exactly one complete header-only theorem in `lean_statement_sketch`.
+
+List symbols by their exact unit-local declaration names (without inventing a
+qualified alias); deterministic validation confirms each declaration exists.
 
 The JSON string must decode directly to valid Lean. Use real Unicode or valid
 Lean ASCII (`∨` or `\/`), never a literal double-escaped `\uXXXX`. Do not use
 ellipses, placeholders, proof bodies, duplicate names, hidden assumptions,
 weakened conclusions, `sorry`, `admit`, a new `axiom`, or `unsafe`.
 
-The operation-fidelity theorem must mention the real operation definition and
-semantic result, not merely a helper's self-equality. The execution-
-correspondence theorem must connect the real execution/step output to approved
-operation/control/state semantics, not merely restate a step premise.
+Operation/algorithm/range/edge theorems must compare distinct specification
+and implementation symbols. A theorem that merely unfolds an implementation
+to its own body is rejected. The execution-correspondence theorem must mention
+both executable and relational definitions from `SPEC2LEAN_LEAN_MODEL_CONTRACT`;
+characterizing only relation constructors is not correspondence.
 
 # Revision and completion
 
@@ -2583,13 +2795,24 @@ premises. Look actively for hidden assumptions or a theorem whose premise
 already states its conclusion. Use a minimal Lean probe/counterexample only
 when truth is not syntactically clear; compilation alone does not prove truth.
 
-First audit the schema-v2 correctness contract. Every obligation must have a
+First audit the schema-v3 correctness contract. Every obligation must have a
 valid `correctness_kind`, meaningful rationale, and exact semantic claim IDs.
-The set must include genuine OPERATION_FIDELITY and
+The set must include genuine OPERATION_FIDELITY, ALGORITHM_FIDELITY,
+RESULT_RANGE, GUARD_BEHAVIOR, STATE_UPDATE, FRAME_PROPERTY, and
 EXECUTION_CORRESPONDENCE statements. Reject a relabeled syntax/type/reflexivity
 lemma that does not establish its advertised kind. Verify the stated
 source-faithfulness boundary: proofs implement approved semantic IR; they do
 not prove the publisher prose itself.
+
+Require exact coverage of every semantics `proofRequirements` kind. For
+each requirement ID, require exactly one distinct obligation with the same kind
+and all of the requirement's semantic claim IDs. For
+OPERATION_FIDELITY, ALGORITHM_FIDELITY, RESULT_RANGE, and EDGE_CASE_BEHAVIOR,
+the independent specification and implementation symbol sets must be nonempty,
+distinct, and both occur in the theorem. Reject an implementation definition
+unfolded against itself. EXECUTION_CORRESPONDENCE must mention both executable
+and relational definitions from the Lean model contract; a constructor
+characterization of the relation alone is insufficient.
 
 Review with a semantic-to-theorem matrix:
 
@@ -2599,7 +2822,7 @@ Review with a semantic-to-theorem matrix:
   actual operation and authorized guards/state/errors, rather than assuming the
   conclusion;
 - guard, update, frame, determinism, and partiality obligations cover applicable
-  branches without overclaiming BOUNDED_PARTIAL scope;
+  branches without overclaiming PARTIAL_EXPLICIT scope;
 - semantic IDs actually justify each theorem statement and later provide a
   complete evidence-manifest path.
 
@@ -2608,6 +2831,14 @@ premises, relation hypotheses identical to conclusions, unconstrained outputs,
 existentials satisfied by arbitrary witnesses, and determinism claims made
 trivial by functional definitions without testing semantic correspondence.
 Truth is necessary; strength and relevance are separate requirements.
+
+For every declaration with a runtime-supplied deterministic behavior-branch
+inventory, inspect every exact branch ID. Check the theorem premises against
+that constructor/pattern, including positive versus negated guards and absent
+guards. Emit the required `SPEC2LEAN_THEOREM_BEHAVIOR_AUDIT` JSON block. Mark
+PASS only after every listed branch is compatible with the conclusion and use
+`counterexample: "NONE_FOUND"`; otherwise mark FAIL, give the smallest concrete
+constructor/input counterexample, and record a BLOCKER or MAJOR finding.
 
 The review must reproduce exactly the supplied audit header:
 

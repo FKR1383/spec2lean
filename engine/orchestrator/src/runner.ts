@@ -12,6 +12,7 @@ import {
   validateAgentDecision,
 } from "./agent-decision.js"
 import { artifactContractForRun } from "./artifact-contract.js"
+import { validateArtifactContent } from "./artifact-content.js"
 import { verifyExpectedArtifact } from "./artifact-verify.js"
 import { recoverResultFromVerifiedArtifact } from "./artifact-recovery.js"
 import { normalizeCriticResultFromReview } from "./critic-disposition.js"
@@ -36,6 +37,8 @@ import {
 } from "./proof-plan.js"
 import { reconcileProofStageResult } from "./proof-stage-result.js"
 import { loadAgentModel, REPO_ROOT } from "./repo.js"
+import { leanBehaviorBranches, requiredBehaviorBranches } from "./theorem-behavior-audit.js"
+import { latestVersionedArtifact } from "./provenance-catalog.js"
 import { loadRun, saveRun } from "./run-store.js"
 import {
   markSemanticV2Fallback,
@@ -149,6 +152,204 @@ const FAST_FIRST_AGENTS:
     SOURCE_CURATION: "source-curator-fast",
   }
 
+export const SOURCE_BLOCK_RECOVERY_PREFIX =
+  "deterministic recovery from a non-authoritative source-curation block"
+export const SEMANTIC_BLOCK_RECOVERY_PREFIX =
+  "deterministic recovery from a non-authoritative semantic-extraction block"
+
+type SourceBlockInspection = {
+  authoritative: boolean
+  issues: string[]
+}
+
+type SemanticBlockInspection = {
+  authoritative: boolean
+  blockerIds: string[]
+  issues: string[]
+}
+
+function records(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is Record<string, unknown> =>
+      typeof item === "object" && item !== null && !Array.isArray(item))
+    : []
+}
+
+export function semanticExtractionBlockAuthority(document: unknown): string[] {
+  if (typeof document !== "object" || document === null || Array.isArray(document)) return []
+  const record = document as Record<string, unknown>
+  const claims = [
+    ...records(record.semanticClaims),
+    ...records(record.claims),
+    ...records(record.refinements),
+  ]
+  return claims.flatMap((claim) => {
+    const lifecycle = typeof claim.lifecycle === "object" && claim.lifecycle !== null &&
+      !Array.isArray(claim.lifecycle)
+      ? claim.lifecycle as Record<string, unknown>
+      : undefined
+    if (
+      claim.classification !== "OPEN_QUESTION" ||
+      claim.stateAffecting !== true ||
+      lifecycle?.status !== "ACTIVE"
+    ) return []
+    const id = claim.semanticId
+    return typeof id === "string" && id.length > 0 ? [id] : ["<unnamed-open-question>"]
+  })
+}
+
+async function inspectSemanticExtractionBlock(
+  run: RunState,
+  path?: string,
+): Promise<SemanticBlockInspection> {
+  try {
+    const semanticPath = path ?? await latestVersionedArtifact(
+      `${run.artifactRoot}/semantics`,
+      [/^semantics-v(\d+)\.json$/, /^semantic-delta-v(\d+)\.json$/],
+    )
+    const document = JSON.parse(
+      await readFile(resolve(REPO_ROOT, semanticPath), "utf8"),
+    ) as unknown
+    const blockerIds = semanticExtractionBlockAuthority(document)
+    return {
+      authoritative: blockerIds.length > 0,
+      blockerIds,
+      issues: blockerIds.length > 0
+        ? blockerIds.map((id) => `active state-affecting OPEN_QUESTION ${id}`)
+        : ["no ACTIVE state-affecting OPEN_QUESTION is recorded in the semantic artifact"],
+    }
+  } catch (error) {
+    return {
+      authoritative: false,
+      blockerIds: [],
+      issues: [error instanceof Error ? error.message : String(error)],
+    }
+  }
+}
+
+export function sourceCurationBlockAuthority(
+  document: unknown,
+  validationIssues: readonly string[],
+): boolean {
+  if (typeof document !== "object" || document === null || Array.isArray(document)) return false
+  const record = document as Record<string, unknown>
+  const gaps = (Array.isArray(record.evidence_gaps) ? record.evidence_gaps : [])
+    .filter((value): value is Record<string, unknown> =>
+      typeof value === "object" && value !== null && !Array.isArray(value)
+    )
+  const loadBearingIds = gaps
+    .filter((gap) => gap.impact === "LOAD_BEARING" && typeof gap.gap_id === "string")
+    .map((gap) => gap.gap_id as string)
+  if (loadBearingIds.length === 0) return false
+
+  const coveredGapIds = new Set(
+    (Array.isArray(record.coverage_matrix) ? record.coverage_matrix : [])
+      .filter((value): value is Record<string, unknown> =>
+        typeof value === "object" && value !== null && !Array.isArray(value)
+      )
+      .filter((row) => row.status === "GAP")
+      .flatMap((row) => Array.isArray(row.gap_ids) ? row.gap_ids : [])
+      .filter((value): value is string => typeof value === "string"),
+  )
+  if (!loadBearingIds.every((id) => coveredGapIds.has(id))) return false
+
+  return validationIssues.every((issue) =>
+    issue.startsWith("source bundle has unresolved LOAD_BEARING evidence gap:") ||
+    issue.startsWith("source evidence closure is mandatory for ")
+  )
+}
+
+async function inspectSourceCurationBlock(
+  run: RunState,
+  path?: string,
+): Promise<SourceBlockInspection> {
+  try {
+    const bundlePath = path ?? await latestVersionedArtifact(
+      `${run.artifactRoot}/source-bundles`,
+      [/^source-bundle-v(\d+)\.json$/],
+    )
+    const source = await readFile(resolve(REPO_ROOT, bundlePath), "utf8")
+    const document = JSON.parse(source) as unknown
+    const sourceRun: RunState = { ...run, stage: "SOURCE_CURATION" }
+    const issues = validateArtifactContent(sourceRun, source, document)
+    return {
+      authoritative: sourceCurationBlockAuthority(document, issues),
+      issues,
+    }
+  } catch (error) {
+    return {
+      authoritative: false,
+      issues: [error instanceof Error ? error.message : String(error)],
+    }
+  }
+}
+
+export async function recoverNonAuthoritativeSourceBlock(
+  run: RunState,
+): Promise<RunState | undefined> {
+  const latest = run.executions?.at(-1)
+  if (
+    run.stage !== "BLOCKED" ||
+    latest?.stage !== "SOURCE_CURATION" ||
+    latest.outcome !== "BLOCKED"
+  ) return undefined
+
+  const inspection = latest.agent === "source-curator-fast"
+    ? { authoritative: false, issues: ["fast curator terminal decisions require full-curator confirmation"] }
+    : await inspectSourceCurationBlock(run)
+  if (inspection.authoritative) return undefined
+
+  const detail = inspection.issues.length === 0
+    ? "the bundle records no explicit LOAD_BEARING evidence gap"
+    : inspection.issues.join(" | ")
+
+  return transitionRun(
+    run,
+    "SOURCE_CURATION",
+    `${SOURCE_BLOCK_RECOVERY_PREFIX}; route this entry to the full source curator: ${detail}`,
+  )
+}
+
+export async function recoverNonAuthoritativeSemanticBlock(
+  run: RunState,
+): Promise<RunState | undefined> {
+  const latest = run.executions?.at(-1)
+  if (
+    run.stage !== "BLOCKED" ||
+    latest?.stage !== "SEMANTIC_EXTRACTION" ||
+    latest.outcome !== "BLOCKED"
+  ) return undefined
+
+  const inspection = await inspectSemanticExtractionBlock(run)
+  if (inspection.authoritative) return undefined
+  return transitionRun(
+    run,
+    "SEMANTIC_EXTRACTION",
+    `${SEMANTIC_BLOCK_RECOVERY_PREFIX}; repair the deterministic artifact/coverage contract: ${inspection.issues.join(" | ")}`,
+  )
+}
+
+export function normalizeFastPathTerminalResult(
+  run: RunState,
+  agent: string,
+  result: AgentResult,
+): AgentResult {
+  if (
+    run.stage !== "SOURCE_CURATION" ||
+    agent !== "source-curator-fast" ||
+    result.outcome !== "BLOCKED"
+  ) return result
+
+  return {
+    outcome: "RETRY",
+    nextStage: "SOURCE_CURATION",
+    summary:
+      "The bounded fast curator is not authoritative for a terminal evidence decision. " +
+      "Route once to the full source curator for schema repair and an independent determination. " +
+      `Fast-path report: ${result.summary}`,
+  }
+}
+
 export function executionAgentForRun(
   run: RunState,
   fallbackAgent: string,
@@ -177,6 +378,11 @@ export function executionAgentForRun(
         event.to === run.stage &&
         event.from !== run.stage,
     )
+
+  if (
+    latestEntry?.from === "BLOCKED" &&
+    latestEntry.reason.startsWith(SOURCE_BLOCK_RECOVERY_PREFIX)
+  ) return fallbackAgent
 
   const enteredAt =
     latestEntry?.at ?? run.createdAt
@@ -233,12 +439,60 @@ async function artifactFingerprint(
   }
 }
 
+function normalizedFailureDiagnostic(value: string): string {
+  return value
+    .replaceAll(REPO_ROOT, "<REPO>")
+    .replace(/:[0-9]+:[0-9]+(?=:|\b)/g, ":<line>:<column>")
+    .replace(/[a-f0-9]{64}/gi, "<sha256>")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+async function retryFailureFingerprint(
+  run: RunState,
+  result: AgentResult,
+  proofContext: Awaited<ReturnType<typeof buildProofPrompt>> | undefined,
+): Promise<string | undefined> {
+  if (result.outcome !== "RETRY") return undefined
+  let diagnostic = result.summary
+  if (run.stage === "PROOF_GENERATION") {
+    const path = proofArtifactPath(run)
+    const banned = await prohibitedLeanTokens(path).catch(() => [])
+    const contractIssues = await proofStatementContractIssues(run).catch(() => [])
+    const check = await verifyLeanFile(path, 90_000).catch((error) => ({
+      success: false,
+      output: error instanceof Error ? error.message : String(error),
+    }))
+    diagnostic = [
+      ...banned.map((token) => `prohibited:${token}`),
+      ...contractIssues.map((issue) => `contract:${issue}`),
+      ...(check.success ? [] : [check.output]),
+      ...(banned.length === 0 && contractIssues.length === 0 && check.success
+        ? [proofContext?.diagnostics ?? result.summary]
+        : []),
+    ].join("\n")
+  }
+  return createHash("sha256")
+    .update(`${run.stage}\0${normalizedFailureDiagnostic(diagnostic)}`)
+    .digest("hex")
+}
+
 function artifactChanged(
   before: ArtifactFingerprint | undefined,
   after: ArtifactFingerprint,
 ): boolean {
   if (before === undefined) return after.exists
   return after.exists && (!before.exists || before.sha256 !== after.sha256)
+}
+
+export function agentWaitBudgetMs(
+  stage: FormalizationStage,
+  agent: string,
+): number {
+  if (agent === "semantic-extractor-delta") return 4 * 60 * 1000
+  if (agent === "source-curator-fast") return 3 * 60 * 1000
+  if (stage === "PROOF_GENERATION") return 8 * 60 * 1000
+  return 8 * 60 * 1000
 }
 
 function repairContractLines(run: RunState): string[] {
@@ -326,6 +580,12 @@ export function buildGeneralPrompt(
   const revisionTargets =
     plan.revisionStages.length === 0 ? "(none)" : plan.revisionStages.join(", ")
   const latestEvent = run.history.at(-1)
+  const latestExecution = run.executions?.at(-1)
+  const interruptedAfterArtifactWrite =
+    latestExecution?.stage === run.stage &&
+    latestExecution.outcome === "RETRY" &&
+    latestExecution.failureClass === "PROVIDER_RETRY_BUDGET_EXCEEDED" &&
+    latestExecution.artifactProduced === true
   const latestSubstantiveRetry = [...(run.executions ?? [])]
     .reverse()
     .find((execution) =>
@@ -333,11 +593,13 @@ export function buildGeneralPrompt(
       execution.outcome === "RETRY" &&
       execution.failureClass !== "PROVIDER_RETRY_BUDGET_EXCEEDED"
     )
-  const currentRetryReason = latestSubstantiveRetry?.response.slice(-4_000) ??
-    (latestEvent?.from === run.stage && latestEvent.to === run.stage &&
-      !latestEvent.reason.includes("provider retry exceeded")
-      ? latestEvent.reason
-      : undefined)
+  const currentRetryReason =
+    interruptedAfterArtifactWrite
+      ? undefined
+      : (latestEvent?.from === run.stage && latestEvent.to === run.stage &&
+        !latestEvent.reason.includes("provider retry exceeded")
+        ? latestEvent.reason
+        : undefined) ?? latestSubstantiveRetry?.response.slice(-4_000)
 
   return [
     "# Spec2Lean Automated Agentic Run",
@@ -397,7 +659,7 @@ export function buildGeneralPrompt(
     ...(run.stage === "SEMANTIC_EXTRACTION" && run.semanticV2?.mode === "DELTA_FAST_PATH"
       ? [
           "",
-          "# Semantic Architecture v2 — DELTA FAST PATH",
+          "# Semantic Architecture v3 — LANGUAGE-CORE DELTA FAST PATH",
           "",
           `Shared environment: ${run.semanticV2.sharedEnvironmentPath}`,
           `Shared environment hash: ${run.semanticV2.environment?.sha256 ?? "missing"}`,
@@ -406,7 +668,10 @@ export function buildGeneralPrompt(
           `Deterministic critic packet: ${run.semanticV2.current?.criticPacketPath ?? "assigned after validation"}`,
           "Generate ONLY the typed instruction-specific semantic delta.",
           "Do not reproduce shared claims as local claims.",
+          "Treat the shared environment as the build-once language core; do not redesign its model per unit.",
           "Read ir/semantic/instruction-delta.schema.json and the shared environment before writing.",
+          "Set scopeStatus=FULL_INSTRUCTION by default and include the exact nine-row coverage array and mandatory proofRequirements. PARTIAL_EXPLICIT requires an encoded precondition.",
+          "Bind languageCore.status=REUSED_APPROVED to the exact language-core manifest path and SHA-256 supplied by the deterministic stage context.",
           "Every new SOURCE_FACT must use local official evidence with sourceBundleEvidenceId set to an exact fragment_id from the latest bounded source bundle.",
           "Pin the exact latest source-bundle path/hash and shared environment ID/revision/hash.",
           "The orchestrator will validate grounding, block state-affecting open questions, materialize the full view, and construct the critic packet.",
@@ -416,10 +681,10 @@ export function buildGeneralPrompt(
     ...(run.stage === "SEMANTIC_EXTRACTION" && run.semanticV2?.mode === "LEGACY_FALLBACK"
       ? [
           "",
-          "# Explicit Semantic v2 Fallback",
+          "# Explicit Semantic v3 Full-Semantics Fallback",
           "",
           `Fallback reason: ${run.semanticV2.fallbackReason ?? "delta path unavailable"}`,
-          "Produce the existing complete legacy semantic interpretation at the required semantics-vN.json path.",
+          "Produce complete schemaVersion=3 full-instruction semantics at the required semantics-vN.json path.",
           "Do not report or imply that the delta fast path succeeded.",
         ]
       : []),
@@ -506,6 +771,13 @@ export async function buildTheoremStrengthContractContext(
 
   const obligationPath = await latestObligationPath(run)
   const targets = await proofTargets(run)
+  const leanPath = await latestVersionedArtifact(
+    `${run.artifactRoot}/lean`,
+    [new RegExp(`^${run.leanModuleName}-v(\\d+)\\.lean$`)],
+  )
+  const behaviorBranches = leanBehaviorBranches(
+    await readFile(resolve(REPO_ROOT, leanPath), "utf8"),
+  )
   return [
     "# Deterministically Validated Theorem Contract Input",
     "",
@@ -530,11 +802,27 @@ export async function buildTheoremStrengthContractContext(
       `Correctness kind: ${target.correctnessKind ?? "LEGACY_UNCLASSIFIED"}`,
       `Semantic claims: ${target.semanticIds.join(", ") || "NONE"}`,
       target.statement,
+      ...(requiredBehaviorBranches(target, behaviorBranches).length === 0
+        ? []
+        : [
+            "Required deterministic behavior branches:",
+            ...requiredBehaviorBranches(target, behaviorBranches).map((branch) =>
+              `- ${branch.branchId}: ${branch.definition} | ${branch.pattern}`
+            ),
+          ]),
       ...(target.strengthRisks.length === 0
         ? []
         : ["Strength caveats:", ...target.strengthRisks.map((risk) => `- ${risk}`)]),
       "",
     ]),
+    "# Required machine-readable behavior audit",
+    "",
+    "For every theorem above with Required deterministic behavior branches, inspect every listed branch against the exact theorem premises and conclusion.",
+    "A PASS is forbidden if any listed branch gives a counterexample. A FAIL is a valid blocking review and must include the concrete constructor/input counterexample.",
+    "Append exactly one JSON block in this form, using the exact supplied branch IDs:",
+    "<!-- SPEC2LEAN_THEOREM_BEHAVIOR_AUDIT",
+    '{"schemaVersion":1,"entries":[{"name":"theorem_name","correctnessKind":"GUARD_BEHAVIOR","status":"PASS|FAIL","branchIdsChecked":["LEAN-BRANCH-..."],"counterexample":"NONE_FOUND|concrete counterexample"}]}',
+    "-->",
   ].join("\n")
 }
 
@@ -623,6 +911,15 @@ async function buildProofPrompt(
             .join("\n\n"),
           strengthRisks: [...new Set(batchTargets.flatMap((item) => item.strengthRisks))],
           semanticIds: [...new Set(batchTargets.flatMap((item) => item.semanticIds))],
+          proofRequirementIds: [
+            ...new Set(batchTargets.flatMap((item) => item.proofRequirementIds)),
+          ],
+          independentSpecificationSymbols: [
+            ...new Set(batchTargets.flatMap((item) => item.independentSpecificationSymbols)),
+          ],
+          implementationSymbols: [
+            ...new Set(batchTargets.flatMap((item) => item.implementationSymbols)),
+          ],
         }
 
   const mode = repairMode ? "REPAIR" : "PROVE_BATCH"
@@ -681,7 +978,10 @@ async function buildProofPrompt(
             "# Current theorem target",
             "",
             `Obligation: ${target.obligationId}`,
+            `Proof requirement: ${target.proofRequirementIds.join(", ")}`,
             `Theorem: ${target.name}`,
+            `Independent specification symbols: ${target.independentSpecificationSymbols.join(", ")}`,
+            `Implementation symbols: ${target.implementationSymbols.join(", ")}`,
             "",
             target.statement,
             "",
@@ -1061,6 +1361,55 @@ export async function executeTick(
         `agent=${stale.agent} model=${stale.model ?? "unrecorded"}; ` +
         `current-agent=${plan.agent} current-model=${executionModel.full}`,
       )
+      const staleArtifact = await artifactFingerprint(stale.expectedArtifact)
+      if (staleArtifact.exists) {
+        const verification = await verifyExpectedArtifact(run)
+        if (!verification.ok) {
+          const summary =
+            "A stale active session left an immutable but incomplete artifact. " +
+            `Start a fresh bounded repair revision with these deterministic diagnostics: ${verification.issues.join(" | ")}`
+          const retried = retryRun(run, `orchestrator stale-session repair: ${summary}`)
+          const saved = {
+            ...retried,
+            activeExecution: undefined,
+            executions: [
+              ...(run.executions ?? []),
+              {
+                startedAt: stale.startedAt,
+                at: new Date().toISOString(),
+                stage: run.stage,
+                agent: stale.agent,
+                model: stale.model,
+                sessionId: stale.sessionId,
+                outcome: "RETRY",
+                nextStage: run.stage,
+                response: summary,
+                artifactProduced: true,
+                ...(stale.artifactBaseline?.sha256 === undefined
+                  ? {}
+                  : { artifactBeforeSha256: stale.artifactBaseline.sha256 }),
+                ...(staleArtifact.sha256 === undefined
+                  ? {}
+                  : { artifactAfterSha256: staleArtifact.sha256 }),
+              },
+            ],
+          }
+          await saveRun(saved)
+          console.log(JSON.stringify({
+            ok: true,
+            deterministic: true,
+            recovered: true,
+            runId: saved.runId,
+            agent: "orchestrator-stale-session-recovery",
+            outcome: "RETRY",
+            fromStage: run.stage,
+            toStage: saved.stage,
+            revision: saved.revision,
+            summary,
+          }, null, 2))
+          return
+        }
+      }
       run = {
         ...run,
         activeExecution: undefined,
@@ -1115,7 +1464,7 @@ export async function executeTick(
     try {
       response = await waitForAgentResult(runtime.runtime.server.url, sessionId, {
         pollMs: 2_000,
-        maxWaitMs: run.stage === "PROOF_GENERATION" ? 15 * 60 * 1000 : 30 * 60 * 1000,
+        maxWaitMs: agentWaitBudgetMs(run.stage, plan.agent),
         providerRetryBudgetMs: options.providerRetryBudgetMs,
         missingStatusIsTerminal: !submitted,
       })
@@ -1152,20 +1501,58 @@ export async function executeTick(
           failureClass = "PROVIDER_RETRY_BUDGET_EXCEEDED"
         } else if (message.includes("reason=length")) {
           failureClass = "OUTPUT_LENGTH_EXCEEDED"
+        } else if (message.includes("timed out")) {
+          failureClass = "AGENT_WAIT_BUDGET_EXCEEDED"
         }
+        const verification = await verifyExpectedArtifact(run).catch(() => undefined)
+        const repairDiagnostics = verification === undefined || verification.ok
+          ? ""
+          : ` Deterministic artifact diagnostics: ${verification.issues.join(" | ")}`
         result = {
           outcome: "RETRY",
           nextStage: run.stage,
           summary: error instanceof ProviderRetryBudgetExceededError
-            ? `OpenCode provider retry exceeded the bounded ${error.retryBudgetMs}ms budget: ${error.providerMessage}. The stalled session was aborted; the stage remains safely resumable and no semantic conclusion was inferred from the provider failure.`
+            ? `OpenCode provider retry exceeded the bounded ${error.retryBudgetMs}ms budget: ${error.providerMessage}. The stalled session was aborted; the stage remains safely resumable and no semantic conclusion was inferred from the provider failure.${repairDiagnostics}`
             : message.includes("reason=length")
               ? "OpenCode terminated the response at its output-length limit before a usable artifact/result was completed. Retry once in strict bounded-output recovery mode: use only the deterministic stage inputs, do not inspect other units, stay within the stated artifact budget, write once, validate, and return the protocol result."
-              : `Agent execution ended without a usable stage result (${message}). The same stage is safely resumable; any written artifact will be verified before another agent is started.`,
+              : `Agent execution ended without a usable stage result (${message}). The same stage is safely resumable; any written artifact will be verified before another agent is started.${repairDiagnostics}`,
         }
       }
     }
 
     if (!result) throw new Error("No agent result available")
+
+    result = normalizeFastPathTerminalResult(run, plan.agent, result)
+
+    if (run.stage === "SOURCE_CURATION" && result.outcome === "BLOCKED") {
+      const inspection = await inspectSourceCurationBlock(run, artifact.outputPath)
+      if (!inspection.authoritative) {
+        const detail = inspection.issues.length === 0
+          ? "the bundle records no explicit LOAD_BEARING evidence gap"
+          : inspection.issues.join(" | ")
+        result = {
+          outcome: "RETRY",
+          nextStage: "SOURCE_CURATION",
+          summary:
+            "Source curation reported BLOCKED without a canonical, coverage-linked " +
+            `LOAD_BEARING evidence gap. Repair the artifact instead: ${detail}`,
+        }
+      }
+    }
+
+    if (run.stage === "SEMANTIC_EXTRACTION" && result.outcome === "BLOCKED") {
+      const inspection = await inspectSemanticExtractionBlock(run, artifact.outputPath)
+      if (!inspection.authoritative) {
+        result = {
+          outcome: "RETRY",
+          nextStage: "SEMANTIC_EXTRACTION",
+          summary:
+            "Semantic extraction reported BLOCKED without an ACTIVE state-affecting " +
+            "OPEN_QUESTION. Schema, provenance, coverage, and cross-artifact validation " +
+            `failures are repairable stage failures, not human blockers: ${inspection.issues.join(" | ")}`,
+        }
+      }
+    }
 
     if (plan.agent.endsWith("-critic")) {
       try {
@@ -1332,10 +1719,10 @@ export async function executeTick(
 
     result = normalizeAgentDecision(run, result)
     const nextStage = validateAgentDecision(run, result)
-    const producedArtifact = artifactChanged(
-      run.activeExecution?.artifactBaseline,
-      await artifactFingerprint(artifact.outputPath),
-    )
+    const artifactBefore = run.activeExecution?.artifactBaseline
+    const artifactAfter = await artifactFingerprint(artifact.outputPath)
+    const producedArtifact = artifactChanged(artifactBefore, artifactAfter)
+    const failureFingerprint = await retryFailureFingerprint(run, result, proofContext)
     const execution = {
       startedAt: run.activeExecution?.startedAt,
       at: new Date().toISOString(),
@@ -1345,8 +1732,13 @@ export async function executeTick(
       sessionId,
       outcome: result.outcome,
       nextStage,
-      response: response || (submitted ? "[no textual response]" : "[resumed session]"),
+      response: failureClass !== undefined
+        ? `${result.summary}\n\n${response || (submitted ? "[no textual response]" : "[resumed session]")}`
+        : response || (submitted ? "[no textual response]" : "[resumed session]"),
       artifactProduced: producedArtifact,
+      ...(artifactBefore?.sha256 === undefined ? {} : { artifactBeforeSha256: artifactBefore.sha256 }),
+      ...(artifactAfter.sha256 === undefined ? {} : { artifactAfterSha256: artifactAfter.sha256 }),
+      ...(failureFingerprint === undefined ? {} : { failureFingerprint }),
       ...(failureClass === undefined ? {} : { failureClass }),
       ...(proofProgress === undefined ? {} : { progress: proofProgress }),
       ...(traceability === undefined ? {} : { traceability }),

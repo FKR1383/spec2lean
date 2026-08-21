@@ -6,6 +6,7 @@
   "required": [
     "schemaVersion",
     "language",
+    "languageCorePath",
     "specificationVersion",
     "strategy",
     "sharedEnvironmentPath",
@@ -19,6 +20,7 @@
   "properties": {
     "schemaVersion": { "const": 1 },
     "language": { "type": "string", "minLength": 1 },
+    "languageCorePath": { "type": "string", "minLength": 1 },
     "specificationVersion": { "type": "string", "minLength": 1 },
     "strategy": { "const": "DELTA_PREFERRED_WITH_LEGACY_FALLBACK" },
     "sharedEnvironmentPath": { "type": "string", "minLength": 1 },

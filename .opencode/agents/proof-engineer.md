@@ -65,6 +65,10 @@ Use `correctness_kind` to guide proof structure without changing statements:
 
 - OPERATION_FIDELITY: unfold the relevant operation/domain definitions and
   prove all approved branches and finite-width facts;
+- ALGORITHM_FIDELITY: relate the independent source-level algorithm to the
+  implementation without rewriting the specification into the implementation;
+- RESULT_RANGE and EDGE_CASE_BEHAVIOR: prove the exact finite-domain bound and
+  each frozen boundary case, not merely reflexivity after simplification;
 - EXECUTION_CORRESPONDENCE: invert or construct the real step relation and
   connect it to operation, guard, state update, error, and frame clauses;
 - GUARD/STATE/FRAME/PARTIALITY: analyze exact constructors and conditions while

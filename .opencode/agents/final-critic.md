@@ -48,12 +48,13 @@ Use this fixed aggregation matrix:
 1. SOURCE: official manifest/version/hashes, required HTML/PDF rendition
    coverage, exact-quote/locator diagnostics, and no load-bearing evidence gap.
 2. SEMANTICS: Gate-authorized artifact, honest classifications/dependency
-   closure, explicit bounded/open cases, and no silent loss or invented gain.
+   closure, exact nine-row completeness, language-core binding, explicit
+   partial/open cases, and no silent loss or invented gain.
 3. LEAN MAPPING: exact artifact reviewed at Gate C, module header/scope,
    branch/operand/state/error completeness, compilation, and no bypass.
-4. THEOREM CONTRACT: schema v2, required OPERATION_FIDELITY and
-   EXECUTION_CORRESPONDENCE coverage, non-vacuity/strength review, and unchanged
-   frozen statements.
+4. THEOREM CONTRACT: schema v3, every semantic proofRequirement, independent
+   specification-versus-implementation fidelity, real executable–relation
+   correspondence, non-vacuity/strength review, and unchanged frozen statements.
 5. PROOFS: every obligation declaration present, exact statement comparison,
    complete Lean compilation, no prohibited token/circular assumption, and
    declaration-level semantic IDs.
