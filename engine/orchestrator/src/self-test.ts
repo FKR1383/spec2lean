@@ -33,6 +33,7 @@ import {
   makeUnitSlug,
   stageAttempt,
 } from "./artifact-contract.js"
+import { normalizeExpectedArtifactContent } from "./artifact-normalization.js"
 import { mapWithConcurrency } from "./batch-runtime.js"
 import {
   PIPELINE_AGENTS,
@@ -755,6 +756,34 @@ const pipelineRun = (suffix: string, stage: RunState["stage"]): RunState => ({
   gates: { A: "pending", B: "pending", C: "pending", THEOREM_STRENGTH: "pending", FINAL: "pending" },
   history: [{ at: "2026-01-01T00:00:00.000Z", from: "ARCHITECTURE_CRITIQUE", to: stage, reason: "pipeline scheduler fixture" }],
 })
+const metadataRun: RunState = {
+  ...pipelineRun("identity", "SOURCE_CURATION"),
+  qualityContractVersion: 1,
+}
+const normalizedMetadata = await normalizeExpectedArtifactContent(
+  metadataRun,
+  artifactContractForRun(metadataRun).outputPath,
+  JSON.stringify({
+    schema_version: 2,
+    bundle_id: "fixture",
+    language: "PTX",
+    specification_version: "wrong",
+    unit: "wrong.b32",
+    semantic_payload: { statement: "must remain byte-for-byte as JSON data" },
+  }),
+  "source-curator",
+)
+const normalizedMetadataDocument = JSON.parse(normalizedMetadata.content) as Record<string, unknown>
+assert(normalizedMetadataDocument.language === metadataRun.language &&
+  normalizedMetadataDocument.specification_version === metadataRun.specVersion &&
+  normalizedMetadataDocument.unit === metadataRun.unit &&
+  normalizedMetadataDocument.schema_version === 3,
+"orchestrator normalizes exact source artifact identity and schema metadata")
+assert(JSON.stringify(normalizedMetadataDocument.semantic_payload) === JSON.stringify({ statement: "must remain byte-for-byte as JSON data" }),
+  "deterministic metadata normalization does not modify semantic payload")
+assert((await normalizeExpectedArtifactContent(metadataRun, "candidates/unrelated.json", "{}", "source-curator"))
+  .normalizedFields.length === 0,
+"deterministic metadata normalization applies only to the exact active artifact path")
 const parkedRuns = [
   pipelineRun("left", "WAITING_GATE_A"),
   pipelineRun("right", "WAITING_GATE_B"),

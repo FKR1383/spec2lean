@@ -23,6 +23,10 @@ async function runStates(): Promise<RunState[]> {
   return states
 }
 
+export async function activeRunForSession(sessionId: string): Promise<RunState | undefined> {
+  return (await runStates()).find((run) => run.activeExecution?.sessionId === sessionId)
+}
+
 async function reviewedArtifactPaths(directory = resolve(REPO_ROOT, "reviews")): Promise<Set<string>> {
   const paths = new Set<string>()
   const visit = async (current: string): Promise<void> => {

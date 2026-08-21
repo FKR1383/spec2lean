@@ -43,7 +43,8 @@ import {
   verifyTraceabilityManifest,
 } from "../../engine/orchestrator/src/traceability.ts"
 import { theoremContractEncodingIssues } from "../../engine/orchestrator/src/theorem-contract.ts"
-import { candidateReplacementIssue } from "../../engine/orchestrator/src/artifact-immutability.ts"
+import { activeRunForSession, candidateReplacementIssue } from "../../engine/orchestrator/src/artifact-immutability.ts"
+import { normalizeExpectedArtifactContent } from "../../engine/orchestrator/src/artifact-normalization.ts"
 
 const TOOL_VERSION = 1
 const TIMEOUT_MS = 3_000
@@ -515,21 +516,8 @@ async function writeCandidate(args: WriteArgs, context: WriteContext) {
         args.path,
       )
 
-      const content = Buffer.from(args.content, "utf8")
-
-      if (content.length > MAX_CANDIDATE_WRITE_BYTES) {
-        throw new Error(
-          `content exceeds the ${MAX_CANDIDATE_WRITE_BYTES}-byte limit`,
-        )
-      }
-
-      const budgetIssues = candidatePathBudgetIssues(
-        artifact.relativePath,
-        args.content,
-      )
-      if (budgetIssues.length > 0) {
-        throw new Error(budgetIssues.join(" | "))
-      }
+      let candidateSource = args.content
+      let normalizedFields: string[] = []
 
       if (extname(artifact.relativePath).toLowerCase() === ".json") {
         let parsed: unknown
@@ -546,6 +534,18 @@ async function writeCandidate(args: WriteArgs, context: WriteContext) {
             `duplicate JSON object keys are not allowed; artifact was not written: ${duplicateIssues.join(" | ")}`,
           )
         }
+        const run = await activeRunForSession(context.sessionID)
+        if (run !== undefined) {
+          const normalized = await normalizeExpectedArtifactContent(
+            run,
+            artifact.relativePath,
+            candidateSource,
+            context.agent,
+          )
+          candidateSource = normalized.content
+          normalizedFields = normalized.normalizedFields
+          parsed = JSON.parse(candidateSource) as unknown
+        }
         if (/(^|\/)theorems\/obligations-v\d+\.json$/.test(artifact.relativePath)) {
           const encodingIssues = theoremContractEncodingIssues(parsed)
           if (encodingIssues.length > 0) {
@@ -554,6 +554,22 @@ async function writeCandidate(args: WriteArgs, context: WriteContext) {
             )
           }
         }
+      }
+
+      const content = Buffer.from(candidateSource, "utf8")
+
+      if (content.length > MAX_CANDIDATE_WRITE_BYTES) {
+        throw new Error(
+          `content exceeds the ${MAX_CANDIDATE_WRITE_BYTES}-byte limit`,
+        )
+      }
+
+      const budgetIssues = candidatePathBudgetIssues(
+        artifact.relativePath,
+        candidateSource,
+      )
+      if (budgetIssues.length > 0) {
+        throw new Error(budgetIssues.join(" | "))
       }
 
       const exists = await pathExists(artifact.absolutePath)
@@ -619,6 +635,7 @@ async function writeCandidate(args: WriteArgs, context: WriteContext) {
           sha256: sha256(content),
           sizeBytes: content.length,
         },
+        normalizedFields,
         provenance: {
           agent: context.agent,
           sessionID: context.sessionID,
