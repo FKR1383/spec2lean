@@ -32,6 +32,7 @@ import {
   artifactChainCompletenessIssues,
   architectureCompletenessContract,
   semanticDeltaCompletenessIssues,
+  sharedProofDischargeIssues,
 } from "./quality-contract.js"
 import type { RunState, SemanticV2ArtifactSet } from "./workflow.js"
 
@@ -645,7 +646,7 @@ export async function validateSemanticDeltaForRun(
         await readFile(ensureRepositoryRelative(run.semanticV2.profilePath), "utf8"),
       ) as unknown
       if (!validProfile(profile)) return { ok: false, issues: ["semantic profile became invalid"] }
-      await loadLanguageCore(profile.languageCorePath)
+      const core = await loadLanguageCore(profile.languageCorePath)
       const coreSha256 = sha256(await readFile(ensureRepositoryRelative(profile.languageCorePath)))
       const deltaCore = isRecord(deltaInput) && isRecord(deltaInput.languageCore)
         ? deltaInput.languageCore
@@ -654,6 +655,8 @@ export async function validateSemanticDeltaForRun(
         deltaCore.path !== profile.languageCorePath || deltaCore.sha256 !== coreSha256) {
         return { ok: false, issues: ["semantic delta is not bound to the exact current language-core manifest"] }
       }
+      const dischargeIssues = sharedProofDischargeIssues(evaluation.view, core)
+      if (dischargeIssues.length > 0) return { ok: false, issues: dischargeIssues }
       const [architecturePath, sourceBundlePath] = await Promise.all([
         authoritativeArtifact(run, "ARCHITECTURE").then((item) => item.path),
         latestSourceBundle(run),

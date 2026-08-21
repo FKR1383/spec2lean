@@ -20,6 +20,14 @@ export type LanguageCore = {
   semanticEnvironment: { path: string; sha256: string }
   leanModule: { path: string; sha256: string; importName: string }
   modelRoles: Record<string, { leanDeclaration: string; semanticIds: string[] }>
+  proofDischarges?: Array<{
+    dischargeId: string
+    correctnessKind: string
+    semanticIds: string[]
+    leanModule: { path: string; sha256: string; importName: string }
+    theoremDeclarations: string[]
+    reviewRecords: Array<{ path: string; sha256: string }>
+  }>
   reviewBinding: {
     status: "BOUND_TO_HUMAN_APPROVED_SEMANTICS" | "HUMAN_APPROVED"
     records: Array<{ path: string; sha256: string }>
@@ -84,6 +92,38 @@ export async function loadLanguageCore(path: string): Promise<LanguageCore> {
       throw new Error(`invalid language-core model role: ${role}`)
     }
   }
+  if (input.proofDischarges !== undefined) {
+    if (!Array.isArray(input.proofDischarges)) throw new Error("language-core proofDischarges must be an array")
+    const seen = new Set<string>()
+    for (const [index, discharge] of input.proofDischarges.entries()) {
+      if (!isRecord(discharge) || typeof discharge.dischargeId !== "string" ||
+        typeof discharge.correctnessKind !== "string" || !Array.isArray(discharge.semanticIds) ||
+        discharge.semanticIds.length === 0 || discharge.semanticIds.some((item) => typeof item !== "string") ||
+        !Array.isArray(discharge.theoremDeclarations) || discharge.theoremDeclarations.length === 0 ||
+        discharge.theoremDeclarations.some((item) => typeof item !== "string") ||
+        !Array.isArray(discharge.reviewRecords) || discharge.reviewRecords.length === 0) {
+        throw new Error(`invalid language-core proof discharge ${index}`)
+      }
+      if (seen.has(discharge.dischargeId)) throw new Error(`duplicate language-core proof discharge ${discharge.dischargeId}`)
+      seen.add(discharge.dischargeId)
+      fingerprint(discharge.leanModule, `proofDischarges[${index}].leanModule`)
+      const dischargeLeanModule = discharge.leanModule as UnknownRecord
+      if (typeof dischargeLeanModule.importName !== "string" || dischargeLeanModule.importName.trim().length === 0) {
+        throw new Error(`language-core proof discharge ${discharge.dischargeId} lacks importName`)
+      }
+      for (const [label, value] of [
+        [`proofDischarges[${index}].leanModule`, discharge.leanModule],
+        ...discharge.reviewRecords.map((record, reviewIndex) =>
+          [`proofDischarges[${index}].reviewRecords[${reviewIndex}]`, record] as const
+        ),
+      ] as const) {
+        fingerprint(value, label)
+        if (hash(await readFile(safe(value.path))) !== value.sha256) {
+          throw new Error(`language-core ${label} hash mismatch: ${value.path}`)
+        }
+      }
+    }
+  }
   for (const [label, value] of [
     ["semanticEnvironment", input.semanticEnvironment],
     ["leanModule", input.leanModule],
@@ -102,6 +142,16 @@ export async function loadLanguageCore(path: string): Promise<LanguageCore> {
     environment.value.language.toLowerCase() !== input.language.toLowerCase() ||
     environment.value.specificationVersion !== input.specificationVersion) {
     throw new Error("language-core is not bound to a matching HUMAN_APPROVED semantic environment")
+  }
+  const activeSharedIds = new Set(environment.value.entries
+    .filter((entry) => entry.lifecycle.status === "ACTIVE")
+    .map((entry) => entry.semanticId))
+  for (const discharge of ((input.proofDischarges ?? []) as NonNullable<LanguageCore["proofDischarges"]>)) {
+    for (const semanticId of discharge.semanticIds) {
+      if (!activeSharedIds.has(semanticId)) {
+        throw new Error(`language-core proof discharge ${discharge.dischargeId} references non-active shared semantic ID: ${semanticId}`)
+      }
+    }
   }
   return input as unknown as LanguageCore
 }

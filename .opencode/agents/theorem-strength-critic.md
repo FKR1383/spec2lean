@@ -52,7 +52,8 @@ lemma that does not establish its advertised kind. Verify the stated
 source-faithfulness boundary: proofs implement approved semantic IR; they do
 not prove the publisher prose itself.
 
-Require exact coverage of every semantics `proofRequirements` kind. For
+Require exact coverage of every `LOCAL` semantics `proofRequirements` entry.
+Reject local regeneration of inherited or not-applicable requirements. For
 each requirement ID, require exactly one distinct obligation with the same kind
 and all of the requirement's semantic claim IDs. For
 OPERATION_FIDELITY, ALGORITHM_FIDELITY, RESULT_RANGE, and EDGE_CASE_BEHAVIOR,

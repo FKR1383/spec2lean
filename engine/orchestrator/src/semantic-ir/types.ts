@@ -216,6 +216,8 @@ export type InstructionSemanticDelta = {
     correctnessKind: string
     semanticClaimIds: string[]
     rationale: string
+    disposition?: "LOCAL" | "INHERITED_FROM_SHARED_ENVIRONMENT" | "NOT_APPLICABLE"
+    coreDischargeId?: string
   }>
   languageCore?: {
     status: "REUSED_APPROVED"

@@ -267,7 +267,9 @@
           "requirementId": { "type": "string", "minLength": 1 },
           "correctnessKind": { "enum": ["OPERATION_FIDELITY", "ALGORITHM_FIDELITY", "RESULT_RANGE", "EDGE_CASE_BEHAVIOR", "TYPE_DOMAIN", "EXECUTION_CORRESPONDENCE", "GUARD_BEHAVIOR", "STATE_UPDATE", "FRAME_PROPERTY", "DETERMINISM", "PARTIALITY", "SCOPE_BOUNDARY"] },
           "semanticClaimIds": { "$ref": "#/$defs/claimIds" },
-          "rationale": { "type": "string", "minLength": 1 }
+          "rationale": { "type": "string", "minLength": 1 },
+          "disposition": { "enum": ["LOCAL", "INHERITED_FROM_SHARED_ENVIRONMENT", "NOT_APPLICABLE"] },
+          "coreDischargeId": { "type": "string", "minLength": 1 }
         }
       }
     }

@@ -13,6 +13,7 @@ import { REPO_ROOT } from "./repo.js"
 import {
   artifactChainCompletenessIssues,
   leanModelContractIssues,
+  sharedProofDischargeIssues,
   theoremSemanticCoverageIssues,
 } from "./quality-contract.js"
 import { theoremStrengthReviewAuditIssues } from "./theorem-contract.js"
@@ -150,7 +151,7 @@ export async function verifyExpectedArtifact(run: RunState): Promise<ArtifactVer
           const profilePath = `language_packs/${run.language.toLowerCase()}/${run.specVersion}/semantic-profile.json`
           const profile = JSON.parse(await readFile(resolve(REPO_ROOT, profilePath), "utf8")) as UnknownRecord
           if (!nonEmptyString(profile.languageCorePath)) throw new Error("semantic profile has no languageCorePath")
-          await loadLanguageCore(profile.languageCorePath)
+          const core = await loadLanguageCore(profile.languageCorePath)
           const coreSha256 = createHash("sha256")
             .update(await readFile(resolve(REPO_ROOT, profile.languageCorePath)))
             .digest("hex")
@@ -158,6 +159,7 @@ export async function verifyExpectedArtifact(run: RunState): Promise<ArtifactVer
             parsedJson.languageCore.sha256 !== coreSha256) {
             issues.push("semantics is not bound to the exact current language-core manifest")
           }
+          issues.push(...sharedProofDischargeIssues(parsedJson, core))
         }
       } catch (error) {
         issues.push(`could not validate architecture/source/semantics coverage: ${String(error)}`)

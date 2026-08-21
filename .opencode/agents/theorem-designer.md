@@ -63,6 +63,9 @@ Always add independent `GUARD_BEHAVIOR`, `STATE_UPDATE`, `FRAME_PROPERTY`,
 `EDGE_CASE_BEHAVIOR`, `TYPE_DOMAIN`, `DETERMINISM`, `PARTIALITY`, and
 `SCOPE_BOUNDARY`. Cover every
 mandatory `proofRequirements` entry from semantics. Do not force
+Only generate obligations for requirements whose disposition is `LOCAL`.
+Do not duplicate `INHERITED_FROM_SHARED_ENVIRONMENT` requirements and do not
+generate `NOT_APPLICABLE` requirements; preserve both in traceability.
 machine-state families onto a pure abstract operation, but still connect its
 executable definition to the approved semantic relation/specification.
 

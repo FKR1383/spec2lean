@@ -27,6 +27,7 @@ import {
 import { parseLeanModelContract } from "./quality-contract.js"
 import { authoritativeArtifact } from "./artifact-authority.js"
 import { leanDerivedDeclarationRanges } from "./lean-declaration-index.js"
+import { loadLanguageCore } from "./language-core.js"
 
 export type TraceabilityClassification =
   | "SOURCE_FACT"
@@ -112,9 +113,9 @@ export type ArtifactFingerprint = {
 }
 
 export type TraceabilityManifest = {
-  schemaVersion: 6
+  schemaVersion: 7
   manifestType: "spec2lean_evidence_manifest"
-  generator: "spec2lean-traceability-v6"
+  generator: "spec2lean-traceability-v7"
   runId: string
   language: string
   specificationVersion: string
@@ -134,6 +135,21 @@ export type TraceabilityManifest = {
     coverage: Array<{ dimension: string; status: string; rationale: string }>
     encodedExclusions: string[]
     proofRequirementKinds: string[]
+    proofRequirements: Array<{
+      requirementId: string
+      correctnessKind: string
+      disposition: "LOCAL" | "INHERITED_FROM_SHARED_ENVIRONMENT" | "NOT_APPLICABLE"
+      semanticClaimIds: string[]
+      coreDischargeId?: string
+    }>
+    inheritedProofDischarges: Array<{
+      dischargeId: string
+      correctnessKind: string
+      semanticIds: string[]
+      leanModule: ArtifactFingerprint & { importName: string }
+      theoremDeclarations: string[]
+      reviewRecords: ArtifactFingerprint[]
+    }>
   }
   diagnostics: {
     requiredOfficialRenditions: Array<"HTML" | "PDF">
@@ -146,6 +162,7 @@ export type TraceabilityManifest = {
     sourceFactsWithoutPdfEvidence: string[]
     assumptionsWithoutApprovalDependency: string[]
     unresolvedOpenQuestions: string[]
+    inheritedProofRequirementsWithoutEvidencePath: string[]
     declarationDiscovery: {
       source: "LEAN_ELABORATOR"
       leanDerivedRangeCount: number
@@ -647,10 +664,10 @@ function uniqueSorted(values: string[]): string[] {
   return [...new Set(values)].sort((left, right) => left.localeCompare(right))
 }
 
-function qualityContractSummary(
+async function qualityContractSummary(
   semantics: unknown,
   leanSource: string,
-): TraceabilityManifest["qualityContract"] {
+): Promise<TraceabilityManifest["qualityContract"]> {
   if (!isRecord(semantics) || typeof semantics.scopeStatus !== "string") return undefined
   const leanContract = parseLeanModelContract(leanSource)
   const coverage = (Array.isArray(semantics.coverage) ? semantics.coverage : [])
@@ -665,6 +682,31 @@ function qualityContractSummary(
       .filter(isRecord)
       .flatMap((item) => typeof item.correctnessKind === "string" ? [item.correctnessKind] : []),
   )
+  const proofRequirements = (Array.isArray(semantics.proofRequirements) ? semantics.proofRequirements : [])
+    .filter(isRecord)
+    .map((item) => ({
+      requirementId: String(item.requirementId ?? "UNKNOWN"),
+      correctnessKind: String(item.correctnessKind ?? "UNKNOWN"),
+      disposition: (["LOCAL", "INHERITED_FROM_SHARED_ENVIRONMENT", "NOT_APPLICABLE"].includes(String(item.disposition))
+        ? item.disposition
+        : "LOCAL") as "LOCAL" | "INHERITED_FROM_SHARED_ENVIRONMENT" | "NOT_APPLICABLE",
+      semanticClaimIds: uniqueSorted(Array.isArray(item.semanticClaimIds)
+        ? item.semanticClaimIds.filter((value): value is string => typeof value === "string")
+        : []),
+      coreDischargeId: typeof item.coreDischargeId === "string" ? item.coreDischargeId : undefined,
+    }))
+    .sort((left, right) => left.requirementId.localeCompare(right.requirementId))
+  const inheritedIds = new Set(proofRequirements
+    .filter((item) => item.disposition === "INHERITED_FROM_SHARED_ENVIRONMENT")
+    .flatMap((item) => item.coreDischargeId === undefined ? [] : [item.coreDischargeId]))
+  let inheritedProofDischarges: NonNullable<TraceabilityManifest["qualityContract"]>["inheritedProofDischarges"] = []
+  if (inheritedIds.size > 0 && isRecord(semantics.languageCore) && typeof semantics.languageCore.path === "string") {
+    const core = await loadLanguageCore(semantics.languageCore.path)
+    inheritedProofDischarges = (core.proofDischarges ?? [])
+      .filter((item) => inheritedIds.has(item.dischargeId))
+      .map((item) => ({ ...item }))
+      .sort((left, right) => left.dischargeId.localeCompare(right.dischargeId))
+  }
   return {
     scopeStatus: semantics.scopeStatus,
     languageCoreStatus: leanContract?.languageCoreStatus ??
@@ -674,6 +716,8 @@ function qualityContractSummary(
       typeof item.preconditionDeclaration === "string" ? [item.preconditionDeclaration] : []
     )),
     proofRequirementKinds,
+    proofRequirements,
+    inheritedProofDischarges,
   }
 }
 
@@ -967,10 +1011,31 @@ export async function buildTraceabilityManifest(
     }))
     .sort((left, right) => left.semanticId.localeCompare(right.semanticId))
 
+  const inheritedProofRequirementsWithoutEvidencePath = !isRecord(semanticDocument) ||
+    !Array.isArray(semanticDocument.proofRequirements)
+    ? []
+    : semanticDocument.proofRequirements
+      .filter(isRecord)
+      .filter((requirement) => requirement.disposition === "INHERITED_FROM_SHARED_ENVIRONMENT")
+      .filter((requirement) => {
+        const semanticIds = Array.isArray(requirement.semanticClaimIds)
+          ? requirement.semanticClaimIds.filter((value): value is string => typeof value === "string")
+          : []
+        const closure = claimClosure(semanticIds, claims)
+        return closure.unresolvedDependencyIds.length > 0 || !closure.claims.some((claim) =>
+          claim.evidenceIds.some((id) => {
+            const item = evidence.get(id)
+            return item?.sourceKind === "HTML" || item?.sourceKind === "PDF"
+          })
+        )
+      })
+      .map((requirement) => String(requirement.requirementId ?? "UNKNOWN"))
+      .sort((left, right) => left.localeCompare(right))
+
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     manifestType: "spec2lean_evidence_manifest",
-    generator: "spec2lean-traceability-v6",
+    generator: "spec2lean-traceability-v7",
     runId: run.runId,
     language: run.language,
     specificationVersion: run.specVersion,
@@ -989,7 +1054,7 @@ export async function buildTraceabilityManifest(
       : { path: theoremPath, sha256: sha256(theoremData) },
     entries,
     semanticUncertainties,
-    qualityContract: qualityContractSummary(semanticDocument, leanData.toString("utf8")),
+    qualityContract: await qualityContractSummary(semanticDocument, leanData.toString("utf8")),
     diagnostics: {
       requiredOfficialRenditions,
       declarationsWithoutReferences: entries
@@ -1023,6 +1088,7 @@ export async function buildTraceabilityManifest(
         .filter((claim) => claim.classification === "ASSUMPTION" && claim.origin === "SEMANTICS" && claim.humanApprovalDependencies.length === 0)
         .map((claim) => claim.semanticId)) : [],
       unresolvedOpenQuestions: semanticUncertainties.map((item) => item.semanticId),
+      inheritedProofRequirementsWithoutEvidencePath,
       declarationDiscovery: {
         source: "LEAN_ELABORATOR",
         leanDerivedRangeCount: declarationDiscovery.leanDerivedRangeCount,
@@ -1107,7 +1173,8 @@ export async function verifyTraceabilityManifest(
     (legacy.schemaVersion === 3 && legacy.generator === "spec2lean-traceability-v3") ||
     (legacy.schemaVersion === 4 && legacy.generator === "spec2lean-traceability-v4") ||
     (legacy.schemaVersion === 5 && legacy.generator === "spec2lean-traceability-v5") ||
-    (legacy.schemaVersion === 6 && legacy.generator === "spec2lean-traceability-v6")
+    (legacy.schemaVersion === 6 && legacy.generator === "spec2lean-traceability-v6") ||
+    (legacy.schemaVersion === 7 && legacy.generator === "spec2lean-traceability-v7")
   if (!supportedVersion || manifest.manifestType !== "spec2lean_evidence_manifest") {
     issues.push("unsupported traceability manifest schema")
   }
@@ -1150,7 +1217,7 @@ export async function verifyTraceabilityManifest(
   for (const reference of manifest.diagnostics.unresolvedReferences) {
     issues.push(`unresolved provenance reference: ${reference}`)
   }
-  if ([3, 4, 5, 6].includes(legacy.schemaVersion ?? -1)) {
+  if ([3, 4, 5, 6, 7].includes(legacy.schemaVersion ?? -1)) {
     for (const declaration of manifest.diagnostics.declarationsWithoutEvidencePath) {
       issues.push(`Lean declaration has no transitive source or project evidence path: ${declaration}`)
     }
@@ -1160,7 +1227,7 @@ export async function verifyTraceabilityManifest(
     for (const semanticId of manifest.diagnostics.sourceFactsWithoutOfficialEvidence) {
       issues.push(`semantic SOURCE_FACT has no official HTML/PDF evidence: ${semanticId}`)
     }
-    if (legacy.schemaVersion === 4 || legacy.schemaVersion === 5 || legacy.schemaVersion === 6) {
+    if ([4, 5, 6, 7].includes(legacy.schemaVersion ?? -1)) {
       for (const semanticId of manifest.diagnostics.sourceFactsWithoutHtmlEvidence) {
         issues.push(`semantic SOURCE_FACT lacks required official HTML evidence: ${semanticId}`)
       }
@@ -1175,12 +1242,17 @@ export async function verifyTraceabilityManifest(
       issues.push(`official PDF alignment failed: ${manifest.diagnostics.pdfAlignment.failure}`)
     }
   }
-  if (legacy.schemaVersion === 6) {
+  if (legacy.schemaVersion === 6 || legacy.schemaVersion === 7) {
     for (const declaration of manifest.diagnostics.declarationDiscovery.leanDeclarationsNotInManifest) {
       issues.push(`Lean elaborator declaration is absent from manifest: ${declaration}`)
     }
     for (const declaration of manifest.diagnostics.declarationDiscovery.manifestDeclarationsNotConfirmedByLean) {
       issues.push(`manifest declaration was not confirmed by Lean elaboration: ${declaration}`)
+    }
+  }
+  if (legacy.schemaVersion === 7) {
+    for (const requirement of manifest.diagnostics.inheritedProofRequirementsWithoutEvidencePath) {
+      issues.push(`inherited proof requirement lacks transitive official evidence: ${requirement}`)
     }
   }
   return [...new Set(issues)].sort((left, right) => left.localeCompare(right))

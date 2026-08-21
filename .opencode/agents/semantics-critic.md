@@ -55,6 +55,10 @@ coverage by exact dimension. Reject a dropped row, a COVERED row without the
 needed typed IR surface, a FULL_INSTRUCTION artifact with an exclusion, or a
 PARTIAL_EXPLICIT exclusion without a real precondition ID. Verify the language
 core is reused rather than cloned per unit. Confirm `proofRequirements`
+classifies each obligation as LOCAL, INHERITED_FROM_SHARED_ENVIRONMENT, or
+NOT_APPLICABLE. Accept inheritance only when the exact approved language-core
+manifest names a hash-bound reviewed proof discharge for the same shared
+semantic IDs and correctness kind; otherwise require LOCAL.
 machine-enforce every applicable algorithm, range, edge, guard, state-update,
 frame, and execution-correspondence family promised by the semantics.
 

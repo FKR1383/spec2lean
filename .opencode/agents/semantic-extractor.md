@@ -59,6 +59,9 @@ guessing.
 Use the full-semantics v3 contract in the runtime prompt. Default to
 `scopeStatus=FULL_INSTRUCTION`, bind the approved language core, copy the exact
 nine coverage dimensions, and emit mandatory `proofRequirements`. Cover the
+proof ownership explicitly with `LOCAL`, `INHERITED_FROM_SHARED_ENVIRONMENT`,
+or `NOT_APPLICABLE`. Inheritance requires an exact reviewed `coreDischargeId`
+from the runtime language-core manifest; absent that record, use `LOCAL`.
 applicable syntax forms, operand roles/order/forms, types and coercions,
 preconditions, normalized operation, deterministic/nondeterministic branches,
 state reads/writes, guard/control behavior, errors/undefined behavior, and

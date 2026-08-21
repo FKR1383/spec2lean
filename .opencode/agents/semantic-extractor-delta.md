@@ -71,7 +71,7 @@ Work in a bounded validation-first sequence:
    GUARD_BEHAVIOR, STATE_UPDATE, FRAME_PROPERTY, and
    EXECUTION_CORRESPONDENCE. A guard inherited from the shared environment or
    judged not applicable still needs an explicit GUARD_BEHAVIOR requirement
-   explaining that scope.
+   explaining that scope and its disposition.
 5. Write the requested immutable artifact, run `candidate_validate`, and make
    at most two diagnostic-driven repair passes. Do not resume broad source
    reading after validation begins.
@@ -91,6 +91,12 @@ Work in a bounded validation-first sequence:
 - Set `scopeStatus=FULL_INSTRUCTION` by default and emit the exact nine-row
   coverage array plus mandatory proofRequirements. PARTIAL_EXPLICIT is allowed
   only with a named encoded precondition; prose-only exclusions are invalid.
+- Classify every proof requirement as `LOCAL`,
+  `INHERITED_FROM_SHARED_ENVIRONMENT`, or `NOT_APPLICABLE`. Use inherited only
+  when the exact runtime language-core manifest contains a hash-bound,
+  reviewed `proofDischarges` entry matching `coreDischargeId`, correctness
+  kind, and shared semantic IDs. Otherwise use `LOCAL`; never infer a shared
+  proof merely because a semantic claim is shared.
 - Always require independent OPERATION_FIDELITY, ALGORITHM_FIDELITY,
   RESULT_RANGE, GUARD_BEHAVIOR, STATE_UPDATE, FRAME_PROPERTY, and
   EXECUTION_CORRESPONDENCE obligations.

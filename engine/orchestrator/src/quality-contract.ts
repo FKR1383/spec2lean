@@ -37,6 +37,18 @@ export const FULL_INSTRUCTION_REQUIRED_PROOF_KINDS = [
   "EXECUTION_CORRESPONDENCE",
 ] as const
 
+export type ProofRequirementDisposition =
+  | "LOCAL"
+  | "INHERITED_FROM_SHARED_ENVIRONMENT"
+  | "NOT_APPLICABLE"
+
+function proofRequirementDisposition(requirement: UnknownRecord): ProofRequirementDisposition | undefined {
+  const value = requirement.disposition ?? "LOCAL"
+  return ["LOCAL", "INHERITED_FROM_SHARED_ENVIRONMENT", "NOT_APPLICABLE"].includes(String(value))
+    ? value as ProofRequirementDisposition
+    : undefined
+}
+
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
@@ -416,6 +428,18 @@ export function semanticCompletenessIssues(document: unknown): string[] {
       if (!nonEmpty(requirement.correctnessKind)) issues.push(`${requirement.requirementId} lacks correctnessKind`)
       if (strings(requirement.semanticClaimIds).length === 0) issues.push(`${requirement.requirementId} lacks semanticClaimIds`)
       if (!nonEmpty(requirement.rationale)) issues.push(`${requirement.requirementId} lacks rationale`)
+      const disposition = proofRequirementDisposition(requirement)
+      if (disposition === undefined) issues.push(`${requirement.requirementId} has invalid disposition`)
+      if (disposition === "INHERITED_FROM_SHARED_ENVIRONMENT" && !nonEmpty(requirement.coreDischargeId)) {
+        issues.push(`${requirement.requirementId} inherited requirement lacks coreDischargeId`)
+      }
+      if (disposition !== "INHERITED_FROM_SHARED_ENVIRONMENT" && requirement.coreDischargeId !== undefined) {
+        issues.push(`${requirement.requirementId} may use coreDischargeId only when inherited`)
+      }
+      if (disposition !== undefined && disposition !== "LOCAL" &&
+        ["OPERATION_FIDELITY", "EXECUTION_CORRESPONDENCE"].includes(String(requirement.correctnessKind))) {
+        issues.push(`${requirement.requirementId} must keep unit-specific ${String(requirement.correctnessKind)} LOCAL`)
+      }
     }
     const kinds = new Set(document.proofRequirements.filter(isRecord).flatMap((item) =>
       nonEmpty(item.correctnessKind) ? [item.correctnessKind] : []
@@ -680,8 +704,61 @@ export function leanModelContractIssues(
 export function requiredProofKinds(semantics: unknown): Set<string> {
   if (!isRecord(semantics) || !Array.isArray(semantics.proofRequirements)) return new Set()
   return new Set(semantics.proofRequirements.filter(isRecord).flatMap((item) =>
-    nonEmpty(item.correctnessKind) ? [item.correctnessKind] : []
+    proofRequirementDisposition(item) === "LOCAL" && nonEmpty(item.correctnessKind)
+      ? [item.correctnessKind]
+      : []
   ))
+}
+
+export function sharedProofDischargeIssues(
+  semantics: unknown,
+  core: { proofDischarges?: Array<{
+    dischargeId: string
+    correctnessKind: string
+    semanticIds: string[]
+    theoremDeclarations: string[]
+  }> },
+): string[] {
+  if (!isRecord(semantics) || !Array.isArray(semantics.proofRequirements)) return []
+  const discharges = new Map((core.proofDischarges ?? []).map((item) => [item.dischargeId, item]))
+  const issues: string[] = []
+  const semanticClaims = new Map<string, UnknownRecord>(
+    (Array.isArray(semantics.claims)
+      ? semantics.claims
+      : Array.isArray(semantics.semanticClaims)
+        ? semantics.semanticClaims
+        : [])
+      .filter(isRecord)
+      .flatMap((claim) => nonEmpty(claim.semanticId) ? [[claim.semanticId, claim] as const] : []),
+  )
+  for (const requirement of semantics.proofRequirements.filter(isRecord)) {
+    if (proofRequirementDisposition(requirement) !== "INHERITED_FROM_SHARED_ENVIRONMENT") continue
+    const id = String(requirement.requirementId ?? "UNKNOWN")
+    const discharge = nonEmpty(requirement.coreDischargeId)
+      ? discharges.get(requirement.coreDischargeId)
+      : undefined
+    if (discharge === undefined) {
+      issues.push(`${id} references an unknown approved core proof discharge`)
+      continue
+    }
+    if (discharge.correctnessKind !== requirement.correctnessKind) {
+      issues.push(`${id} correctnessKind does not match core discharge ${discharge.dischargeId}`)
+    }
+    const dischargedIds = new Set(discharge.semanticIds)
+    for (const semanticId of strings(requirement.semanticClaimIds)) {
+      if (!dischargedIds.has(semanticId)) {
+        issues.push(`${id} semantic claim ${semanticId} is not discharged by ${discharge.dischargeId}`)
+      }
+      const claim = semanticClaims.get(semanticId)
+      if (claim === undefined || !isRecord(claim.origin) || claim.origin.kind !== "SHARED") {
+        issues.push(`${id} inherited semantic claim ${semanticId} is not materialized from the approved shared environment`)
+      }
+    }
+    if (discharge.theoremDeclarations.length === 0) {
+      issues.push(`${id} core discharge ${discharge.dischargeId} has no theorem declaration`)
+    }
+  }
+  return issues
 }
 
 export function theoremSemanticCoverageIssues(
@@ -695,7 +772,7 @@ export function theoremSemanticCoverageIssues(
   const issues: string[] = []
   const presentKinds = new Set<string>()
   const leanContract = parseLeanModelContract(leanSource)
-  const requirements = new Map(
+  const allRequirements = new Map(
     (isRecord(semantics) && Array.isArray(semantics.proofRequirements)
       ? semantics.proofRequirements
       : [])
@@ -704,6 +781,9 @@ export function theoremSemanticCoverageIssues(
         ? [[item.requirementId, item] as const]
         : []),
   )
+  const requirements = new Map([...allRequirements].filter(([, requirement]) =>
+    proofRequirementDisposition(requirement) === "LOCAL"
+  ))
   const requirementCoverage = new Map<string, number>()
   for (const [index, item] of obligations.theorem_obligations.entries()) {
     if (!isRecord(item)) continue
@@ -714,9 +794,13 @@ export function theoremSemanticCoverageIssues(
       issues.push(`${id} must bind exactly one proof_requirement_id so each required property has an independent theorem`)
     }
     for (const requirementId of proofRequirementIds) {
-      const requirement = requirements.get(requirementId)
+      const requirement = allRequirements.get(requirementId)
       if (requirement === undefined) {
         issues.push(`${id} references unknown proof requirement ${requirementId}`)
+        continue
+      }
+      if (proofRequirementDisposition(requirement) !== "LOCAL") {
+        issues.push(`${id} must not regenerate non-local proof requirement ${requirementId}`)
         continue
       }
       requirementCoverage.set(requirementId, (requirementCoverage.get(requirementId) ?? 0) + 1)

@@ -441,6 +441,7 @@ class EvidencePanel {
       if (next.diagnostics.pdfAlignment?.failure) warnings.push('PDF alignment failed: ' + next.diagnostics.pdfAlignment.failure);
       if (next.diagnostics.sourceFactsWithoutHtmlEvidence?.length) warnings.push('SOURCE_FACT claims missing required HTML evidence: ' + next.diagnostics.sourceFactsWithoutHtmlEvidence.join(', ') + '.');
       if (next.diagnostics.sourceFactsWithoutPdfEvidence?.length) warnings.push('SOURCE_FACT claims missing required PDF evidence: ' + next.diagnostics.sourceFactsWithoutPdfEvidence.join(', ') + '.');
+      if (next.diagnostics.inheritedProofRequirementsWithoutEvidencePath?.length) warnings.push('Inherited proof requirements missing an official evidence path: ' + next.diagnostics.inheritedProofRequirementsWithoutEvidencePath.join(', ') + '.');
       if (next.diagnostics.pdfAlignment?.coverageRatio !== undefined && next.diagnostics.pdfAlignment.coverageRatio < 1) warnings.push('PDF corroboration is partial: ' + next.diagnostics.pdfAlignment.matched + '/' + (next.diagnostics.pdfAlignment.eligible ?? '?') + ' official fragments aligned; HTML evidence remains hash-bound.');
       if (next.entry.semanticIds.length === 0 && next.entry.evidence.length === 0) warnings.push('This declaration has no provenance reference.');
       if (next.entry.unresolvedReferences.length) warnings.push('Unresolved IDs: ' + next.entry.unresolvedReferences.join(', '));
@@ -465,6 +466,11 @@ class EvidencePanel {
         for (const row of next.qualityContract.coverage) {
           const card = document.createElement('div'); card.className = 'card';
           text(card, row.dimension + ' · ' + row.status + (row.rationale ? ' — ' + row.rationale : ''));
+          quality.append(card);
+        }
+        for (const requirement of next.qualityContract.proofRequirements ?? []) {
+          const card = document.createElement('div'); card.className = 'card';
+          text(card, requirement.requirementId + ' · ' + requirement.correctnessKind + ' · ' + requirement.disposition + (requirement.coreDischargeId ? ' · ' + requirement.coreDischargeId : ''));
           quality.append(card);
         }
       } else text(quality, 'Legacy manifest: no deterministic completeness matrix is recorded.');

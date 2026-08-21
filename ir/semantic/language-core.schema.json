@@ -43,6 +43,27 @@
         }
       }
     },
+    "proofDischarges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["dischargeId", "correctnessKind", "semanticIds", "leanModule", "theoremDeclarations", "reviewRecords"],
+        "properties": {
+          "dischargeId": { "type": "string", "minLength": 1 },
+          "correctnessKind": { "type": "string", "minLength": 1 },
+          "semanticIds": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+          "leanModule": {
+            "allOf": [
+              { "$ref": "common.schema.json#/$defs/fingerprint" },
+              { "type": "object", "required": ["importName"], "properties": { "importName": { "type": "string", "minLength": 1 } } }
+            ]
+          },
+          "theoremDeclarations": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+          "reviewRecords": { "type": "array", "minItems": 1, "items": { "$ref": "common.schema.json#/$defs/fingerprint" } }
+        }
+      }
+    },
     "reviewBinding": {
       "type": "object",
       "additionalProperties": false,

@@ -113,6 +113,7 @@ import {
   FULL_INSTRUCTION_REQUIRED_PROOF_KINDS,
   leanModelContractIssues,
   semanticCompletenessIssues,
+  sharedProofDischargeIssues,
   sourceBundleCompletenessIssues,
   theoremSemanticCoverageIssues,
 } from "./quality-contract.js"
@@ -286,6 +287,27 @@ const qualitySemantics = {
   proofRequirements: mandatoryProofRequirements,
 }
 assert(semanticCompletenessIssues(qualitySemantics).length === 0, "semantic completeness and proof contract")
+const inheritedRequirementId = mandatoryProofRequirements.find((item) => item.correctnessKind === "GUARD_BEHAVIOR")!.requirementId
+const inheritedSemantics = {
+  ...qualitySemantics,
+  claims: [{ semanticId: "SEM-COMPLETE", origin: { kind: "SHARED", environmentId: "test", revision: 1 } }],
+  proofRequirements: mandatoryProofRequirements.map((item) => item.requirementId === inheritedRequirementId
+    ? { ...item, disposition: "INHERITED_FROM_SHARED_ENVIRONMENT", coreDischargeId: "CORE-GUARD" }
+    : { ...item, disposition: "LOCAL" }),
+}
+const inheritedCore = {
+  proofDischarges: [{
+    dischargeId: "CORE-GUARD",
+    correctnessKind: "GUARD_BEHAVIOR",
+    semanticIds: ["SEM-COMPLETE"],
+    theoremDeclarations: ["Spec2Lean.Test.CoreProofs.guard_noop"],
+  }],
+}
+assert(sharedProofDischargeIssues(inheritedSemantics, inheritedCore).length === 0,
+  "reviewed shared proof discharge satisfies inherited requirement")
+assert(sharedProofDischargeIssues(inheritedSemantics, { proofDischarges: [] })
+  .some((issue) => issue.includes("unknown approved core proof discharge")),
+"inherited requirement without approved core discharge is rejected")
 assert(
   artifactChainCompletenessIssues(qualityArchitecture, qualitySourceBundle, qualitySemantics).length === 0,
   "architecture/source/semantics correspondence",
@@ -336,6 +358,21 @@ const badLeanDomain = [
   }),
   "-/",
 ].join("\n")
+const forbiddenInheritedObligation = {
+  schema_version: 3,
+  theorem_obligations: [{
+    obligation_id: "OBL-INHERITED",
+    proof_requirement_ids: [inheritedRequirementId],
+    correctness_kind: "GUARD_BEHAVIOR",
+    semantic_claim_ids: ["SEM-COMPLETE"],
+    independent_specification_symbols: [],
+    implementation_symbols: ["execute"],
+    lean_statement_sketch: "theorem inherited_guard (x : S32) : execute x = x",
+  }],
+}
+assert(theoremSemanticCoverageIssues(forbiddenInheritedObligation, inheritedSemantics, badLeanDomain)
+  .some((issue) => issue.includes("must not regenerate non-local proof requirement")),
+"theorem generation cannot duplicate an inherited proof requirement")
 assert(
   leanModelContractIssues(badLeanDomain, qualitySemantics).some((issue) => issue.includes("unbounded Int")),
   "fixed-width domains reject unconstrained Int",

@@ -99,6 +99,21 @@ export type EvidenceManifest = {
     coverage: Array<{ dimension: string; status: string; rationale: string }>
     encodedExclusions: string[]
     proofRequirementKinds: string[]
+    proofRequirements?: Array<{
+      requirementId: string
+      correctnessKind: string
+      disposition: 'LOCAL' | 'INHERITED_FROM_SHARED_ENVIRONMENT' | 'NOT_APPLICABLE'
+      semanticClaimIds: string[]
+      coreDischargeId?: string
+    }>
+    inheritedProofDischarges?: Array<{
+      dischargeId: string
+      correctnessKind: string
+      semanticIds: string[]
+      leanModule: ArtifactFingerprint & { importName: string }
+      theoremDeclarations: string[]
+      reviewRecords: ArtifactFingerprint[]
+    }>
   }
   diagnostics: {
     requiredOfficialRenditions?: Array<"HTML" | "PDF">
@@ -111,6 +126,7 @@ export type EvidenceManifest = {
     sourceFactsWithoutPdfEvidence?: string[]
     assumptionsWithoutApprovalDependency?: string[]
     unresolvedOpenQuestions?: string[]
+    inheritedProofRequirementsWithoutEvidencePath?: string[]
     declarationDiscovery?: {
       source: "LEAN_ELABORATOR"
       leanDerivedRangeCount: number
