@@ -1518,10 +1518,24 @@ assert(
     }).length === 0,
   "semantic terminal BLOCKED is reserved for active state-affecting open questions",
 )
+const structuralSemanticRoot = `candidates/pipeline-self-tests/${pipelineFixtureId}/semantic-block`
+const structuralSemanticPath = `${structuralSemanticRoot}/semantics/semantics-v1.json`
+const straySemanticPath = `${structuralSemanticRoot}/semantics/semantics-v999.json`
+const structuralSemanticSource = JSON.stringify({ semanticClaims: [] })
+await mkdir(dirname(resolve(REPO_ROOT, structuralSemanticPath)), { recursive: true })
+await writeFile(resolve(REPO_ROOT, structuralSemanticPath), structuralSemanticSource)
+await writeFile(resolve(REPO_ROOT, straySemanticPath), JSON.stringify({
+  semanticClaims: [{
+    semanticId: "STRAY-OQ",
+    classification: "OPEN_QUESTION",
+    stateAffecting: true,
+    lifecycle: { status: "ACTIVE" },
+  }],
+}))
 const structuralSemanticBlock: RunState = {
   ...baseArtifactRun,
   stage: "BLOCKED",
-  artifactRoot: "tests/fixtures/nonexistent-semantic-block",
+  artifactRoot: structuralSemanticRoot,
   executions: [{
     at: "2026-01-01T00:00:01.000Z",
     stage: "SEMANTIC_EXTRACTION",
@@ -1531,12 +1545,20 @@ const structuralSemanticBlock: RunState = {
     nextStage: "BLOCKED",
     response: "coverage validator mismatch",
     artifactProduced: true,
+    artifactPath: structuralSemanticPath,
+    artifactAfterSha256: createHash("sha256").update(structuralSemanticSource).digest("hex"),
   }],
 }
 assert(
   (await recoverNonAuthoritativeSemanticBlock(structuralSemanticBlock))?.stage === "SEMANTIC_EXTRACTION",
-  "a structural semantic BLOCKED result deterministically resumes as a repair",
+  "blocked recovery uses the exact execution artifact rather than a stray higher version",
 )
+await writeFile(resolve(REPO_ROOT, structuralSemanticPath), JSON.stringify({ semanticClaims: [{ semanticId: "mutated" }] }))
+assert(
+  await recoverNonAuthoritativeSemanticBlock(structuralSemanticBlock) === undefined,
+  "blocked recovery fails closed when the exact recorded artifact hash changes",
+)
+await rm(resolve(REPO_ROOT, structuralSemanticRoot), { recursive: true, force: true })
 const legacyRevisionRun: RunState = {
   ...baseArtifactRun,
   stage: "SEMANTIC_EXTRACTION",

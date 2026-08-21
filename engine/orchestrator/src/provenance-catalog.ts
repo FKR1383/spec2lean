@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { readFile, readdir } from "node:fs/promises"
+import { readFile } from "node:fs/promises"
 import { resolve } from "node:path"
 
 import { REPO_ROOT } from "./repo.js"
@@ -349,23 +349,6 @@ export function collectArchitectureProvenanceClaims(
 
 function sha256(data: Buffer | string): string {
   return createHash("sha256").update(data).digest("hex")
-}
-
-export async function latestVersionedArtifact(
-  directory: string,
-  patterns: readonly RegExp[],
-): Promise<string> {
-  const entries = await readdir(resolve(REPO_ROOT, directory), { withFileTypes: true })
-  const candidates = entries.flatMap((entry) => {
-    if (!entry.isFile() || entry.isSymbolicLink()) return []
-    for (const pattern of patterns) {
-      const version = Number(entry.name.match(pattern)?.[1])
-      if (Number.isSafeInteger(version)) return [{ name: entry.name, version }]
-    }
-    return []
-  }).sort((left, right) => right.version - left.version)
-  if (candidates[0] === undefined) throw new Error(`No versioned artifact under ${directory}`)
-  return `${directory}/${candidates[0].name}`
 }
 
 async function readIdentity(path: string): Promise<{ identity: ArtifactIdentity; source: string }> {

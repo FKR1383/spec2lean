@@ -103,6 +103,8 @@ export type AgentExecution = {
   nextStage: FormalizationStage
   response: string
   artifactProduced?: boolean
+  /** Exact attempted output, including RETRY/BLOCKED executions. */
+  artifactPath?: string
   artifactBeforeSha256?: string
   artifactAfterSha256?: string
   /** Exact successful outputs. Downstream trust boundaries resolve only these bindings. */

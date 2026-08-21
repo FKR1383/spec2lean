@@ -39,7 +39,6 @@ import {
 import { reconcileProofStageResult } from "./proof-stage-result.js"
 import { loadAgentModel, REPO_ROOT } from "./repo.js"
 import { leanBehaviorBranches, requiredBehaviorBranches } from "./theorem-behavior-audit.js"
-import { latestVersionedArtifact } from "./provenance-catalog.js"
 import { loadRun, saveRun } from "./run-store.js"
 import {
   markSemanticV2Fallback,
@@ -214,16 +213,15 @@ export function semanticExtractionBlockAuthority(document: unknown): string[] {
 
 async function inspectSemanticExtractionBlock(
   run: RunState,
-  path?: string,
+  path: string,
+  expectedSha256?: string,
 ): Promise<SemanticBlockInspection> {
   try {
-    const semanticPath = path ?? await latestVersionedArtifact(
-      `${run.artifactRoot}/semantics`,
-      [/^semantics-v(\d+)\.json$/, /^semantic-delta-v(\d+)\.json$/],
-    )
-    const document = JSON.parse(
-      await readFile(resolve(REPO_ROOT, semanticPath), "utf8"),
-    ) as unknown
+    const source = await readFile(resolve(REPO_ROOT, path), "utf8")
+    if (expectedSha256 !== undefined && createHash("sha256").update(source).digest("hex") !== expectedSha256) {
+      throw new Error(`recorded blocked semantic artifact changed after execution: ${path}`)
+    }
+    const document = JSON.parse(source) as unknown
     const blockerIds = semanticExtractionBlockAuthority(document)
     return {
       authoritative: blockerIds.length > 0,
@@ -234,7 +232,10 @@ async function inspectSemanticExtractionBlock(
     }
   } catch (error) {
     return {
-      authoritative: false,
+      // Recovery may proceed only after the exact recorded artifact is
+      // verified. A missing/mutated binding is not evidence that the semantic
+      // block was non-authoritative.
+      authoritative: expectedSha256 !== undefined,
       blockerIds: [],
       issues: [error instanceof Error ? error.message : String(error)],
     }
@@ -275,14 +276,14 @@ export function sourceCurationBlockAuthority(
 
 async function inspectSourceCurationBlock(
   run: RunState,
-  path?: string,
+  path: string,
+  expectedSha256?: string,
 ): Promise<SourceBlockInspection> {
   try {
-    const bundlePath = path ?? await latestVersionedArtifact(
-      `${run.artifactRoot}/source-bundles`,
-      [/^source-bundle-v(\d+)\.json$/],
-    )
-    const source = await readFile(resolve(REPO_ROOT, bundlePath), "utf8")
+    const source = await readFile(resolve(REPO_ROOT, path), "utf8")
+    if (expectedSha256 !== undefined && createHash("sha256").update(source).digest("hex") !== expectedSha256) {
+      throw new Error(`recorded blocked source artifact changed after execution: ${path}`)
+    }
     const document = JSON.parse(source) as unknown
     const sourceRun: RunState = { ...run, stage: "SOURCE_CURATION" }
     const issues = validateArtifactContent(sourceRun, source, document)
@@ -292,7 +293,10 @@ async function inspectSourceCurationBlock(
     }
   } catch (error) {
     return {
-      authoritative: false,
+      // Fail closed for recovery of a recorded BLOCKED decision. During the
+      // active execution (no expected hash yet), a malformed/missing bundle
+      // remains a repairable stage failure.
+      authoritative: expectedSha256 !== undefined,
       issues: [error instanceof Error ? error.message : String(error)],
     }
   }
@@ -307,10 +311,12 @@ export async function recoverNonAuthoritativeSourceBlock(
     latest?.stage !== "SOURCE_CURATION" ||
     latest.outcome !== "BLOCKED"
   ) return undefined
+  if (latest.agent !== "source-curator-fast" &&
+    (latest.artifactPath === undefined || latest.artifactAfterSha256 === undefined)) return undefined
 
   const inspection = latest.agent === "source-curator-fast"
     ? { authoritative: false, issues: ["fast curator terminal decisions require full-curator confirmation"] }
-    : await inspectSourceCurationBlock(run)
+    : await inspectSourceCurationBlock(run, latest.artifactPath!, latest.artifactAfterSha256)
   if (inspection.authoritative) return undefined
 
   const detail = inspection.issues.length === 0
@@ -333,8 +339,9 @@ export async function recoverNonAuthoritativeSemanticBlock(
     latest?.stage !== "SEMANTIC_EXTRACTION" ||
     latest.outcome !== "BLOCKED"
   ) return undefined
+  if (latest.artifactPath === undefined || latest.artifactAfterSha256 === undefined) return undefined
 
-  const inspection = await inspectSemanticExtractionBlock(run)
+  const inspection = await inspectSemanticExtractionBlock(run, latest.artifactPath, latest.artifactAfterSha256)
   if (inspection.authoritative) return undefined
   return transitionRun(
     run,
@@ -1415,6 +1422,7 @@ export async function executeTick(
                 nextStage: run.stage,
                 response: summary,
                 artifactProduced: true,
+                artifactPath: stale.expectedArtifact,
                 ...(stale.artifactBaseline?.sha256 === undefined
                   ? {}
                   : { artifactBeforeSha256: stale.artifactBaseline.sha256 }),
@@ -1823,6 +1831,7 @@ export async function executeTick(
         ? `${result.summary}\n\n${response || (submitted ? "[no textual response]" : "[resumed session]")}`
         : response || (submitted ? "[no textual response]" : "[resumed session]"),
       artifactProduced: producedArtifact,
+      artifactPath: artifact.outputPath,
       ...(artifactBefore?.sha256 === undefined ? {} : { artifactBeforeSha256: artifactBefore.sha256 }),
       ...(artifactAfter.sha256 === undefined ? {} : { artifactAfterSha256: artifactAfter.sha256 }),
       ...(publishedArtifacts.length === 0 ? {} : { publishedArtifacts }),
