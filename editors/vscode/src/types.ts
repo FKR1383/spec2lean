@@ -76,7 +76,7 @@ export type EvidenceEntry = {
 }
 
 export type EvidenceManifest = {
-  schemaVersion: 1 | 2 | 3 | 4 | 5
+  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6
   manifestType: "spec2lean_evidence_manifest"
   generator: string
   runId: string
@@ -111,6 +111,13 @@ export type EvidenceManifest = {
     sourceFactsWithoutPdfEvidence?: string[]
     assumptionsWithoutApprovalDependency?: string[]
     unresolvedOpenQuestions?: string[]
+    declarationDiscovery?: {
+      source: "LEAN_ELABORATOR"
+      leanDerivedRangeCount: number
+      manifestDeclarationCount: number
+      leanDeclarationsNotInManifest: string[]
+      manifestDeclarationsNotConfirmedByLean: string[]
+    }
     pdfAlignment?: {
       eligible?: number
       matched: number

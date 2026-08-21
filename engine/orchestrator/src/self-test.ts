@@ -2650,6 +2650,27 @@ assert(
     unresolvedReferenceTokens("traceability: SF-UNKNOWN-1", new Set()).includes("SF-UNKNOWN-1"),
   "Lean provenance tolerates one formatting blank and flags only explicit provenance tokens",
 )
+const attributedDeclarations = parseLeanDeclarations([
+  "-- spec2lean: SF-1",
+  "@[inline] def attributedDef := true",
+  "-- spec2lean: SF-1",
+  "@[simp] theorem attributedTheorem : True := by trivial",
+  "-- spec2lean: SF-1",
+  "@[reducible]",
+  "private def privateAttributed := true",
+  "-- spec2lean: SF-1",
+  "structure TracedStructure where value : Nat",
+  "-- spec2lean: SF-1",
+  "inductive TracedInductive where | value",
+  "-- spec2lean: SF-1",
+  "instance : Inhabited TracedStructure := ⟨{ value := 0 }⟩",
+].join("\n"))
+assert(
+  attributedDeclarations.map((item) => item.kind).join(",") ===
+    "def,theorem,def,structure,inductive,instance" &&
+    attributedDeclarations.every((item) => item.comment.includes("spec2lean: SF-1")),
+  "traceability discovers attributed, private, structure, inductive, and anonymous instance declarations",
+)
 
 const traceabilityManifest = await buildTraceabilityManifest({
   runId: "ptx-9.3-or.b32-b870f055",

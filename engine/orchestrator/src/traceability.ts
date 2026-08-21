@@ -26,6 +26,7 @@ import {
 } from "./provenance-catalog.js"
 import { parseLeanModelContract } from "./quality-contract.js"
 import { authoritativeArtifact } from "./artifact-authority.js"
+import { leanDerivedDeclarationRanges } from "./lean-declaration-index.js"
 
 export type TraceabilityClassification =
   | "SOURCE_FACT"
@@ -111,9 +112,9 @@ export type ArtifactFingerprint = {
 }
 
 export type TraceabilityManifest = {
-  schemaVersion: 5
+  schemaVersion: 6
   manifestType: "spec2lean_evidence_manifest"
-  generator: "spec2lean-traceability-v5"
+  generator: "spec2lean-traceability-v6"
   runId: string
   language: string
   specificationVersion: string
@@ -145,6 +146,13 @@ export type TraceabilityManifest = {
     sourceFactsWithoutPdfEvidence: string[]
     assumptionsWithoutApprovalDependency: string[]
     unresolvedOpenQuestions: string[]
+    declarationDiscovery: {
+      source: "LEAN_ELABORATOR"
+      leanDerivedRangeCount: number
+      manifestDeclarationCount: number
+      leanDeclarationsNotInManifest: string[]
+      manifestDeclarationsNotConfirmedByLean: string[]
+    }
     pdfAlignment?: {
       eligible: number
       matched: number
@@ -505,16 +513,20 @@ function collectTheoremBindings(value: unknown): Map<string, TheoremBinding> {
 export function parseLeanDeclarations(source: string): LeanDeclaration[] {
   const lines = source.split(/\r?\n/)
   const declarations: Omit<LeanDeclaration, "endLine">[] = []
-  const declarationPattern = /^\s*(?:(?:private|protected|noncomputable)\s+)*(def|theorem|lemma|structure|inductive|abbrev|instance)\s+([A-Za-z_][A-Za-z0-9_'.]*)/
+  const declarationPattern = /^\s*(?:@\[[^\]]*\]\s*)*(?:(?:private|protected|noncomputable|local|scoped)\s+)*(?:@\[[^\]]*\]\s*)*(def|theorem|lemma|structure|inductive|abbrev|instance|opaque|class)\b\s*([A-Za-z_][A-Za-z0-9_'.]*)?/
 
   for (let index = 0; index < lines.length; index += 1) {
     const match = lines[index]?.match(declarationPattern)
-    if (match?.[1] === undefined || match[2] === undefined) continue
+    if (match?.[1] === undefined) continue
     const comments: string[] = []
     let commentLine = index - 1
     let skippedBlank = false
     while (commentLine >= 0) {
       const line = lines[commentLine] ?? ""
+      if (/^\s*@\[/.test(line) || /^\s*\]/.test(line)) {
+        commentLine -= 1
+        continue
+      }
       const comment = line.match(/^\s*--\s?(.*)$/)
       if (comment?.[1] === undefined) {
         if (!skippedBlank && line.trim().length === 0) {
@@ -529,7 +541,7 @@ export function parseLeanDeclarations(source: string): LeanDeclaration[] {
     }
     declarations.push({
       kind: match[1],
-      name: match[2],
+      name: match[2] ?? `anonymous-instance@${index + 1}`,
       startLine: index + 1,
       comment: comments.join("\n"),
     })
@@ -539,6 +551,42 @@ export function parseLeanDeclarations(source: string): LeanDeclaration[] {
     ...declaration,
     endLine: (declarations[index + 1]?.startLine ?? (lines.length + 1)) - 1,
   }))
+}
+
+async function discoverLeanDeclarations(source: string): Promise<{
+  declarations: LeanDeclaration[]
+  leanDerivedRangeCount: number
+  leanDeclarationsNotInManifest: string[]
+  manifestDeclarationsNotConfirmedByLean: string[]
+}> {
+  const declarations = parseLeanDeclarations(source)
+  const lines = source.split(/\r?\n/)
+  const derived = await leanDerivedDeclarationRanges(source)
+  const uniqueRanges = new Map<string, typeof derived[number]>()
+  for (const range of derived) uniqueRanges.set(`${range.startLine}:${range.endLine}`, range)
+  const declarationKeyword = /\b(?:def|theorem|lemma|structure|inductive|abbrev|instance|opaque|class)\b/
+  const relevantRanges = [...uniqueRanges.values()].filter((range) =>
+    lines.slice(Math.max(0, range.startLine - 1), Math.max(range.startLine, range.endLine))
+      .some((line) => declarationKeyword.test(line))
+  )
+  const confirmed = (declaration: LeanDeclaration): boolean => relevantRanges.some((range) =>
+    declaration.startLine >= range.startLine && declaration.startLine <= range.endLine
+  )
+  const represented = (range: typeof derived[number]): boolean => declarations.some((declaration) =>
+    declaration.startLine >= range.startLine && declaration.startLine <= range.endLine
+  )
+  return {
+    declarations,
+    leanDerivedRangeCount: relevantRanges.length,
+    leanDeclarationsNotInManifest: relevantRanges
+      .filter((range) => !represented(range))
+      .map((range) => `${range.leanName}@${range.startLine}-${range.endLine}`)
+      .sort((left, right) => left.localeCompare(right)),
+    manifestDeclarationsNotConfirmedByLean: declarations
+      .filter((declaration) => !confirmed(declaration))
+      .map((declaration) => `${declaration.name}@${declaration.startLine}`)
+      .sort((left, right) => left.localeCompare(right)),
+  }
 }
 
 function expandCompactReferences(comment: string): string {
@@ -843,7 +891,8 @@ export async function buildTraceabilityManifest(
       return kind === "PDF" && pdfRenditions.has(id)
     })
 
-  const entries = parseLeanDeclarations(leanData.toString("utf8")).map((declaration) => {
+  const declarationDiscovery = await discoverLeanDeclarations(leanData.toString("utf8"))
+  const entries = declarationDiscovery.declarations.map((declaration) => {
     const theoremBinding = theoremBindings.get(declaration.name)
     const semanticIds = [...new Set([
       ...referencedIds(declaration.comment, claims.keys()),
@@ -919,9 +968,9 @@ export async function buildTraceabilityManifest(
     .sort((left, right) => left.semanticId.localeCompare(right.semanticId))
 
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     manifestType: "spec2lean_evidence_manifest",
-    generator: "spec2lean-traceability-v5",
+    generator: "spec2lean-traceability-v6",
     runId: run.runId,
     language: run.language,
     specificationVersion: run.specVersion,
@@ -974,6 +1023,13 @@ export async function buildTraceabilityManifest(
         .filter((claim) => claim.classification === "ASSUMPTION" && claim.origin === "SEMANTICS" && claim.humanApprovalDependencies.length === 0)
         .map((claim) => claim.semanticId)) : [],
       unresolvedOpenQuestions: semanticUncertainties.map((item) => item.semanticId),
+      declarationDiscovery: {
+        source: "LEAN_ELABORATOR",
+        leanDerivedRangeCount: declarationDiscovery.leanDerivedRangeCount,
+        manifestDeclarationCount: entries.length,
+        leanDeclarationsNotInManifest: declarationDiscovery.leanDeclarationsNotInManifest,
+        manifestDeclarationsNotConfirmedByLean: declarationDiscovery.manifestDeclarationsNotConfirmedByLean,
+      },
       pdfAlignment: !input.includePdfRenditions || (pdfAlignment === undefined && pdfAlignmentFailure === undefined)
         ? undefined : pdfAlignment?.metrics ?? {
         eligible: [...evidence.values()].filter((item) => item.sourceKind === "HTML" && item.quotation !== undefined).length,
@@ -1050,7 +1106,8 @@ export async function verifyTraceabilityManifest(
     (legacy.schemaVersion === 2 && legacy.generator === "spec2lean-traceability-v2") ||
     (legacy.schemaVersion === 3 && legacy.generator === "spec2lean-traceability-v3") ||
     (legacy.schemaVersion === 4 && legacy.generator === "spec2lean-traceability-v4") ||
-    (legacy.schemaVersion === 5 && legacy.generator === "spec2lean-traceability-v5")
+    (legacy.schemaVersion === 5 && legacy.generator === "spec2lean-traceability-v5") ||
+    (legacy.schemaVersion === 6 && legacy.generator === "spec2lean-traceability-v6")
   if (!supportedVersion || manifest.manifestType !== "spec2lean_evidence_manifest") {
     issues.push("unsupported traceability manifest schema")
   }
@@ -1093,7 +1150,7 @@ export async function verifyTraceabilityManifest(
   for (const reference of manifest.diagnostics.unresolvedReferences) {
     issues.push(`unresolved provenance reference: ${reference}`)
   }
-  if (legacy.schemaVersion === 3 || legacy.schemaVersion === 4 || legacy.schemaVersion === 5) {
+  if ([3, 4, 5, 6].includes(legacy.schemaVersion ?? -1)) {
     for (const declaration of manifest.diagnostics.declarationsWithoutEvidencePath) {
       issues.push(`Lean declaration has no transitive source or project evidence path: ${declaration}`)
     }
@@ -1103,7 +1160,7 @@ export async function verifyTraceabilityManifest(
     for (const semanticId of manifest.diagnostics.sourceFactsWithoutOfficialEvidence) {
       issues.push(`semantic SOURCE_FACT has no official HTML/PDF evidence: ${semanticId}`)
     }
-    if (legacy.schemaVersion === 4 || legacy.schemaVersion === 5) {
+    if (legacy.schemaVersion === 4 || legacy.schemaVersion === 5 || legacy.schemaVersion === 6) {
       for (const semanticId of manifest.diagnostics.sourceFactsWithoutHtmlEvidence) {
         issues.push(`semantic SOURCE_FACT lacks required official HTML evidence: ${semanticId}`)
       }
@@ -1116,6 +1173,14 @@ export async function verifyTraceabilityManifest(
     }
     if (manifest.diagnostics.pdfAlignment?.failure !== undefined) {
       issues.push(`official PDF alignment failed: ${manifest.diagnostics.pdfAlignment.failure}`)
+    }
+  }
+  if (legacy.schemaVersion === 6) {
+    for (const declaration of manifest.diagnostics.declarationDiscovery.leanDeclarationsNotInManifest) {
+      issues.push(`Lean elaborator declaration is absent from manifest: ${declaration}`)
+    }
+    for (const declaration of manifest.diagnostics.declarationDiscovery.manifestDeclarationsNotConfirmedByLean) {
+      issues.push(`manifest declaration was not confirmed by Lean elaboration: ${declaration}`)
     }
   }
   return [...new Set(issues)].sort((left, right) => left.localeCompare(right))
