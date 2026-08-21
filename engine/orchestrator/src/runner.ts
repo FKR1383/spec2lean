@@ -1509,13 +1509,19 @@ export async function executeTick(
       try {
         result = parseAgentResult(response)
       } catch (error) {
-        result = await recoverResultFromVerifiedArtifact(run) ?? {
-          outcome: "RETRY",
-          nextStage: run.stage,
-          summary:
-            `Agent response did not contain a valid terminal protocol result and ` +
-            `the required artifact did not establish recoverable completion: ` +
-            `${error instanceof Error ? error.message : String(error)}`,
+        const recovered = await recoverResultFromVerifiedArtifact(run)
+        if (recovered !== undefined) {
+          result = recovered
+        } else {
+          failureClass = "AGENT_PROTOCOL_ERROR"
+          result = {
+            outcome: "RETRY",
+            nextStage: run.stage,
+            summary:
+              `Agent response did not contain a valid terminal protocol result and ` +
+              `the required artifact did not establish recoverable completion: ` +
+              `${error instanceof Error ? error.message : String(error)}`,
+          }
         }
       }
     } catch (error) {
@@ -1646,6 +1652,7 @@ export async function executeTick(
             summary: `${result.summary} Deterministic theorem-to-source evidence manifest: ${traceability.manifestPath}.`,
           }
         } catch (error) {
+          failureClass = "STRUCTURAL_ARTIFACT_VALIDATION"
           result = {
             outcome: "RETRY",
             nextStage: run.stage,
@@ -1656,6 +1663,7 @@ export async function executeTick(
     } else if (result.outcome === "SUCCESS" || result.outcome === "REVISE") {
       const verification = await verifyExpectedArtifact(run)
       if (!verification.ok) {
+        failureClass = "STRUCTURAL_ARTIFACT_VALIDATION"
         const renditionIssues = verification.issues.filter(isOfficialRenditionIssue)
         if (run.stage === "SEMANTIC_EXTRACTION" && renditionIssues.length > 0) {
           if (!(result.outcome === "REVISE" && result.nextStage === "SOURCE_CURATION")) {
@@ -1683,6 +1691,7 @@ export async function executeTick(
         try {
           run = await materializeSemanticDeltaForRun(run)
         } catch (error) {
+          failureClass = "STRUCTURAL_ARTIFACT_VALIDATION"
           const detail = error instanceof Error ? error.message : String(error)
           run = markSemanticV2Fallback(
             run,
@@ -1704,6 +1713,7 @@ export async function executeTick(
             summary: `${result.summary} Deterministic Lean-to-source evidence manifest: ${traceability.manifestPath}.`,
           }
         } catch (error) {
+          failureClass = "STRUCTURAL_ARTIFACT_VALIDATION"
           result = {
             outcome: "RETRY",
             nextStage: run.stage,
@@ -1756,6 +1766,9 @@ export async function executeTick(
     }
 
     result = normalizeAgentDecision(run, result)
+    if (result.outcome === "RETRY" && failureClass === undefined) {
+      failureClass = "MODEL_OR_SEMANTIC_RETRY"
+    }
     const nextStage = validateAgentDecision(run, result)
     const artifactBefore = run.activeExecution?.artifactBaseline
     const artifactAfter = await artifactFingerprint(artifact.outputPath)

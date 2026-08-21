@@ -1,4 +1,5 @@
 import type { CorrectnessKind } from "./theorem-contract.js"
+import { parseMachineJsonBlock } from "./machine-block.js"
 
 type UnknownRecord = Record<string, unknown>
 
@@ -62,22 +63,7 @@ function strings(value: unknown): string[] {
 }
 
 function machineBlock(source: string, name: string): UnknownRecord | undefined {
-  const html = source.match(new RegExp(
-    `<!--\\s*${name}\\s*\\n([\\s\\S]*?)\\n\\s*-->`,
-    "i",
-  ))
-  const lean = source.match(new RegExp(
-    `/-\\s*${name}\\s*\\n([\\s\\S]*?)\\n\\s*-/`,
-    "i",
-  ))
-  const match = html ?? lean
-  if (match?.[1] === undefined) return undefined
-  try {
-    const value = JSON.parse(match[1]) as unknown
-    return isRecord(value) ? value : undefined
-  } catch {
-    return undefined
-  }
+  return parseMachineJsonBlock(source, name).value
 }
 
 export function architectureCompletenessContract(source: string): UnknownRecord | undefined {
@@ -111,10 +97,9 @@ function exactDimensionRecords(
 
 export function architectureCompletenessIssues(source: string): string[] {
   const issues: string[] = []
-  const contract = architectureCompletenessContract(source)
-  if (contract === undefined) {
-    return ["architecture lacks SPEC2LEAN_COMPLETENESS_CONTRACT"]
-  }
+  const parsed = parseMachineJsonBlock(source, "SPEC2LEAN_COMPLETENESS_CONTRACT")
+  if (parsed.status !== "OK" || parsed.value === undefined) return [parsed.issue!]
+  const contract = parsed.value
   if (contract.schemaVersion !== 1) issues.push("architecture completeness schemaVersion must be 1")
   if (!['FULL_INSTRUCTION', 'PARTIAL_EXPLICIT'].includes(String(contract.scopeStatus))) {
     issues.push("architecture completeness scopeStatus must be FULL_INSTRUCTION or PARTIAL_EXPLICIT")

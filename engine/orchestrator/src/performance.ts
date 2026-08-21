@@ -106,6 +106,19 @@ export async function buildPerfReport(runId: string): Promise<Record<string, unk
     outputLengthExecutions: (run.executions ?? []).filter(
       (execution) => execution.failureClass === "OUTPUT_LENGTH_EXCEEDED",
     ).length,
+    retryFailureClasses: Object.fromEntries(
+      [...new Set((run.executions ?? [])
+        .filter((execution) => execution.outcome === "RETRY")
+        .map((execution) => execution.failureClass ?? "UNCLASSIFIED_LEGACY_RETRY"))]
+        .sort()
+        .map((failureClass) => [
+          failureClass,
+          (run.executions ?? []).filter(
+            (execution) => execution.outcome === "RETRY" &&
+              (execution.failureClass ?? "UNCLASSIFIED_LEGACY_RETRY") === failureClass,
+          ).length,
+        ]),
+    ),
     semanticV2: semanticV2Telemetry(run),
     executionModels: Object.fromEntries(
       [...new Set((run.executions ?? []).map((execution) => execution.model ?? "unrecorded"))]

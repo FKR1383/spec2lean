@@ -5,6 +5,7 @@ import { resolve } from "node:path"
 import { REPO_ROOT } from "./repo.js"
 import type { RunState } from "./workflow.js"
 import { authoritativeArtifact } from "./artifact-authority.js"
+import { parseMachineJsonBlock } from "./machine-block.js"
 
 export const PROVENANCE_CLASSIFICATIONS = [
   "SOURCE_FACT",
@@ -175,25 +176,15 @@ export type ArchitectureIndex = {
   }>
 }
 
-const ARCHITECTURE_INDEX_PATTERN =
-  /<!--\s*SPEC2LEAN_ARCHITECTURE_INDEX\s*([\s\S]*?)\s*-->/m
-
 export function parseArchitectureIndex(source: string): ArchitectureIndex | undefined {
-  const body = source.match(ARCHITECTURE_INDEX_PATTERN)?.[1]
-  if (body === undefined) return undefined
-  try {
-    return JSON.parse(body) as ArchitectureIndex
-  } catch {
-    return undefined
-  }
+  return parseMachineJsonBlock(source, "SPEC2LEAN_ARCHITECTURE_INDEX").value as ArchitectureIndex | undefined
 }
 
 export function validateArchitectureIndex(source: string): string[] {
   const issues: string[] = []
-  const index = parseArchitectureIndex(source)
-  if (index === undefined) {
-    return ["architecture artifact lacks a valid SPEC2LEAN_ARCHITECTURE_INDEX JSON block"]
-  }
+  const parsed = parseMachineJsonBlock(source, "SPEC2LEAN_ARCHITECTURE_INDEX")
+  if (parsed.status !== "OK" || parsed.value === undefined) return [parsed.issue!]
+  const index = parsed.value as ArchitectureIndex
   if (index.schemaVersion !== 1 || !Array.isArray(index.entries)) {
     return ["architecture index must have schemaVersion=1 and an entries array"]
   }

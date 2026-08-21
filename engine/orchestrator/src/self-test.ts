@@ -75,6 +75,10 @@ import {
   makeLeanLanguageName,
 } from "./lean-language.js"
 import { validateSourceProposal } from "./source-bootstrap.js"
+import {
+  architectureWithCanonicalMachineBlocks,
+  parseMachineJsonBlock,
+} from "./machine-block.js"
 import { ensureSourceIndex, htmlSections } from "./source-index.js"
 import { STAGE_PLANS } from "./stage-plan.js"
 import {
@@ -215,6 +219,41 @@ const qualityArchitecture = [
   "-->",
 ].join("\n")
 assert(architectureCompletenessIssues(qualityArchitecture).length === 0, "full architecture quality contract")
+const completenessValue = JSON.parse(qualityArchitecture.split("\n")[1]!) as Record<string, unknown>
+const popcExactFailureShape = `<!-- SPEC2LEAN_COMPLETENESS_CONTRACT\n${JSON.stringify(completenessValue)}-->`
+assert(architectureCompletenessIssues(popcExactFailureShape).length === 0,
+  "popc same-line HTML closing delimiter is accepted as harmless layout")
+const selpExactFailureShape = `<!-- SPEC2LEAN_COMPLETENESS_CONTRACT\n${JSON.stringify(completenessValue).slice(0, -1)}\n-->`
+assert(architectureCompletenessIssues(selpExactFailureShape)[0]?.includes("JSON parse failed"),
+  "selp missing final object brace produces a JSON parse diagnostic")
+assert(parseMachineJsonBlock("architecture prose", "SPEC2LEAN_COMPLETENESS_CONTRACT").status === "ABSENT" &&
+  architectureCompletenessIssues("architecture prose")[0]?.includes("marker/block is absent"),
+"an actually absent completeness marker is distinguished")
+assert(parseMachineJsonBlock(
+  "SPEC2LEAN_COMPLETENESS_CONTRACT appears only as prose",
+  "SPEC2LEAN_COMPLETENESS_CONTRACT",
+).status === "MALFORMED_FRAMING",
+"a present marker with malformed framing is distinguished")
+const invalidCompletenessSchema = qualityArchitecture.replace('"schemaVersion":1', '"schemaVersion":99')
+assert(architectureCompletenessIssues(invalidCompletenessSchema)
+  .some((issue) => issue.includes("schemaVersion must be 1")),
+"parsed completeness JSON receives schema/content diagnostics rather than a missing-block error")
+const canonicalArchitecture = architectureWithCanonicalMachineBlocks(
+  "## Bounded scope and exclusions\nFixture prose",
+  { schemaVersion: 1, entries: [] },
+  completenessValue,
+)
+assert(parseMachineJsonBlock(canonicalArchitecture, "SPEC2LEAN_ARCHITECTURE_INDEX").status === "OK" &&
+  parseMachineJsonBlock(canonicalArchitecture, "SPEC2LEAN_COMPLETENESS_CONTRACT").status === "OK",
+"architecture writer serialization always emits parseable canonical machine blocks")
+let manualArchitectureBlockRejected = false
+try {
+  architectureWithCanonicalMachineBlocks(qualityArchitecture, { schemaVersion: 1, entries: [] }, completenessValue)
+} catch {
+  manualArchitectureBlockRejected = true
+}
+assert(manualArchitectureBlockRejected,
+  "architecture writer rejects manually serialized machine blocks instead of publishing ambiguous framing")
 
 const qualitySourceBundle = {
   schema_version: 3,

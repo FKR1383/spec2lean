@@ -101,10 +101,15 @@ runtime prompt. Cover:
 6. behavior-affecting reads, writes, branches, errors, and host/version limits;
 7. candidate validation/theorem families;
 8. Gate A checklist;
-9. the exact machine-readable `SPEC2LEAN_ARCHITECTURE_INDEX` required by the
-   runtime contract.
-10. the exact nine-row `SPEC2LEAN_COMPLETENESS_CONTRACT` required by the
-    runtime contract.
+9. the structured `architectureIndex` argument required by
+   `candidate_architecture_write`.
+10. the structured nine-row `completenessContract` argument required by
+    `candidate_architecture_write`.
+
+Do not manually serialize either `SPEC2LEAN_*` comment in Markdown `content`.
+The architecture writer validates the structured values and appends canonical
+machine blocks. A structural tool diagnostic is a same-session repair request,
+not a reason to repeat source research.
 
 `FULL_INSTRUCTION` is the default for the exact requested unit. Do not obtain a
 quick success by shrinking the source-visible instruction. `PARTIAL_EXPLICIT`

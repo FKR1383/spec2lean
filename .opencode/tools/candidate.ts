@@ -30,6 +30,7 @@ import {
 import { verifyExpectedArtifact } from "../../engine/orchestrator/src/artifact-verify.ts"
 import {
   buildProvenanceCatalog,
+  validateArchitectureIndex,
 } from "../../engine/orchestrator/src/provenance-catalog.ts"
 import { authoritativeArtifact } from "../../engine/orchestrator/src/artifact-authority.ts"
 import { proofTargets } from "../../engine/orchestrator/src/proof-plan.ts"
@@ -45,6 +46,8 @@ import {
 import { theoremContractEncodingIssues } from "../../engine/orchestrator/src/theorem-contract.ts"
 import { activeRunForSession, candidateReplacementIssue } from "../../engine/orchestrator/src/artifact-immutability.ts"
 import { normalizeExpectedArtifactContent } from "../../engine/orchestrator/src/artifact-normalization.ts"
+import { architectureWithCanonicalMachineBlocks } from "../../engine/orchestrator/src/machine-block.ts"
+import { architectureCompletenessIssues } from "../../engine/orchestrator/src/quality-contract.ts"
 
 const TOOL_VERSION = 1
 const TIMEOUT_MS = 3_000
@@ -699,14 +702,46 @@ export const architecture_write = tool({
   description:
     "Atomically write one compact architecture foundation artifact. The tool " +
     `schema enforces the ${MAX_ARCHITECTURE_BYTES}-byte architecture budget ` +
-    "before model output can grow into an unbounded candidate payload.",
+    "before model output can grow into an unbounded candidate payload. Machine " +
+    "blocks are supplied as structured values and serialized canonically by the tool.",
 
   args: {
     path: writePathSchema,
     content: tool.schema
       .string()
       .max(MAX_ARCHITECTURE_BYTES)
-      .describe("Complete compact architecture artifact content"),
+      .describe("Compact human-readable architecture Markdown without SPEC2LEAN machine blocks"),
+    architectureIndex: tool.schema.object({
+      schemaVersion: tool.schema.literal(1),
+      entries: tool.schema.array(tool.schema.object({
+        semanticId: tool.schema.string().min(1),
+        classification: tool.schema.enum(["SOURCE_FACT", "DERIVED_INTERPRETATION", "DESIGN_DEPENDENCY", "ASSUMPTION", "OPEN_QUESTION"]),
+        statement: tool.schema.string().min(1),
+        evidenceIds: tool.schema.array(tool.schema.string().min(1)),
+        dependencyIds: tool.schema.array(tool.schema.string().min(1)),
+        stateAffecting: tool.schema.boolean(),
+        status: tool.schema.enum(["RESOLVED", "OPEN"]),
+      })).min(1),
+    }).describe("Structured SPEC2LEAN_ARCHITECTURE_INDEX; the tool owns comment serialization"),
+    completenessContract: tool.schema.object({
+      schemaVersion: tool.schema.literal(1),
+      scopeStatus: tool.schema.enum(["FULL_INSTRUCTION", "PARTIAL_EXPLICIT"]),
+      languageCore: tool.schema.object({
+        status: tool.schema.enum(["REUSED_APPROVED", "BOOTSTRAP_CANDIDATE"]),
+        path: tool.schema.string().min(1).optional(),
+        sha256: tool.schema.string().regex(/^[a-f0-9]{64}$/).optional(),
+        candidateCoreId: tool.schema.string().min(1).optional(),
+        scopeStatement: tool.schema.string().min(1).optional(),
+        proposedSemanticIds: tool.schema.array(tool.schema.string().min(1)).optional(),
+      }),
+      dimensions: tool.schema.array(tool.schema.object({
+        dimension: tool.schema.enum(["SYNTAX", "OPERANDS", "TYPES", "OPERATION_BRANCHES", "EDGE_CASES", "GUARDS", "STATE_EFFECTS", "ERRORS", "VERSION_APPLICABILITY"]),
+        status: tool.schema.enum(["COVERED", "NOT_APPLICABLE", "EXCLUDED_BY_ENCODED_PRECONDITION"]),
+        semanticIds: tool.schema.array(tool.schema.string().min(1)),
+        encodedBy: tool.schema.array(tool.schema.string().min(1)),
+        rationale: tool.schema.string().min(1),
+      })).length(9),
+    }).describe("Structured SPEC2LEAN_COMPLETENESS_CONTRACT; the tool owns comment serialization"),
     mode: writeModeSchema,
     expectedSha256: expectedWriteHashSchema,
   },
@@ -723,7 +758,34 @@ export const architecture_write = tool({
         },
       })
     }
-    return await writeCandidate(args, context)
+    try {
+      const content = architectureWithCanonicalMachineBlocks(
+        args.content,
+        args.architectureIndex as Record<string, unknown>,
+        args.completenessContract as Record<string, unknown>,
+      )
+      const issues = [
+        ...validateArchitectureIndex(content),
+        ...architectureCompletenessIssues(content),
+      ]
+      if (issues.length > 0) throw new Error(`structured architecture metadata is invalid: ${issues.join(" | ")}`)
+      return await writeCandidate({
+        path: args.path,
+        content,
+        mode: args.mode,
+        expectedSha256: args.expectedSha256,
+      }, context)
+    } catch (error) {
+      return jsonResult({
+        ok: false,
+        tool: "candidate_architecture_write",
+        version: TOOL_VERSION,
+        error: {
+          code: "ARCHITECTURE_WRITE_FAILED",
+          message: error instanceof Error ? error.message : "unknown error",
+        },
+      })
+    }
   },
 })
 
