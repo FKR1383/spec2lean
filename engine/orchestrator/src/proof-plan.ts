@@ -1,8 +1,9 @@
-import { access, readFile, readdir } from "node:fs/promises"
+import { access, readFile } from "node:fs/promises"
 import { resolve } from "node:path"
 
 import { artifactContractForRun, stageAttempt } from "./artifact-contract.js"
 import { REPO_ROOT } from "./repo.js"
+import { authoritativeArtifact } from "./artifact-authority.js"
 import {
   compareProofWithApprovedTheorems,
   validateTheoremObligationDocument,
@@ -36,19 +37,7 @@ type ObligationArtifact = {
 }
 
 export async function latestObligationPath(run: RunState): Promise<string> {
-  const dirRelative = `${run.artifactRoot}/theorems`
-  const files = (await readdir(resolve(REPO_ROOT, dirRelative))) as string[]
-  const candidates = files
-    .map((name) => ({ name, m: name.match(/^obligations-v(\d+)\.json$/) }))
-    .filter((x): x is { name: string; m: RegExpMatchArray } => x.m !== null)
-    .map((x) => ({ name: x.name, version: Number(x.m[1]!) }))
-    .sort((a, b) => b.version - a.version)
-
-  if (candidates.length === 0) {
-    throw new Error(`No theorem obligation artifact under ${dirRelative}`)
-  }
-
-  return `${dirRelative}/${candidates[0]!.name}`
+  return (await authoritativeArtifact(run, "THEOREM_OBLIGATIONS")).path
 }
 
 export function theoremDeclarationNames(source: string): Set<string> {
@@ -61,8 +50,8 @@ export function theoremDeclarationNames(source: string): Set<string> {
   )
 }
 
-export async function proofTargets(run: RunState): Promise<ProofTarget[]> {
-  const obligationPath = await latestObligationPath(run)
+export async function proofTargets(run: RunState, exactPath?: string): Promise<ProofTarget[]> {
+  const obligationPath = exactPath ?? await latestObligationPath(run)
   const artifact = JSON.parse(
     await readFile(resolve(REPO_ROOT, obligationPath), "utf8"),
   ) as ObligationArtifact
@@ -141,10 +130,15 @@ export function proofArtifactPath(run: RunState): string {
 
 export function verifiedProofArtifactPath(run: RunState): string {
   if (run.stage === "PROOF_GENERATION") return proofArtifactPath(run)
+  const binding = [...(run.executions ?? [])].reverse()
+    .flatMap((execution) => [...(execution.publishedArtifacts ?? [])].reverse())
+    .find((artifact) => artifact.role === "LEAN_PROOFS")
+  if (binding !== undefined) return binding.path
+  // Historical schema-v1 runs predate explicit publication bindings. Their
+  // deterministic attempt contract gives one exact path; never glob for a
+  // numerically newer proof file.
   const completedAttempt = stageAttempt(run, "PROOF_GENERATION") - 1
-  if (completedAttempt < 1) {
-    throw new Error(`Run ${run.runId} has no completed proof-generation attempt`)
-  }
+  if (completedAttempt < 1) throw new Error(`Run ${run.runId} has no completed proof-generation attempt`)
   return `${run.artifactRoot}/lean/${run.leanModuleName}Proofs-v${completedAttempt}.lean`
 }
 

@@ -3,12 +3,12 @@ import { access, readFile, stat } from "node:fs/promises"
 import { resolve } from "node:path"
 
 import { artifactContractForRun } from "./artifact-contract.js"
+import { authoritativeArtifact } from "./artifact-authority.js"
 import { validateArtifactContent } from "./artifact-content.js"
 import { validateArchitectureQuestionTriage } from "./architecture-review.js"
 import { prohibitedLeanTokens, verifyLeanFile } from "./lean-local.js"
 import { duplicateJsonKeyIssues } from "./json-integrity.js"
 import { latestObligationPath, proofTargets } from "./proof-plan.js"
-import { latestVersionedArtifact } from "./provenance-catalog.js"
 import { REPO_ROOT } from "./repo.js"
 import {
   artifactChainCompletenessIssues,
@@ -69,10 +69,7 @@ async function semanticEvidenceIntegrityIssues(run: RunState, document: unknown)
   const issues: string[] = []
   if (!isRecord(document)) return issues
   try {
-    const bundlePath = await latestVersionedArtifact(
-      `${run.artifactRoot}/source-bundles`,
-      [/^source-bundle-v(\d+)\.json$/],
-    )
+    const bundlePath = (await authoritativeArtifact(run, "SOURCE_BUNDLE")).path
     const bundle = JSON.parse(await readFile(resolve(REPO_ROOT, bundlePath), "utf8")) as UnknownRecord
     const fragments = Array.isArray(bundle.fragments) ? bundle.fragments : []
     const fragmentIds = new Set(fragments.filter(isRecord).map((item) => item.fragment_id).filter(nonEmptyString))
@@ -139,8 +136,8 @@ export async function verifyExpectedArtifact(run: RunState): Promise<ArtifactVer
     if (run.qualityContractVersion === 1) {
       try {
         const [architecturePath, sourceBundlePath] = await Promise.all([
-          latestVersionedArtifact(`${run.artifactRoot}/architecture`, [/^foundation-v(\d+)\.md$/]),
-          latestVersionedArtifact(`${run.artifactRoot}/source-bundles`, [/^source-bundle-v(\d+)\.json$/]),
+          authoritativeArtifact(run, "ARCHITECTURE").then((item) => item.path),
+          authoritativeArtifact(run, "SOURCE_BUNDLE").then((item) => item.path),
         ])
         const [architecture, sourceBundle] = await Promise.all([
           readFile(resolve(REPO_ROOT, architecturePath), "utf8"),
@@ -169,10 +166,7 @@ export async function verifyExpectedArtifact(run: RunState): Promise<ArtifactVer
 
   if (run.qualityContractVersion === 1 && run.stage === "LEAN_FORMALIZATION") {
     try {
-      const semanticsPath = await latestVersionedArtifact(
-        `${run.artifactRoot}/semantics`,
-        [/^semantics-v(\d+)\.json$/],
-      )
+      const semanticsPath = (await authoritativeArtifact(run, "SEMANTICS")).path
       const semantics = JSON.parse(
         await readFile(resolve(REPO_ROOT, semanticsPath), "utf8"),
       ) as unknown
@@ -201,14 +195,8 @@ export async function verifyExpectedArtifact(run: RunState): Promise<ArtifactVer
   if (run.qualityContractVersion === 1 && run.stage === "THEOREM_GENERATION") {
     try {
       const [semanticsPath, leanPath] = await Promise.all([
-        latestVersionedArtifact(
-          `${run.artifactRoot}/semantics`,
-          [/^semantics-v(\d+)\.json$/],
-        ),
-        latestVersionedArtifact(
-          `${run.artifactRoot}/lean`,
-          [new RegExp(`^${run.leanModuleName}-v(\\d+)\\.lean$`)],
-        ),
+        authoritativeArtifact(run, "SEMANTICS").then((item) => item.path),
+        authoritativeArtifact(run, "LEAN_MAPPING").then((item) => item.path),
       ])
       const [semantics, leanSource] = await Promise.all([
         readFile(resolve(REPO_ROOT, semanticsPath), "utf8").then((value) => JSON.parse(value) as unknown),
@@ -222,10 +210,7 @@ export async function verifyExpectedArtifact(run: RunState): Promise<ArtifactVer
 
   if (run.stage === "ARCHITECTURE_CRITIQUE") {
     try {
-      const architecturePath = await latestVersionedArtifact(
-        `${run.artifactRoot}/architecture`,
-        [/^foundation-v(\d+)\.md$/],
-      )
+      const architecturePath = (await authoritativeArtifact(run, "ARCHITECTURE")).path
       const architecture = await readFile(resolve(REPO_ROOT, architecturePath), "utf8")
       issues.push(...validateArchitectureQuestionTriage(architecture, source))
     } catch (error) {
@@ -240,10 +225,7 @@ export async function verifyExpectedArtifact(run: RunState): Promise<ArtifactVer
       const obligationPath = await latestObligationPath(run)
       const targets = await proofTargets(run)
       issues.push(...theoremStrengthReviewAuditIssues(source, obligationPath, targets))
-      const leanPath = await latestVersionedArtifact(
-        `${run.artifactRoot}/lean`,
-        [new RegExp(`^${run.leanModuleName}-v(\\d+)\\.lean$`)],
-      )
+      const leanPath = (await authoritativeArtifact(run, "LEAN_MAPPING")).path
       const leanSource = await readFile(resolve(REPO_ROOT, leanPath), "utf8")
       issues.push(...theoremBehaviorAuditIssues(
         source,

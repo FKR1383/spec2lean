@@ -6,8 +6,8 @@ import { GATES } from "./gates.js"
 import {
   buildProvenanceCatalog,
   collectArchitectureProvenanceClaims,
-  latestVersionedArtifact,
 } from "./provenance-catalog.js"
+import { authoritativeArtifact } from "./artifact-authority.js"
 import { parseArchitectureQuestionTriage } from "./architecture-review.js"
 import { readFile } from "node:fs/promises"
 import { resolve } from "node:path"
@@ -51,10 +51,9 @@ export async function benchmarkGateAssessment(
   }
   try {
     const architectureSource = gate === "A"
-      ? await readFile(resolve(REPO_ROOT, await latestVersionedArtifact(
-          `${run.artifactRoot}/architecture`,
-          [/^foundation-v(\d+)\.md$/],
-        )), "utf8")
+      ? await readFile(resolve(REPO_ROOT,
+          (await authoritativeArtifact(run, "ARCHITECTURE")).path,
+        ), "utf8")
       : undefined
     const claims = architectureSource !== undefined
       ? collectArchitectureProvenanceClaims(architectureSource, "architecture")
@@ -90,10 +89,9 @@ export async function benchmarkGateAssessment(
       }
     }
 
-    const review = await readFile(resolve(REPO_ROOT, await latestVersionedArtifact(
-      `${run.artifactRoot}/reviews`,
-      [/^architecture-critic-v(\d+)\.md$/],
-    )), "utf8")
+    const review = await readFile(resolve(REPO_ROOT,
+      (await authoritativeArtifact(run, "ARCHITECTURE_REVIEW")).path,
+    ), "utf8")
     const triage = parseArchitectureQuestionTriage(review)
     if (triage === undefined) {
       return {

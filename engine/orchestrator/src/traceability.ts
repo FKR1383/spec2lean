@@ -4,7 +4,6 @@ import {
   lstat,
   mkdir,
   readFile,
-  readdir,
   unlink,
   writeFile,
 } from "node:fs/promises"
@@ -26,6 +25,7 @@ import {
   collectSemanticProvenanceClaims,
 } from "./provenance-catalog.js"
 import { parseLeanModelContract } from "./quality-contract.js"
+import { authoritativeArtifact } from "./artifact-authority.js"
 
 export type TraceabilityClassification =
   | "SOURCE_FACT"
@@ -193,30 +193,6 @@ async function readRepositoryFile(path: string): Promise<Buffer> {
 
 async function fingerprint(path: string): Promise<ArtifactFingerprint> {
   return { path, sha256: sha256(await readRepositoryFile(path)) }
-}
-
-async function latestVersionedFile(
-  directory: string,
-  patterns: RegExp[],
-): Promise<string> {
-  assertRepositoryRelative(directory)
-  const entries = await readdir(resolve(REPO_ROOT, directory), { withFileTypes: true })
-  const candidates = entries.flatMap((entry) => {
-    if (!entry.isFile() || entry.isSymbolicLink()) return []
-    for (const pattern of patterns) {
-      const match = entry.name.match(pattern)
-      if (match?.[1] !== undefined) {
-        const version = Number(match[1])
-        if (Number.isSafeInteger(version)) return [{ name: entry.name, version }]
-      }
-    }
-    return []
-  }).sort((left, right) => right.version - left.version)
-  const selected = candidates[0]
-  if (selected === undefined) {
-    throw new Error(`No versioned traceability input found under ${directory}`)
-  }
-  return `${directory}/${selected.name}`
 }
 
 function collectArchitectureClaims(
@@ -682,10 +658,7 @@ export async function semanticEvidenceRenditionIssues(
   input: SemanticEvidenceRenditionInput,
 ): Promise<string[]> {
   const run = await loadRun(input.runId)
-  const semanticPath = input.semanticPath ?? await latestVersionedFile(
-    `${run.artifactRoot}/semantics`,
-    [/^semantics-v(\d+)\.json$/],
-  )
+  const semanticPath = input.semanticPath ?? (await authoritativeArtifact(run, "SEMANTICS")).path
   const semanticDocument = input.semanticDocument ?? JSON.parse(
     (await readRepositoryFile(semanticPath)).toString("utf8"),
   ) as unknown
@@ -695,10 +668,9 @@ export async function semanticEvidenceRenditionIssues(
       (semanticDocument.schemaVersion === 1 && Array.isArray(semanticDocument.claims))
     )) return []
 
-  const sourceBundlePaths = input.sourceBundlePaths ?? [await latestVersionedFile(
-    `${run.artifactRoot}/source-bundles`,
-    [/^source-bundle-v(\d+)\.json$/],
-  )]
+  const sourceBundlePaths = input.sourceBundlePaths ?? [
+    (await authoritativeArtifact(run, "SOURCE_BUNDLE")).path,
+  ]
   const claims = new Map<string, TraceabilityClaim>()
   collectClaims(semanticDocument, semanticPath, claims)
   const evidence = new Map<string, TraceabilityEvidence>()
@@ -778,34 +750,15 @@ export async function buildTraceabilityManifest(
   const documentRole = input.documentRole ?? "SEMANTICS"
   const leanPath = input.leanPath ?? (documentRole === "PROOFS"
     ? verifiedProofArtifactPath(run)
-    : await latestVersionedFile(
-        `${run.artifactRoot}/lean`,
-        [new RegExp(`^${run.leanModuleName}-v(\\d+)\\.lean$`)],
-      ))
-  const semanticPath = input.semanticPath ?? (
-    run.semanticV2?.mode === "DELTA_FAST_PATH" && run.semanticV2.current?.materializedPath !== undefined
-      ? run.semanticV2.current.materializedPath
-      : await latestVersionedFile(
-          `${run.artifactRoot}/semantics`,
-          [/^semantics-v(\d+)\.json$/],
-        )
-  )
-  const architecturePath = input.architecturePath ?? await latestVersionedFile(
-    `${run.artifactRoot}/architecture`,
-    [/^foundation-v(\d+)\.md$/],
-  )
+    : (await authoritativeArtifact(run, "LEAN_MAPPING")).path)
+  const semanticPath = input.semanticPath ?? (await authoritativeArtifact(run, "SEMANTICS")).path
+  const architecturePath = input.architecturePath ?? (await authoritativeArtifact(run, "ARCHITECTURE")).path
   const sourceBundlePaths = input.sourceBundlePaths ?? [
-    await latestVersionedFile(
-      `${run.artifactRoot}/source-bundles`,
-      [/^source-bundle-v(\d+)\.json$/],
-    ),
+    (await authoritativeArtifact(run, "SOURCE_BUNDLE")).path,
   ]
   if (sourceBundlePaths.length === 0) throw new Error("At least one source bundle is required")
   const theoremPath = documentRole === "PROOFS"
-    ? input.theoremPath ?? await latestVersionedFile(
-        `${run.artifactRoot}/theorems`,
-        [/^obligations-v(\d+)\.json$/],
-      )
+    ? input.theoremPath ?? (await authoritativeArtifact(run, "THEOREM_OBLIGATIONS")).path
     : undefined
 
   const [leanData, semanticData, architectureData, sourceBundleData, theoremData] = await Promise.all([

@@ -12,6 +12,7 @@ import {
   validateAgentDecision,
 } from "./agent-decision.js"
 import { artifactContractForRun } from "./artifact-contract.js"
+import { authoritativeArtifact, primaryArtifactRole, publishedArtifact } from "./artifact-authority.js"
 import { validateArtifactContent } from "./artifact-content.js"
 import { verifyExpectedArtifact } from "./artifact-verify.js"
 import { recoverResultFromVerifiedArtifact } from "./artifact-recovery.js"
@@ -69,9 +70,22 @@ async function buildPipelineTraceabilityManifest(
   run: RunState,
   documentRole: "SEMANTICS" | "PROOFS",
 ) {
+  const [architecture, sourceBundle, semantics, theorem] = await Promise.all([
+    authoritativeArtifact(run, "ARCHITECTURE"),
+    authoritativeArtifact(run, "SOURCE_BUNDLE"),
+    authoritativeArtifact(run, "SEMANTICS"),
+    documentRole === "PROOFS"
+      ? authoritativeArtifact(run, "THEOREM_OBLIGATIONS")
+      : undefined,
+  ])
   return await buildTraceabilityManifest({
     runId: run.runId,
     documentRole,
+    leanPath: documentRole === "PROOFS" ? proofArtifactPath(run) : artifactContractForRun(run).outputPath,
+    semanticPath: semantics.path,
+    architecturePath: architecture.path,
+    sourceBundlePaths: [sourceBundle.path],
+    theoremPath: theorem?.path,
     includePdfRenditions: true,
   })
 }
@@ -771,10 +785,7 @@ export async function buildTheoremStrengthContractContext(
 
   const obligationPath = await latestObligationPath(run)
   const targets = await proofTargets(run)
-  const leanPath = await latestVersionedArtifact(
-    `${run.artifactRoot}/lean`,
-    [new RegExp(`^${run.leanModuleName}-v(\\d+)\\.lean$`)],
-  )
+  const leanPath = (await authoritativeArtifact(run, "LEAN_MAPPING")).path
   const behaviorBranches = leanBehaviorBranches(
     await readFile(resolve(REPO_ROOT, leanPath), "utf8"),
   )
@@ -1264,12 +1275,30 @@ export async function executeTick(
     await prepareLeanPackage(run)
     const local = await finalizeProofStageLocally(run)
     let proofPreflightDiagnostics: string | undefined
-    if (local?.outcome === "SUCCESS") {
+      if (local?.outcome === "SUCCESS") {
       await installProofPackage(run)
       try {
         const traceability = await generateVerifiedTraceability(run, "PROOFS")
         const localSummary = `${local.summary} Deterministic theorem-to-source evidence manifest: ${traceability.manifestPath}.`
         const next = transitionRun(run, "FINAL_CRITIQUE", `local Lean verification: ${localSummary}`)
+        const publishedArtifacts = await Promise.all([
+          publishedArtifact(run, {
+            role: "LEAN_PROOFS",
+            path: proofArtifactPath(run),
+            stage: run.stage,
+            agent: "orchestrator-local-lean",
+            sessionId: "local",
+            runRevision: next.revision,
+          }),
+          publishedArtifact(run, {
+            role: "TRACEABILITY_PROOFS",
+            path: traceability.manifestPath,
+            stage: run.stage,
+            agent: "orchestrator-local-lean",
+            sessionId: "local",
+            runRevision: next.revision,
+          }),
+        ])
         const saved = {
           ...next,
           activeExecution: undefined,
@@ -1284,6 +1313,7 @@ export async function executeTick(
               nextStage: local.nextStage,
               response: localSummary,
               traceability,
+              publishedArtifacts,
             },
           ],
         }
@@ -1723,6 +1753,63 @@ export async function executeTick(
     const artifactAfter = await artifactFingerprint(artifact.outputPath)
     const producedArtifact = artifactChanged(artifactBefore, artifactAfter)
     const failureFingerprint = await retryFailureFingerprint(run, result, proofContext)
+    let nextRun = failureClass === "PROVIDER_RETRY_BUDGET_EXCEEDED"
+      ? {
+          ...run,
+          updatedAt: new Date().toISOString(),
+        }
+      : result.outcome === "RETRY"
+        ? retryRun(run, `${plan.agent} retry: ${result.summary}`)
+        : transitionRun(run, nextStage, `${plan.agent}: ${result.summary}`)
+
+    const publishedArtifacts = []
+    if (result.outcome === "SUCCESS") {
+      publishedArtifacts.push(await publishedArtifact(run, {
+        role: primaryArtifactRole(run),
+        path: artifact.outputPath,
+        stage: run.stage,
+        agent: plan.agent,
+        sessionId,
+        runRevision: nextRun.revision,
+      }))
+      if (
+        run.stage === "SEMANTIC_EXTRACTION" &&
+        run.semanticV2?.mode === "DELTA_FAST_PATH" &&
+        run.semanticV2.current !== undefined
+      ) {
+        publishedArtifacts.push(
+          await publishedArtifact(run, {
+            role: "SEMANTICS",
+            path: run.semanticV2.current.materializedPath,
+            stage: run.stage,
+            agent: "orchestrator-semantic-materializer",
+            sessionId,
+            runRevision: nextRun.revision,
+          }),
+          await publishedArtifact(run, {
+            role: "SEMANTIC_CRITIC_PACKET",
+            path: run.semanticV2.current.criticPacketPath,
+            stage: run.stage,
+            agent: "orchestrator-semantic-materializer",
+            sessionId,
+            runRevision: nextRun.revision,
+          }),
+        )
+      }
+      if (traceability !== undefined) {
+        publishedArtifacts.push(await publishedArtifact(run, {
+          role: traceability.documentRole === "PROOFS"
+            ? "TRACEABILITY_PROOFS"
+            : "TRACEABILITY_SEMANTICS",
+          path: traceability.manifestPath,
+          stage: run.stage,
+          agent: "orchestrator-traceability",
+          sessionId,
+          runRevision: nextRun.revision,
+        }))
+      }
+    }
+
     const execution = {
       startedAt: run.activeExecution?.startedAt,
       at: new Date().toISOString(),
@@ -1738,19 +1825,12 @@ export async function executeTick(
       artifactProduced: producedArtifact,
       ...(artifactBefore?.sha256 === undefined ? {} : { artifactBeforeSha256: artifactBefore.sha256 }),
       ...(artifactAfter.sha256 === undefined ? {} : { artifactAfterSha256: artifactAfter.sha256 }),
+      ...(publishedArtifacts.length === 0 ? {} : { publishedArtifacts }),
       ...(failureFingerprint === undefined ? {} : { failureFingerprint }),
       ...(failureClass === undefined ? {} : { failureClass }),
       ...(proofProgress === undefined ? {} : { progress: proofProgress }),
       ...(traceability === undefined ? {} : { traceability }),
     }
-    let nextRun = failureClass === "PROVIDER_RETRY_BUDGET_EXCEEDED"
-      ? {
-          ...run,
-          updatedAt: new Date().toISOString(),
-        }
-      : result.outcome === "RETRY"
-        ? retryRun(run, `${plan.agent} retry: ${result.summary}`)
-        : transitionRun(run, nextStage, `${plan.agent}: ${result.summary}`)
 
     nextRun = {
       ...nextRun,

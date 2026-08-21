@@ -3,7 +3,6 @@ import {
   access,
   mkdir,
   readFile,
-  readdir,
   stat,
   writeFile,
 } from "node:fs/promises"
@@ -27,7 +26,7 @@ import {
 } from "./semantic-ir/validate.js"
 import { REPO_ROOT } from "./repo.js"
 import { loadLanguageCore } from "./language-core.js"
-import { latestVersionedArtifact } from "./provenance-catalog.js"
+import { authoritativeArtifact } from "./artifact-authority.js"
 import { semanticEvidenceRenditionIssues } from "./traceability.js"
 import {
   artifactChainCompletenessIssues,
@@ -278,10 +277,7 @@ export async function assessSemanticFastPath(run: RunState): Promise<SemanticEli
       throw new Error("language-core identity or semantic-environment binding mismatch")
     }
     if (run.qualityContractVersion === 1) {
-      const architecturePath = await latestVersionedArtifact(
-        `${run.artifactRoot}/architecture`,
-        [/^foundation-v(\d+)\.md$/],
-      )
+      const architecturePath = (await authoritativeArtifact(run, "ARCHITECTURE")).path
       const architecture = await readFile(ensureRepositoryRelative(architecturePath), "utf8")
       const contract = architectureCompletenessContract(architecture)
       const binding = isRecord(contract?.languageCore) ? contract.languageCore : undefined
@@ -542,15 +538,7 @@ async function verifySharedEnvironmentFiles(
 }
 
 async function latestSourceBundle(run: RunState): Promise<string> {
-  const directory = `${run.artifactRoot}/source-bundles`
-  const entries = await readdir(ensureRepositoryRelative(directory))
-  const candidates = entries.flatMap((name) => {
-    const match = name.match(/^source-bundle-v(\d+)\.json$/)
-    return match?.[1] === undefined ? [] : [{ name, version: Number(match[1]) }]
-  }).sort((left, right) => right.version - left.version)
-  const latest = candidates[0]
-  if (latest === undefined) throw new Error("No versioned source bundle exists")
-  return `${directory}/${latest.name}`
+  return (await authoritativeArtifact(run, "SOURCE_BUNDLE")).path
 }
 
 export function bundleEvidenceIds(bundle: unknown): Set<string> {
@@ -586,7 +574,7 @@ async function verifyDeltaGrounding(
 ): Promise<void> {
   const bundlePath = await latestSourceBundle(run)
   if (delta.provenance.sourceBundle.path !== bundlePath) {
-    throw new Error(`Delta source bundle is not the latest run bundle: expected ${bundlePath}`)
+    throw new Error(`Delta source bundle is not the authoritative run bundle: expected ${bundlePath}`)
   }
   const bundleData = await readFile(ensureRepositoryRelative(bundlePath))
   if (sha256(bundleData) !== delta.provenance.sourceBundle.sha256) {
@@ -667,10 +655,7 @@ export async function validateSemanticDeltaForRun(
         return { ok: false, issues: ["semantic delta is not bound to the exact current language-core manifest"] }
       }
       const [architecturePath, sourceBundlePath] = await Promise.all([
-        latestVersionedArtifact(
-          `${run.artifactRoot}/architecture`,
-          [/^foundation-v(\d+)\.md$/],
-        ),
+        authoritativeArtifact(run, "ARCHITECTURE").then((item) => item.path),
         latestSourceBundle(run),
       ])
       const [architecture, sourceBundle] = await Promise.all([

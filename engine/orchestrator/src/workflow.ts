@@ -54,6 +54,37 @@ export type AgentFailureClass =
   | "OUTPUT_LENGTH_EXCEEDED"
   | "AGENT_WAIT_BUDGET_EXCEEDED"
 
+export type ArtifactRole =
+  | "ARCHITECTURE"
+  | "ARCHITECTURE_REVIEW"
+  | "SOURCE_BUNDLE"
+  | "SEMANTIC_DELTA"
+  | "SEMANTICS"
+  | "SEMANTIC_CRITIC_PACKET"
+  | "SEMANTICS_REVIEW"
+  | "LEAN_MAPPING"
+  | "LEAN_MAPPING_REVIEW"
+  | "THEOREM_OBLIGATIONS"
+  | "THEOREM_STRENGTH_REVIEW"
+  | "LEAN_PROOFS"
+  | "FINAL_REVIEW"
+  | "TRACEABILITY_SEMANTICS"
+  | "TRACEABILITY_PROOFS"
+
+/** Immutable identity recorded when an execution successfully publishes an artifact. */
+export type PublishedArtifact = {
+  role: ArtifactRole
+  path: string
+  sha256: string
+  sizeBytes: number
+  stage: FormalizationStage
+  producingExecution: {
+    agent: string
+    sessionId: string
+  }
+  runRevision: number
+}
+
 export type RunEvent = {
   at: string
   from: FormalizationStage | null
@@ -74,6 +105,8 @@ export type AgentExecution = {
   artifactProduced?: boolean
   artifactBeforeSha256?: string
   artifactAfterSha256?: string
+  /** Exact successful outputs. Downstream trust boundaries resolve only these bindings. */
+  publishedArtifacts?: PublishedArtifact[]
   failureFingerprint?: string
   failureClass?: AgentFailureClass
   progress?: {

@@ -4,6 +4,7 @@ import { resolve } from "node:path"
 
 import { REPO_ROOT } from "./repo.js"
 import type { RunState } from "./workflow.js"
+import { authoritativeArtifact } from "./artifact-authority.js"
 
 export const PROVENANCE_CLASSIFICATIONS = [
   "SOURCE_FACT",
@@ -373,22 +374,15 @@ async function readIdentity(path: string): Promise<{ identity: ArtifactIdentity;
 }
 
 export async function semanticAuthorityPath(run: RunState): Promise<string> {
-  if (
-    run.semanticV2?.mode === "DELTA_FAST_PATH" &&
-    run.semanticV2.current?.materializedPath !== undefined
-  ) return run.semanticV2.current.materializedPath
-  return await latestVersionedArtifact(
-    `${run.artifactRoot}/semantics`,
-    [/^semantics-v(\d+)\.json$/],
-  )
+  return (await authoritativeArtifact(run, "SEMANTICS")).path
 }
 
-export async function buildProvenanceCatalog(run: RunState): Promise<ProvenanceCatalog> {
-  const semanticPath = await semanticAuthorityPath(run)
-  const architecturePath = await latestVersionedArtifact(
-    `${run.artifactRoot}/architecture`,
-    [/^foundation-v(\d+)\.md$/],
-  )
+export async function buildProvenanceCatalog(
+  run: RunState,
+  paths: { semanticPath?: string; architecturePath?: string } = {},
+): Promise<ProvenanceCatalog> {
+  const semanticPath = paths.semanticPath ?? await semanticAuthorityPath(run)
+  const architecturePath = paths.architecturePath ?? (await authoritativeArtifact(run, "ARCHITECTURE")).path
   const [semantic, architecture] = await Promise.all([
     readIdentity(semanticPath),
     readIdentity(architecturePath),

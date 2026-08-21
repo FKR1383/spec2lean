@@ -5,9 +5,9 @@ import { resolve } from "node:path"
 import {
   buildProvenanceCatalog,
   compactProvenanceCatalog,
-  latestVersionedArtifact,
   type ArtifactIdentity,
 } from "./provenance-catalog.js"
+import { optionalAuthoritativeArtifact } from "./artifact-authority.js"
 import { REPO_ROOT } from "./repo.js"
 import {
   MAX_ARCHITECTURE_BYTES,
@@ -24,21 +24,6 @@ import {
 
 function sha256(value: Buffer | string): string {
   return createHash("sha256").update(value).digest("hex")
-}
-
-async function identity(path: string): Promise<ArtifactIdentity> {
-  return { path, sha256: sha256(await readFile(resolve(REPO_ROOT, path))) }
-}
-
-async function optionalLatest(
-  directory: string,
-  patterns: readonly RegExp[],
-): Promise<ArtifactIdentity | undefined> {
-  try {
-    return await identity(await latestVersionedArtifact(directory, patterns))
-  } catch {
-    return undefined
-  }
 }
 
 function gateAuthority(run: RunState, gate: GateName): string {
@@ -165,18 +150,18 @@ export function stageInputArtifactAreas(
 
 /** Build the exact, compact stage input contract injected into the model call. */
 export async function buildStageInputContext(run: RunState): Promise<string> {
-  const root = run.artifactRoot
-  const semanticPatterns = run.stage === "SEMANTIC_EXTRACTION" &&
-    run.semanticV2?.mode === "DELTA_FAST_PATH"
-    ? [/^semantic-delta-v(\d+)\.json$/]
-    : [/^semantics-v(\d+)\.json$/]
   const [architecture, architectureReview, sourceBundle, semantics, lean, obligations, shared] = await Promise.all([
-    optionalLatest(`${root}/architecture`, [/^foundation-v(\d+)\.md$/]),
-    optionalLatest(`${root}/reviews`, [/^architecture-critic-v(\d+)\.md$/]),
-    optionalLatest(`${root}/source-bundles`, [/^source-bundle-v(\d+)\.json$/]),
-    optionalLatest(`${root}/semantics`, semanticPatterns),
-    optionalLatest(`${root}/lean`, [new RegExp(`^${run.leanModuleName}-v(\\d+)\\.lean$`)]),
-    optionalLatest(`${root}/theorems`, [/^obligations-v(\d+)\.json$/]),
+    optionalAuthoritativeArtifact(run, "ARCHITECTURE"),
+    optionalAuthoritativeArtifact(run, "ARCHITECTURE_REVIEW"),
+    optionalAuthoritativeArtifact(run, "SOURCE_BUNDLE"),
+    optionalAuthoritativeArtifact(
+      run,
+      run.stage === "SEMANTIC_EXTRACTION" && run.semanticV2?.mode === "DELTA_FAST_PATH"
+        ? "SEMANTIC_DELTA"
+        : "SEMANTICS",
+    ),
+    optionalAuthoritativeArtifact(run, "LEAN_MAPPING"),
+    optionalAuthoritativeArtifact(run, "THEOREM_OBLIGATIONS"),
     sharedEnvironmentSummary(run),
   ])
 

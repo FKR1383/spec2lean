@@ -59,6 +59,7 @@ import {
 } from "./critic-disposition.js"
 import { criticStageOwnershipIssues } from "./stage-ownership.js"
 import { duplicateJsonKeyIssues } from "./json-integrity.js"
+import { candidateReplacementIssue } from "./artifact-immutability.js"
 import {
   artifactPathsForGate,
   verifyHumanDecisionRecord,
@@ -829,6 +830,44 @@ try {
     resolve(REPO_ROOT, `${semanticParkRun.artifactRoot}/reviews/architecture-critic-v1.md`),
     semanticParkReview,
   )
+  semanticParkRun.executions = [
+    {
+      at: "2026-01-01T00:00:00.000Z",
+      stage: "ARCHITECTURE",
+      agent: "spec-architect",
+      sessionId: "self-test-architecture",
+      outcome: "SUCCESS",
+      nextStage: "ARCHITECTURE_CRITIQUE",
+      response: "self-test",
+      publishedArtifacts: [{
+        role: "ARCHITECTURE",
+        path: `${semanticParkRun.artifactRoot}/architecture/foundation-v1.md`,
+        sha256: createHash("sha256").update(semanticParkArchitecture).digest("hex"),
+        sizeBytes: Buffer.byteLength(semanticParkArchitecture),
+        stage: "ARCHITECTURE",
+        producingExecution: { agent: "spec-architect", sessionId: "self-test-architecture" },
+        runRevision: 2,
+      }],
+    },
+    {
+      at: "2026-01-01T00:00:01.000Z",
+      stage: "ARCHITECTURE_CRITIQUE",
+      agent: "architecture-critic",
+      sessionId: "self-test-critic",
+      outcome: "SUCCESS",
+      nextStage: "WAITING_GATE_A",
+      response: "self-test",
+      publishedArtifacts: [{
+        role: "ARCHITECTURE_REVIEW",
+        path: `${semanticParkRun.artifactRoot}/reviews/architecture-critic-v1.md`,
+        sha256: createHash("sha256").update(semanticParkReview).digest("hex"),
+        sizeBytes: Buffer.byteLength(semanticParkReview),
+        stage: "ARCHITECTURE_CRITIQUE",
+        producingExecution: { agent: "architecture-critic", sessionId: "self-test-critic" },
+        runRevision: 3,
+      }],
+    },
+  ]
   await saveRun(semanticParkRun)
   const semanticAdvance = await advanceBenchmarkGate(semanticParkRun)
   assert(semanticAdvance !== undefined, "benchmark gate advances with a semantic waiver")
@@ -1208,6 +1247,25 @@ try {
     ...architectureRecoveryRun,
     stage: "ARCHITECTURE_CRITIQUE",
   }
+  const architectureRecoveryData = await readFile(resolve(REPO_ROOT, architecturePath))
+  criticRecoveryRun.executions = [{
+    at: "2026-01-01T00:00:00.000Z",
+    stage: "ARCHITECTURE",
+    agent: "spec-architect",
+    sessionId: "self-test-recovery",
+    outcome: "SUCCESS",
+    nextStage: "ARCHITECTURE_CRITIQUE",
+    response: "self-test",
+    publishedArtifacts: [{
+      role: "ARCHITECTURE",
+      path: architecturePath,
+      sha256: createHash("sha256").update(architectureRecoveryData).digest("hex"),
+      sizeBytes: architectureRecoveryData.length,
+      stage: "ARCHITECTURE",
+      producingExecution: { agent: "spec-architect", sessionId: "self-test-recovery" },
+      runRevision: 2,
+    }],
+  }]
   const criticPath = artifactContractForRun(criticRecoveryRun).outputPath
   await mkdir(resolve(REPO_ROOT, dirname(criticPath)), { recursive: true })
   await writeFile(
@@ -1259,6 +1317,32 @@ const fastCuratorRun: RunState = {
   ...baseArtifactRun,
   stage: "SOURCE_CURATION",
 }
+const fastCuratorBindings = await Promise.all([
+  ["ARCHITECTURE" as const, "ARCHITECTURE" as const, "spec-architect", `${fastCuratorRun.artifactRoot}/architecture/foundation-v4.md`],
+  ["ARCHITECTURE_REVIEW" as const, "ARCHITECTURE_CRITIQUE" as const, "architecture-critic", `${fastCuratorRun.artifactRoot}/reviews/architecture-critic-v4.md`],
+] as const).then((entries) => Promise.all(entries.map(async ([role, stage, agent, path], index) => {
+  const data = await readFile(resolve(REPO_ROOT, path))
+  const sessionId = `fast-curator-input-${index}`
+  return {
+    at: `2026-01-01T00:00:0${index}.000Z`,
+    stage,
+    agent,
+    sessionId,
+    outcome: "SUCCESS",
+    nextStage: stage === "ARCHITECTURE" ? "ARCHITECTURE_CRITIQUE" as const : "WAITING_GATE_A" as const,
+    response: "self-test",
+    publishedArtifacts: [{
+      role,
+      path,
+      sha256: createHash("sha256").update(data).digest("hex"),
+      sizeBytes: data.length,
+      stage,
+      producingExecution: { agent, sessionId },
+      runRevision: index + 2,
+    }],
+  }
+})))
+fastCuratorRun.executions = fastCuratorBindings
 const sourceCurationPrompt = await buildStageInputContext(fastCuratorRun)
 assert(
   sourceCurationPrompt.includes("additionalProperties=false") &&
@@ -1515,6 +1599,42 @@ const benchmarkRun: RunState = {
     startedAtUtc: "2026-01-01T00:00:00.000Z",
   },
 }
+const benchmarkGateArtifacts = [
+  {
+    role: "ARCHITECTURE" as const,
+    path: `${benchmarkRun.artifactRoot}/architecture/foundation-v4.md`,
+    stage: "ARCHITECTURE" as const,
+    agent: "spec-architect",
+  },
+  {
+    role: "ARCHITECTURE_REVIEW" as const,
+    path: `${benchmarkRun.artifactRoot}/reviews/architecture-critic-v4.md`,
+    stage: "ARCHITECTURE_CRITIQUE" as const,
+    agent: "architecture-critic",
+  },
+]
+benchmarkRun.executions = await Promise.all(benchmarkGateArtifacts.map(async (artifact, index) => {
+  const data = await readFile(resolve(REPO_ROOT, artifact.path))
+  const sessionId = `benchmark-self-test-${index}`
+  return {
+    at: `2026-01-01T00:00:0${index}.000Z`,
+    stage: artifact.stage,
+    agent: artifact.agent,
+    sessionId,
+    outcome: "SUCCESS",
+    nextStage: artifact.stage === "ARCHITECTURE" ? "ARCHITECTURE_CRITIQUE" as const : "WAITING_GATE_A" as const,
+    response: "self-test",
+    publishedArtifacts: [{
+      role: artifact.role,
+      path: artifact.path,
+      sha256: createHash("sha256").update(data).digest("hex"),
+      sizeBytes: data.length,
+      stage: artifact.stage,
+      producingExecution: { agent: artifact.agent, sessionId },
+      runRevision: index + 2,
+    }],
+  }
+}))
 const benchmarkLocation = benchmarkDecisionLocation(benchmarkRun, "A")
 try {
   const recorded = await recordBenchmarkAutoAdvance(benchmarkRun, "A")
@@ -1553,16 +1673,66 @@ try {
   await mkdir(resolve(REPO_ROOT, `${benchmarkReentryRoot}/reviews`), { recursive: true })
   await writeFile(resolve(REPO_ROOT, `${benchmarkReentryRoot}/architecture/foundation-v1.md`), "first architecture\n")
   await writeFile(resolve(REPO_ROOT, `${benchmarkReentryRoot}/reviews/architecture-critic-v1.md`), "first review\n")
+  const bindBenchmarkReentry = async (version: number): Promise<void> => {
+    const architecturePath = `${benchmarkReentryRoot}/architecture/foundation-v${version}.md`
+    const reviewPath = `${benchmarkReentryRoot}/reviews/architecture-critic-v${version}.md`
+    const [architectureData, reviewData] = await Promise.all([
+      readFile(resolve(REPO_ROOT, architecturePath)),
+      readFile(resolve(REPO_ROOT, reviewPath)),
+    ])
+    benchmarkReentryRun.executions = [
+      {
+        at: `2026-01-01T00:00:0${version}.000Z`,
+        stage: "ARCHITECTURE",
+        agent: "spec-architect",
+        sessionId: `reentry-architecture-${version}`,
+        outcome: "SUCCESS",
+        nextStage: "ARCHITECTURE_CRITIQUE",
+        response: "self-test",
+        publishedArtifacts: [{
+          role: "ARCHITECTURE",
+          path: architecturePath,
+          sha256: createHash("sha256").update(architectureData).digest("hex"),
+          sizeBytes: architectureData.length,
+          stage: "ARCHITECTURE",
+          producingExecution: { agent: "spec-architect", sessionId: `reentry-architecture-${version}` },
+          runRevision: version * 2,
+        }],
+      },
+      {
+        at: `2026-01-01T00:00:0${version + 1}.000Z`,
+        stage: "ARCHITECTURE_CRITIQUE",
+        agent: "architecture-critic",
+        sessionId: `reentry-review-${version}`,
+        outcome: "SUCCESS",
+        nextStage: "WAITING_GATE_A",
+        response: "self-test",
+        publishedArtifacts: [{
+          role: "ARCHITECTURE_REVIEW",
+          path: reviewPath,
+          sha256: createHash("sha256").update(reviewData).digest("hex"),
+          sizeBytes: reviewData.length,
+          stage: "ARCHITECTURE_CRITIQUE",
+          producingExecution: { agent: "architecture-critic", sessionId: `reentry-review-${version}` },
+          runRevision: version * 2 + 1,
+        }],
+      },
+    ]
+  }
+  await bindBenchmarkReentry(1)
   const first = await recordBenchmarkAutoAdvance(benchmarkReentryRun, "A")
   await writeFile(resolve(REPO_ROOT, `${benchmarkReentryRoot}/architecture/foundation-v2.md`), "revised architecture\n")
   await writeFile(resolve(REPO_ROOT, `${benchmarkReentryRoot}/reviews/architecture-critic-v2.md`), "revised review\n")
+  await bindBenchmarkReentry(2)
+  await writeFile(resolve(REPO_ROOT, `${benchmarkReentryRoot}/architecture/foundation-v999.md`), "stray architecture\n")
+  await writeFile(resolve(REPO_ROOT, `${benchmarkReentryRoot}/reviews/architecture-critic-v999.md`), "stray review\n")
   const revised = await recordBenchmarkAutoAdvance(benchmarkReentryRun, "A")
   const recoveredRevised = await recordBenchmarkAutoAdvance(benchmarkReentryRun, "A")
   assert(
     first.reviewPath === benchmarkReentryV1.reviewPath && !first.recovered &&
       revised.reviewPath === benchmarkReentryV2.reviewPath && !revised.recovered &&
       recoveredRevised.reviewPath === benchmarkReentryV2.reviewPath && recoveredRevised.recovered,
-    "benchmark gate re-entry versions changed artifact bindings and recovers an identical latest decision",
+    "benchmark gate uses the recorded successful artifacts and ignores later stray vN files",
   )
 } finally {
   await rm(resolve(REPO_ROOT, benchmarkReentryRoot), { recursive: true, force: true })
@@ -1570,6 +1740,51 @@ try {
     resolve(REPO_ROOT, `reviews/${benchmarkReentryRun.language}-${benchmarkReentryRun.unitSlug}`),
     { recursive: true, force: true },
   )
+}
+
+const immutabilityId = `artifact-immutability-self-test-${randomUUID()}`
+const immutabilityPath = `candidates/self-test/${immutabilityId}/architecture/foundation-v1.md`
+const immutabilityReviewPath = `reviews/tool-tests/${immutabilityId}.json`
+const immutabilitySession = `session-${immutabilityId}`
+const immutabilityRun: RunState = {
+  ...baseArtifactRun,
+  runId: immutabilityId,
+  artifactRoot: `candidates/self-test/${immutabilityId}`,
+  stage: "ARCHITECTURE",
+  activeExecution: {
+    startedAt: "2026-01-01T00:00:00.000Z",
+    stage: "ARCHITECTURE",
+    agent: "spec-architect",
+    sessionId: immutabilitySession,
+    expectedArtifact: immutabilityPath,
+  },
+}
+try {
+  await mkdir(resolve(REPO_ROOT, dirname(immutabilityPath)), { recursive: true })
+  const reviewedBody = "reviewed immutable architecture\n"
+  await writeFile(resolve(REPO_ROOT, immutabilityPath), reviewedBody)
+  await saveRun(immutabilityRun)
+  assert(
+    await candidateReplacementIssue(immutabilityPath, immutabilitySession) === undefined,
+    "an active producing session may repair its unpublished artifact",
+  )
+  await mkdir(resolve(REPO_ROOT, dirname(immutabilityReviewPath)), { recursive: true })
+  await writeFile(resolve(REPO_ROOT, immutabilityReviewPath), JSON.stringify({
+    artifacts: [{
+      relativePath: immutabilityPath,
+      sha256: createHash("sha256").update(reviewedBody).digest("hex"),
+      sizeBytes: Buffer.byteLength(reviewedBody),
+    }],
+  }))
+  assert(
+    (await candidateReplacementIssue(immutabilityPath, immutabilitySession))
+      ?.includes("review record") === true,
+    "a hash-reviewed artifact cannot be replaced even by the former producing session",
+  )
+} finally {
+  await rm(resolve(REPO_ROOT, `runs/${immutabilityId}`), { recursive: true, force: true })
+  await rm(resolve(REPO_ROOT, `candidates/self-test/${immutabilityId}`), { recursive: true, force: true })
+  await unlink(resolve(REPO_ROOT, immutabilityReviewPath)).catch(() => undefined)
 }
 
 const semanticIrMetrics = await runSemanticIrSelfTests()
@@ -2438,6 +2653,10 @@ assert(
 
 const traceabilityManifest = await buildTraceabilityManifest({
   runId: "ptx-9.3-or.b32-b870f055",
+  leanPath: "candidates/ptx/9.3/units/or-b32/lean/OrB32-v7.lean",
+  semanticPath: "candidates/ptx/9.3/units/or-b32/semantics/semantics-v1.json",
+  architecturePath: "candidates/ptx/9.3/units/or-b32/architecture/foundation-v4.md",
+  sourceBundlePaths: ["candidates/ptx/9.3/units/or-b32/source-bundles/source-bundle-v2.json"],
 })
 const traceabilityIssues = await verifyTraceabilityManifest(traceabilityManifest)
 assert(
@@ -2455,6 +2674,11 @@ assert(
 const proofTraceabilityManifest = await buildTraceabilityManifest({
   runId: "ptx-9.3-or.b32-b870f055",
   documentRole: "PROOFS",
+  leanPath: "candidates/ptx/9.3/units/or-b32/lean/OrB32Proofs-v1.lean",
+  semanticPath: "candidates/ptx/9.3/units/or-b32/semantics/semantics-v1.json",
+  architecturePath: "candidates/ptx/9.3/units/or-b32/architecture/foundation-v4.md",
+  sourceBundlePaths: ["candidates/ptx/9.3/units/or-b32/source-bundles/source-bundle-v2.json"],
+  theoremPath: "candidates/ptx/9.3/units/or-b32/theorems/obligations-v5.json",
 })
 const proofTraceabilityIssues = await verifyTraceabilityManifest(proofTraceabilityManifest)
 assert(

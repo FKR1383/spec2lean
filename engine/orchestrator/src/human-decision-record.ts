@@ -5,7 +5,6 @@ import {
   lstat,
   mkdir,
   readFile,
-  readdir,
   realpath,
   unlink,
   writeFile,
@@ -19,6 +18,7 @@ import {
 } from "node:path"
 
 import { REPO_ROOT } from "./repo.js"
+import { authoritativeArtifact } from "./artifact-authority.js"
 import type { GateName, RunState } from "./workflow.js"
 
 type HumanDecision = "approved" | "rejected"
@@ -106,110 +106,39 @@ function reviewRecordType(
     : "human_gate_decision"
 }
 
-async function latestVersionedArtifact(
-  directory: string,
-  pattern: RegExp,
-): Promise<string> {
-  validateRelativePath(directory)
-  const root = await realpath(REPO_ROOT)
-  const absoluteDirectory = resolve(root, directory)
-  ensureInside(root, absoluteDirectory)
-  const canonicalDirectory = await realpath(absoluteDirectory)
-  ensureInside(root, canonicalDirectory)
-  if (canonicalDirectory !== absoluteDirectory) {
-    throw new Error("gate artifact directory may not contain symbolic links")
-  }
-
-  const entries = await readdir(canonicalDirectory, {
-    withFileTypes: true,
-  })
-
-  const candidates = entries
-    .filter((entry) => entry.isFile() && !entry.isSymbolicLink())
-    .flatMap((entry) => {
-      const match = entry.name.match(pattern)
-      return match?.[1] === undefined
-        ? []
-        : [{ name: entry.name, version: Number(match[1]) }]
-    })
-    .filter((entry) => Number.isSafeInteger(entry.version))
-    .sort((left, right) => right.version - left.version)
-
-  const latest = candidates[0]
-  if (latest === undefined) {
-    throw new Error(`No gate artifact matching ${pattern} under ${directory}`)
-  }
-
-  return `${directory}/${latest.name}`
-}
-
 export async function artifactPathsForGate(
   run: RunState,
   gate: GateName,
 ): Promise<string[]> {
-  const root = run.artifactRoot
-
   switch (gate) {
     case "A":
       return await Promise.all([
-        latestVersionedArtifact(
-          `${root}/architecture`,
-          /^foundation-v(\d+)\.md$/,
-        ),
-        latestVersionedArtifact(
-          `${root}/reviews`,
-          /^architecture-critic-v(\d+)\.md$/,
-        ),
+        authoritativeArtifact(run, "ARCHITECTURE").then((item) => item.path),
+        authoritativeArtifact(run, "ARCHITECTURE_REVIEW").then((item) => item.path),
       ])
 
     case "B":
       return await Promise.all([
-        run.semanticV2?.mode === "DELTA_FAST_PATH" && run.semanticV2.current?.materializedPath !== undefined
-          ? run.semanticV2.current.materializedPath
-          : latestVersionedArtifact(
-              `${root}/semantics`,
-              /^semantics-v(\d+)\.json$/,
-            ),
-        latestVersionedArtifact(
-          `${root}/reviews`,
-          /^semantics-critic-v(\d+)\.md$/,
-        ),
+        authoritativeArtifact(run, "SEMANTICS").then((item) => item.path),
+        authoritativeArtifact(run, "SEMANTICS_REVIEW").then((item) => item.path),
       ])
 
     case "C":
       return await Promise.all([
-        latestVersionedArtifact(
-          `${root}/lean`,
-          new RegExp(`^${run.leanModuleName}-v(\\d+)\\.lean$`),
-        ),
-        latestVersionedArtifact(
-          `${root}/reviews`,
-          /^lean-mapping-critic-v(\d+)\.md$/,
-        ),
+        authoritativeArtifact(run, "LEAN_MAPPING").then((item) => item.path),
+        authoritativeArtifact(run, "LEAN_MAPPING_REVIEW").then((item) => item.path),
       ])
 
     case "THEOREM_STRENGTH":
       return await Promise.all([
-        latestVersionedArtifact(
-          `${root}/theorems`,
-          /^obligations-v(\d+)\.json$/,
-        ),
-        latestVersionedArtifact(
-          `${root}/reviews`,
-          /^theorem-strength-critic-v(\d+)\.md$/,
-        ),
+        authoritativeArtifact(run, "THEOREM_OBLIGATIONS").then((item) => item.path),
+        authoritativeArtifact(run, "THEOREM_STRENGTH_REVIEW").then((item) => item.path),
       ])
 
     case "FINAL":
       return await Promise.all([
-        latestVersionedArtifact(
-          `${root}/lean`,
-          new RegExp(`^${run.leanModuleName}Proofs-v(\\d+)\\.lean$`),
-        ),
-        latestVersionedArtifact(
-          `${root}/reviews`,
-          /^final-critic-v(\d+)\.md$/,
-        ),
+        authoritativeArtifact(run, "LEAN_PROOFS").then((item) => item.path),
+        authoritativeArtifact(run, "FINAL_REVIEW").then((item) => item.path),
       ])
   }
 }

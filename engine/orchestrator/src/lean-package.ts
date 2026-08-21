@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises"
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import { resolve } from "node:path"
 
@@ -13,27 +13,10 @@ import { proofArtifactPath } from "./proof-plan.js"
 import { REPO_ROOT } from "./repo.js"
 import { withRepositoryLock } from "./repository-lock.js"
 import type { RunState } from "./workflow.js"
+import { authoritativeArtifact } from "./artifact-authority.js"
 
 function sha256(text: string): string {
   return createHash("sha256").update(text).digest("hex")
-}
-
-async function latestMappingPath(run: RunState): Promise<string> {
-  const dirRelative = `${run.artifactRoot}/lean`
-  const dir = resolve(REPO_ROOT, dirRelative)
-  const files = (await readdir(dir)) as string[]
-  const pattern = new RegExp(`^${run.leanModuleName}-v(\\d+)\\.lean$`)
-  const matches = files
-    .map((name) => ({ name, match: name.match(pattern) }))
-    .filter((x): x is { name: string; match: RegExpMatchArray } => x.match !== null)
-    .map((x) => ({ name: x.name, version: Number(x.match[1]!) }))
-    .sort((a, b) => b.version - a.version)
-
-  if (matches.length === 0) {
-    throw new Error(`No Lean mapping candidate found under ${dirRelative}`)
-  }
-
-  return `${dirRelative}/${matches[0]!.name}`
 }
 
 export function packageTransform(source: string, moduleName: string, languageName = "PTX"): {
@@ -88,7 +71,7 @@ export type LeanPackageInfo = {
 }
 
 export async function prepareLeanPackage(run: RunState): Promise<LeanPackageInfo> {
-  const sourcePath = await latestMappingPath(run)
+  const sourcePath = (await authoritativeArtifact(run, "LEAN_MAPPING")).path
   const source = await readFile(resolve(REPO_ROOT, sourcePath), "utf8")
   const languageName = leanLanguageName(run)
   const transformed = packageTransform(source, run.leanModuleName, languageName)

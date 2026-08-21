@@ -30,8 +30,8 @@ import {
 import { verifyExpectedArtifact } from "../../engine/orchestrator/src/artifact-verify.ts"
 import {
   buildProvenanceCatalog,
-  latestVersionedArtifact,
 } from "../../engine/orchestrator/src/provenance-catalog.ts"
+import { authoritativeArtifact } from "../../engine/orchestrator/src/artifact-authority.ts"
 import { proofTargets } from "../../engine/orchestrator/src/proof-plan.ts"
 import { loadRun } from "../../engine/orchestrator/src/run-store.ts"
 import {
@@ -43,6 +43,7 @@ import {
   verifyTraceabilityManifest,
 } from "../../engine/orchestrator/src/traceability.ts"
 import { theoremContractEncodingIssues } from "../../engine/orchestrator/src/theorem-contract.ts"
+import { candidateReplacementIssue } from "../../engine/orchestrator/src/artifact-immutability.ts"
 
 const TOOL_VERSION = 1
 const TIMEOUT_MS = 3_000
@@ -572,6 +573,12 @@ async function writeCandidate(args: WriteArgs, context: WriteContext) {
           )
         }
 
+        const immutableIssue = await candidateReplacementIssue(
+          artifact.relativePath,
+          context.sessionID,
+        )
+        if (immutableIssue !== undefined) throw new Error(immutableIssue)
+
         const metadata = await lstat(artifact.absolutePath)
 
         if (metadata.isSymbolicLink() || !metadata.isFile()) {
@@ -821,7 +828,7 @@ export const validate = tool({
         const semantic = await validateSemanticDeltaForRun(run)
         issues.push(...semantic.issues)
         if (semantic.ok && run.semanticV2?.mode !== "DELTA_FAST_PATH") {
-          const catalog = await buildProvenanceCatalog(run)
+          const catalog = await buildProvenanceCatalog(run, { semanticPath: args.path })
           const knownSemanticIds = new Set(catalog.claims.map((claim) => claim.semanticId))
           for (const claim of catalog.claims.filter((item) => item.origin === "SEMANTICS")) {
             for (const dependencyId of claim.dependencyIds) {
@@ -830,10 +837,7 @@ export const validate = tool({
               }
             }
           }
-          const sourceBundlePath = await latestVersionedArtifact(
-            `${run.artifactRoot}/source-bundles`,
-            [/^source-bundle-v(\d+)\.json$/],
-          )
+          const sourceBundlePath = (await authoritativeArtifact(run, "SOURCE_BUNDLE")).path
           const bundleIds = bundleEvidenceIds(JSON.parse(
             await readFile(resolve(context.worktree, sourceBundlePath), "utf8"),
           ) as unknown)
@@ -874,7 +878,7 @@ export const validate = tool({
       if (run.stage === "THEOREM_GENERATION") {
         const [catalog, targets] = await Promise.all([
           buildProvenanceCatalog(run),
-          proofTargets(run),
+          proofTargets(run, args.path),
         ])
         const known = new Set(catalog.claims.map((claim) => claim.semanticId))
         for (const target of targets) {
