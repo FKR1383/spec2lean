@@ -127,6 +127,7 @@ import {
   theoremStrengthReviewAuditIssues,
   validateTheoremObligationDocument,
 } from "./theorem-contract.js"
+import { theoremElaborationIssues, theoremTypeExpression } from "./theorem-elaboration.js"
 import { loadAgentModel, loadProjectModel, REPO_ROOT } from "./repo.js"
 import { saveRun } from "./run-store.js"
 import { withRepositoryLock } from "./repository-lock.js"
@@ -480,6 +481,10 @@ const theoremContract = validateTheoremObligationDocument({
   }],
 })
 assert(theoremContract.issues.length === 0, "complete theorem contract validates")
+assert(
+  theoremTypeExpression(theoremContract.declarations[0]!) === "(∀ (n : Nat), n = n)",
+  "theorem headers are converted to proof-free proposition checks",
+)
 const correctnessTheoremContract = validateTheoremObligationDocument({
   schema_version: 2,
   source_faithfulness_boundary:
@@ -1201,6 +1206,25 @@ const baseArtifactRun: RunState = {
   },
   history: [],
 }
+const elaborationMappingPath = "candidates/ptx/9.3/units/or-b32/lean/OrB32-v7.lean"
+const elaborationObligations = JSON.parse(await readFile(
+  resolve(REPO_ROOT, "candidates/ptx/9.3/units/or-b32/theorems/obligations-v5.json"),
+  "utf8",
+)) as unknown
+assert(
+  (await theoremElaborationIssues(baseArtifactRun, elaborationObligations, elaborationMappingPath)).length === 0,
+  "approved theorem headers elaborate in the transformed intended Lean module context",
+)
+assert(
+  (await theoremElaborationIssues(baseArtifactRun, {
+    schema_version: 1,
+    theorem_obligations: [{
+      obligation_id: "BROKEN-ELABORATION",
+      lean_statement_sketch: "theorem broken_elaboration (x : TypeThatDoesNotExist) : True",
+    }],
+  }, elaborationMappingPath)).some((issue) => issue.includes("do not elaborate")),
+  "unknown theorem types are rejected deterministically before theorem-strength critique",
+)
 const ecmaArtifactRun: RunState = {
   ...baseArtifactRun,
   runId: "ecmascript-2025-ToBoolean-self-test",

@@ -16,6 +16,7 @@ import {
   theoremSemanticCoverageIssues,
 } from "./quality-contract.js"
 import { theoremStrengthReviewAuditIssues } from "./theorem-contract.js"
+import { theoremElaborationIssues } from "./theorem-elaboration.js"
 import {
   leanBehaviorBranches,
   theoremBehaviorAuditIssues,
@@ -203,6 +204,7 @@ export async function verifyExpectedArtifact(run: RunState): Promise<ArtifactVer
         readFile(resolve(REPO_ROOT, leanPath), "utf8"),
       ])
       issues.push(...theoremSemanticCoverageIssues(parsedJson, semantics, leanSource))
+      issues.push(...await theoremElaborationIssues(run, parsedJson, leanPath))
     } catch (error) {
       issues.push(`could not validate theorem coverage against semantics and Lean: ${String(error)}`)
     }
