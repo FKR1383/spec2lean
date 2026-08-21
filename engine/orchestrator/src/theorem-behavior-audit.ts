@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 
 import type { CorrectnessKind } from "./theorem-contract.js"
+import { parseLeanDeclarations } from "./traceability.js"
 
 export type LeanBehaviorBranch = {
   branchId: string
@@ -32,37 +33,20 @@ function branchId(definition: string, pattern: string): string {
 /** Extract stable IDs for explicit match-equation branches inside Lean defs. */
 export function leanBehaviorBranches(source: string): LeanBehaviorBranch[] {
   const branches: LeanBehaviorBranch[] = []
-  let definition: string | undefined
-  let definitionIndent = 0
+  const lines = source.split(/\r?\n/)
 
-  for (const line of source.split(/\r?\n/)) {
-    const declaration = line.match(/^(\s*)(?:protected\s+)?(?:def|abbrev)\s+([A-Za-z_][A-Za-z0-9_']*)\b/)
-    if (declaration?.[2] !== undefined) {
-      definition = declaration[2]
-      definitionIndent = declaration[1]!.length
-      continue
+  for (const declaration of parseLeanDeclarations(source)) {
+    if (declaration.kind !== "def" && declaration.kind !== "abbrev") continue
+    for (const line of lines.slice(declaration.startLine - 1, declaration.endLine)) {
+      const branch = line.match(/^\s*\|\s*(.+?)\s*=>/)
+      if (branch?.[1] === undefined) continue
+      const pattern = branch[1].replace(/\s+/g, " ").trim()
+      branches.push({
+        branchId: branchId(declaration.name, pattern),
+        definition: declaration.name,
+        pattern,
+      })
     }
-
-    if (definition === undefined) continue
-    const nonEmpty = line.trim()
-    const indent = line.length - line.trimStart().length
-    if (
-      nonEmpty.length > 0 &&
-      indent <= definitionIndent &&
-      /^(?:def|abbrev|theorem|lemma|inductive|structure|namespace|end)\b/.test(nonEmpty)
-    ) {
-      definition = undefined
-      continue
-    }
-
-    const branch = line.match(/^\s*\|\s*(.+?)\s*=>/)
-    if (branch?.[1] === undefined) continue
-    const pattern = branch[1].replace(/\s+/g, " ").trim()
-    branches.push({
-      branchId: branchId(definition, pattern),
-      definition,
-      pattern,
-    })
   }
 
   return [...new Map(branches.map((branch) => [branch.branchId, branch])).values()]

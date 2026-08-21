@@ -924,6 +924,68 @@ assert(
     ).some((issue) => issue.includes("behavior audit omitted")),
   "theorem-strength review must account for every explicit branch of referenced Lean definitions",
 )
+const modifiedBehaviorFixture = [
+  "@[inline] def attributedExec (value : Bool) : Bool :=",
+  "  match value with",
+  "  | true => false",
+  "  | false => true",
+  "",
+  "@[simp] private def privateExec (value : Bool) : Bool :=",
+  "  match value with",
+  "  | true => true",
+  "  | false => false",
+  "",
+  "noncomputable def noncomputableExec (value : Bool) : Bool :=",
+  "  match value with",
+  "  | true => true",
+  "  | false => false",
+  "",
+  "protected def protectedExec (value : Bool) : Bool :=",
+  "  match value with",
+  "  | true => false",
+  "  | false => true",
+].join("\n")
+const modifiedBehaviorBranches = leanBehaviorBranches(modifiedBehaviorFixture)
+assert(
+  ["attributedExec", "privateExec", "noncomputableExec", "protectedExec"].every((definition) =>
+    modifiedBehaviorBranches.filter((branch) => branch.definition === definition).length === 2
+  ),
+  "behavior inventory discovers attributed, private, noncomputable, and protected definitions",
+)
+const modifiedBehaviorTarget = {
+  name: "modified_behavior",
+  statement:
+    "theorem modified_behavior (x : Bool) : attributedExec x = privateExec (noncomputableExec (protectedExec x))",
+  correctnessKind: "ALGORITHM_FIDELITY" as const,
+}
+const modifiedBehaviorAudit = [
+  "MAJOR: 0",
+  "<!-- SPEC2LEAN_THEOREM_BEHAVIOR_AUDIT",
+  JSON.stringify({
+    schemaVersion: 1,
+    entries: [{
+      name: modifiedBehaviorTarget.name,
+      correctnessKind: modifiedBehaviorTarget.correctnessKind,
+      status: "PASS",
+      branchIdsChecked: modifiedBehaviorBranches.map((branch) => branch.branchId),
+      counterexample: "NONE_FOUND",
+    }],
+  }),
+  "-->",
+].join("\n")
+assert(
+  theoremBehaviorAuditIssues(
+    modifiedBehaviorAudit,
+    [modifiedBehaviorTarget],
+    modifiedBehaviorBranches,
+  ).length === 0 &&
+    theoremBehaviorAuditIssues(
+      modifiedBehaviorAudit.replace(modifiedBehaviorBranches[0]!.branchId, "OMITTED-MODIFIED-BRANCH"),
+      [modifiedBehaviorTarget],
+      modifiedBehaviorBranches,
+    ).some((issue) => issue.includes("behavior audit omitted")),
+  "theorem behavior audit requires every branch from attributed and modified definitions",
+)
 
 let activeBatchOperations = 0
 let maximumBatchOperations = 0
