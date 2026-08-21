@@ -103,10 +103,12 @@ the current bundle.
 
 An exclusion is valid only as `PARTIAL_EXPLICIT` with
 `EXCLUDED_BY_ENCODED_PRECONDITION` and a real `preconditionId`; a header or prose
-sentence cannot remove a legal case. Proof requirements must include operation
-and execution correspondence plus independent ALGORITHM_FIDELITY, RESULT_RANGE,
-GUARD_BEHAVIOR, STATE_UPDATE, and FRAME_PROPERTY requirements, plus every
-source-implied edge-case/type-domain property. Do not leave a
+sentence cannot remove a legal case. Every FULL_INSTRUCTION requires local
+OPERATION_FIDELITY, RESULT_RANGE, and EXECUTION_CORRESPONDENCE requirements.
+Require local ALGORITHM_FIDELITY for a real multi-branch operation and local
+EDGE_CASE_BEHAVIOR when edge cases are covered. GUARD_BEHAVIOR, STATE_UPDATE,
+and FRAME_PROPERTY may be inherited only through an exact approved discharge;
+otherwise keep them local. Add every source-implied type-domain property. Do not leave a
 proof family in prose without a machine-enforced requirement.
 
 For every SOURCE_FACT, establish claim-level coverage for every official

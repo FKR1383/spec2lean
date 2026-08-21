@@ -432,6 +432,31 @@ export function semanticCompletenessIssues(document: unknown): string[] {
     for (const kind of FULL_INSTRUCTION_REQUIRED_PROOF_KINDS) {
       if (!kinds.has(kind)) issues.push(`semantics lacks mandatory proof requirement ${kind}`)
     }
+    if (document.scopeStatus === "FULL_INSTRUCTION") {
+      const localKinds = new Set(document.proofRequirements.filter(isRecord).flatMap((item) =>
+        proofRequirementDisposition(item) === "LOCAL" && nonEmpty(item.correctnessKind)
+          ? [item.correctnessKind]
+          : []
+      ))
+      for (const kind of ["OPERATION_FIDELITY", "RESULT_RANGE", "EXECUTION_CORRESPONDENCE"]) {
+        if (!localKinds.has(kind)) {
+          issues.push(`FULL_INSTRUCTION semantics requires unit-specific LOCAL ${kind}`)
+        }
+      }
+      const operationBranches = Array.isArray(operation?.branches)
+        ? operation.branches.filter(isRecord)
+        : []
+      if (operationBranches.length > 1 && !localKinds.has("ALGORITHM_FIDELITY")) {
+        issues.push("FULL_INSTRUCTION semantics with multiple operation branches requires LOCAL ALGORITHM_FIDELITY")
+      }
+      const edgeCases = Array.isArray(operation?.edgeCases)
+        ? operation.edgeCases.filter(isRecord)
+        : []
+      if (status("EDGE_CASES") === "COVERED" && edgeCases.length > 0 &&
+        !localKinds.has("EDGE_CASE_BEHAVIOR")) {
+        issues.push("FULL_INSTRUCTION semantics with covered edge cases requires LOCAL EDGE_CASE_BEHAVIOR")
+      }
+    }
   }
   return issues
 }
@@ -501,15 +526,22 @@ export function parseLeanModelContract(source: string): LeanModelContract | unde
 
 function declarationExists(source: string, name: string): boolean {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-  return new RegExp(`\\b(?:def|abbrev|inductive|structure|class)\\s+${escaped}\\b`).test(source)
+  return new RegExp(
+    `^\\s*(?:@\\[[^\\]]*\\]\\s*)*(?:(?:private|protected|noncomputable|local|scoped)\\s+)*(?:@\\[[^\\]]*\\]\\s*)*(?:def|abbrev|inductive|structure|class)\\s+${escaped}\\b`,
+    "m",
+  ).test(source)
 }
 
 function declarationBlock(source: string, name: string): string {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-  const start = new RegExp(`^\\s*(?:def|abbrev|inductive|structure)\\s+${escaped}\\b`, "m").exec(source)
+  const prefix = "(?:@\\[[^\\]]*\\]\\s*)*(?:(?:private|protected|noncomputable|local|scoped)\\s+)*(?:@\\[[^\\]]*\\]\\s*)*"
+  const start = new RegExp(`^\\s*${prefix}(?:def|abbrev|inductive|structure)\\s+${escaped}\\b`, "m").exec(source)
   if (start?.index === undefined) return ""
   const remainder = source.slice(start.index)
-  const next = /^\s*(?:def|abbrev|inductive|structure|theorem|lemma|namespace|end)\s+/gm
+  const next = new RegExp(
+    `^\\s*${prefix}(?:def|abbrev|inductive|structure|theorem|lemma|namespace|end)\\s+`,
+    "gm",
+  )
   next.lastIndex = remainder.indexOf("\n") + 1
   const end = next.exec(remainder)?.index ?? remainder.length
   return remainder.slice(0, end)
@@ -770,6 +802,13 @@ export function theoremSemanticCoverageIssues(
     proofRequirementDisposition(requirement) === "LOCAL"
   ))
   const requirementCoverage = new Map<string, number>()
+  const operationSpecificationSymbols = new Set<string>()
+  for (const item of obligations.theorem_obligations.filter(isRecord)) {
+    if (item.correctness_kind !== "OPERATION_FIDELITY") continue
+    for (const symbol of strings(item.independent_specification_symbols)) {
+      operationSpecificationSymbols.add(symbol)
+    }
+  }
   for (const [index, item] of obligations.theorem_obligations.entries()) {
     if (!isRecord(item)) continue
     const id = nonEmpty(item.obligation_id) ? item.obligation_id : `obligation ${index}`
@@ -836,6 +875,20 @@ export function theoremSemanticCoverageIssues(
         !relational.some((name) => statement.includes(name))) {
         issues.push(`${id} EXECUTION_CORRESPONDENCE must mention both executable and relational definitions`)
       }
+      if (operationSpecificationSymbols.size > 0 &&
+        ![...operationSpecificationSymbols].some((name) => statement.includes(name))) {
+        issues.push(`${id} EXECUTION_CORRESPONDENCE must connect machine execution to an OPERATION_FIDELITY specification result`)
+      }
+    }
+    if (item.correctness_kind === 'RESULT_RANGE') {
+      const normalizedRange = statement.replace(/\s+/g, " ")
+      const optionExhaustiveness =
+        /(?:=\s*(?:Option\.)?none\b)[\s\S]*(?:∨|\bor\b)[\s\S]*(?:∃|Exists\b)[\s\S]*=\s*(?:Option\.)?some\b/i.test(normalizedRange) ||
+        /(?:∃|Exists\b)[\s\S]*=\s*(?:Option\.)?some\b[\s\S]*(?:∨|\bor\b)[\s\S]*=\s*(?:Option\.)?none\b/i.test(normalizedRange)
+      const actualRangeConstraint = /(?:≤|≥|<|>|∈|Membership\.|\.val\s*(?:≤|≥|<|>))/.test(normalizedRange)
+      if (optionExhaustiveness && !actualRangeConstraint) {
+        issues.push(`${id} RESULT_RANGE is only Option constructor/existence exhaustiveness, not a property of the instruction result`)
+      }
     }
     for (const symbol of [...specSymbols, ...implementationSymbols]) {
       if (!statement.includes(symbol)) issues.push(`${id} declaration does not mention declared symbol ${symbol}`)
@@ -844,6 +897,10 @@ export function theoremSemanticCoverageIssues(
     const normalized = statement.replace(/\s+/g, " ")
     const reflexive = normalized.match(/:\s*([A-Za-z_][A-Za-z0-9_'.]*(?:\s+[^=↔]+)?)\s*=\s*\1\s*(?::=|$)/)
     if (reflexive !== null) issues.push(`${id} is a reflexive tautology rather than an independent correctness claim`)
+    if (/\([^():]+:\s*False\)|\bFalse\s*(?:→|->)/.test(normalized) ||
+      /\b([A-Za-z_][A-Za-z0-9_']*)\s*≠\s*\1\b/.test(normalized)) {
+      issues.push(`${id} has an explicitly impossible hypothesis and is vacuous`)
+    }
   }
   for (const kind of requiredProofKinds(semantics)) {
     if (!presentKinds.has(kind)) issues.push(`theorem contract does not cover semantic proof requirement ${kind}`)

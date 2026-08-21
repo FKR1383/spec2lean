@@ -45,10 +45,13 @@ when truth is not syntactically clear; compilation alone does not prove truth.
 
 First audit the schema-v3 correctness contract. Every obligation must have a
 valid `correctness_kind`, meaningful rationale, and exact semantic claim IDs.
-The set must include genuine OPERATION_FIDELITY, ALGORITHM_FIDELITY,
-RESULT_RANGE, GUARD_BEHAVIOR, STATE_UPDATE, FRAME_PROPERTY, and
-EXECUTION_CORRESPONDENCE statements. Reject a relabeled syntax/type/reflexivity
-lemma that does not establish its advertised kind. Verify the stated
+Every FULL_INSTRUCTION set must include genuine unit-local OPERATION_FIDELITY,
+RESULT_RANGE, and EXECUTION_CORRESPONDENCE statements. Require local
+ALGORITHM_FIDELITY for a real multi-branch approved operation and local
+EDGE_CASE_BEHAVIOR when EDGE_CASES is covered. Require guard/state/frame locally
+unless the semantic requirement cites an exact approved CoreProofs discharge.
+Reject a relabeled syntax/type/reflexivity lemma that does not establish its
+advertised kind. Verify the stated
 source-faithfulness boundary: proofs implement approved semantic IR; they do
 not prove the publisher prose itself.
 
@@ -59,8 +62,10 @@ and all of the requirement's semantic claim IDs. For
 OPERATION_FIDELITY, ALGORITHM_FIDELITY, RESULT_RANGE, and EDGE_CASE_BEHAVIOR,
 the independent specification and implementation symbol sets must be nonempty,
 distinct, and both occur in the theorem. Reject an implementation definition
-unfolded against itself. EXECUTION_CORRESPONDENCE must mention both executable
-and relational definitions from the Lean model contract; a constructor
+unfolded against itself. Reject RESULT_RANGE statements that merely enumerate
+Option constructors or prove output existence. EXECUTION_CORRESPONDENCE must
+mention both executable and relational definitions from the Lean model contract
+and connect them to the OPERATION_FIDELITY specification result; a constructor
 characterization of the relation alone is insufficient.
 
 Review with a semantic-to-theorem matrix:

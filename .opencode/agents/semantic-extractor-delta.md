@@ -66,8 +66,9 @@ Work in a bounded validation-first sequence:
    diagnostic requires in the new requested revision. Do not regenerate it.
 3. On a first attempt, read only the named shared environment, architecture,
    and source bundle, then build the loss matrix below once.
-4. Before the first write, check that all seven mandatory proof families are
-   present: OPERATION_FIDELITY, ALGORITHM_FIDELITY, RESULT_RANGE,
+4. Before the first write, check that all seven baseline proof-family records
+   are present (including explicit NOT_APPLICABLE where justified):
+   OPERATION_FIDELITY, ALGORITHM_FIDELITY, RESULT_RANGE,
    GUARD_BEHAVIOR, STATE_UPDATE, FRAME_PROPERTY, and
    EXECUTION_CORRESPONDENCE. A guard inherited from the shared environment or
    judged not applicable still needs an explicit GUARD_BEHAVIOR requirement
@@ -97,9 +98,12 @@ Work in a bounded validation-first sequence:
   reviewed `proofDischarges` entry matching `coreDischargeId`, correctness
   kind, and shared semantic IDs. Otherwise use `LOCAL`; never infer a shared
   proof merely because a semantic claim is shared.
-- Always require independent OPERATION_FIDELITY, ALGORITHM_FIDELITY,
-  RESULT_RANGE, GUARD_BEHAVIOR, STATE_UPDATE, FRAME_PROPERTY, and
-  EXECUTION_CORRESPONDENCE obligations.
+- Always require unit-local OPERATION_FIDELITY, RESULT_RANGE, and
+  EXECUTION_CORRESPONDENCE. Require local ALGORITHM_FIDELITY for a real
+  multi-branch algorithm and EDGE_CASE_BEHAVIOR when edge cases are covered.
+  Guard/state/frame may be inherited only through an exact approved discharge;
+  otherwise keep them local. Retain explicit NOT_APPLICABLE requirements for
+  genuinely inapplicable families.
 - Set `languageCore` to REUSED_APPROVED with the exact runtime-supplied core
   manifest path and SHA-256; never substitute the shared-environment hash.
 

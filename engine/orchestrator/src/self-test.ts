@@ -279,12 +279,23 @@ const qualitySourceBundle = {
   })),
 }
 assert(sourceBundleCompletenessIssues(qualitySourceBundle).length === 0, "source evidence closure contract")
-const mandatoryProofRequirements = FULL_INSTRUCTION_REQUIRED_PROOF_KINDS.map((correctnessKind, index) => ({
+const mandatoryProofRequirements: Array<{
+  requirementId: string
+  correctnessKind: string
+  semanticClaimIds: string[]
+  rationale: string
+}> = FULL_INSTRUCTION_REQUIRED_PROOF_KINDS.map((correctnessKind, index) => ({
   requirementId: `REQ-${index + 1}`,
   correctnessKind,
   semanticClaimIds: ["SEM-COMPLETE"],
   rationale: `${correctnessKind} independently checks the approved behavior`,
 }))
+mandatoryProofRequirements.push({
+  requirementId: "REQ-EDGE",
+  correctnessKind: "EDGE_CASE_BEHAVIOR",
+  semanticClaimIds: ["SEM-COMPLETE"],
+  rationale: "EDGE_CASE_BEHAVIOR independently checks the covered boundary case",
+})
 const qualitySemantics = {
   schemaVersion: 3,
   documentType: "spec2lean_full_semantics",
@@ -327,6 +338,11 @@ const qualitySemantics = {
   proofRequirements: mandatoryProofRequirements,
 }
 assert(semanticCompletenessIssues(qualitySemantics).length === 0, "semantic completeness and proof contract")
+assert(semanticCompletenessIssues({
+  ...qualitySemantics,
+  proofRequirements: mandatoryProofRequirements.filter((item) => item.correctnessKind !== "EDGE_CASE_BEHAVIOR"),
+}).some((issue) => issue.includes("covered edge cases requires LOCAL EDGE_CASE_BEHAVIOR")),
+"covered semantic edge cases require a local edge-case theorem requirement")
 const inheritedRequirementId = mandatoryProofRequirements.find((item) => item.correctnessKind === "GUARD_BEHAVIOR")!.requirementId
 const inheritedSemantics = {
   ...qualitySemantics,
@@ -434,6 +450,129 @@ assert(
     .some((issue) => issue.includes("reflexive tautology")),
   "tautological implementation theorem is rejected",
 )
+const proofQualityLean = [
+  "def sourceSpec (x : Nat) : Nat := x + 1",
+  "def implementation (x : Nat) : Nat := x + 1",
+  "def execute (x : Nat) : Nat := implementation x",
+  "inductive Step : Nat → Nat → Prop where",
+  "  | run (x : Nat) : Step x (implementation x)",
+  "/- SPEC2LEAN_LEAN_MODEL_CONTRACT",
+  JSON.stringify({
+    schemaVersion: 1,
+    scopeStatus: "FULL_INSTRUCTION",
+    languageCoreStatus: "BOOTSTRAP_CANDIDATE",
+    languageCoreImport: "",
+    domainBindings: [],
+    encodedExclusions: [],
+    operationBranchBindings: [],
+    edgeCaseBindings: [],
+    specificationDefinitions: ["sourceSpec"],
+    executableDefinitions: ["execute"],
+    relationalDefinitions: ["Step"],
+  }),
+  "-/",
+].join("\n")
+const oneRequirementSemantics = (requirementId: string, correctnessKind: string) => ({
+  proofRequirements: [{
+    requirementId,
+    correctnessKind,
+    disposition: "LOCAL",
+    semanticClaimIds: ["SEM-COMPLETE"],
+  }],
+})
+const obligation = (
+  obligationId: string,
+  requirementId: string,
+  correctnessKind: string,
+  specificationSymbols: string[],
+  implementationSymbols: string[],
+  statement: string,
+) => ({
+  schema_version: 3,
+  theorem_obligations: [{
+    obligation_id: obligationId,
+    proof_requirement_ids: [requirementId],
+    correctness_kind: correctnessKind,
+    semantic_claim_ids: ["SEM-COMPLETE"],
+    independent_specification_symbols: specificationSymbols,
+    implementation_symbols: implementationSymbols,
+    lean_statement_sketch: statement,
+  }],
+})
+assert(theoremSemanticCoverageIssues(
+  obligation(
+    "OBL-SAME-SYMBOL", "REQ-OP", "OPERATION_FIDELITY",
+    ["implementation"], ["implementation"],
+    "theorem same_symbol (x : Nat) : implementation x = implementation x",
+  ),
+  oneRequirementSemantics("REQ-OP", "OPERATION_FIDELITY"),
+  proofQualityLean,
+).some((issue) => issue.includes("same symbol as specification and implementation")),
+"OPERATION_FIDELITY requires separate specification and implementation symbols")
+assert(theoremSemanticCoverageIssues(
+  obligation(
+    "OBL-IMPOSSIBLE", "REQ-OP", "OPERATION_FIDELITY",
+    ["sourceSpec"], ["implementation"],
+    "theorem impossible_operation (x : Nat) (h : False) : sourceSpec x = implementation x",
+  ),
+  oneRequirementSemantics("REQ-OP", "OPERATION_FIDELITY"),
+  proofQualityLean,
+).some((issue) => issue.includes("explicitly impossible hypothesis")),
+"an obviously impossible premise cannot make a functionality theorem vacuous")
+const dependentSpecificationLean = proofQualityLean.replace(
+  "def sourceSpec (x : Nat) : Nat := x + 1",
+  "@[inline] private def sourceSpec (x : Nat) : Nat := implementation x",
+)
+assert(theoremSemanticCoverageIssues(
+  obligation(
+    "OBL-DEPENDENT-SPEC", "REQ-OP", "OPERATION_FIDELITY",
+    ["sourceSpec"], ["implementation"],
+    "theorem dependent_spec (x : Nat) : sourceSpec x = implementation x",
+  ),
+  oneRequirementSemantics("REQ-OP", "OPERATION_FIDELITY"),
+  dependentSpecificationLean,
+).some((issue) => issue.includes("sourceSpec depends on implementation")),
+"an attributed private independent specification cannot depend on its implementation")
+assert(theoremSemanticCoverageIssues(
+  obligation(
+    "OBL-FAKE-RANGE", "REQ-RANGE", "RESULT_RANGE",
+    ["sourceSpec"], ["implementation"],
+    "theorem fake_range (x : Nat) : sourceSpec x = none ∨ ∃ y, implementation x = some y",
+  ),
+  oneRequirementSemantics("REQ-RANGE", "RESULT_RANGE"),
+  proofQualityLean,
+).some((issue) => issue.includes("only Option constructor/existence exhaustiveness")),
+"RESULT_RANGE rejects Option none/some existence exhaustiveness")
+const executionRequirements = {
+  proofRequirements: [
+    { requirementId: "REQ-OP", correctnessKind: "OPERATION_FIDELITY", disposition: "LOCAL", semanticClaimIds: ["SEM-COMPLETE"] },
+    { requirementId: "REQ-EXEC", correctnessKind: "EXECUTION_CORRESPONDENCE", disposition: "LOCAL", semanticClaimIds: ["SEM-COMPLETE"] },
+  ],
+}
+const disconnectedExecutionObligations = {
+  schema_version: 3,
+  theorem_obligations: [
+    obligation("OBL-OP", "REQ-OP", "OPERATION_FIDELITY", ["sourceSpec"], ["implementation"],
+      "theorem operation_ok (x : Nat) : sourceSpec x = implementation x").theorem_obligations[0],
+    obligation("OBL-EXEC", "REQ-EXEC", "EXECUTION_CORRESPONDENCE", [], ["execute", "Step"],
+      "theorem execution_only (x y : Nat) : execute x = y ↔ Step x y").theorem_obligations[0],
+  ],
+}
+assert(theoremSemanticCoverageIssues(
+  disconnectedExecutionObligations,
+  executionRequirements,
+  proofQualityLean,
+).some((issue) => issue.includes("connect machine execution to an OPERATION_FIDELITY specification result")),
+"EXECUTION_CORRESPONDENCE must connect state execution to the proven operation result")
+const missingRelationExecution = structuredClone(disconnectedExecutionObligations)
+missingRelationExecution.theorem_obligations[1]!.lean_statement_sketch =
+  "theorem execution_missing_relation (x : Nat) : execute x = sourceSpec x"
+assert(theoremSemanticCoverageIssues(
+  missingRelationExecution,
+  executionRequirements,
+  proofQualityLean,
+).some((issue) => issue.includes("both executable and relational definitions")),
+"EXECUTION_CORRESPONDENCE must mention executable and relational definitions")
 const acquisitionProfile = {
   schemaVersion: 1,
   language: "ecmascript",
@@ -613,6 +752,26 @@ assert(
       }],
     }).issues.some((issue) => issue.includes("EXECUTION_CORRESPONDENCE")),
   "schema v2 rejects theorem sets that prove only syntax or scope",
+)
+const guardOnlyTheoremSet = validateTheoremObligationDocument({
+  schema_version: 3,
+  source_faithfulness_boundary:
+    "These proofs implement approved semantic IR while source specification prose remains evidence-reviewed authority.",
+  theorem_obligations: ["GUARD_BEHAVIOR", "STATE_UPDATE", "FRAME_PROPERTY"].map((correctnessKind, index) => ({
+    obligation_id: `T-GENERIC-${index + 1}`,
+    proof_requirement_ids: [`REQ-GENERIC-${index + 1}`],
+    correctness_kind: correctnessKind,
+    correctness_rationale: "This generic state theorem intentionally does not establish instruction functionality.",
+    semantic_claim_ids: ["SEM-GENERIC"],
+    independent_specification_symbols: [],
+    implementation_symbols: ["execute"],
+    lean_statement_sketch: `theorem generic_${index + 1} (n : Nat) : n = n`,
+  })),
+})
+assert(
+  guardOnlyTheoremSet.issues.some((issue) => issue.includes("OPERATION_FIDELITY")) &&
+    guardOnlyTheoremSet.issues.some((issue) => issue.includes("EXECUTION_CORRESPONDENCE")),
+  "a guard/state/frame-only theorem set cannot satisfy behavioral correctness",
 )
 assert(
   compareProofWithApprovedTheorems(

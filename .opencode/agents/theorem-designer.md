@@ -58,15 +58,18 @@ the behavioral correctness spine:
    behavior. State function/relation equivalence, soundness/completeness, or an
    equally direct correspondence suited to the approved model.
 
-Always add independent `GUARD_BEHAVIOR`, `STATE_UPDATE`, `FRAME_PROPERTY`,
-`ALGORITHM_FIDELITY`, and `RESULT_RANGE` obligations. Add applicable
-`EDGE_CASE_BEHAVIOR`, `TYPE_DOMAIN`, `DETERMINISM`, `PARTIALITY`, and
-`SCOPE_BOUNDARY`. Cover every
-mandatory `proofRequirements` entry from semantics. Do not force
-Only generate obligations for requirements whose disposition is `LOCAL`.
+Always add unit-local `OPERATION_FIDELITY`, `RESULT_RANGE`, and
+`EXECUTION_CORRESPONDENCE` obligations for FULL_INSTRUCTION. Add local
+`ALGORITHM_FIDELITY` when the approved operation has a real multi-branch
+algorithm, and local `EDGE_CASE_BEHAVIOR` whenever semantic EDGE_CASES is
+COVERED. Add `GUARD_BEHAVIOR`, `STATE_UPDATE`, and `FRAME_PROPERTY` locally
+unless an exact approved CoreProofs discharge marks that requirement inherited.
+Add applicable `TYPE_DOMAIN`, `DETERMINISM`, `PARTIALITY`, and
+`SCOPE_BOUNDARY`. Cover every mandatory `proofRequirements` entry from
+semantics. Only generate obligations for requirements whose disposition is `LOCAL`.
 Do not duplicate `INHERITED_FROM_SHARED_ENVIRONMENT` requirements and do not
 generate `NOT_APPLICABLE` requirements; preserve both in traceability.
-machine-state families onto a pure abstract operation, but still connect its
+Do not force machine-state families onto a pure abstract operation, but still connect its
 executable definition to the approved semantic relation/specification.
 
 # Construction procedure
@@ -121,7 +124,11 @@ Operation/algorithm/range/edge theorems must compare distinct specification
 and implementation symbols. A theorem that merely unfolds an implementation
 to its own body is rejected. The execution-correspondence theorem must mention
 both executable and relational definitions from `SPEC2LEAN_LEAN_MODEL_CONTRACT`;
-characterizing only relation constructors is not correspondence.
+it must also connect them to the independent OPERATION_FIDELITY specification
+result. Characterizing only relation constructors is not correspondence.
+RESULT_RANGE must state a genuine bound, finite result set, or other semantic
+property of the actual instruction result; `none ∨ ∃ x, some x` is only Option
+constructor exhaustiveness and is rejected.
 
 # Revision and completion
 
