@@ -2744,6 +2744,8 @@ assert(
   candidateTool.includes("JSON.parse(args.content)") &&
     candidateTool.includes("invalid JSON; artifact was not written") &&
     candidateTool.includes("candidate_architecture_write") &&
+    candidateTool.includes("candidate_semantic_delta_write") &&
+    candidateTool.includes("canonicalSemanticDeltaForRun") &&
     candidateTool.includes("MAX_ARCHITECTURE_BYTES") &&
     candidateTool.includes("candidate_validate") &&
     candidateTool.includes("verifyTraceabilityManifest") &&

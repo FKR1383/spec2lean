@@ -462,7 +462,11 @@ export async function buildStageInputContext(run: RunState): Promise<string> {
     "",
     "# Same-session completion check",
     "",
-    `After the final ${run.stage === "ARCHITECTURE" ? "candidate_architecture_write" : "candidate_write"}, call candidate_validate with runId=${run.runId} and path=<required stage artifact>.`,
+    `After the final ${run.stage === "ARCHITECTURE"
+      ? "candidate_architecture_write"
+      : run.stage === "SEMANTIC_EXTRACTION" && run.semanticV2?.mode === "DELTA_FAST_PATH"
+        ? "candidate_semantic_delta_write"
+        : "candidate_write"}, call candidate_validate with runId=${run.runId} and path=<required stage artifact>.`,
     "Repair every reported structural/provenance issue in this same session and validate again.",
     "Do not emit SUCCESS until candidate_validate returns ok=true.",
     "If validation exposes a genuine source or semantic gap, return BLOCKED instead of manufacturing content.",

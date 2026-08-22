@@ -39,6 +39,7 @@ import {
   bundleEvidenceIds,
   validateSemanticDeltaForRun,
 } from "../../engine/orchestrator/src/semantic-v2.ts"
+import { canonicalSemanticDeltaForRun } from "../../engine/orchestrator/src/semantic-delta-authoring.ts"
 import {
   buildTraceabilityManifest,
   verifyTraceabilityManifest,
@@ -501,6 +502,7 @@ type WriteArgs = {
   content: string
   mode: "create" | "replace"
   expectedSha256?: string
+  structuredSemanticDelta?: boolean
 }
 
 type WriteContext = {
@@ -539,6 +541,16 @@ async function writeCandidate(args: WriteArgs, context: WriteContext) {
         }
         const run = await activeRunForSession(context.sessionID)
         if (run !== undefined) {
+          if (
+            run.stage === "SEMANTIC_EXTRACTION" &&
+            run.semanticV2?.mode === "DELTA_FAST_PATH" &&
+            artifact.relativePath === run.semanticV2.current?.deltaPath &&
+            args.structuredSemanticDelta !== true
+          ) {
+            throw new Error(
+              "semantic delta artifacts must be written with candidate_semantic_delta_write",
+            )
+          }
           const normalized = await normalizeExpectedArtifactContent(
             run,
             artifact.relativePath,
@@ -782,6 +794,58 @@ export const architecture_write = tool({
         version: TOOL_VERSION,
         error: {
           code: "ARCHITECTURE_WRITE_FAILED",
+          message: error instanceof Error ? error.message : "unknown error",
+        },
+      })
+    }
+  },
+})
+
+export const semantic_delta_write = tool({
+  description:
+    "Write semantic decisions for the active delta-fast-path run while the " +
+    "orchestrator derives canonical identity, source evidence records, hashes, " +
+    "provenance, language-core binding, and fresh lifecycle metadata.",
+
+  args: {
+    path: writePathSchema,
+    semanticContent: tool.schema
+      .record(tool.schema.string(), tool.schema.unknown())
+      .describe(
+        "Instruction-local semantic fields. Evidence entries need only an exact " +
+        "sourceBundleEvidenceId; orchestration-owned envelope fields are ignored.",
+      ),
+    mode: writeModeSchema,
+    expectedSha256: expectedWriteHashSchema,
+  },
+
+  async execute(args, context) {
+    try {
+      const run = await activeRunForSession(context.sessionID)
+      if (run === undefined) throw new Error("no active run owns this session")
+      const expected = artifactContractForRun(run).outputPath
+      if (args.path !== expected || run.semanticV2?.current?.deltaPath !== expected) {
+        throw new Error(`path is not the exact active semantic delta artifact; expected ${expected}`)
+      }
+      const delta = await canonicalSemanticDeltaForRun(
+        run,
+        args.semanticContent,
+        { agent: context.agent, sessionId: context.sessionID },
+      )
+      return await writeCandidate({
+        path: args.path,
+        content: `${JSON.stringify(delta, null, 2)}\n`,
+        mode: args.mode,
+        expectedSha256: args.expectedSha256,
+        structuredSemanticDelta: true,
+      }, context)
+    } catch (error) {
+      return jsonResult({
+        ok: false,
+        tool: "candidate_semantic_delta_write",
+        version: TOOL_VERSION,
+        error: {
+          code: "SEMANTIC_DELTA_WRITE_FAILED",
           message: error instanceof Error ? error.message : "unknown error",
         },
       })

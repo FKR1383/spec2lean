@@ -1,5 +1,6 @@
-import { readFile } from "node:fs/promises"
-import { resolve } from "node:path"
+import { createHash } from "node:crypto"
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import { dirname, resolve } from "node:path"
 
 import { artifactContractForRun } from "./artifact-contract.js"
 import { buildGeneralPrompt } from "./runner.js"
@@ -18,6 +19,7 @@ import type {
 import { REPO_ROOT } from "./repo.js"
 import type { RunState } from "./workflow.js"
 import { semanticV2Telemetry } from "./semantic-v2-telemetry.js"
+import { canonicalSemanticDeltaForRun } from "./semantic-delta-authoring.js"
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`SEMANTIC_V2_SELF_TEST_FAILED: ${message}`)
@@ -142,6 +144,139 @@ export async function runSemanticV2SelfTests(): Promise<{
       },
       events: [],
     },
+  }
+
+  const canonicalRoot = "candidates/self-test/semantic-delta-authoring"
+  const canonicalBundlePath = `${canonicalRoot}/source-bundle.json`
+  const sourceDocuments = new Map<string, {
+    document_id: string
+    kind: string
+    local_path: string
+    sha256: string
+  }>()
+  const fragments = delta.evidence.map((record, index) => {
+    const existingDocument = sourceDocuments.get(record.source.documentPath)
+    const documentId = existingDocument?.document_id ?? `document-${sourceDocuments.size + 1}`
+    if (existingDocument === undefined) {
+      sourceDocuments.set(record.source.documentPath, {
+        document_id: documentId,
+        kind: record.source.kind.toUpperCase(),
+        local_path: record.source.documentPath,
+        sha256: record.source.documentSha256,
+      })
+    }
+    return {
+      fragment_id: record.sourceBundleEvidenceId!,
+      document_id: documentId,
+      source_kind: record.source.kind.toUpperCase(),
+      source_sha256: record.source.documentSha256,
+      exact_quote: record.quotation ?? "synthetic exact source quotation",
+      locator: {
+        ...record.locator,
+        start_line: record.locator.startLine,
+        end_line: record.locator.endLine,
+      },
+      reason_for_inclusion: "structured delta writer regression fixture",
+    }
+  })
+  const canonicalBundle = {
+    schema_version: 3,
+    language: "ptx",
+    specification_version: "9.3",
+    unit: "and.b32",
+    source_documents: [...sourceDocuments.values()],
+    fragments,
+  }
+  const canonicalBundleText = `${JSON.stringify(canonicalBundle, null, 2)}\n`
+  await mkdir(dirname(resolve(REPO_ROOT, canonicalBundlePath)), { recursive: true })
+  await writeFile(resolve(REPO_ROOT, canonicalBundlePath), canonicalBundleText)
+  const canonicalBundleSha256 = createHash("sha256").update(canonicalBundleText).digest("hex")
+  const canonicalRun: RunState = {
+    ...fastRun,
+    revision: 9,
+    semanticV2: {
+      ...fastRun.semanticV2!,
+      profilePath: "language_packs/ptx/9.3/semantic-profile.json",
+    },
+    executions: [{
+      at: "2026-01-01T00:00:01.000Z",
+      stage: "SOURCE_CURATION",
+      agent: "source-curator",
+      sessionId: "semantic-delta-source-fixture",
+      outcome: "SUCCESS",
+      nextStage: "SEMANTIC_EXTRACTION",
+      response: "fixture",
+      publishedArtifacts: [{
+        role: "SOURCE_BUNDLE",
+        path: canonicalBundlePath,
+        sha256: canonicalBundleSha256,
+        sizeBytes: Buffer.byteLength(canonicalBundleText),
+        stage: "SOURCE_CURATION",
+        producingExecution: {
+          agent: "source-curator",
+          sessionId: "semantic-delta-source-fixture",
+        },
+        runRevision: 8,
+      }],
+    }],
+  }
+  const malformedShapes = [
+    {
+      name: "clz/brev missing canonical evidence and lifecycle fields",
+      make: (): unknown => {
+        const value = clone(delta) as unknown as Record<string, unknown>
+        value.evidence = delta.evidence.map((record) => ({
+          sourceBundleEvidenceId: record.sourceBundleEvidenceId,
+          fragmentId: record.sourceBundleEvidenceId,
+          statement: record.quotation ?? "agent summary",
+        }))
+        value.claims = delta.claims.map(({ lifecycle: _lifecycle, humanApprovalDependencies: _approval, ...claim }) => ({
+          ...claim,
+          evidenceIds: claim.evidenceIds.map((id) =>
+            delta.evidence.find((item) => item.evidenceId === id)?.sourceBundleEvidenceId ?? id),
+          status: "RESOLVED",
+        }))
+        return value
+      },
+    },
+    {
+      name: "shl unknown source-manifest hash",
+      make: (): unknown => {
+        const value = clone(delta)
+        for (const record of value.evidence) record.source.sourceManifestSha256 = "unknown"
+        return value
+      },
+    },
+  ]
+  try {
+    for (const fixture of malformedShapes) {
+      const canonical = await canonicalSemanticDeltaForRun(
+        canonicalRun,
+        fixture.make(),
+        { agent: "semantic-extractor-delta", sessionId: "structured-writer-fixture" },
+      )
+      assert(
+        canonical.unit.language.toLowerCase() === canonicalRun.language.toLowerCase() &&
+          canonical.unit.unit === canonicalRun.unit &&
+          canonical.provenance.sourceBundle.path === canonicalBundlePath &&
+          canonical.evidence.every((item) =>
+            /^[a-f0-9]{64}$/.test(item.source.sourceManifestSha256) &&
+            item.specificationVersion === canonicalRun.specVersion &&
+            item.locator !== undefined) &&
+          canonical.claims.every((claim) =>
+            claim.lifecycle.status === "ACTIVE" &&
+            claim.lifecycle.introducedInRevision === canonicalRun.revision &&
+            Array.isArray(claim.humanApprovalDependencies)),
+        `structured writer canonicalizes ${fixture.name}`,
+      )
+      const canonicalEvaluation = evaluateSemanticDeltaDocuments(shared, canonical)
+      assert(
+        canonicalEvaluation.ok,
+        `structured writer output validates after repairing ${fixture.name}: ${canonicalEvaluation.issues.join(" | ")}`,
+      )
+    }
+  } finally {
+    await rm(resolve(REPO_ROOT, canonicalRoot), { recursive: true, force: true })
   }
   assert(
     artifactContractForRun(fastRun).outputPath.endsWith("semantic-delta-v1.json"),

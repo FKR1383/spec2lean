@@ -110,8 +110,8 @@ Treat the approved shared semantic environment as the build-once language core. 
 When no approved core exists, mark a BOOTSTRAP_CANDIDATE boundary explicitly; never pretend a per-unit invention is already shared.
 Use only the exact shared-environment IDs listed by the deterministic input contract; per-unit accepted artifacts are examples, not shared authority.
 For PTX call spec_fast_context exactly once with purpose=architecture; never inspect another unit's candidate or accepted artifacts.
-Include the canonical SPEC2LEAN_ARCHITECTURE_INDEX and mark every behavior-affecting open entry stateAffecting=true.
-Include the exact nine-row SPEC2LEAN_COMPLETENESS_CONTRACT and never exclude a legal case in prose alone.
+Pass SPEC2LEAN_ARCHITECTURE_INDEX and the exact nine-row SPEC2LEAN_COMPLETENESS_CONTRACT as structured candidate_architecture_write arguments; never serialize their comments manually.
+Mark every behavior-affecting open entry stateAffecting=true and never exclude a legal case in prose alone.
 Do not invent open questions from mere source silence about inapplicable hidden features; express an explicit bounded model omission as DESIGN_DEPENDENCY/ASSUMPTION, never as a source-derived absence claim.
 Use SOURCE_FACT entries as internal roots with empty evidence/dependency arrays; exact official locators remain mandatory in the prose.
 Stay within the deterministic architecture byte/line budget and use the exact required section headings.
@@ -226,9 +226,10 @@ Agent: `theorem-designer`
 Generate the complete, non-redundant correctness theorem set from the exact Gate-C-authorized mapping.
 Use theorem contract schema v3 and classify each obligation by correctness_kind.
 Require an operation-fidelity theorem and an execution-correspondence theorem; syntax/style/typechecking lemmas alone are insufficient.
-Map every semantics proofRequirement ID to exactly one independent theorem, including algorithm, result-range, guard, state-update, frame, operation, and execution-correspondence properties.
+Map every LOCAL semantics proofRequirement ID to exactly one independent theorem; preserve inherited and not-applicable requirements without regenerating them.
 Operation/algorithm/range/edge theorems must compare a separate source-level specification function/relation with implementation symbols; self-unfolding restatements are invalid.
-Execution correspondence must mention both executable and relational definitions from the Lean model contract.
+RESULT_RANGE must constrain the actual instruction result, not merely enumerate Option constructors or assert output existence.
+Execution correspondence must mention executable and relational definitions from the Lean model contract and connect them to the independent operation specification result.
 Bind every obligation to the exact semantic claim IDs it verifies and state the source-faithfulness boundary explicitly.
 Store each complete header-only Lean theorem declaration in theorem_obligations[].lean_statement_sketch; this JSON is the pre-proof theorem contract.
 Write and verify the complete obligation artifact before emitting the result protocol.
@@ -1547,7 +1548,8 @@ steps: 24
 permission:
   read: allow
   candidate_read: allow
-  candidate_write: allow
+  candidate_write: deny
+  candidate_semantic_delta_write: allow
   candidate_validate: allow
   candidate_diff: allow
   glob: allow
@@ -1606,22 +1608,30 @@ Work in a bounded validation-first sequence:
    diagnostic requires in the new requested revision. Do not regenerate it.
 3. On a first attempt, read only the named shared environment, architecture,
    and source bundle, then build the loss matrix below once.
-4. Before the first write, check that all seven mandatory proof families are
-   present: OPERATION_FIDELITY, ALGORITHM_FIDELITY, RESULT_RANGE,
+4. Before the first write, check that all seven baseline proof-family records
+   are present (including explicit NOT_APPLICABLE where justified):
+   OPERATION_FIDELITY, ALGORITHM_FIDELITY, RESULT_RANGE,
    GUARD_BEHAVIOR, STATE_UPDATE, FRAME_PROPERTY, and
    EXECUTION_CORRESPONDENCE. A guard inherited from the shared environment or
    judged not applicable still needs an explicit GUARD_BEHAVIOR requirement
-   explaining that scope.
-5. Write the requested immutable artifact, run `candidate_validate`, and make
+   explaining that scope and its disposition.
+5. Write the requested immutable artifact with
+   `candidate_semantic_delta_write`, run `candidate_validate`, and make
    at most two diagnostic-driven repair passes. Do not resume broad source
    reading after validation begins.
 
-- Pin exact unit, environment ID/revision/hash, and source-bundle path/hash.
+- Do not serialize run identity, environment/source hashes, source paths,
+  locators, provenance, language-core binding, or fresh lifecycle boilerplate.
+  The structured writer derives those fields from the exact run and published
+  source bundle. Supply semantic content plus exact `sourceBundleEvidenceId`
+  references only.
 - Every local SOURCE_FACT uses exact bundle evidence through
-  `sourceBundleEvidenceId`.
+  `sourceBundleEvidenceId`; the structured writer assigns canonical evidence
+  IDs and rewrites matching claim references.
 - Every DERIVED_INTERPRETATION names its semantic dependencies.
 - Every DESIGN_DEPENDENCY is stated as project design, not official prose.
-- Preserve assumptions and open questions with stateAffecting and lifecycle.
+- Preserve assumptions and open questions with their stateAffecting decision;
+  the writer supplies the fresh ACTIVE lifecycle revision.
 - Provide typed syntax, operands, operation, reads/writes, preconditions, and
   proof families without inventing unsupported branches.
 - Every operand lists exhaustive `legalForms`, exact `typeDomains`, and
@@ -1631,9 +1641,18 @@ Work in a bounded validation-first sequence:
 - Set `scopeStatus=FULL_INSTRUCTION` by default and emit the exact nine-row
   coverage array plus mandatory proofRequirements. PARTIAL_EXPLICIT is allowed
   only with a named encoded precondition; prose-only exclusions are invalid.
-- Always require independent OPERATION_FIDELITY, ALGORITHM_FIDELITY,
-  RESULT_RANGE, GUARD_BEHAVIOR, STATE_UPDATE, FRAME_PROPERTY, and
-  EXECUTION_CORRESPONDENCE obligations.
+- Classify every proof requirement as `LOCAL`,
+  `INHERITED_FROM_SHARED_ENVIRONMENT`, or `NOT_APPLICABLE`. Use inherited only
+  when the exact runtime language-core manifest contains a hash-bound,
+  reviewed `proofDischarges` entry matching `coreDischargeId`, correctness
+  kind, and shared semantic IDs. Otherwise use `LOCAL`; never infer a shared
+  proof merely because a semantic claim is shared.
+- Always require unit-local OPERATION_FIDELITY, RESULT_RANGE, and
+  EXECUTION_CORRESPONDENCE. Require local ALGORITHM_FIDELITY for a real
+  multi-branch algorithm and EDGE_CASE_BEHAVIOR when edge cases are covered.
+  Guard/state/frame may be inherited only through an exact approved discharge;
+  otherwise keep them local. Retain explicit NOT_APPLICABLE requirements for
+  genuinely inapplicable families.
 - Set `languageCore` to REUSED_APPROVED with the exact runtime-supplied core
   manifest path and SHA-256; never substitute the shared-environment hash.
 
@@ -1654,7 +1673,7 @@ ensure the dependency closure terminates in local/shared SOURCE_FACT roots or
 explicit project/human authority. Never let a design choice masquerade as a
 derivation merely because it is convenient to encode.
 
-Write the requested delta during the first bounded pass, run
+Write the requested delta through `candidate_semantic_delta_write` during the first bounded pass, run
 `candidate_validate`, and repair every reported issue in this same session.
 Return RETRY for explicit legacy fallback
 when the unit is outside the environment/schema. Return BLOCKED for a genuine
@@ -1733,6 +1752,9 @@ guessing.
 Use the full-semantics v3 contract in the runtime prompt. Default to
 `scopeStatus=FULL_INSTRUCTION`, bind the approved language core, copy the exact
 nine coverage dimensions, and emit mandatory `proofRequirements`. Cover the
+proof ownership explicitly with `LOCAL`, `INHERITED_FROM_SHARED_ENVIRONMENT`,
+or `NOT_APPLICABLE`. Inheritance requires an exact reviewed `coreDischargeId`
+from the runtime language-core manifest; absent that record, use `LOCAL`.
 applicable syntax forms, operand roles/order/forms, types and coercions,
 preconditions, normalized operation, deterministic/nondeterministic branches,
 state reads/writes, guard/control behavior, errors/undefined behavior, and
@@ -1774,10 +1796,12 @@ the current bundle.
 
 An exclusion is valid only as `PARTIAL_EXPLICIT` with
 `EXCLUDED_BY_ENCODED_PRECONDITION` and a real `preconditionId`; a header or prose
-sentence cannot remove a legal case. Proof requirements must include operation
-and execution correspondence plus independent ALGORITHM_FIDELITY, RESULT_RANGE,
-GUARD_BEHAVIOR, STATE_UPDATE, and FRAME_PROPERTY requirements, plus every
-source-implied edge-case/type-domain property. Do not leave a
+sentence cannot remove a legal case. Every FULL_INSTRUCTION requires local
+OPERATION_FIDELITY, RESULT_RANGE, and EXECUTION_CORRESPONDENCE requirements.
+Require local ALGORITHM_FIDELITY for a real multi-branch operation and local
+EDGE_CASE_BEHAVIOR when edge cases are covered. GUARD_BEHAVIOR, STATE_UPDATE,
+and FRAME_PROPERTY may be inherited only through an exact approved discharge;
+otherwise keep them local. Add every source-implied type-domain property. Do not leave a
 proof family in prose without a machine-enforced requirement.
 
 For every SOURCE_FACT, establish claim-level coverage for every official
@@ -1876,6 +1900,10 @@ coverage by exact dimension. Reject a dropped row, a COVERED row without the
 needed typed IR surface, a FULL_INSTRUCTION artifact with an exclusion, or a
 PARTIAL_EXPLICIT exclusion without a real precondition ID. Verify the language
 core is reused rather than cloned per unit. Confirm `proofRequirements`
+classifies each obligation as LOCAL, INHERITED_FROM_SHARED_ENVIRONMENT, or
+NOT_APPLICABLE. Accept inheritance only when the exact approved language-core
+manifest names a hash-bound reviewed proof discharge for the same shared
+semantic IDs and correctness kind; otherwise require LOCAL.
 machine-enforce every applicable algorithm, range, edge, guard, state-update,
 frame, and execution-correspondence family promised by the semantics.
 
@@ -2410,10 +2438,15 @@ runtime prompt. Cover:
 6. behavior-affecting reads, writes, branches, errors, and host/version limits;
 7. candidate validation/theorem families;
 8. Gate A checklist;
-9. the exact machine-readable `SPEC2LEAN_ARCHITECTURE_INDEX` required by the
-   runtime contract.
-10. the exact nine-row `SPEC2LEAN_COMPLETENESS_CONTRACT` required by the
-    runtime contract.
+9. the structured `architectureIndex` argument required by
+   `candidate_architecture_write`.
+10. the structured nine-row `completenessContract` argument required by
+    `candidate_architecture_write`.
+
+Do not manually serialize either `SPEC2LEAN_*` comment in Markdown `content`.
+The architecture writer validates the structured values and appends canonical
+machine blocks. A structural tool diagnostic is a same-session repair request,
+not a reason to repeat source research.
 
 `FULL_INSTRUCTION` is the default for the exact requested unit. Do not obtain a
 quick success by shrinking the source-visible instruction. `PARTIAL_EXPLICIT`
@@ -2670,12 +2703,18 @@ the behavioral correctness spine:
    behavior. State function/relation equivalence, soundness/completeness, or an
    equally direct correspondence suited to the approved model.
 
-Always add independent `GUARD_BEHAVIOR`, `STATE_UPDATE`, `FRAME_PROPERTY`,
-`ALGORITHM_FIDELITY`, and `RESULT_RANGE` obligations. Add applicable
-`EDGE_CASE_BEHAVIOR`, `TYPE_DOMAIN`, `DETERMINISM`, `PARTIALITY`, and
-`SCOPE_BOUNDARY`. Cover every
-mandatory `proofRequirements` entry from semantics. Do not force
-machine-state families onto a pure abstract operation, but still connect its
+Always add unit-local `OPERATION_FIDELITY`, `RESULT_RANGE`, and
+`EXECUTION_CORRESPONDENCE` obligations for FULL_INSTRUCTION. Add local
+`ALGORITHM_FIDELITY` when the approved operation has a real multi-branch
+algorithm, and local `EDGE_CASE_BEHAVIOR` whenever semantic EDGE_CASES is
+COVERED. Add `GUARD_BEHAVIOR`, `STATE_UPDATE`, and `FRAME_PROPERTY` locally
+unless an exact approved CoreProofs discharge marks that requirement inherited.
+Add applicable `TYPE_DOMAIN`, `DETERMINISM`, `PARTIALITY`, and
+`SCOPE_BOUNDARY`. Cover every mandatory `proofRequirements` entry from
+semantics. Only generate obligations for requirements whose disposition is `LOCAL`.
+Do not duplicate `INHERITED_FROM_SHARED_ENVIRONMENT` requirements and do not
+generate `NOT_APPLICABLE` requirements; preserve both in traceability.
+Do not force machine-state families onto a pure abstract operation, but still connect its
 executable definition to the approved semantic relation/specification.
 
 # Construction procedure
@@ -2730,7 +2769,11 @@ Operation/algorithm/range/edge theorems must compare distinct specification
 and implementation symbols. A theorem that merely unfolds an implementation
 to its own body is rejected. The execution-correspondence theorem must mention
 both executable and relational definitions from `SPEC2LEAN_LEAN_MODEL_CONTRACT`;
-characterizing only relation constructors is not correspondence.
+it must also connect them to the independent OPERATION_FIDELITY specification
+result. Characterizing only relation constructors is not correspondence.
+RESULT_RANGE must state a genuine bound, finite result set, or other semantic
+property of the actual instruction result; `none ∨ ∃ x, some x` is only Option
+constructor exhaustiveness and is rejected.
 
 # Revision and completion
 
@@ -2797,21 +2840,27 @@ when truth is not syntactically clear; compilation alone does not prove truth.
 
 First audit the schema-v3 correctness contract. Every obligation must have a
 valid `correctness_kind`, meaningful rationale, and exact semantic claim IDs.
-The set must include genuine OPERATION_FIDELITY, ALGORITHM_FIDELITY,
-RESULT_RANGE, GUARD_BEHAVIOR, STATE_UPDATE, FRAME_PROPERTY, and
-EXECUTION_CORRESPONDENCE statements. Reject a relabeled syntax/type/reflexivity
-lemma that does not establish its advertised kind. Verify the stated
+Every FULL_INSTRUCTION set must include genuine unit-local OPERATION_FIDELITY,
+RESULT_RANGE, and EXECUTION_CORRESPONDENCE statements. Require local
+ALGORITHM_FIDELITY for a real multi-branch approved operation and local
+EDGE_CASE_BEHAVIOR when EDGE_CASES is covered. Require guard/state/frame locally
+unless the semantic requirement cites an exact approved CoreProofs discharge.
+Reject a relabeled syntax/type/reflexivity lemma that does not establish its
+advertised kind. Verify the stated
 source-faithfulness boundary: proofs implement approved semantic IR; they do
 not prove the publisher prose itself.
 
-Require exact coverage of every semantics `proofRequirements` kind. For
+Require exact coverage of every `LOCAL` semantics `proofRequirements` entry.
+Reject local regeneration of inherited or not-applicable requirements. For
 each requirement ID, require exactly one distinct obligation with the same kind
 and all of the requirement's semantic claim IDs. For
 OPERATION_FIDELITY, ALGORITHM_FIDELITY, RESULT_RANGE, and EDGE_CASE_BEHAVIOR,
 the independent specification and implementation symbol sets must be nonempty,
 distinct, and both occur in the theorem. Reject an implementation definition
-unfolded against itself. EXECUTION_CORRESPONDENCE must mention both executable
-and relational definitions from the Lean model contract; a constructor
+unfolded against itself. Reject RESULT_RANGE statements that merely enumerate
+Option constructors or prove output existence. EXECUTION_CORRESPONDENCE must
+mention both executable and relational definitions from the Lean model contract
+and connect them to the OPERATION_FIDELITY specification result; a constructor
 characterization of the relation alone is insufficient.
 
 Review with a semantic-to-theorem matrix:

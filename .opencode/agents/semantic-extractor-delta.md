@@ -7,7 +7,8 @@ steps: 24
 permission:
   read: allow
   candidate_read: allow
-  candidate_write: allow
+  candidate_write: deny
+  candidate_semantic_delta_write: allow
   candidate_validate: allow
   candidate_diff: allow
   glob: allow
@@ -73,16 +74,23 @@ Work in a bounded validation-first sequence:
    EXECUTION_CORRESPONDENCE. A guard inherited from the shared environment or
    judged not applicable still needs an explicit GUARD_BEHAVIOR requirement
    explaining that scope and its disposition.
-5. Write the requested immutable artifact, run `candidate_validate`, and make
+5. Write the requested immutable artifact with
+   `candidate_semantic_delta_write`, run `candidate_validate`, and make
    at most two diagnostic-driven repair passes. Do not resume broad source
    reading after validation begins.
 
-- Pin exact unit, environment ID/revision/hash, and source-bundle path/hash.
+- Do not serialize run identity, environment/source hashes, source paths,
+  locators, provenance, language-core binding, or fresh lifecycle boilerplate.
+  The structured writer derives those fields from the exact run and published
+  source bundle. Supply semantic content plus exact `sourceBundleEvidenceId`
+  references only.
 - Every local SOURCE_FACT uses exact bundle evidence through
-  `sourceBundleEvidenceId`.
+  `sourceBundleEvidenceId`; the structured writer assigns canonical evidence
+  IDs and rewrites matching claim references.
 - Every DERIVED_INTERPRETATION names its semantic dependencies.
 - Every DESIGN_DEPENDENCY is stated as project design, not official prose.
-- Preserve assumptions and open questions with stateAffecting and lifecycle.
+- Preserve assumptions and open questions with their stateAffecting decision;
+  the writer supplies the fresh ACTIVE lifecycle revision.
 - Provide typed syntax, operands, operation, reads/writes, preconditions, and
   proof families without inventing unsupported branches.
 - Every operand lists exhaustive `legalForms`, exact `typeDomains`, and
@@ -124,7 +132,7 @@ ensure the dependency closure terminates in local/shared SOURCE_FACT roots or
 explicit project/human authority. Never let a design choice masquerade as a
 derivation merely because it is convenient to encode.
 
-Write the requested delta during the first bounded pass, run
+Write the requested delta through `candidate_semantic_delta_write` during the first bounded pass, run
 `candidate_validate`, and repair every reported issue in this same session.
 Return RETRY for explicit legacy fallback
 when the unit is outside the environment/schema. Return BLOCKED for a genuine
