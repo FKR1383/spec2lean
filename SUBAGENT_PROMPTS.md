@@ -2188,8 +2188,9 @@ the repository or web for reassurance. End with the exact supplied
 `SPEC2LEAN_RESULT` line outside a fence.
 
 Schema, locator, candidate-write, or `candidate_validate` failures are never a
-semantic BLOCKED result. After the bounded repair attempt, return RETRY with
-the exact diagnostic so the full curator can take over. This fast agent is not
+semantic BLOCKED result. On the first deterministic validation failure, return
+RETRY immediately with the exact diagnostic; do not spend the fast-path window
+repairing structure. The full curator owns that repair. This fast agent is not
 authoritative for a terminal evidence-absence decision.
 ````
 

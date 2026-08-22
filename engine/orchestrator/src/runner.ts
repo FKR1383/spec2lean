@@ -515,7 +515,7 @@ export function agentWaitBudgetMs(
   agent: string,
 ): number {
   if (agent === "semantic-extractor-delta") return 4 * 60 * 1000
-  if (agent === "source-curator-fast") return 3 * 60 * 1000
+  if (agent === "source-curator-fast") return 2 * 60 * 1000
   if (stage === "PROOF_GENERATION") return 8 * 60 * 1000
   return 8 * 60 * 1000
 }

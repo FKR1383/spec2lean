@@ -2615,6 +2615,14 @@ assert(
   "semantic delta extraction has a bounded four-minute wait budget",
 )
 assert(
+  agentWaitBudgetMs("SOURCE_CURATION", "source-curator-fast") === 2 * 60 * 1000 &&
+    (await readFile(
+      resolve(REPO_ROOT, ".opencode/agents/source-curator-fast.md"),
+      "utf8",
+    )).includes("On the first deterministic validation failure, return"),
+  "fast source validation falls back promptly instead of spending the full stage budget on structural repair",
+)
+assert(
   agentWaitBudgetMs("LEAN_FORMALIZATION", "lean-formalizer") === 8 * 60 * 1000,
   "ordinary agent stages retain an eight-minute wait budget",
 )
