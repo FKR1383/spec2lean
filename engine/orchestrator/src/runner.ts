@@ -1735,10 +1735,31 @@ export async function executeTick(
       }
     }
 
+    // A model may surface candidate_validate diagnostics in an explicit RETRY.
+    // Re-run the deterministic validator here so ownership is established by
+    // the engine, not inferred from model prose. Orchestrator invariants are
+    // terminal; agent-owned structural defects remain repairable.
+    if (result.outcome === "RETRY" && failureClass === undefined) {
+      const verification = await verifyExpectedArtifact(run).catch(() => undefined)
+      if (verification !== undefined && !verification.ok) {
+        failureClass = artifactVerificationFailureClass(verification.issues)
+        if (failureClass === "ENGINE_INVARIANT_FAILURE") {
+          result = {
+            outcome: "RETRY",
+            nextStage: run.stage,
+            summary:
+              "Deterministic validation found an orchestrator-owned invariant failure; " +
+              `the same agent will not be retried: ${verification.issues.join(" | ")}`,
+          }
+        }
+      }
+    }
+
     if (
       run.stage === "SEMANTIC_EXTRACTION" &&
       run.semanticV2?.mode === "DELTA_FAST_PATH" &&
-      result.outcome !== "SUCCESS"
+      result.outcome !== "SUCCESS" &&
+      failureClass !== "ENGINE_INVARIANT_FAILURE"
     ) {
       run = markSemanticV2Fallback(
         run,

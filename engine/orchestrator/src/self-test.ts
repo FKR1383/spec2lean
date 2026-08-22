@@ -2760,6 +2760,11 @@ assert(
     candidateTool.includes("source bundle is missing the exact hash-bound official"),
   "candidate tools validate JSON, required source renditions, and same-session stage/traceability checks",
 )
+assert(
+  runnerSource.includes("A model may surface candidate_validate diagnostics in an explicit RETRY") &&
+    runnerSource.includes("the same agent will not be retried"),
+  "explicit model RETRY results are deterministically reclassified before another LLM invocation",
+)
 
 const leanVerifierSmoke = await verifyLeanFile("lean/Spec2Lean/PTX/MovB32.lean")
 assert(
