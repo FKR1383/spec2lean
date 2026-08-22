@@ -688,6 +688,7 @@ export async function validateSemanticDeltaForRun(
       const renditionIssues = await semanticEvidenceRenditionIssues({
         runId: run.runId,
         semanticDocument: renditionProjection,
+        semanticPath: run.semanticV2.current.deltaPath,
         sourceBundlePaths: [sourceBundlePath],
         includePdfRenditions: true,
       })

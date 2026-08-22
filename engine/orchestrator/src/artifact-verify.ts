@@ -3,7 +3,10 @@ import { access, readFile, stat } from "node:fs/promises"
 import { resolve } from "node:path"
 
 import { artifactContractForRun } from "./artifact-contract.js"
-import { authoritativeArtifact } from "./artifact-authority.js"
+import {
+  authoritativeArtifact,
+  MissingPublishedArtifactBindingError,
+} from "./artifact-authority.js"
 import { validateArtifactContent } from "./artifact-content.js"
 import { validateArchitectureQuestionTriage } from "./architecture-review.js"
 import { prohibitedLeanTokens, verifyLeanFile } from "./lean-local.js"
@@ -32,6 +35,32 @@ export type ArtifactVerification = {
   ok: boolean
   path: string
   issues: string[]
+}
+
+/** Failures outside the current agent artifact must never consume LLM retries. */
+export function artifactVerificationFailureClass(
+  issues: readonly string[],
+): "ENGINE_INVARIANT_FAILURE" | "STRUCTURAL_AGENT_ARTIFACT_REPAIR" {
+  const engineOwned = issues.some((issue) => {
+    const normalized = issue.toLowerCase()
+    return normalized.startsWith("orchestrator_invariant:") ||
+      normalized.includes("missing published semantics artifact binding") ||
+      normalized.includes("missing semantics rendition binding") ||
+      normalized.includes("run lacks a published semantics artifact binding") ||
+      normalized.includes("published artifact binding for semantics") ||
+      (normalized.includes("no published semantics") && normalized.includes("artifact")) ||
+      normalized.includes("outside artifact ownership")
+  })
+  return engineOwned
+    ? "ENGINE_INVARIANT_FAILURE"
+    : "STRUCTURAL_AGENT_ARTIFACT_REPAIR"
+}
+
+function validationFailureMessage(context: string, error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  return error instanceof MissingPublishedArtifactBindingError
+    ? `ORCHESTRATOR_INVARIANT: ${context}: ${message}`
+    : `${context}: ${message}`
 }
 
 type UnknownRecord = Record<string, unknown>
@@ -84,7 +113,10 @@ async function semanticEvidenceIntegrityIssues(run: RunState, document: unknown)
       }
     }
   } catch (error) {
-    issues.push(`could not verify semantic evidence against source bundle: ${error instanceof Error ? error.message : String(error)}`)
+    issues.push(validationFailureMessage(
+      "could not verify semantic evidence against source bundle",
+      error,
+    ))
   }
   return issues
 }
@@ -131,9 +163,13 @@ export async function verifyExpectedArtifact(run: RunState): Promise<ArtifactVer
       issues.push(...await semanticEvidenceRenditionIssues({
         runId: run.runId,
         semanticDocument: parsedJson,
+        semanticPath: path,
       }))
     } catch (error) {
-      issues.push(`could not verify semantic official-rendition coverage: ${error instanceof Error ? error.message : String(error)}`)
+      issues.push(validationFailureMessage(
+        "could not verify semantic official-rendition coverage",
+        error,
+      ))
     }
     if (run.qualityContractVersion === 1) {
       try {

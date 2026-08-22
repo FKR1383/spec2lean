@@ -34,6 +34,7 @@ import {
   stageAttempt,
 } from "./artifact-contract.js"
 import { normalizeExpectedArtifactContent } from "./artifact-normalization.js"
+import { artifactVerificationFailureClass } from "./artifact-verify.js"
 import { mapWithConcurrency } from "./batch-runtime.js"
 import {
   PIPELINE_AGENTS,
@@ -139,6 +140,7 @@ import { saveRun } from "./run-store.js"
 import { withRepositoryLock } from "./repository-lock.js"
 import {
   consecutiveOutputLengthFailureCount,
+  isEngineInvariantFailure,
   isProviderAvailabilityFailure,
   noProgressRetryCount,
   noProgressRetryLimitReached,
@@ -151,6 +153,7 @@ import {
   buildTraceabilityManifest,
   manifestEntryForLine,
   parseLeanDeclarations,
+  semanticEvidenceRenditionIssues,
   traceabilityManifestPath,
   unresolvedReferenceTokens,
   verifyTraceabilityManifest,
@@ -1532,6 +1535,123 @@ const baseArtifactRun: RunState = {
   },
   history: [],
 }
+const prepublicationId = `semantic-prepublication-self-test-${randomUUID()}`
+const prepublicationRoot = `candidates/self-test/${prepublicationId}`
+const prepublicationSemanticPath = `${prepublicationRoot}/semantics/semantics-v1.json`
+const prepublicationBundlePath = `${prepublicationRoot}/source-bundles/source-bundle-v1.json`
+const prepublicationSemanticSource = `${JSON.stringify({
+  schemaVersion: 3,
+  documentType: "spec2lean_full_semantics",
+  semanticClaims: [],
+}, null, 2)}\n`
+const prepublicationBundleSource = `${JSON.stringify({
+  schema_version: 3,
+  source_documents: [],
+  fragments: [],
+}, null, 2)}\n`
+const prepublicationRun: RunState = {
+  ...baseArtifactRun,
+  runId: prepublicationId,
+  artifactRoot: prepublicationRoot,
+  executions: [{
+    at: "2026-01-01T00:00:01.000Z",
+    stage: "SOURCE_CURATION",
+    agent: "source-curator",
+    sessionId: "prepublication-source",
+    outcome: "SUCCESS",
+    nextStage: "SEMANTIC_EXTRACTION",
+    response: "fixture",
+    publishedArtifacts: [{
+      role: "SOURCE_BUNDLE",
+      path: prepublicationBundlePath,
+      sha256: createHash("sha256").update(prepublicationBundleSource).digest("hex"),
+      sizeBytes: Buffer.byteLength(prepublicationBundleSource),
+      stage: "SOURCE_CURATION",
+      producingExecution: { agent: "source-curator", sessionId: "prepublication-source" },
+      runRevision: 1,
+    }],
+  }],
+}
+try {
+  await mkdir(dirname(resolve(REPO_ROOT, prepublicationSemanticPath)), { recursive: true })
+  await mkdir(dirname(resolve(REPO_ROOT, prepublicationBundlePath)), { recursive: true })
+  await writeFile(resolve(REPO_ROOT, prepublicationSemanticPath), prepublicationSemanticSource)
+  await writeFile(resolve(REPO_ROOT, prepublicationBundlePath), prepublicationBundleSource)
+  await saveRun(prepublicationRun)
+  assert(
+    (await semanticEvidenceRenditionIssues({
+      runId: prepublicationId,
+      semanticDocument: JSON.parse(prepublicationSemanticSource) as unknown,
+      semanticPath: prepublicationSemanticPath,
+      sourceBundlePaths: [prepublicationBundlePath],
+      includePdfRenditions: false,
+    })).length === 0,
+    "the exact active semantic candidate validates before SEMANTICS publication",
+  )
+  let unpublishedAuthorityRejected = false
+  try {
+    await semanticEvidenceRenditionIssues({
+      runId: prepublicationId,
+      includePdfRenditions: false,
+    })
+  } catch (error) {
+    unpublishedAuthorityRejected =
+      String(error).includes("published artifact binding for SEMANTICS")
+  }
+  assert(
+    unpublishedAuthorityRejected,
+    "downstream semantic rendition lookup still requires a published SEMANTICS binding",
+  )
+  const semanticSha256 = createHash("sha256").update(prepublicationSemanticSource).digest("hex")
+  const publishedRun: RunState = {
+    ...prepublicationRun,
+    executions: [
+      ...(prepublicationRun.executions ?? []),
+      {
+        at: "2026-01-01T00:00:02.000Z",
+        stage: "SEMANTIC_EXTRACTION",
+        agent: "semantic-extractor",
+        sessionId: "prepublication-semantics",
+        outcome: "SUCCESS",
+        nextStage: "SEMANTIC_CRITIQUE",
+        response: "fixture",
+        publishedArtifacts: [{
+          role: "SEMANTICS",
+          path: prepublicationSemanticPath,
+          sha256: semanticSha256,
+          sizeBytes: Buffer.byteLength(prepublicationSemanticSource),
+          stage: "SEMANTIC_EXTRACTION",
+          producingExecution: { agent: "semantic-extractor", sessionId: "prepublication-semantics" },
+          runRevision: 2,
+        }],
+      },
+    ],
+  }
+  await saveRun(publishedRun)
+  assert(
+    (await semanticEvidenceRenditionIssues({
+      runId: prepublicationId,
+      includePdfRenditions: false,
+    })).length === 0,
+    "post-publication rendition lookup consumes the exact authoritative SEMANTICS binding",
+  )
+} finally {
+  await rm(resolve(REPO_ROOT, prepublicationRoot), { recursive: true, force: true })
+  await rm(resolve(REPO_ROOT, `runs/${prepublicationId}`), { recursive: true, force: true })
+}
+assert(
+  artifactVerificationFailureClass([
+    "could not verify semantic official-rendition coverage: run lacks a published SEMANTICS artifact binding",
+  ]) === "ENGINE_INVARIANT_FAILURE" &&
+    artifactVerificationFailureClass(["INVALID_EVIDENCE_ID@$.claims[0]"]) ===
+      "STRUCTURAL_AGENT_ARTIFACT_REPAIR",
+  "deterministic verification separates orchestrator invariants from agent-owned artifact repair",
+)
+assert(
+  isEngineInvariantFailure({ failureClass: "ENGINE_INVARIANT_FAILURE" }) &&
+    !isEngineInvariantFailure({ failureClass: "STRUCTURAL_AGENT_ARTIFACT_REPAIR" }),
+  "orchestrator-owned invariant failures are terminal instead of consuming another LLM retry",
+)
 const elaborationMappingPath = "candidates/ptx/9.3/units/or-b32/lean/OrB32-v7.lean"
 const elaborationObligations = JSON.parse(await readFile(
   resolve(REPO_ROOT, "candidates/ptx/9.3/units/or-b32/theorems/obligations-v5.json"),

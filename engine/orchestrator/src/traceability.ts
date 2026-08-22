@@ -750,7 +750,14 @@ export async function semanticEvidenceRenditionIssues(
   input: SemanticEvidenceRenditionInput,
 ): Promise<string[]> {
   const run = await loadRun(input.runId)
-  const semanticPath = input.semanticPath ?? (await authoritativeArtifact(run, "SEMANTICS")).path
+  // Producer-side validation is deliberately allowed to supply the exact
+  // unpublished candidate path/document. Only downstream callers that supply
+  // neither resolve the published SEMANTICS trust-boundary binding.
+  const semanticPath = input.semanticPath ?? (
+    input.semanticDocument === undefined
+      ? (await authoritativeArtifact(run, "SEMANTICS")).path
+      : (() => { throw new Error("semanticPath is required with a pre-publication semanticDocument") })()
+  )
   const semanticDocument = input.semanticDocument ?? JSON.parse(
     (await readRepositoryFile(semanticPath)).toString("utf8"),
   ) as unknown

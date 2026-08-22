@@ -56,7 +56,8 @@ export async function buildPerfReport(runId: string): Promise<Record<string, unk
     if (execution.progress?.kind === "PROOF_BATCH_CONTINUATION") {
       current.proofContinuations += 1
     } else if (execution.outcome === "RETRY") current.retries += 1
-    if (execution.failureClass === "PROVIDER_RETRY_BUDGET_EXCEEDED") current.providerRetries += 1
+    if (["PROVIDER_FAILURE", "PROVIDER_RETRY_BUDGET_EXCEEDED"]
+      .includes(execution.failureClass ?? "")) current.providerRetries += 1
   }
 
   const stages = [...metrics.entries()].map(([stage, current]) => ({
@@ -101,7 +102,8 @@ export async function buildPerfReport(runId: string): Promise<Record<string, unk
       0,
     ),
     providerRetryExecutions: (run.executions ?? []).filter(
-      (execution) => execution.failureClass === "PROVIDER_RETRY_BUDGET_EXCEEDED",
+      (execution) => ["PROVIDER_FAILURE", "PROVIDER_RETRY_BUDGET_EXCEEDED"]
+        .includes(execution.failureClass ?? ""),
     ).length,
     outputLengthExecutions: (run.executions ?? []).filter(
       (execution) => execution.failureClass === "OUTPUT_LENGTH_EXCEEDED",

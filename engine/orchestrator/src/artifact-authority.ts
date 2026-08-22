@@ -10,6 +10,16 @@ import type {
   RunState,
 } from "./workflow.js"
 
+export class MissingPublishedArtifactBindingError extends Error {
+  constructor(
+    readonly runId: string,
+    readonly role: ArtifactRole,
+  ) {
+    super(`Run ${runId} has no published artifact binding for ${role}`)
+    this.name = "MissingPublishedArtifactBindingError"
+  }
+}
+
 const PRIMARY_ROLE: Partial<Record<FormalizationStage, ArtifactRole>> = {
   ARCHITECTURE: "ARCHITECTURE",
   ARCHITECTURE_CRITIQUE: "ARCHITECTURE_REVIEW",
@@ -98,7 +108,7 @@ export async function authoritativeArtifact(
 ): Promise<PublishedArtifact> {
   const binding = recordedArtifact(run, role) ?? await legacyRecordedArtifact(run, role)
   if (binding === undefined) {
-    throw new Error(`Run ${run.runId} has no published artifact binding for ${role}`)
+    throw new MissingPublishedArtifactBindingError(run.runId, role)
   }
   return await verifyPublishedArtifact(binding)
 }

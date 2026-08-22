@@ -6,7 +6,14 @@ export const NO_PROGRESS_RETRY_LIMIT = 2
 export function isProviderAvailabilityFailure(
   execution: AgentExecution | undefined,
 ): boolean {
-  return execution?.failureClass === "PROVIDER_RETRY_BUDGET_EXCEEDED"
+  return execution?.failureClass === "PROVIDER_FAILURE" ||
+    execution?.failureClass === "PROVIDER_RETRY_BUDGET_EXCEEDED"
+}
+
+export function isEngineInvariantFailure(
+  execution: Pick<AgentExecution, "failureClass"> | undefined,
+): boolean {
+  return execution?.failureClass === "ENGINE_INVARIANT_FAILURE"
 }
 
 /**

@@ -14,7 +14,10 @@ import {
 import { artifactContractForRun } from "./artifact-contract.js"
 import { authoritativeArtifact, primaryArtifactRole, publishedArtifact } from "./artifact-authority.js"
 import { validateArtifactContent } from "./artifact-content.js"
-import { verifyExpectedArtifact } from "./artifact-verify.js"
+import {
+  artifactVerificationFailureClass,
+  verifyExpectedArtifact,
+} from "./artifact-verify.js"
 import { recoverResultFromVerifiedArtifact } from "./artifact-recovery.js"
 import { normalizeCriticResultFromReview } from "./critic-disposition.js"
 import { architectureQuestionTriageRequiresRevision } from "./architecture-review.js"
@@ -61,6 +64,7 @@ import {
   type FormalizationStage,
   type RunState,
 } from "./workflow.js"
+import { isEngineInvariantFailure } from "./retry-policy.js"
 
 type Agent = { name: string }
 type Session = { id: string }
@@ -605,14 +609,18 @@ export function buildGeneralPrompt(
   const interruptedAfterArtifactWrite =
     latestExecution?.stage === run.stage &&
     latestExecution.outcome === "RETRY" &&
-    latestExecution.failureClass === "PROVIDER_RETRY_BUDGET_EXCEEDED" &&
+    ["PROVIDER_FAILURE", "PROVIDER_RETRY_BUDGET_EXCEEDED"].includes(
+      latestExecution.failureClass ?? "",
+    ) &&
     latestExecution.artifactProduced === true
   const latestSubstantiveRetry = [...(run.executions ?? [])]
     .reverse()
     .find((execution) =>
       execution.stage === run.stage &&
       execution.outcome === "RETRY" &&
-      execution.failureClass !== "PROVIDER_RETRY_BUDGET_EXCEEDED"
+      !["PROVIDER_FAILURE", "PROVIDER_RETRY_BUDGET_EXCEEDED"].includes(
+        execution.failureClass ?? "",
+      )
     )
   const currentRetryReason =
     interruptedAfterArtifactWrite
@@ -1542,13 +1550,17 @@ export async function executeTick(
         result = recoveredResult
       } else {
         if (error instanceof ProviderRetryBudgetExceededError) {
-          failureClass = "PROVIDER_RETRY_BUDGET_EXCEEDED"
+          failureClass = "PROVIDER_FAILURE"
         } else if (message.includes("reason=length")) {
           failureClass = "OUTPUT_LENGTH_EXCEEDED"
         } else if (message.includes("timed out")) {
           failureClass = "AGENT_WAIT_BUDGET_EXCEEDED"
         }
         const verification = await verifyExpectedArtifact(run).catch(() => undefined)
+        if (verification !== undefined && !verification.ok &&
+          artifactVerificationFailureClass(verification.issues) === "ENGINE_INVARIANT_FAILURE") {
+          failureClass = "ENGINE_INVARIANT_FAILURE"
+        }
         const repairDiagnostics = verification === undefined || verification.ok
           ? ""
           : ` Deterministic artifact diagnostics: ${verification.issues.join(" | ")}`
@@ -1652,7 +1664,7 @@ export async function executeTick(
             summary: `${result.summary} Deterministic theorem-to-source evidence manifest: ${traceability.manifestPath}.`,
           }
         } catch (error) {
-          failureClass = "STRUCTURAL_ARTIFACT_VALIDATION"
+          failureClass = "STRUCTURAL_AGENT_ARTIFACT_REPAIR"
           result = {
             outcome: "RETRY",
             nextStage: run.stage,
@@ -1663,7 +1675,7 @@ export async function executeTick(
     } else if (result.outcome === "SUCCESS" || result.outcome === "REVISE") {
       const verification = await verifyExpectedArtifact(run)
       if (!verification.ok) {
-        failureClass = "STRUCTURAL_ARTIFACT_VALIDATION"
+        failureClass = artifactVerificationFailureClass(verification.issues)
         const renditionIssues = verification.issues.filter(isOfficialRenditionIssue)
         if (run.stage === "SEMANTIC_EXTRACTION" && renditionIssues.length > 0) {
           if (!(result.outcome === "REVISE" && result.nextStage === "SOURCE_CURATION")) {
@@ -1691,7 +1703,7 @@ export async function executeTick(
         try {
           run = await materializeSemanticDeltaForRun(run)
         } catch (error) {
-          failureClass = "STRUCTURAL_ARTIFACT_VALIDATION"
+          failureClass = "STRUCTURAL_AGENT_ARTIFACT_REPAIR"
           const detail = error instanceof Error ? error.message : String(error)
           run = markSemanticV2Fallback(
             run,
@@ -1713,7 +1725,7 @@ export async function executeTick(
             summary: `${result.summary} Deterministic Lean-to-source evidence manifest: ${traceability.manifestPath}.`,
           }
         } catch (error) {
-          failureClass = "STRUCTURAL_ARTIFACT_VALIDATION"
+          failureClass = "STRUCTURAL_AGENT_ARTIFACT_REPAIR"
           result = {
             outcome: "RETRY",
             nextStage: run.stage,
@@ -1769,16 +1781,28 @@ export async function executeTick(
     if (result.outcome === "RETRY" && failureClass === undefined) {
       failureClass = "MODEL_OR_SEMANTIC_RETRY"
     }
-    const nextStage = validateAgentDecision(run, result)
+    const requestedNextStage = validateAgentDecision(run, result)
+    const engineInvariantFailure = isEngineInvariantFailure({ failureClass })
+    const nextStage = engineInvariantFailure
+      ? "FAILED" as const
+      : requestedNextStage
     const artifactBefore = run.activeExecution?.artifactBaseline
     const artifactAfter = await artifactFingerprint(artifact.outputPath)
     const producedArtifact = artifactChanged(artifactBefore, artifactAfter)
     const failureFingerprint = await retryFailureFingerprint(run, result, proofContext)
-    let nextRun = failureClass === "PROVIDER_RETRY_BUDGET_EXCEEDED"
+    let nextRun = ["PROVIDER_FAILURE", "PROVIDER_RETRY_BUDGET_EXCEEDED"].includes(
+      failureClass ?? "",
+    )
       ? {
           ...run,
           updatedAt: new Date().toISOString(),
         }
+      : engineInvariantFailure
+        ? transitionRun(
+            run,
+            "FAILED",
+            `orchestrator-owned invariant failure; agent retry suppressed: ${result.summary}`,
+          )
       : result.outcome === "RETRY"
         ? retryRun(run, `${plan.agent} retry: ${result.summary}`)
         : transitionRun(run, nextStage, `${plan.agent}: ${result.summary}`)

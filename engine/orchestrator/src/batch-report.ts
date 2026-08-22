@@ -52,7 +52,8 @@ const runs = await Promise.all(batch.runs.map(async (entry) => {
     ).length,
     proofContinuations,
     providerRetryBudgetFailures: executions.filter(
-      (execution) => execution.failureClass === "PROVIDER_RETRY_BUDGET_EXCEEDED",
+      (execution) => ["PROVIDER_FAILURE", "PROVIDER_RETRY_BUDGET_EXCEEDED"]
+        .includes(execution.failureClass ?? ""),
     ).length,
     executionModels: executions.reduce<Record<string, number>>((counts, execution) => {
       const model = execution.model ?? "unrecorded"
