@@ -1,6 +1,0 @@
-name = "Spec2Lean"
-version = "0.1.0"
-defaultTargets = ["Spec2Lean"]
-
-[[lean_lib]]
-name = "Spec2Lean"

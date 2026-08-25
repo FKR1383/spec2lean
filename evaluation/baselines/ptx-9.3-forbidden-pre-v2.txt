@@ -1,6 +1,0 @@
-lean/Spec2Lean/PTX/XorB32Proofs.lean:16:unsafe verification bypass.
-lean/Spec2Lean/PTX/XorB32Proofs.lean:25:partial case (it relates only complete executions; mapping decision D-25 /
-lean/Spec2Lean/PTX/NotB32Proofs.lean:16:unsafe verification bypass.
-lean/Spec2Lean/PTX/NotB32Proofs.lean:25:partial case (it relates only complete executions; mapping decision D-25 /
-lean/Spec2Lean/PTX/AddU32Proofs.lean:43:partial execution for out-of-domain states only (PTX-ADD-SEM2-044/045/046/050),
-lean/Spec2Lean/PTX/MovB32Proofs.lean:13:unsafe verification bypass.
