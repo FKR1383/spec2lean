@@ -8,19 +8,70 @@ import sys
 from pathlib import Path
 from typing import Any, Sequence
 
-from .constants import INDEX_SCHEMA_VERSION, PARSER_VERSION, __version__
+from .constants import INDEX_SCHEMA_VERSION, PARSER_VERSION, UNIT_KINDS, __version__
 from .database import build_database, connect
 from .parsers import parse_html, parse_pdf
+from .planning.render import plan_statistics, render_dot
+from .planning.runner import build_plan
+from .planning.submission import record_observed_nodes, submit_candidate
+from .planning.tools import TOOLS as PLANNER_TOOLS, invoke_tool
+from .planning.validation import validate_plan
 from .util import canonical_json
 from .validation import record_validation, statistics, validate_database
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_INDEX_ROOT = REPOSITORY_ROOT / "indexes"
+DEFAULT_PLAN_ROOT = REPOSITORY_ROOT / "plans"
 
 
 def _database_for(language: str, version: str) -> Path:
     return DEFAULT_INDEX_ROOT / language.casefold() / version / "specification.sqlite"
+
+
+def _plan_for(language: str, version: str) -> Path:
+    return DEFAULT_PLAN_ROOT / language.casefold() / version / "plan.json"
+
+
+def _resolve_plan(args: argparse.Namespace, unit_id: str | None = None) -> Path:
+    if getattr(args, "plan", None):
+        path = Path(args.plan).resolve()
+        if not path.is_file():
+            raise FileNotFoundError(f"plan does not exist: {path}")
+        return path
+    language = getattr(args, "language", None)
+    version = getattr(args, "version", None)
+    if language and version:
+        path = _plan_for(language, version)
+        if not path.is_file():
+            raise FileNotFoundError(f"plan does not exist: {path}")
+        return path
+    if unit_id:
+        matches = []
+        for path in DEFAULT_PLAN_ROOT.glob("*/*/plan.json"):
+            try:
+                plan = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if any(unit.get("unitId") == unit_id for unit in plan.get("units", [])):
+                matches.append(path)
+        if len(matches) == 1:
+            return matches[0]
+        if not matches:
+            raise FileNotFoundError(f"unit {unit_id!r} was not found in local plans")
+        raise RuntimeError(f"unit {unit_id!r} occurs in multiple plans; pass --plan")
+    raise ValueError("pass --plan or both --language and --version")
+
+
+def _load_plan(args: argparse.Namespace, unit_id: str | None = None) -> tuple[Path, dict[str, Any]]:
+    path = _resolve_plan(args, unit_id)
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid plan JSON in {path}: {exc}") from exc
+    if not isinstance(value, dict):
+        raise ValueError(f"plan must be a JSON object: {path}")
+    return path, value
 
 
 def _official_url(path: Path) -> str | None:
@@ -386,14 +437,180 @@ def _command_dump(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_planner_tool(args: argparse.Namespace) -> int:
+    database = Path(args.database).resolve()
+    if not database.is_file():
+        raise FileNotFoundError(f"database does not exist: {database}")
+    try:
+        request = json.loads(args.request)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"planner tool request is not valid JSON: {exc}") from exc
+    if args.tool_name == "submit":
+        required = {
+            "session state": args.session_state,
+            "submission output": args.submission_output,
+            "language": args.language,
+            "version": args.specification_version,
+            "index digest": args.index_digest,
+        }
+        missing = [name for name, value in required.items() if not value]
+        if missing:
+            raise ValueError(f"planner submit is missing: {', '.join(missing)}")
+        result = submit_candidate(
+            database=database,
+            state_path=args.session_state,
+            output_path=args.submission_output,
+            language=args.language,
+            version=args.specification_version,
+            digest=args.index_digest,
+            candidate=request,
+        )
+    else:
+        with connect(database, read_only=True) as connection:
+            result = invoke_tool(connection, args.tool_name, request)
+        if args.session_state:
+            record_observed_nodes(args.session_state, result)
+    print(json.dumps(result, ensure_ascii=False, separators=(",", ":"), sort_keys=True))
+    return 0
+
+
+def _command_plan_build(args: argparse.Namespace) -> int:
+    database = Path(args.database).resolve() if args.database else _database_for(args.language, args.version)
+    if not database.is_file():
+        raise FileNotFoundError(f"database does not exist: {database}")
+    directory = (
+        Path(args.plan_directory).resolve()
+        if args.plan_directory
+        else DEFAULT_PLAN_ROOT / args.language.casefold() / args.version
+    )
+    run = build_plan(
+        database=database,
+        plan_directory=directory,
+        repository_root=REPOSITORY_ROOT,
+        opencode_executable=args.opencode,
+        expected_language=args.language,
+        expected_version=args.version,
+    )
+    _json(run)
+    return 0 if run["status"] == "PASS" else 1
+
+
+def _command_plan_stats(args: argparse.Namespace) -> int:
+    path, plan = _load_plan(args)
+    result = plan_statistics(plan)
+    result["plan"] = str(path)
+    run_path = path.with_name("planner-run.json")
+    if run_path.is_file():
+        run = json.loads(run_path.read_text(encoding="utf-8"))
+        result["plannerRuntimeSeconds"] = run.get("runtimeSeconds")
+        result["modelId"] = run.get("modelId")
+        result["reasoning"] = run.get("reasoning")
+    _json(result)
+    return 0
+
+
+def _command_plan_units(args: argparse.Namespace) -> int:
+    _, plan = _load_plan(args)
+    units = plan["units"]
+    if args.kind:
+        units = [unit for unit in units if unit["kind"] == args.kind]
+    _json(units)
+    return 0
+
+
+def _command_plan_show(args: argparse.Namespace) -> int:
+    _, plan = _load_plan(args, args.unit)
+    unit = next((item for item in plan["units"] if item["unitId"] == args.unit), None)
+    if unit is None:
+        raise KeyError(f"unknown unit: {args.unit}")
+    dependencies = [edge for edge in plan["dependencies"] if edge["toUnitId"] == args.unit]
+    dependents = [edge for edge in plan["dependencies"] if edge["fromUnitId"] == args.unit]
+    _json({"unit": unit, "dependencies": dependencies, "dependents": dependents})
+    return 0
+
+
+def _command_plan_deps(args: argparse.Namespace) -> int:
+    _, plan = _load_plan(args, args.unit)
+    _json([edge for edge in plan["dependencies"] if edge["toUnitId"] == args.unit])
+    return 0
+
+
+def _command_plan_dependents(args: argparse.Namespace) -> int:
+    _, plan = _load_plan(args, args.unit)
+    _json([edge for edge in plan["dependencies"] if edge["fromUnitId"] == args.unit])
+    return 0
+
+
+def _command_plan_layers(args: argparse.Namespace) -> int:
+    _, plan = _load_plan(args)
+    _json(plan["processingLayers"])
+    return 0
+
+
+def _command_plan_scc(args: argparse.Namespace) -> int:
+    _, plan = _load_plan(args)
+    components = plan["stronglyConnectedComponents"]
+    if args.cycles_only:
+        components = [component for component in components if component["cyclic"]]
+    _json(components)
+    return 0
+
+
+def _command_plan_graph(args: argparse.Namespace) -> int:
+    _, plan = _load_plan(args)
+    rendered = render_dot(plan)
+    if args.output:
+        output = Path(args.output).resolve()
+        output.write_text(rendered, encoding="utf-8")
+        print(output)
+    else:
+        print(rendered, end="")
+    return 0
+
+
+def _command_plan_validate(args: argparse.Namespace) -> int:
+    path, plan = _load_plan(args)
+    specification = plan.get("specification", {})
+    database = (
+        Path(args.database).resolve()
+        if args.database
+        else _database_for(specification.get("language", ""), specification.get("version", ""))
+    )
+    if not database.is_file():
+        raise FileNotFoundError(f"database does not exist: {database}")
+    with connect(database, read_only=True) as connection:
+        indexed_specification = connection.execute(
+            "SELECT language, version FROM specifications"
+        ).fetchone()
+        build = connection.execute(
+            "SELECT semantic_digest FROM builds WHERE status = 'COMPLETE' ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+        report = validate_plan(
+            plan,
+            connection,
+            expected_language=indexed_specification["language"] if indexed_specification else None,
+            expected_version=indexed_specification["version"] if indexed_specification else None,
+            expected_digest=build["semantic_digest"] if build else None,
+        )
+    report["plan"] = str(path)
+    _json(report)
+    return 0 if report["ok"] else 1
+
+
 def _add_database_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--language")
     parser.add_argument("--version")
     parser.add_argument("--database")
 
 
+def _add_plan_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--language")
+    parser.add_argument("--version")
+    parser.add_argument("--plan")
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="spec2lean", description="Spec2Lean Phase 1 specification index")
+    parser = argparse.ArgumentParser(prog="spec2lean", description="Spec2Lean specification index and planner")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
     index = commands.add_parser("index", help="build and inspect specification indexes")
@@ -474,13 +691,74 @@ def build_parser() -> argparse.ArgumentParser:
     dump.add_argument("--all-nodes", action="store_true")
     dump.add_argument("--max-depth", type=int)
     dump.set_defaults(func=_command_dump)
+
+    plan = commands.add_parser("plan", help="build and inspect Phase-2 formalization plans")
+    plan_sub = plan.add_subparsers(dest="plan_command", required=True)
+
+    plan_build = plan_sub.add_parser("build", help="run the one-shot OpenCode Planner and validate its output")
+    plan_build.add_argument("--language", required=True)
+    plan_build.add_argument("--version", required=True)
+    plan_build.add_argument("--database")
+    plan_build.add_argument("--plan-directory")
+    plan_build.add_argument("--opencode", default="opencode")
+    plan_build.set_defaults(func=_command_plan_build)
+
+    plan_stats = plan_sub.add_parser("stats", help="show formalization-plan statistics")
+    _add_plan_arguments(plan_stats)
+    plan_stats.set_defaults(func=_command_plan_stats)
+
+    plan_units = plan_sub.add_parser("units", help="list formalization units")
+    _add_plan_arguments(plan_units)
+    plan_units.add_argument("--kind", choices=sorted(UNIT_KINDS))
+    plan_units.set_defaults(func=_command_plan_units)
+
+    for name, help_text, handler in (
+        ("show", "show one unit and adjacent edges", _command_plan_show),
+        ("deps", "show prerequisites of one unit", _command_plan_deps),
+        ("dependents", "show units that depend on one unit", _command_plan_dependents),
+    ):
+        command = plan_sub.add_parser(name, help=help_text)
+        _add_plan_arguments(command)
+        command.add_argument("--unit", required=True)
+        command.set_defaults(func=handler)
+
+    layers = plan_sub.add_parser("layers", help="show deterministic processing layers")
+    _add_plan_arguments(layers)
+    layers.set_defaults(func=_command_plan_layers)
+
+    scc = plan_sub.add_parser("scc", help="show strongly connected components")
+    _add_plan_arguments(scc)
+    scc.add_argument("--cycles-only", action="store_true")
+    scc.set_defaults(func=_command_plan_scc)
+
+    graph = plan_sub.add_parser("graph", help="render the dependency graph")
+    _add_plan_arguments(graph)
+    graph.add_argument("--format", choices=("dot",), default="dot")
+    graph.add_argument("--output")
+    graph.set_defaults(func=_command_plan_graph)
+
+    plan_validate = plan_sub.add_parser("validate", help="validate a plan against its Phase-1 index")
+    _add_plan_arguments(plan_validate)
+    plan_validate.add_argument("--database")
+    plan_validate.set_defaults(func=_command_plan_validate)
+
+    planner_tool = commands.add_parser("planner-tool", help=argparse.SUPPRESS)
+    planner_tool.add_argument("tool_name", choices=sorted([*PLANNER_TOOLS, "submit"]))
+    planner_tool.add_argument("--database", required=True)
+    planner_tool.add_argument("--request", required=True)
+    planner_tool.add_argument("--session-state")
+    planner_tool.add_argument("--submission-output")
+    planner_tool.add_argument("--language")
+    planner_tool.add_argument("--specification-version")
+    planner_tool.add_argument("--index-digest")
+    planner_tool.set_defaults(func=_command_planner_tool)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.index_command == "build" and not (args.pdf or args.html):
+    if getattr(args, "index_command", None) == "build" and not (args.pdf or args.html):
         parser.error("index build requires --pdf and/or --html")
     try:
         return int(args.func(args))

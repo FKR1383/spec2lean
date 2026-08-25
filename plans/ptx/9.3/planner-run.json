@@ -1,0 +1,72 @@
+{
+  "artifacts": {
+    "plan": "plan.json",
+    "rendering": "plan.md"
+  },
+  "database": "/home/pouria/spec2lean/spec2lean/indexes/ptx/9.3/specification.sqlite",
+  "finishedAt": "2026-08-25T16:05:45Z",
+  "indexSemanticDigest": "e2c43e95b5cb15de4d4b97e5fb1840e8aa8620f26701a0f30e07a2c04ec88fb0",
+  "invocation": {
+    "agent": "spec2lean-planner",
+    "format": "json",
+    "model": "openai/gpt-5.3-codex-spark",
+    "variant": "low"
+  },
+  "language": "ptx",
+  "modelId": "openai/gpt-5.3-codex-spark",
+  "observedSourceNodes": 814,
+  "openCodeSessions": 1,
+  "opencodeExitCode": 0,
+  "opencodeOutputSha256": "ba0c308ab9d6491cd0ce25b6e7b99fd1e9ad6ea4774136477a3ef347edc38f08",
+  "opencodeVersion": "1.18.15",
+  "planSchemaVersion": 1,
+  "plannerAgent": "spec2lean-planner",
+  "reasoning": {
+    "reasoningEffort": "low",
+    "variant": "low"
+  },
+  "runId": "planner-run:7b635562bd164442a7f0ef6ec3596dd2",
+  "runtimeSeconds": 92.99,
+  "startedAt": "2026-08-25T16:04:12Z",
+  "statistics": {
+    "cyclicStronglyConnectedComponents": 0,
+    "dependencyEdges": 60,
+    "explicitEdges": 0,
+    "formalizationUnits": 29,
+    "inferredEdges": 60,
+    "instructionFamilyUnits": 20,
+    "instructionUnits": 0,
+    "processingLayers": 5,
+    "sourceNodesReferenced": 87,
+    "stronglyConnectedComponents": 29,
+    "unitKinds": {
+      "ABI": 1,
+      "ARCHITECTURE": 1,
+      "DIRECTIVE": 1,
+      "EXECUTION_MODEL": 1,
+      "INSTRUCTION_FAMILY": 20,
+      "MEMORY_MODEL": 1,
+      "OPERAND_MODEL": 1,
+      "SPECIAL_REGISTER": 1,
+      "STATE_MODEL": 1,
+      "TYPE_SYSTEM": 1
+    }
+  },
+  "status": "PASS",
+  "submitPlanAttempts": 3,
+  "validation": {
+    "checks": {
+      "dependencies": 60,
+      "processing_layers": 5,
+      "sccs": 29,
+      "schema": 1,
+      "source_nodes": 87,
+      "specification_identity": 3,
+      "units": 29
+    },
+    "errors": 0,
+    "issues": [],
+    "ok": true
+  },
+  "version": "9.3"
+}

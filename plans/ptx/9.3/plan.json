@@ -1,0 +1,1515 @@
+{
+  "dependencies": [
+    {
+      "fromUnitId": "ptx.architecture",
+      "origin": "INFERRED",
+      "reason": "ABI mappings depend on target architecture and supported type/state-space capabilities.",
+      "sourceNodeIds": [
+        "node:310d33a36f5df0827180bf14",
+        "node:e53c4cd56335a98fea3d649b"
+      ],
+      "toUnitId": "ptx.abi",
+      "type": "USES_TYPE_SYSTEM"
+    },
+    {
+      "fromUnitId": "ptx.architecture",
+      "origin": "INFERRED",
+      "reason": "Directive handling depends on target architecture versions and features.",
+      "sourceNodeIds": [
+        "node:a15a22b121e3de06683f9526",
+        "node:e53c4cd56335a98fea3d649b"
+      ],
+      "toUnitId": "ptx.directives",
+      "type": "USES_EXECUTION_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.architecture",
+      "origin": "INFERRED",
+      "reason": "State model refines machine and architectural state assumptions.",
+      "sourceNodeIds": [
+        "node:4ddac11db3acf057344979d8",
+        "node:8d424cc6e183baf4bf7e4112"
+      ],
+      "toUnitId": "ptx.state_model",
+      "type": "USES_STATE_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.execution_model",
+      "origin": "INFERRED",
+      "reason": "Async warpgroup matrix instructions depend on asynchronous execution grouping and scheduling.",
+      "sourceNodeIds": [
+        "node:265f4882a4277fb5c581f8b3",
+        "node:d66292b25921a0c765af516d"
+      ],
+      "toUnitId": "ptx.instruction.asynchronous_warpgroup_matrix",
+      "type": "USES_EXECUTION_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.execution_model",
+      "origin": "INFERRED",
+      "reason": "These instructions control predicate values in execution flow.",
+      "sourceNodeIds": [
+        "node:265f4882a4277fb5c581f8b3",
+        "node:fb2309208a0328e9ebf3af7d"
+      ],
+      "toUnitId": "ptx.instruction.comparison_and_selection",
+      "type": "USES_EXECUTION_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.execution_model",
+      "origin": "INFERRED",
+      "reason": "Control-flow opcodes directly manipulate instruction stream progression.",
+      "sourceNodeIds": [
+        "node:16830998676046fbbc72cfa0",
+        "node:265f4882a4277fb5c581f8b3"
+      ],
+      "toUnitId": "ptx.instruction.control_flow",
+      "type": "USES_EXECUTION_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.execution_model",
+      "origin": "INFERRED",
+      "reason": "Async copy and conversion forms interact with execution ordering and completion.",
+      "sourceNodeIds": [
+        "node:265f4882a4277fb5c581f8b3",
+        "node:f386c786bf4f18f6eeb79936"
+      ],
+      "toUnitId": "ptx.instruction.data_movement_conversion",
+      "type": "USES_EXECUTION_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.execution_model",
+      "origin": "INFERRED",
+      "reason": "Carry/CC instructions depend on predication and instruction sequencing.",
+      "sourceNodeIds": [
+        "node:265f4882a4277fb5c581f8b3",
+        "node:57ba22e9f98949bd1790ab69"
+      ],
+      "toUnitId": "ptx.instruction.extended_precision_integer_arithmetic",
+      "type": "USES_EXECUTION_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.execution_model",
+      "origin": "INFERRED",
+      "reason": "Fabric operations follow the PTX execution and proxy/handle lifecycle model.",
+      "sourceNodeIds": [
+        "node:265f4882a4277fb5c581f8b3",
+        "node:dafcf4c0091c134c0545c413"
+      ],
+      "toUnitId": "ptx.instruction.fabric",
+      "type": "USES_EXECUTION_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.execution_model",
+      "origin": "INFERRED",
+      "reason": "Floating-point instructions execute under arithmetic and predicate rules.",
+      "sourceNodeIds": [
+        "node:265f4882a4277fb5c581f8b3",
+        "node:b1bb0f65e78aaf9dae3dc206"
+      ],
+      "toUnitId": "ptx.instruction.floating_point",
+      "type": "USES_EXECUTION_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.execution_model",
+      "origin": "INFERRED",
+      "reason": "Half-precision FP instructions obey standard execution and rounding semantics.",
+      "sourceNodeIds": [
+        "node:265f4882a4277fb5c581f8b3",
+        "node:3d6c0d2adf11dee820867d02"
+      ],
+      "toUnitId": "ptx.instruction.half_precision_floating_point",
+      "type": "USES_EXECUTION_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.execution_model",
+      "origin": "INFERRED",
+      "reason": "Integer arithmetic instructions execute under the PTX control-flow and predication model.",
+      "sourceNodeIds": [
+        "node:24a2de9a3b572f3c35614086",
+        "node:265f4882a4277fb5c581f8b3"
+      ],
+      "toUnitId": "ptx.instruction.integer_arithmetic",
+      "type": "USES_EXECUTION_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.execution_model",
+      "origin": "INFERRED",
+      "reason": "Bitwise instructions are plain operations under ALU/control model.",
+      "sourceNodeIds": [
+        "node:265f4882a4277fb5c581f8b3",
+        "node:f99f74bd2ad7e241fa49caed"
+      ],
+      "toUnitId": "ptx.instruction.logic_and_shift",
+      "type": "USES_EXECUTION_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.execution_model",
+      "origin": "INFERRED",
+      "reason": "Misc instructions interact with trap/debugging behavior and execution control.",
+      "sourceNodeIds": [
+        "node:265f4882a4277fb5c581f8b3",
+        "node:49de9640ecabdd8263d280fd"
+      ],
+      "toUnitId": "ptx.instruction.miscellaneous",
+      "type": "USES_EXECUTION_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.execution_model",
+      "origin": "INFERRED",
+      "reason": "Synchronization instructions directly affect active thread-group execution semantics.",
+      "sourceNodeIds": [
+        "node:1b523c12789e12f3053326be",
+        "node:265f4882a4277fb5c581f8b3"
+      ],
+      "toUnitId": "ptx.instruction.parallel_synchronization_and_communication",
+      "type": "USES_EXECUTION_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.execution_model",
+      "origin": "INFERRED",
+      "reason": "Stack instructions affect call/return stack-like state during execution.",
+      "sourceNodeIds": [
+        "node:265f4882a4277fb5c581f8b3",
+        "node:e25e6e360e6d920896c68fb6"
+      ],
+      "toUnitId": "ptx.instruction.stack_manipulation",
+      "type": "USES_EXECUTION_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.execution_model",
+      "origin": "INFERRED",
+      "reason": "Surface accesses are ordered according to surface and execution model.",
+      "sourceNodeIds": [
+        "node:265f4882a4277fb5c581f8b3",
+        "node:6e7021fc7f557f59a9f7084f"
+      ],
+      "toUnitId": "ptx.instruction.surface",
+      "type": "USES_EXECUTION_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.execution_model",
+      "origin": "INFERRED",
+      "reason": "TCGEN05 instructions are asynchronous and grouped across threads/CTAs.",
+      "sourceNodeIds": [
+        "node:265f4882a4277fb5c581f8b3",
+        "node:d559e201ccb4e36469214251"
+      ],
+      "toUnitId": "ptx.instruction.tensorcore_5th_generation",
+      "type": "USES_EXECUTION_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.execution_model",
+      "origin": "INFERRED",
+      "reason": "Texture operations are execution-space dependent instructions.",
+      "sourceNodeIds": [
+        "node:265f4882a4277fb5c581f8b3",
+        "node:5902e716d7f32bb92dcd8805"
+      ],
+      "toUnitId": "ptx.instruction.texture",
+      "type": "USES_EXECUTION_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.execution_model",
+      "origin": "INFERRED",
+      "reason": "Video vector instructions map to execution functional units and predication behavior.",
+      "sourceNodeIds": [
+        "node:265f4882a4277fb5c581f8b3",
+        "node:f2b89996a8181719871d5d03"
+      ],
+      "toUnitId": "ptx.instruction.video",
+      "type": "USES_EXECUTION_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.execution_model",
+      "origin": "INFERRED",
+      "reason": "Warp-level tensor operations rely on warp scheduling and execution group behavior.",
+      "sourceNodeIds": [
+        "node:265f4882a4277fb5c581f8b3",
+        "node:28c53f13da1f47c05d84787e"
+      ],
+      "toUnitId": "ptx.instruction.warp_level_matrix",
+      "type": "USES_EXECUTION_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.execution_model",
+      "origin": "INFERRED",
+      "reason": "Execution ordering interacts with memory consistency rules.",
+      "sourceNodeIds": [
+        "node:0c8257bbccf5d3b205b689a4",
+        "node:1afd22572f2ac12bce00cea4"
+      ],
+      "toUnitId": "ptx.memory_model",
+      "type": "USES_MEMORY_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.execution_model",
+      "origin": "INFERRED",
+      "reason": "Special register reads occur according to execution context and thread hierarchy.",
+      "sourceNodeIds": [
+        "node:4a376af6a48e2af3c4cf12bd",
+        "node:4ddac11db3acf057344979d8"
+      ],
+      "toUnitId": "ptx.special_register",
+      "type": "USES_EXECUTION_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.memory_model",
+      "origin": "INFERRED",
+      "reason": "Uses async proxy and shared memory lifecycles with ordering constraints.",
+      "sourceNodeIds": [
+        "node:1afd22572f2ac12bce00cea4",
+        "node:d66292b25921a0c765af516d"
+      ],
+      "toUnitId": "ptx.instruction.asynchronous_warpgroup_matrix",
+      "type": "USES_MEMORY_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.memory_model",
+      "origin": "INFERRED",
+      "reason": "Load/store/copy operations require memory consistency and state-space rules.",
+      "sourceNodeIds": [
+        "node:1afd22572f2ac12bce00cea4",
+        "node:f386c786bf4f18f6eeb79936"
+      ],
+      "toUnitId": "ptx.instruction.data_movement_conversion",
+      "type": "USES_MEMORY_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.memory_model",
+      "origin": "INFERRED",
+      "reason": "Fabric operations are memory and communication operations with completion semantics.",
+      "sourceNodeIds": [
+        "node:1afd22572f2ac12bce00cea4",
+        "node:dafcf4c0091c134c0545c413"
+      ],
+      "toUnitId": "ptx.instruction.fabric",
+      "type": "USES_MEMORY_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.memory_model",
+      "origin": "INFERRED",
+      "reason": "Synchronization and atomic operations constrain memory visibility.",
+      "sourceNodeIds": [
+        "node:1afd22572f2ac12bce00cea4",
+        "node:1b523c12789e12f3053326be"
+      ],
+      "toUnitId": "ptx.instruction.parallel_synchronization_and_communication",
+      "type": "USES_MEMORY_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.memory_model",
+      "origin": "INFERRED",
+      "reason": "Surface loads/stores participate in memory consistency.",
+      "sourceNodeIds": [
+        "node:1afd22572f2ac12bce00cea4",
+        "node:6e7021fc7f557f59a9f7084f"
+      ],
+      "toUnitId": "ptx.instruction.surface",
+      "type": "USES_MEMORY_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.memory_model",
+      "origin": "INFERRED",
+      "reason": "These instructions integrate tensor memory consistency and smem access rules.",
+      "sourceNodeIds": [
+        "node:1afd22572f2ac12bce00cea4",
+        "node:d559e201ccb4e36469214251"
+      ],
+      "toUnitId": "ptx.instruction.tensorcore_5th_generation",
+      "type": "USES_MEMORY_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.memory_model",
+      "origin": "INFERRED",
+      "reason": "Texture instructions access image objects and memory-like resources.",
+      "sourceNodeIds": [
+        "node:1afd22572f2ac12bce00cea4",
+        "node:5902e716d7f32bb92dcd8805"
+      ],
+      "toUnitId": "ptx.instruction.texture",
+      "type": "USES_MEMORY_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.memory_model",
+      "origin": "INFERRED",
+      "reason": "Warp-level matrix instructions load/store tensor layouts and share memory.",
+      "sourceNodeIds": [
+        "node:1afd22572f2ac12bce00cea4",
+        "node:28c53f13da1f47c05d84787e"
+      ],
+      "toUnitId": "ptx.instruction.warp_level_matrix",
+      "type": "USES_MEMORY_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.operand_model",
+      "origin": "INFERRED",
+      "reason": "Function ABI depends on operand/result conventions and declared parameter forms.",
+      "sourceNodeIds": [
+        "node:7a6a81a3b15731b6eb011a41",
+        "node:d0479aefb7940e31e9346f73"
+      ],
+      "toUnitId": "ptx.abi",
+      "type": "USES_STATE_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.operand_model",
+      "origin": "INFERRED",
+      "reason": "Address and register-operands for data movement are modelled in operand syntax.",
+      "sourceNodeIds": [
+        "node:f386c786bf4f18f6eeb79936",
+        "node:f408a81944be71b1a4806924"
+      ],
+      "toUnitId": "ptx.instruction.data_movement_conversion",
+      "type": "USES_OPERAND_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.operand_model",
+      "origin": "INFERRED",
+      "reason": "Extended precision variants require constrained destination/source operands.",
+      "sourceNodeIds": [
+        "node:57ba22e9f98949bd1790ab69",
+        "node:eb6d15ac2e6bea2ae8f80f80"
+      ],
+      "toUnitId": "ptx.instruction.extended_precision_integer_arithmetic",
+      "type": "USES_OPERAND_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.operand_model",
+      "origin": "INFERRED",
+      "reason": "Arithmetic family semantics depends on operand constraints and register forms.",
+      "sourceNodeIds": [
+        "node:24a2de9a3b572f3c35614086",
+        "node:f408a81944be71b1a4806924"
+      ],
+      "toUnitId": "ptx.instruction.integer_arithmetic",
+      "type": "USES_OPERAND_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.operand_model",
+      "origin": "INFERRED",
+      "reason": "Shifts/bitwise instructions follow source/destination operand classes.",
+      "sourceNodeIds": [
+        "node:b81cc2705c71e94f126e78b1",
+        "node:f99f74bd2ad7e241fa49caed"
+      ],
+      "toUnitId": "ptx.instruction.logic_and_shift",
+      "type": "USES_OPERAND_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.operand_model",
+      "origin": "INFERRED",
+      "reason": "Mixed-precision spellings follow shared operand and modifier conventions.",
+      "sourceNodeIds": [
+        "node:13a3f813574748c9489040b0",
+        "node:2a3b5841c4a6481ee069771f"
+      ],
+      "toUnitId": "ptx.instruction.mixed_precision_floating_point",
+      "type": "USES_OPERAND_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.state_model",
+      "origin": "INFERRED",
+      "reason": "ABI declarations reference parameter/state-space and call/return behavior of the machine state.",
+      "sourceNodeIds": [
+        "node:310d33a36f5df0827180bf14",
+        "node:8d424cc6e183baf4bf7e4112"
+      ],
+      "toUnitId": "ptx.abi",
+      "type": "USES_STATE_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.state_model",
+      "origin": "INFERRED",
+      "reason": "Directives control code generation and linkage in the context of machine state.",
+      "sourceNodeIds": [
+        "node:8d424cc6e183baf4bf7e4112",
+        "node:a15a22b121e3de06683f9526"
+      ],
+      "toUnitId": "ptx.directives",
+      "type": "USES_STATE_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.state_model",
+      "origin": "INFERRED",
+      "reason": "Directives describe ABI and metadata tied to typed declarations.",
+      "sourceNodeIds": [
+        "node:a15a22b121e3de06683f9526",
+        "node:b738daec7a694017ccf0cf03"
+      ],
+      "toUnitId": "ptx.directives",
+      "type": "USES_TYPE_SYSTEM"
+    },
+    {
+      "fromUnitId": "ptx.state_model",
+      "origin": "INFERRED",
+      "reason": "Execution ordering and control depend on machine state constructs.",
+      "sourceNodeIds": [
+        "node:265f4882a4277fb5c581f8b3",
+        "node:4ddac11db3acf057344979d8"
+      ],
+      "toUnitId": "ptx.execution_model",
+      "type": "USES_EXECUTION_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.state_model",
+      "origin": "INFERRED",
+      "reason": "Control transfer depends on register/predicate state.",
+      "sourceNodeIds": [
+        "node:16830998676046fbbc72cfa0",
+        "node:667353f3c180f86c78b22e02"
+      ],
+      "toUnitId": "ptx.instruction.control_flow",
+      "type": "USES_STATE_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.state_model",
+      "origin": "INFERRED",
+      "reason": "Stack instructions manipulate compiler-visible state slots and pointer metadata.",
+      "sourceNodeIds": [
+        "node:8d424cc6e183baf4bf7e4112",
+        "node:e25e6e360e6d920896c68fb6"
+      ],
+      "toUnitId": "ptx.instruction.stack_manipulation",
+      "type": "USES_STATE_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.state_model",
+      "origin": "INFERRED",
+      "reason": "Memory model constrains state-space allocation and visibility.",
+      "sourceNodeIds": [
+        "node:1afd22572f2ac12bce00cea4",
+        "node:8d424cc6e183baf4bf7e4112"
+      ],
+      "toUnitId": "ptx.memory_model",
+      "type": "USES_MEMORY_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.state_model",
+      "origin": "INFERRED",
+      "reason": "Special register names model per-thread and system state values.",
+      "sourceNodeIds": [
+        "node:4a376af6a48e2af3c4cf12bd",
+        "node:8d424cc6e183baf4bf7e4112"
+      ],
+      "toUnitId": "ptx.special_register",
+      "type": "USES_STATE_MODEL"
+    },
+    {
+      "fromUnitId": "ptx.state_model",
+      "origin": "INFERRED",
+      "reason": "Types are defined as part of modelled state and instruction-visible value domains.",
+      "sourceNodeIds": [
+        "node:8d424cc6e183baf4bf7e4112",
+        "node:b738daec7a694017ccf0cf03"
+      ],
+      "toUnitId": "ptx.type_system",
+      "type": "USES_TYPE_SYSTEM"
+    },
+    {
+      "fromUnitId": "ptx.type_system",
+      "origin": "INFERRED",
+      "reason": "Asynchronous warpgroup MMA instructions are type/precision specific.",
+      "sourceNodeIds": [
+        "node:b738daec7a694017ccf0cf03",
+        "node:d66292b25921a0c765af516d"
+      ],
+      "toUnitId": "ptx.instruction.asynchronous_warpgroup_matrix",
+      "type": "USES_TYPE_SYSTEM"
+    },
+    {
+      "fromUnitId": "ptx.type_system",
+      "origin": "INFERRED",
+      "reason": "Predication and comparison instructions are type-specific.",
+      "sourceNodeIds": [
+        "node:b738daec7a694017ccf0cf03",
+        "node:fb2309208a0328e9ebf3af7d"
+      ],
+      "toUnitId": "ptx.instruction.comparison_and_selection",
+      "type": "USES_TYPE_SYSTEM"
+    },
+    {
+      "fromUnitId": "ptx.type_system",
+      "origin": "INFERRED",
+      "reason": "Load/store/conversion instructions are type-indexed.",
+      "sourceNodeIds": [
+        "node:b738daec7a694017ccf0cf03",
+        "node:f386c786bf4f18f6eeb79936"
+      ],
+      "toUnitId": "ptx.instruction.data_movement_conversion",
+      "type": "USES_TYPE_SYSTEM"
+    },
+    {
+      "fromUnitId": "ptx.type_system",
+      "origin": "INFERRED",
+      "reason": "Extended-precision integer forms require carry/type behavior rules.",
+      "sourceNodeIds": [
+        "node:57ba22e9f98949bd1790ab69",
+        "node:b738daec7a694017ccf0cf03"
+      ],
+      "toUnitId": "ptx.instruction.extended_precision_integer_arithmetic",
+      "type": "USES_TYPE_SYSTEM"
+    },
+    {
+      "fromUnitId": "ptx.type_system",
+      "origin": "INFERRED",
+      "reason": "Floating-point instructions are defined by operand and operation types.",
+      "sourceNodeIds": [
+        "node:b1bb0f65e78aaf9dae3dc206",
+        "node:b738daec7a694017ccf0cf03"
+      ],
+      "toUnitId": "ptx.instruction.floating_point",
+      "type": "USES_TYPE_SYSTEM"
+    },
+    {
+      "fromUnitId": "ptx.type_system",
+      "origin": "INFERRED",
+      "reason": "Half-precision comparators operate on half-precision typed inputs.",
+      "sourceNodeIds": [
+        "node:7258b86486ff3beafe31a1d9",
+        "node:b738daec7a694017ccf0cf03"
+      ],
+      "toUnitId": "ptx.instruction.half_precision_comparison",
+      "type": "USES_TYPE_SYSTEM"
+    },
+    {
+      "fromUnitId": "ptx.type_system",
+      "origin": "INFERRED",
+      "reason": "Half-precision family uses extended FP16/BF16 type domains.",
+      "sourceNodeIds": [
+        "node:3d6c0d2adf11dee820867d02",
+        "node:b738daec7a694017ccf0cf03"
+      ],
+      "toUnitId": "ptx.instruction.half_precision_floating_point",
+      "type": "USES_TYPE_SYSTEM"
+    },
+    {
+      "fromUnitId": "ptx.type_system",
+      "origin": "INFERRED",
+      "reason": "Arithmetic instruction families are typed by destination/source types.",
+      "sourceNodeIds": [
+        "node:24a2de9a3b572f3c35614086",
+        "node:b738daec7a694017ccf0cf03"
+      ],
+      "toUnitId": "ptx.instruction.integer_arithmetic",
+      "type": "USES_TYPE_SYSTEM"
+    },
+    {
+      "fromUnitId": "ptx.type_system",
+      "origin": "INFERRED",
+      "reason": "Bitwise instructions are constrained by integer type widths and predicates.",
+      "sourceNodeIds": [
+        "node:b738daec7a694017ccf0cf03",
+        "node:f99f74bd2ad7e241fa49caed"
+      ],
+      "toUnitId": "ptx.instruction.logic_and_shift",
+      "type": "USES_TYPE_SYSTEM"
+    },
+    {
+      "fromUnitId": "ptx.type_system",
+      "origin": "INFERRED",
+      "reason": "Mixed-precision operations are constrained by source and destination type conversions.",
+      "sourceNodeIds": [
+        "node:2a3b5841c4a6481ee069771f",
+        "node:b738daec7a694017ccf0cf03"
+      ],
+      "toUnitId": "ptx.instruction.mixed_precision_floating_point",
+      "type": "USES_TYPE_SYSTEM"
+    },
+    {
+      "fromUnitId": "ptx.type_system",
+      "origin": "INFERRED",
+      "reason": "TC instructions require specific matrix, accumulator, and descriptor type schemas.",
+      "sourceNodeIds": [
+        "node:b738daec7a694017ccf0cf03",
+        "node:d559e201ccb4e36469214251"
+      ],
+      "toUnitId": "ptx.instruction.tensorcore_5th_generation",
+      "type": "USES_TYPE_SYSTEM"
+    },
+    {
+      "fromUnitId": "ptx.type_system",
+      "origin": "INFERRED",
+      "reason": "Video instructions are type-specialized across integer and FP-like packings.",
+      "sourceNodeIds": [
+        "node:b738daec7a694017ccf0cf03",
+        "node:f2b89996a8181719871d5d03"
+      ],
+      "toUnitId": "ptx.instruction.video",
+      "type": "USES_TYPE_SYSTEM"
+    },
+    {
+      "fromUnitId": "ptx.type_system",
+      "origin": "INFERRED",
+      "reason": "Matrix instructions require specific operand element-type and accumulator type constraints.",
+      "sourceNodeIds": [
+        "node:28c53f13da1f47c05d84787e",
+        "node:b738daec7a694017ccf0cf03"
+      ],
+      "toUnitId": "ptx.instruction.warp_level_matrix",
+      "type": "USES_TYPE_SYSTEM"
+    },
+    {
+      "fromUnitId": "ptx.type_system",
+      "origin": "INFERRED",
+      "reason": "Operands carry explicit type information for each operand position.",
+      "sourceNodeIds": [
+        "node:8d424cc6e183baf4bf7e4112",
+        "node:f408a81944be71b1a4806924"
+      ],
+      "toUnitId": "ptx.operand_model",
+      "type": "USES_OPERAND_MODEL"
+    }
+  ],
+  "processingLayers": [
+    {
+      "layer": 0,
+      "sccIds": [
+        "scc:002"
+      ],
+      "unitIds": [
+        "ptx.architecture"
+      ]
+    },
+    {
+      "layer": 1,
+      "sccIds": [
+        "scc:028"
+      ],
+      "unitIds": [
+        "ptx.state_model"
+      ]
+    },
+    {
+      "layer": 2,
+      "sccIds": [
+        "scc:003",
+        "scc:004",
+        "scc:029"
+      ],
+      "unitIds": [
+        "ptx.directives",
+        "ptx.execution_model",
+        "ptx.type_system"
+      ]
+    },
+    {
+      "layer": 3,
+      "sccIds": [
+        "scc:006",
+        "scc:007",
+        "scc:011",
+        "scc:012",
+        "scc:013",
+        "scc:016",
+        "scc:019",
+        "scc:023",
+        "scc:025",
+        "scc:026",
+        "scc:027"
+      ],
+      "unitIds": [
+        "ptx.instruction.comparison_and_selection",
+        "ptx.instruction.control_flow",
+        "ptx.instruction.floating_point",
+        "ptx.instruction.half_precision_comparison",
+        "ptx.instruction.half_precision_floating_point",
+        "ptx.instruction.miscellaneous",
+        "ptx.instruction.stack_manipulation",
+        "ptx.instruction.video",
+        "ptx.memory_model",
+        "ptx.operand_model",
+        "ptx.special_register"
+      ]
+    },
+    {
+      "layer": 4,
+      "sccIds": [
+        "scc:001",
+        "scc:005",
+        "scc:008",
+        "scc:009",
+        "scc:010",
+        "scc:014",
+        "scc:015",
+        "scc:017",
+        "scc:018",
+        "scc:020",
+        "scc:021",
+        "scc:022",
+        "scc:024"
+      ],
+      "unitIds": [
+        "ptx.abi",
+        "ptx.instruction.asynchronous_warpgroup_matrix",
+        "ptx.instruction.data_movement_conversion",
+        "ptx.instruction.extended_precision_integer_arithmetic",
+        "ptx.instruction.fabric",
+        "ptx.instruction.integer_arithmetic",
+        "ptx.instruction.logic_and_shift",
+        "ptx.instruction.mixed_precision_floating_point",
+        "ptx.instruction.parallel_synchronization_and_communication",
+        "ptx.instruction.surface",
+        "ptx.instruction.tensorcore_5th_generation",
+        "ptx.instruction.texture",
+        "ptx.instruction.warp_level_matrix"
+      ]
+    }
+  ],
+  "schemaVersion": 1,
+  "specification": {
+    "indexSemanticDigest": "e2c43e95b5cb15de4d4b97e5fb1840e8aa8620f26701a0f30e07a2c04ec88fb0",
+    "language": "ptx",
+    "version": "9.3"
+  },
+  "stronglyConnectedComponents": [
+    {
+      "cyclic": false,
+      "sccId": "scc:001",
+      "unitIds": [
+        "ptx.abi"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:002",
+      "unitIds": [
+        "ptx.architecture"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:003",
+      "unitIds": [
+        "ptx.directives"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:004",
+      "unitIds": [
+        "ptx.execution_model"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:005",
+      "unitIds": [
+        "ptx.instruction.asynchronous_warpgroup_matrix"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:006",
+      "unitIds": [
+        "ptx.instruction.comparison_and_selection"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:007",
+      "unitIds": [
+        "ptx.instruction.control_flow"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:008",
+      "unitIds": [
+        "ptx.instruction.data_movement_conversion"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:009",
+      "unitIds": [
+        "ptx.instruction.extended_precision_integer_arithmetic"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:010",
+      "unitIds": [
+        "ptx.instruction.fabric"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:011",
+      "unitIds": [
+        "ptx.instruction.floating_point"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:012",
+      "unitIds": [
+        "ptx.instruction.half_precision_comparison"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:013",
+      "unitIds": [
+        "ptx.instruction.half_precision_floating_point"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:014",
+      "unitIds": [
+        "ptx.instruction.integer_arithmetic"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:015",
+      "unitIds": [
+        "ptx.instruction.logic_and_shift"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:016",
+      "unitIds": [
+        "ptx.instruction.miscellaneous"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:017",
+      "unitIds": [
+        "ptx.instruction.mixed_precision_floating_point"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:018",
+      "unitIds": [
+        "ptx.instruction.parallel_synchronization_and_communication"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:019",
+      "unitIds": [
+        "ptx.instruction.stack_manipulation"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:020",
+      "unitIds": [
+        "ptx.instruction.surface"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:021",
+      "unitIds": [
+        "ptx.instruction.tensorcore_5th_generation"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:022",
+      "unitIds": [
+        "ptx.instruction.texture"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:023",
+      "unitIds": [
+        "ptx.instruction.video"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:024",
+      "unitIds": [
+        "ptx.instruction.warp_level_matrix"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:025",
+      "unitIds": [
+        "ptx.memory_model"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:026",
+      "unitIds": [
+        "ptx.operand_model"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:027",
+      "unitIds": [
+        "ptx.special_register"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:028",
+      "unitIds": [
+        "ptx.state_model"
+      ]
+    },
+    {
+      "cyclic": false,
+      "sccId": "scc:029",
+      "unitIds": [
+        "ptx.type_system"
+      ]
+    }
+  ],
+  "units": [
+    {
+      "instructionNames": [],
+      "kind": "ABI",
+      "name": "ABI",
+      "sourceNodeIds": [
+        "node:1248063b0f8f5bf4251d8bcd",
+        "node:310d33a36f5df0827180bf14",
+        "node:a03b07a88bff22dc8279809a"
+      ],
+      "unitId": "ptx.abi"
+    },
+    {
+      "instructionNames": [],
+      "kind": "ARCHITECTURE",
+      "name": "Architecture",
+      "sourceNodeIds": [
+        "node:4ddac11db3acf057344979d8",
+        "node:e53c4cd56335a98fea3d649b"
+      ],
+      "unitId": "ptx.architecture"
+    },
+    {
+      "instructionNames": [],
+      "kind": "DIRECTIVE",
+      "name": "Directives",
+      "sourceNodeIds": [
+        "node:a15a22b121e3de06683f9526",
+        "node:c710443bca5edaab89e5c1b6",
+        "node:dccc356da141dea0cead3fe3"
+      ],
+      "unitId": "ptx.directives"
+    },
+    {
+      "instructionNames": [],
+      "kind": "EXECUTION_MODEL",
+      "name": "Execution Model",
+      "sourceNodeIds": [
+        "node:0c8257bbccf5d3b205b689a4",
+        "node:265f4882a4277fb5c581f8b3",
+        "node:36d82c8f8c365d4d3b1fd25f",
+        "node:4ddac11db3acf057344979d8"
+      ],
+      "unitId": "ptx.execution_model"
+    },
+    {
+      "instructionNames": [
+        "wgmma.commit_group",
+        "wgmma.fence",
+        "wgmma.mma_async",
+        "wgmma.mma_async.sp",
+        "wgmma.wait_group"
+      ],
+      "kind": "INSTRUCTION_FAMILY",
+      "name": "Asynchronous Warpgroup Matrix Instructions",
+      "sourceNodeIds": [
+        "node:1e3cc5d93f2c61634bdde4c6",
+        "node:7b0392430e3e198b49187c4f",
+        "node:d66292b25921a0c765af516d"
+      ],
+      "unitId": "ptx.instruction.asynchronous_warpgroup_matrix"
+    },
+    {
+      "instructionNames": [
+        "selp",
+        "set",
+        "setp",
+        "slct"
+      ],
+      "kind": "INSTRUCTION_FAMILY",
+      "name": "Comparison and Selection Instructions",
+      "sourceNodeIds": [
+        "node:57266ef2d98591ea7999aaab",
+        "node:673e954a680aed00917f2fbc",
+        "node:fb2309208a0328e9ebf3af7d"
+      ],
+      "unitId": "ptx.instruction.comparison_and_selection"
+    },
+    {
+      "instructionNames": [
+        "bra",
+        "brx.idx",
+        "call",
+        "exit",
+        "ret"
+      ],
+      "kind": "INSTRUCTION_FAMILY",
+      "name": "Control Flow Instructions",
+      "sourceNodeIds": [
+        "node:16830998676046fbbc72cfa0",
+        "node:91b32d6f4bd217d68eb8740e",
+        "node:ef45273b05d6a3236f6c7fb5"
+      ],
+      "unitId": "ptx.instruction.control_flow"
+    },
+    {
+      "instructionNames": [
+        "applypriority",
+        "cp.async",
+        "createpolicy",
+        "cvt",
+        "cvt.pack",
+        "cvta",
+        "discard",
+        "getctarank",
+        "isspacep",
+        "ld",
+        "ld.global.nc",
+        "ldu",
+        "mapa",
+        "mov",
+        "multimem.ld_reduce",
+        "multimem.red",
+        "multimem.st",
+        "multimem.st.async",
+        "prefetch",
+        "prefetchu",
+        "prmt",
+        "shfl",
+        "shfl.sync",
+        "st",
+        "st.async",
+        "st.bulk",
+        "tensormap.replace"
+      ],
+      "kind": "INSTRUCTION_FAMILY",
+      "name": "Data Movement and Conversion Instructions",
+      "sourceNodeIds": [
+        "node:34d644993ec7d06a264620a4",
+        "node:addd84c5871ecb90db087236",
+        "node:f386c786bf4f18f6eeb79936"
+      ],
+      "unitId": "ptx.instruction.data_movement_conversion"
+    },
+    {
+      "instructionNames": [
+        "add.cc",
+        "addc",
+        "mad.cc",
+        "madc",
+        "sub.cc",
+        "subc"
+      ],
+      "kind": "INSTRUCTION_FAMILY",
+      "name": "Extended-Precision Integer Arithmetic Instructions",
+      "sourceNodeIds": [
+        "node:57ba22e9f98949bd1790ab69",
+        "node:bbe4b96063fa84561c3c4de8",
+        "node:dccf2fb9993c491e6bf40ef8"
+      ],
+      "unitId": "ptx.instruction.extended_precision_integer_arithmetic"
+    },
+    {
+      "instructionNames": [
+        "fabric.submit",
+        "fabric.try_get",
+        "fabric.try_pullred",
+        "fabric.try_put",
+        "fabric.try_red",
+        "fabric.wait"
+      ],
+      "kind": "INSTRUCTION_FAMILY",
+      "name": "Fabric Instructions",
+      "sourceNodeIds": [
+        "node:7a81c749a3695ec45c064b2e",
+        "node:8fff1034478168338d8b566f",
+        "node:dafcf4c0091c134c0545c413"
+      ],
+      "unitId": "ptx.instruction.fabric"
+    },
+    {
+      "instructionNames": [
+        "abs",
+        "add",
+        "copysign",
+        "cos",
+        "div",
+        "ex2",
+        "fma",
+        "lg2",
+        "mad",
+        "max",
+        "min",
+        "mul",
+        "neg",
+        "rcp",
+        "rcp.approx.ftz.f64",
+        "rsqrt",
+        "rsqrt.approx.ftz.f64",
+        "sin",
+        "sqrt",
+        "sub",
+        "tanh",
+        "testp"
+      ],
+      "kind": "INSTRUCTION_FAMILY",
+      "name": "Floating Point Instructions",
+      "sourceNodeIds": [
+        "node:9668ba982cccaddc320746ed",
+        "node:b1bb0f65e78aaf9dae3dc206",
+        "node:e794bc2c48aaf265cfe35961"
+      ],
+      "unitId": "ptx.instruction.floating_point"
+    },
+    {
+      "instructionNames": [
+        "set",
+        "setp"
+      ],
+      "kind": "INSTRUCTION_FAMILY",
+      "name": "Half Precision Comparison Instructions",
+      "sourceNodeIds": [
+        "node:66cec077e4ec7ea599c70623",
+        "node:7258b86486ff3beafe31a1d9",
+        "node:8492be4ef59404e894749c39"
+      ],
+      "unitId": "ptx.instruction.half_precision_comparison"
+    },
+    {
+      "instructionNames": [
+        "abs",
+        "add",
+        "ex2",
+        "fma",
+        "max",
+        "min",
+        "mul",
+        "neg",
+        "sub",
+        "tanh"
+      ],
+      "kind": "INSTRUCTION_FAMILY",
+      "name": "Half-Precision Floating-Point Instructions",
+      "sourceNodeIds": [
+        "node:3d6c0d2adf11dee820867d02",
+        "node:c7971669b6239e7e9e23f1e6",
+        "node:d1fb545acbe42db3877de7d8"
+      ],
+      "unitId": "ptx.instruction.half_precision_floating_point"
+    },
+    {
+      "instructionNames": [
+        "abs",
+        "add",
+        "bfe",
+        "bfi",
+        "bfind",
+        "bmsk",
+        "brev",
+        "clmad",
+        "clz",
+        "div",
+        "dp2a",
+        "dp4a",
+        "fns",
+        "mad",
+        "mad24",
+        "max",
+        "min",
+        "mul",
+        "mul24",
+        "neg",
+        "popc",
+        "rem",
+        "sad",
+        "sub",
+        "szext"
+      ],
+      "kind": "INSTRUCTION_FAMILY",
+      "name": "Integer Arithmetic Instructions",
+      "sourceNodeIds": [
+        "node:08050002a5073b09cb445d4f",
+        "node:24a2de9a3b572f3c35614086",
+        "node:f1172b258c3576292aecdf2b"
+      ],
+      "unitId": "ptx.instruction.integer_arithmetic"
+    },
+    {
+      "instructionNames": [
+        "and",
+        "cnot",
+        "lop3",
+        "not",
+        "or",
+        "shf",
+        "shl",
+        "shr",
+        "xor"
+      ],
+      "kind": "INSTRUCTION_FAMILY",
+      "name": "Logic and Shift Instructions",
+      "sourceNodeIds": [
+        "node:6c766445c81011a4ce07d523",
+        "node:e88dae202bbca000013bdbe9",
+        "node:f99f74bd2ad7e241fa49caed"
+      ],
+      "unitId": "ptx.instruction.logic_and_shift"
+    },
+    {
+      "instructionNames": [
+        "brkpt",
+        "nanosleep",
+        "pmevent",
+        "setmaxnreg",
+        "trap"
+      ],
+      "kind": "INSTRUCTION_FAMILY",
+      "name": "Miscellaneous Instructions",
+      "sourceNodeIds": [
+        "node:45ec5ca26e4b9e51b1279d23",
+        "node:49de9640ecabdd8263d280fd",
+        "node:bc51981b17f38de9939cee47"
+      ],
+      "unitId": "ptx.instruction.miscellaneous"
+    },
+    {
+      "instructionNames": [
+        "add",
+        "fma",
+        "sub"
+      ],
+      "kind": "INSTRUCTION_FAMILY",
+      "name": "Mixed Precision Floating-Point Instructions",
+      "sourceNodeIds": [
+        "node:0bd63b1845d39f20df8717c4",
+        "node:2a3b5841c4a6481ee069771f",
+        "node:a871ac2e98bbc8da9dfdb92c"
+      ],
+      "unitId": "ptx.instruction.mixed_precision_floating_point"
+    },
+    {
+      "instructionNames": [
+        "activemask",
+        "atom",
+        "bar",
+        "bar.warp.sync",
+        "barrier.cluster",
+        "clusterlaunchcontrol.query_cancel",
+        "clusterlaunchcontrol.try_cancel",
+        "elect.sync",
+        "fence",
+        "griddepcontrol",
+        "match.sync",
+        "mbarrier",
+        "membar",
+        "multimem.red.async",
+        "red",
+        "red.async",
+        "redux.sync",
+        "tensormap.cp_fenceproxy",
+        "vote.sync"
+      ],
+      "kind": "INSTRUCTION_FAMILY",
+      "name": "Parallel Synchronization and Communication Instructions",
+      "sourceNodeIds": [
+        "node:1b523c12789e12f3053326be",
+        "node:7052152d357e3aeb48d54a0f",
+        "node:c02bf26b4bdfd9fe046fce91"
+      ],
+      "unitId": "ptx.instruction.parallel_synchronization_and_communication"
+    },
+    {
+      "instructionNames": [
+        "alloca",
+        "stackrestore",
+        "stacksave"
+      ],
+      "kind": "INSTRUCTION_FAMILY",
+      "name": "Stack Manipulation Instructions",
+      "sourceNodeIds": [
+        "node:6b01704ff8cac7689f4169bb",
+        "node:9f6b03a64c7e85e88b7d73c6",
+        "node:e25e6e360e6d920896c68fb6"
+      ],
+      "unitId": "ptx.instruction.stack_manipulation"
+    },
+    {
+      "instructionNames": [
+        "suld",
+        "suq",
+        "sured",
+        "sust"
+      ],
+      "kind": "INSTRUCTION_FAMILY",
+      "name": "Surface Instructions",
+      "sourceNodeIds": [
+        "node:6e7021fc7f557f59a9f7084f",
+        "node:9b4e618b47a3ad6bb7885015",
+        "node:a791a239d9daf195bed74ccf"
+      ],
+      "unitId": "ptx.instruction.surface"
+    },
+    {
+      "instructionNames": [
+        "tcgen05.alloc",
+        "tcgen05.commit",
+        "tcgen05.cp",
+        "tcgen05.dealloc",
+        "tcgen05.fence",
+        "tcgen05.ld",
+        "tcgen05.mma",
+        "tcgen05.mma_async",
+        "tcgen05.mma_async.sp",
+        "tcgen05.relinquish_alloc_permit",
+        "tcgen05.shift",
+        "tcgen05.st",
+        "tcgen05.wait"
+      ],
+      "kind": "INSTRUCTION_FAMILY",
+      "name": "TensorCore 5th Generation Instructions",
+      "sourceNodeIds": [
+        "node:50902b85fd86ead5a61dc00b",
+        "node:d559e201ccb4e36469214251",
+        "node:e74993fbd32ed000bfd09560"
+      ],
+      "unitId": "ptx.instruction.tensorcore_5th_generation"
+    },
+    {
+      "instructionNames": [
+        "istypep",
+        "tex",
+        "tld4",
+        "txq"
+      ],
+      "kind": "INSTRUCTION_FAMILY",
+      "name": "Texture Instructions",
+      "sourceNodeIds": [
+        "node:2b1490a169bd8c6c6f3a1dbe",
+        "node:4ad325a951137cd8a1f8bf4e",
+        "node:5902e716d7f32bb92dcd8805"
+      ],
+      "unitId": "ptx.instruction.texture"
+    },
+    {
+      "instructionNames": [
+        "vabsdiff",
+        "vabsdiff2",
+        "vabsdiff4",
+        "vadd",
+        "vadd2",
+        "vadd4",
+        "vavrg2",
+        "vavrg4",
+        "vmad",
+        "vmax",
+        "vmax2",
+        "vmax4",
+        "vmin",
+        "vmin2",
+        "vmin4",
+        "vset",
+        "vset2",
+        "vset4",
+        "vshl",
+        "vshr",
+        "vsub",
+        "vsub2",
+        "vsub4"
+      ],
+      "kind": "INSTRUCTION_FAMILY",
+      "name": "Video Instructions",
+      "sourceNodeIds": [
+        "node:8be97418814186f1eacde153",
+        "node:903820e46c34ae96f1df5fec",
+        "node:f2b89996a8181719871d5d03"
+      ],
+      "unitId": "ptx.instruction.video"
+    },
+    {
+      "instructionNames": [
+        "ldmatrix",
+        "mma",
+        "mma.sp",
+        "mma.sp::ordered_metadata",
+        "movmatrix",
+        "stmatrix",
+        "wmma.load",
+        "wmma.mma",
+        "wmma.store"
+      ],
+      "kind": "INSTRUCTION_FAMILY",
+      "name": "Warp-Level Matrix Instructions",
+      "sourceNodeIds": [
+        "node:28c53f13da1f47c05d84787e",
+        "node:440d57719d562f82e092b3b2",
+        "node:b8a6755fe013e6e2c6403ad5"
+      ],
+      "unitId": "ptx.instruction.warp_level_matrix"
+    },
+    {
+      "instructionNames": [],
+      "kind": "MEMORY_MODEL",
+      "name": "Memory Consistency Model",
+      "sourceNodeIds": [
+        "node:1afd22572f2ac12bce00cea4",
+        "node:ad983656886d0e3ec0763701",
+        "node:d07809296823c5820df1b814"
+      ],
+      "unitId": "ptx.memory_model"
+    },
+    {
+      "instructionNames": [],
+      "kind": "OPERAND_MODEL",
+      "name": "Operand Model",
+      "sourceNodeIds": [
+        "node:b81cc2705c71e94f126e78b1",
+        "node:d0479aefb7940e31e9346f73",
+        "node:f408a81944be71b1a4806924"
+      ],
+      "unitId": "ptx.operand_model"
+    },
+    {
+      "instructionNames": [],
+      "kind": "SPECIAL_REGISTER",
+      "name": "Special Registers",
+      "sourceNodeIds": [
+        "node:32aa8871626ea81083bea6d4",
+        "node:4a376af6a48e2af3c4cf12bd",
+        "node:ae2b51d329f9c61ace6c17ef"
+      ],
+      "unitId": "ptx.special_register"
+    },
+    {
+      "instructionNames": [],
+      "kind": "STATE_MODEL",
+      "name": "Machine State Model",
+      "sourceNodeIds": [
+        "node:4ddac11db3acf057344979d8",
+        "node:8d424cc6e183baf4bf7e4112",
+        "node:e53c4cd56335a98fea3d649b"
+      ],
+      "unitId": "ptx.state_model"
+    },
+    {
+      "instructionNames": [],
+      "kind": "TYPE_SYSTEM",
+      "name": "Type System",
+      "sourceNodeIds": [
+        "node:8d424cc6e183baf4bf7e4112",
+        "node:b4f7607500502e77e74e7cec",
+        "node:b738daec7a694017ccf0cf03"
+      ],
+      "unitId": "ptx.type_system"
+    }
+  ]
+}
