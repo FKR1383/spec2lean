@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spec2lean"
+version = "0.1.0"
+description = "Deterministic hierarchical specification parser and SQLite index"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "lxml>=5.0,<7",
+  "PyMuPDF>=1.24,<2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+
+[project.scripts]
+spec2lean = "spec2lean.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+

@@ -1,11 +1,7 @@
-# Lean / Lake generated artifacts
-.lake/
-*.olean
-*.ilean
-
 # Python generated artifacts
 __pycache__/
 *.py[cod]
+*.egg-info/
 .venv/
 .pytest_cache/
 .mypy_cache/
@@ -13,10 +9,17 @@ __pycache__/
 .coverage
 htmlcov/
 
-# Node / TypeScript generated artifacts
+# Generic dependency/build artifacts
 node_modules/
 dist/
 coverage/
+
+# Generated local databases and exports (canonical inputs remain under documents/)
+indexes/**/*.sqlite
+indexes/**/*.sqlite-*
+indexes/**/*.building
+indexes/**/index-manifest.json
+indexes/**/*.json.dump
 
 # Environment files and credentials
 .env
@@ -45,12 +48,3 @@ tmp/
 
 # Locally cached official specifications
 documents/sources/nvidia/ptx/9.3/raw/
-
-# Spec2Lean local hardening/debug artifacts
-.spec2lean-hardening-backup-*/
-candidates/.probe-hash-*
-candidates/tool-tests/
-reviews/tool-tests/
-
-# Deterministic local Spec2Lean indexes
-.spec2lean-cache/
