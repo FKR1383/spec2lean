@@ -17,6 +17,7 @@ from spec2lean.troubleshooting.models import (
     action_for,
 )
 from spec2lean.troubleshooting.opencode import opencode_config
+from spec2lean.troubleshooting.prompt import build_troubleshooter_prompt
 from spec2lean.troubleshooting.resolver import resolve_check_failure
 from spec2lean.troubleshooting.runner import run_troubleshooter
 
@@ -197,6 +198,52 @@ def test_build_failure_routes_to_one_troubleshooter_repair_and_records_hashes(tm
     assert artifact["changedFiles"] == ["Unit.lean"]
     assert artifact["singleSession"] is True and artifact["automaticRetries"] == 0
     assert json.loads((output / "troubleshoot.json").read_text()) == artifact
+
+
+def test_build_repair_context_includes_toolchain_and_prior_attempts(tmp_path):
+    plan, roots, _, _ = _write_build_inputs(tmp_path)
+    attempts = [{
+        "repairRunId": "repair-run:prior",
+        "compilerDiagnostics": [{"message": "previous mismatch"}],
+        "changes": [{"description": "Previous failed conversion."}],
+        "leanSourceHashBefore": "sha256:before",
+        "leanSourceHashAfter": "sha256:after",
+    }]
+    captured = {}
+
+    def repair(context, *, timeout_seconds):
+        captured.update(context)
+        return {
+            "submission": {
+                "leanSource": REPAIRED_SOURCE,
+                "declarations": captured["translationManifest"]["declarations"],
+                "changes": [{
+                    "description": "Use the compiler-required API type.",
+                    "affectedDeclarations": ["Spec2Lean.Repair.operation"],
+                }],
+            },
+            "error": None,
+            "session": {"opencodeVersion": "1.test"},
+        }
+
+    run_troubleshooter(
+        plan,
+        semantics_root=roots["semantics"],
+        translations_root=roots["translations"],
+        checks_root=roots["checks"],
+        troubleshooting_root=roots["troubleshooting"],
+        unit_id=UNIT["unitId"],
+        repair_runner=repair,
+        prior_repair_attempts=attempts,
+        now=lambda: "2026-08-27T00:00:00Z",
+        repository_root=roots["plans"],
+    )
+
+    assert captured["leanVersion"] == "Lean (version 4.test)"
+    assert captured["priorRepairAttempts"] == attempts
+    prompt = build_troubleshooter_prompt(captured)
+    assert "diagnostics and Lean version as authoritative" in prompt
+    assert "Do not repeat" in prompt
 
 
 def test_coverage_failure_routes_to_translator_with_exact_uncovered_ids(tmp_path):
@@ -487,6 +534,64 @@ def test_resolver_handles_coverage_then_fresh_build_failure_in_one_call(tmp_path
     assert resolution["dispatches"] == 2
     assert resolution["stopReason"] == "ALL_CHECKS_PASS"
     assert resolution["outcome"] == "COMPLETE" and resolution["nextAction"] == NO_ACTION
+
+
+def test_resolver_passes_failed_build_attempt_history_to_next_repair(tmp_path, monkeypatch):
+    initial = _check("FAIL", "PASS", "PASS")
+    plan, roots = _write_plan_and_check(tmp_path, initial)
+    received_histories = []
+    repair_number = 0
+
+    def fake_troubleshooter(plan, **kwargs):
+        nonlocal repair_number
+        repair_number += 1
+        received_histories.append(kwargs["prior_repair_attempts"])
+        artifact = {
+            "repairRunId": f"repair-run:{repair_number}",
+            "compilerDiagnostics": kwargs["check_override"]["build"]["diagnostics"],
+            "changes": [{"description": f"repair {repair_number}"}],
+            "hashes": {
+                "before": {"Unit.lean": f"sha256:before-{repair_number}"},
+                "after": {"Unit.lean": f"sha256:after-{repair_number}"},
+            },
+        }
+        return roots["troubleshooting"], artifact
+
+    still_failing = _check("FAIL", "PASS", "PASS")
+    still_failing["build"]["diagnostics"][0]["message"] = "new mismatch after repair 1"
+    passed = _check("PASS", "PASS", "PASS")
+    check_results = [still_failing, passed]
+
+    def checker(plan, **kwargs):
+        return roots["checks"], check_results.pop(0)
+
+    monkeypatch.setattr(
+        "spec2lean.troubleshooting.resolver.run_troubleshooter", fake_troubleshooter
+    )
+    _, resolution = resolve_check_failure(
+        plan,
+        evidence_root=tmp_path / "evidence",
+        semantics_root=roots["semantics"],
+        translations_root=roots["translations"],
+        checks_root=roots["checks"],
+        troubleshooting_root=roots["troubleshooting"],
+        database=tmp_path / "db",
+        unit_id=UNIT["unitId"],
+        checker=checker,
+        now=lambda: "2026-08-27T00:00:00Z",
+        repository_root=roots["plans"],
+    )
+
+    assert received_histories[0] == []
+    assert received_histories[1] == [{
+        "repairRunId": "repair-run:1",
+        "compilerDiagnostics": initial["build"]["diagnostics"],
+        "changes": [{"description": "repair 1"}],
+        "leanSourceHashBefore": "sha256:before-1",
+        "leanSourceHashAfter": "sha256:after-1",
+    }]
+    assert resolution["dispatches"] == 2
+    assert resolution["outcome"] == "COMPLETE"
 
 
 def test_resolver_stops_on_repeated_actionable_state_instead_of_looping(tmp_path):

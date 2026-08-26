@@ -18,10 +18,13 @@ LEAN_DIAGNOSTIC = re.compile(
 def _diagnostics(stdout: str, stderr: str) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for stream, content in (("stdout", stdout), ("stderr", stderr)):
+        current: dict[str, Any] | None = None
         for text in content.splitlines():
             item: dict[str, Any] = {"stream": stream, "message": text}
             match = LEAN_DIAGNOSTIC.match(text)
             if match:
+                if current is not None:
+                    result.append(current)
                 item.update({
                     "file": match.group("file"),
                     "line": int(match.group("line")),
@@ -35,7 +38,14 @@ def _diagnostics(stdout: str, stderr: str) -> list[dict[str, Any]]:
                 item["severity"] = "WARNING"
             else:
                 item["severity"] = "INFO"
-            result.append(item)
+            if match:
+                current = item
+            elif current is not None:
+                current["message"] += "\n" + text
+            else:
+                result.append(item)
+        if current is not None:
+            result.append(current)
     return result
 
 

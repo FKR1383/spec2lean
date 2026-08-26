@@ -60,6 +60,12 @@ dispatch it reruns Phase 6, and only that fresh result may authorize the next
 dispatch. It stops on all-pass, repeated actionable state (no progress), or the
 explicit dispatch cap (eight by default).
 
+Build diagnostics preserve Lean's multiline actual-type/expected-type context.
+Each build-repair session also receives the exact Lean version and a compact
+history of earlier failed build repairs from the same bounded resolution. The
+general Troubleshooter prompt treats those compiler facts as authoritative and
+must not repeat or revert to a candidate state that already failed.
+
 ## Bounded upstream revisions
 
 Phase-4 and Phase-5 creation prompts and create-only `build` commands remain

@@ -146,6 +146,7 @@ def run_troubleshooter(
     now: Callable[[], str] = utc_now,
     repository_root: Path | None = None,
     check_override: dict[str, Any] | None = None,
+    prior_repair_attempts: list[dict[str, Any]] | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     if check_override is None:
         _, check = load_check(checks_root, plan, unit_id)
@@ -201,7 +202,9 @@ def run_troubleshooter(
         "translationScope": scope.to_dict(),
         "leanSource": source,
         "translationManifest": manifest,
+        "leanVersion": check["build"].get("leanVersion"),
         "compilerDiagnostics": list(check["build"].get("diagnostics", [])),
+        "priorRepairAttempts": list(prior_repair_attempts or []),
         "traceability": check["traceability"],
         "semantics": semantics,
     }

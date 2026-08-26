@@ -81,6 +81,7 @@ def resolve_check_failure(
     initial_action = action_for(initial_check)
     started_at = now()
     stages: list[dict[str, Any]] = []
+    repair_history: list[dict[str, Any]] = []
     seen_states: set[str] = set()
     dispatch_count = 0
     stop_reason = "ALL_CHECKS_PASS"
@@ -98,6 +99,8 @@ def resolve_check_failure(
         route_kwargs: dict[str, Any] = {}
         if repair_runner is not None:
             route_kwargs["repair_runner"] = repair_runner
+        if action == REPAIR_BUILD:
+            route_kwargs["prior_repair_attempts"] = list(repair_history)
         _, route = run_troubleshooter(
             plan, semantics_root=semantics_root, translations_root=translations_root,
             checks_root=checks_root, troubleshooting_root=troubleshooting_root,
@@ -130,6 +133,14 @@ def resolve_check_failure(
             stages.append({"dispatch": dispatch_count, "phase": "LLM_TRANSLATOR_REVISION", "directory": str(translation_path), "runId": translation_revision["revisionRunId"]})
         elif action == REPAIR_BUILD:
             stages.append({"dispatch": dispatch_count, "phase": "TROUBLESHOOTER_BUILD_REPAIR", "directory": str(unit_directory(troubleshooting_root, plan, current_check["unit"])), "runId": route["repairRunId"]})
+            hashes = route.get("hashes") or {}
+            repair_history.append({
+                "repairRunId": route.get("repairRunId"),
+                "compilerDiagnostics": route.get("compilerDiagnostics", []),
+                "changes": route.get("changes", []),
+                "leanSourceHashBefore": (hashes.get("before") or {}).get("Unit.lean"),
+                "leanSourceHashAfter": (hashes.get("after") or {}).get("Unit.lean"),
+            })
 
         check_path, after_check = checker(
             plan, evidence_root=evidence_root, semantics_root=semantics_root,

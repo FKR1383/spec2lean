@@ -206,6 +206,11 @@ def test_build_test_records_pass_failure_version_diagnostics_and_location(tmp_pa
             return subprocess.CompletedProcess(command, 0, "Lean (version 4.test)\n", "")
         return subprocess.CompletedProcess(
             command, 1, "", "Unit.lean:3:7: error(lean.test): type mismatch\n"
+            "  supplied\n"
+            "has type\n"
+            "  Nat\n"
+            "but is expected to have type\n"
+            "  UInt32\n"
         )
 
     times = iter((20.0, 20.01))
@@ -216,6 +221,8 @@ def test_build_test_records_pass_failure_version_diagnostics_and_location(tmp_pa
         key: failed["diagnostics"][0][key]
         for key in ("file", "line", "column", "severity")
     } == {"file": "Unit.lean", "line": 3, "column": 7, "severity": "ERROR"}
+    assert len(failed["diagnostics"]) == 1
+    assert "supplied\nhas type\n  Nat" in failed["diagnostics"][0]["message"]
 
 
 @pytest.mark.skipif(shutil.which("lean") is None, reason="Lean toolchain is not installed")
