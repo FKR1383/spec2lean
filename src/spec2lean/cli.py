@@ -11,12 +11,16 @@ from typing import Any, Sequence
 from .constants import INDEX_SCHEMA_VERSION, PARSER_VERSION, __version__
 from .database import build_database, connect
 from .parsers import parse_html, parse_pdf
+from .planning.models import PlanningRequest
+from .planning.render import render_dot
+from .planning.runner import build_plan
 from .util import canonical_json
 from .validation import record_validation, statistics, validate_database
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_INDEX_ROOT = REPOSITORY_ROOT / "indexes"
+DEFAULT_PLANS_ROOT = REPOSITORY_ROOT / "plans"
 
 
 def _database_for(language: str, version: str) -> Path:
@@ -397,8 +401,72 @@ def _add_database_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--database")
 
 
+def _planning_request(args: argparse.Namespace) -> PlanningRequest:
+    if args.instructions is not None:
+        instructions = [item.strip() for item in args.instructions.split(",")]
+        if any(not item for item in instructions):
+            raise ValueError("--instructions must be a comma-separated list without empty items")
+        return PlanningRequest.exact(args.language, args.version, instructions)
+    if args.family is not None:
+        return PlanningRequest.family_request(args.language, args.version, args.family)
+    if args.source_node is not None:
+        return PlanningRequest.subtree(args.language, args.version, args.source_node)
+    return PlanningRequest.full(args.language, args.version)
+
+
+def _command_plan_build(args: argparse.Namespace) -> int:
+    database = _resolve_database(args)
+    run_directory = build_plan(
+        database,
+        Path(args.plans_root),
+        _planning_request(args),
+        timeout_seconds=args.timeout,
+    )
+    print(run_directory)
+    return 0
+
+
+def _find_plan_run(run_id: str, plans_root: str | Path) -> Path:
+    root = Path(plans_root).resolve()
+    matches = [path.parent for path in root.glob(f"*/*/{run_id}/plan.json")]
+    if not matches:
+        raise FileNotFoundError(f"plan run does not exist: {run_id}")
+    if len(matches) > 1:
+        raise RuntimeError(f"plan run ID is ambiguous under {root}: {run_id}")
+    return matches[0]
+
+
+def _load_plan(args: argparse.Namespace) -> tuple[Path, dict[str, Any]]:
+    run = _find_plan_run(args.run, args.plans_root)
+    return run, json.loads((run / "plan.json").read_text(encoding="utf-8"))
+
+
+def _command_plan_show(args: argparse.Namespace) -> int:
+    _, plan = _load_plan(args)
+    _json(plan)
+    return 0
+
+
+def _command_plan_field(args: argparse.Namespace) -> int:
+    _, plan = _load_plan(args)
+    _json(plan[args.plan_field])
+    return 0
+
+
+def _command_plan_graph(args: argparse.Namespace) -> int:
+    _, plan = _load_plan(args)
+    rendered = render_dot(plan)
+    if args.output:
+        output = Path(args.output).resolve()
+        output.write_text(rendered, encoding="utf-8")
+        print(output)
+    else:
+        print(rendered, end="")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="spec2lean", description="Spec2Lean Phase 1 specification index")
+    parser = argparse.ArgumentParser(prog="spec2lean", description="Spec2Lean specification index and request-scoped planner")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
     index = commands.add_parser("index", help="build and inspect specification indexes")
@@ -479,14 +547,53 @@ def build_parser() -> argparse.ArgumentParser:
     dump.add_argument("--all-nodes", action="store_true")
     dump.add_argument("--max-depth", type=int)
     dump.set_defaults(func=_command_dump)
+
+    plan = commands.add_parser("plan", help="build and inspect request-scoped Phase 2 plans")
+    plan_sub = plan.add_subparsers(dest="plan_command", required=True)
+    plan_build = plan_sub.add_parser("build", help="resolve scope and run one OpenCode Planner session")
+    plan_build.add_argument("--language", required=True)
+    plan_build.add_argument("--version", required=True)
+    plan_build.add_argument("--database")
+    selector = plan_build.add_mutually_exclusive_group(required=True)
+    selector.add_argument("--instructions", help="comma-separated exact instruction names")
+    selector.add_argument("--family", help="conceptual instruction family")
+    selector.add_argument("--source-node", help="exact Phase-1 node:<id> subtree")
+    selector.add_argument("--all", action="store_true", help="explicitly plan the full specification")
+    plan_build.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
+    plan_build.add_argument("--timeout", type=int, default=1800, help="single Planner session timeout in seconds")
+    plan_build.set_defaults(func=_command_plan_build)
+
+    for name, help_text, field in (
+        ("show", "show the complete plan", None),
+        ("units", "show requested plan units", "requestedUnits"),
+        ("deps", "show dependency edges", "dependencies"),
+        ("layers", "show derived processing layers", "processingLayers"),
+        ("prerequisites", "show external prerequisites", "externalPrerequisites"),
+    ):
+        command = plan_sub.add_parser(name, help=help_text)
+        command.add_argument("--run", required=True)
+        command.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
+        if field is None:
+            command.set_defaults(func=_command_plan_show)
+        else:
+            command.set_defaults(func=_command_plan_field, plan_field=field)
+
+    graph = plan_sub.add_parser("graph", help="export a plan dependency graph")
+    graph.add_argument("--run", required=True)
+    graph.add_argument("--format", choices=("dot",), required=True)
+    graph.add_argument("--output")
+    graph.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
+    graph.set_defaults(func=_command_plan_graph)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.index_command == "build" and not (args.pdf or args.html):
+    if getattr(args, "index_command", None) == "build" and not (args.pdf or args.html):
         parser.error("index build requires --pdf and/or --html")
+    if getattr(args, "plan_command", None) == "build" and args.timeout < 1:
+        parser.error("plan build --timeout must be positive")
     try:
         return int(args.func(args))
     except (FileNotFoundError, KeyError, RuntimeError, ValueError, sqlite3.Error) as exc:

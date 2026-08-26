@@ -24,3 +24,15 @@ def html_database(tmp_path: Path, html_source: Path) -> Path:
     )
     return target
 
+
+@pytest.fixture
+def planner_database(tmp_path: Path) -> Path:
+    source = Path(__file__).parent / "fixtures" / "planner_specification.html"
+    target = tmp_path / "planner.sqlite"
+    build_database(
+        target,
+        language="synthetic",
+        version="1.0",
+        documents=[parse_html(source, "https://example.test/planner-spec")],
+    )
+    return target

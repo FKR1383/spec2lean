@@ -1,9 +1,11 @@
 # Spec2Lean
 
-Spec2Lean currently implements **Phase 1 only: Parse + Index**. It turns an
-official PDF and/or HTML language specification into a deterministic,
-searchable, hierarchical SQLite database. It does not plan formalizations,
-interpret semantics, invoke an LLM, generate Lean, or check proofs.
+Spec2Lean implements **Phase 1: Parse + Index** and **Phase 2: Request-scoped
+Planner**. Phase 1 turns an official PDF and/or HTML language specification
+into a deterministic, searchable, hierarchical SQLite database. Phase 2
+resolves an explicitly bounded request, invokes one restricted OpenCode Planner
+session, validates its dependency graph, and writes an inspectable plan. It
+does not perform semantic extraction, generate Lean, or check proofs.
 
 Python is used because PyMuPDF exposes PDF layout/font/bounding-box data and
 `lxml` preserves semantic HTML structure and source lines. SQLite and FTS5
@@ -153,3 +155,48 @@ types, anchors, page/bounding-box provenance, FTS, cross-reference resolution,
 SHA invalidation, structural validation, subtrees, and deterministic rebuilds.
 
 See [the Phase 1 design](docs/phase-1-design.md) for schema and parser details.
+
+## Build a request-scoped plan
+
+Phase 2 requires the exact installed OpenCode model
+`openai/gpt-5.4-mini` and uses reasoning variant `low`. Choose exactly one
+scope selector. A quota-free catalog preflight fails before creating a run if
+that exact model is unavailable; no fallback model is selected.
+
+```bash
+# Exact instruction spellings.
+./spec2lean plan build \
+  --language ptx \
+  --version 9.3 \
+  --instructions add.u32,sub.u32,mul.lo.u32,shl.b32
+
+# Conceptual family (membership remains bounded by Phase 1 candidates).
+./spec2lean plan build \
+  --language ptx \
+  --version 9.3 \
+  --family "integer arithmetic instructions"
+
+# Exact Phase 1 subtree.
+./spec2lean plan build \
+  --language ptx \
+  --version 9.3 \
+  --source-node node:PHASE_1_NODE_ID
+
+# Full-document planning is available only when explicitly requested.
+./spec2lean plan build --language ptx --version 9.3 --all
+```
+
+The build prints its run directory and plan run ID. Inspect an accepted run
+without invoking OpenCode again:
+
+```bash
+./spec2lean plan show --run PLAN_RUN_ID
+./spec2lean plan units --run PLAN_RUN_ID
+./spec2lean plan deps --run PLAN_RUN_ID
+./spec2lean plan layers --run PLAN_RUN_ID
+./spec2lean plan prerequisites --run PLAN_RUN_ID
+./spec2lean plan graph --run PLAN_RUN_ID --format dot --output /tmp/plan.dot
+```
+
+See [the Phase 2 design](docs/phase-2-design.md) for scope rules, Planner
+isolation, submission validation, cycles, and artifact ownership.

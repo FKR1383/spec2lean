@@ -21,6 +21,8 @@ indexes/**/*.building
 indexes/**/index-manifest.json
 indexes/**/*.json.dump
 indexes/**/*.pages.txt
+plans/**
+!plans/.gitkeep
 
 # Environment files and credentials
 .env

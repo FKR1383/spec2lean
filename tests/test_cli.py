@@ -19,6 +19,15 @@ def _run(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _run_plan(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [str(CLI), "plan", *args],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
 def test_inspection_commands_cover_hierarchy_provenance_and_export(html_database, tmp_path):
     database = str(html_database)
     with connect(html_database, read_only=True) as db:
@@ -54,3 +63,42 @@ def test_inspection_commands_cover_hierarchy_provenance_and_export(html_database
     assert data["nodes"]
     assert "created_at" not in data["documents"][0]
 
+
+def test_plan_inspection_commands_and_dot_export(tmp_path):
+    plans_root = tmp_path / "plans"
+    run_id = "plan:test-cli"
+    run = plans_root / "synthetic" / "1.0" / run_id
+    run.mkdir(parents=True)
+    plan = {
+        "schemaVersion": 1,
+        "language": "synthetic",
+        "version": "1.0",
+        "planRunId": run_id,
+        "sourceDatabaseDigest": "a" * 64,
+        "request": {"scope": {"mode": "EXACT_INSTRUCTIONS"}},
+        "requestedUnits": [
+            {"unitId": "unit:a", "name": "alpha.u32", "sourceNodeIds": ["node:a"]},
+            {"unitId": "unit:b", "name": "beta.u32", "sourceNodeIds": ["node:b"]},
+        ],
+        "externalPrerequisites": [],
+        "dependencies": [{
+            "from": "unit:a", "to": "unit:b", "reason": "alpha first",
+            "supportingNodeIds": ["node:a"], "origin": "INFERRED",
+        }],
+        "processingLayers": [
+            {"layer": 0, "unitIds": ["unit:a"]},
+            {"layer": 1, "unitIds": ["unit:b"]},
+        ],
+        "cycles": [],
+        "graphStatus": "ACYCLIC",
+    }
+    (run / "plan.json").write_text(json.dumps(plan))
+    common = ("--run", run_id, "--plans-root", str(plans_root))
+    for command in ("show", "units", "deps", "layers", "prerequisites"):
+        result = _run_plan(command, *common)
+        assert result.returncode == 0, (command, result.stderr)
+        json.loads(result.stdout)
+    output = tmp_path / "plan.dot"
+    result = _run_plan("graph", *common, "--format", "dot", "--output", str(output))
+    assert result.returncode == 0, result.stderr
+    assert '"unit:a" -> "unit:b"' in output.read_text()
