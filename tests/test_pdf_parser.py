@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from collections import Counter
+from pathlib import Path
+import json
 
 import pymupdf as fitz
 
 from spec2lean.database import build_database, connect
+from spec2lean.cli import main
 from spec2lean.parsers.pdf import parse_pdf
 from spec2lean.util import walk_nodes
 from spec2lean.validation import validate_database
@@ -55,7 +58,15 @@ def test_pdf_hierarchy_page_bbox_tables_and_validation(tmp_path):
     assert any(span.page_number == 1 and span.bbox for node in nodes for span in node.spans)
 
     database = tmp_path / "pdf.sqlite"
-    build_database(database, language="synthetic-pdf", version="1.0", documents=[parsed])
+    result = build_database(database, language="synthetic-pdf", version="1.0", documents=[parsed])
+    assert len(result["page_text_artifacts"]) == 1
+    page_text = Path(result["page_text_artifacts"][0]["path"])
+    rendered = page_text.read_text(encoding="utf-8")
+    assert "source_sha256: " + parsed.sha256 in rendered
+    assert "===== PDF PAGE 1 OF 2 =====" in rendered
+    assert "===== PDF PAGE 2 OF 2 =====" in rendered
+    assert "This is the first exact PDF paragraph." in rendered
+    assert rendered.index("PDF PAGE 1 OF 2") < rendered.index("PDF PAGE 2 OF 2")
     with connect(database, read_only=True) as db:
         report = validate_database(db)
         span = db.execute(
@@ -67,3 +78,40 @@ def test_pdf_hierarchy_page_bbox_tables_and_validation(tmp_path):
     assert report["ok"], report["issues"]
     assert span["bbox_x1"] > span["bbox_x0"]
     assert resolved >= 1
+
+    page_text.write_text(rendered + "tampered\n", encoding="utf-8")
+    with connect(database, read_only=True) as db:
+        stale_report = validate_database(db)
+    assert not stale_report["ok"]
+    assert any(issue["code"] == "PDF_PAGE_TEXT_MISMATCH" for issue in stale_report["issues"])
+
+
+def test_cli_build_records_page_text_in_manifest(tmp_path, capsys):
+    source = tmp_path / "synthetic.pdf"
+    _make_pdf(source)
+    database = tmp_path / "index" / "specification.sqlite"
+
+    status = main(
+        [
+            "index",
+            "build",
+            "--language",
+            "synthetic-pdf",
+            "--version",
+            "1.0",
+            "--pdf",
+            str(source),
+            "--database",
+            str(database),
+            "--no-pdf-tables",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    manifest = json.loads((database.parent / "index-manifest.json").read_text(encoding="utf-8"))
+
+    assert status == 0
+    assert output["page_text_artifacts"][0]["page_count"] == 2
+    page_text = manifest["sources"][0]["page_text"]
+    assert page_text["format_version"] == 1
+    assert page_text["relative_path"].startswith("text/")
+    assert Path(page_text["path"]).is_file()

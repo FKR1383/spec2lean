@@ -20,6 +20,7 @@ indexes/**/*.sqlite-*
 indexes/**/*.building
 indexes/**/index-manifest.json
 indexes/**/*.json.dump
+indexes/**/*.pages.txt
 
 # Environment files and credentials
 .env

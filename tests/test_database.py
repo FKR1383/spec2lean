@@ -63,7 +63,8 @@ def test_rebuild_has_identical_semantic_digest(tmp_path, html_source):
     second = tmp_path / "second.sqlite"
     one = build_database(first, language="synthetic", version="1.0", documents=[parse_html(html_source)])
     two = build_database(second, language="synthetic", version="1.0", documents=[parse_html(html_source)])
+    assert one["page_text_artifacts"] == []
+    assert two["page_text_artifacts"] == []
     assert one["semantic_digest"] == two["semantic_digest"]
     with connect(first, read_only=True) as a, connect(second, read_only=True) as b:
         assert semantic_digest(a) == semantic_digest(b)
-

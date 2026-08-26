@@ -34,9 +34,24 @@ present.
 ./spec2lean index stats --language ptx --version 9.3
 ```
 
-The canonical local database is `indexes/ptx/9.3/specification.sqlite`.
-Generated indexes are intentionally Git-ignored because they are reproducible
-from the hash-pinned official inputs.
+The canonical local database is `indexes/ptx/9.3/specification.sqlite`. The
+same `index build` command also writes a deterministic, page-marked PDF text
+representation under `indexes/ptx/9.3/text/*.pages.txt`. Later phases can read
+this UTF-8 text without reopening or rendering the PDF; each source page is
+delimited by `===== PDF PAGE N OF M =====`. The database remains authoritative
+for hierarchy and provenance.
+
+Generated indexes, manifests, and page-text files are intentionally Git-ignored
+because they are reproducible from the hash-pinned official inputs.
+
+```bash
+# Locate and inspect the generated sequential PDF text.
+find indexes/ptx/9.3/text -name '*.pages.txt' -print
+less indexes/ptx/9.3/text/*.pages.txt
+
+# Find page markers and occurrences without parsing the PDF again.
+rg -n 'PDF PAGE|shl' indexes/ptx/9.3/text/*.pages.txt
+```
 
 ## Inspect without SQL
 

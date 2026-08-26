@@ -10,6 +10,7 @@ from typing import Any, Iterable
 
 from .constants import INDEX_SCHEMA_VERSION, PARSER_VERSION
 from .model import Node, ParsedDocument
+from .page_text import write_pdf_page_text_artifacts
 from .util import canonical_json, normalize_text, normalize_title, stable_id, walk_nodes
 
 
@@ -541,6 +542,7 @@ def build_database(
         except Exception:
             pass
     os.replace(temporary, target)
+    page_text_artifacts = write_pdf_page_text_artifacts(target.parent, parsed_documents)
     return {
         "database": str(target),
         "specification_id": specification_id,
@@ -549,4 +551,5 @@ def build_database(
         "documents": document_ids,
         "node_counts": dict(sorted(aggregate_counts.items())),
         "created_at": created_at,
+        "page_text_artifacts": page_text_artifacts,
     }

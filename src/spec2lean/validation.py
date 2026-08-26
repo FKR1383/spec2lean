@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from collections import Counter
@@ -10,10 +11,16 @@ from lxml import html
 
 from .constants import INDEX_SCHEMA_VERSION, PARSER_VERSION
 from .database import utc_now
+from .page_text import page_text_path, render_pdf_page_text
 from .util import normalize_text, sha256_file, stable_id
 
 
 def statistics(connection: sqlite3.Connection) -> dict[str, Any]:
+    database_file = next(
+        (row["file"] for row in connection.execute("PRAGMA database_list") if row["name"] == "main"),
+        "",
+    )
+    index_directory = Path(database_file).resolve().parent if database_file else Path.cwd()
     documents = [dict(row) for row in connection.execute(
         """SELECT document_id, source_type, title, local_path, sha256, byte_size,
                   page_count, source_text_chars, indexed_text_chars, parser_stats_json
@@ -24,6 +31,12 @@ def statistics(connection: sqlite3.Connection) -> dict[str, Any]:
             document["indexed_text_chars"] / max(document["source_text_chars"], 1), 6
         )
         document["parser_stats"] = json.loads(document.pop("parser_stats_json"))
+        if document["source_type"] == "pdf":
+            artifact = page_text_path(index_directory, document["local_path"], document["sha256"])
+            document["page_text_path"] = str(artifact)
+            document["page_text_exists"] = artifact.is_file()
+            if artifact.is_file():
+                document["page_text_bytes"] = artifact.stat().st_size
     node_types = {
         row["node_type"]: row["count"]
         for row in connection.execute(
@@ -61,6 +74,11 @@ def _issue(issues: list[dict[str, Any]], code: str, message: str, *, severity: s
 def validate_database(connection: sqlite3.Connection) -> dict[str, Any]:
     issues: list[dict[str, Any]] = []
     checks: Counter[str] = Counter()
+    database_file = next(
+        (row["file"] for row in connection.execute("PRAGMA database_list") if row["name"] == "main"),
+        "",
+    )
+    index_directory = Path(database_file).resolve().parent if database_file else Path.cwd()
 
     integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
     checks["sqlite_integrity"] += 1
@@ -149,6 +167,35 @@ def validate_database(connection: sqlite3.Connection) -> dict[str, Any]:
             actual = [page["page_number"] for page in pages]
             if actual != expected:
                 _issue(issues, "PDF_PAGE_COVERAGE", "stored page sequence is incomplete", document_id=document["document_id"])
+            artifact = page_text_path(index_directory, document["local_path"], document["sha256"])
+            checks["pdf_page_text_artifacts"] += 1
+            if not artifact.is_file():
+                _issue(
+                    issues,
+                    "PDF_PAGE_TEXT_MISSING",
+                    "deterministic page-marked PDF text artifact is missing",
+                    document_id=document["document_id"],
+                    path=str(artifact),
+                )
+            else:
+                expected_text = render_pdf_page_text(
+                    source_filename=Path(document["local_path"]).name,
+                    source_sha256=document["sha256"],
+                    pages=pages,
+                    parser_version=document["parser_version"],
+                    schema_version=document["schema_version"],
+                )
+                actual_text = artifact.read_bytes()
+                if actual_text != expected_text:
+                    _issue(
+                        issues,
+                        "PDF_PAGE_TEXT_MISMATCH",
+                        "page-marked PDF text artifact differs from indexed page text",
+                        document_id=document["document_id"],
+                        path=str(artifact),
+                        expected_sha256=hashlib.sha256(expected_text).hexdigest(),
+                        actual_sha256=hashlib.sha256(actual_text).hexdigest(),
+                    )
             page_map = {page["page_number"]: page for page in pages}
             for span in connection.execute(
                 """SELECT s.*, n.node_type

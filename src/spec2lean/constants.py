@@ -1,6 +1,7 @@
 __version__ = "0.2.0"
 PARSER_VERSION = "phase1-1"
 INDEX_SCHEMA_VERSION = 1
+PAGE_TEXT_FORMAT_VERSION = 1
 PLAN_SCHEMA_VERSION = 1
 PLANNER_AGENT = "spec2lean-planner"
 PLANNER_MODEL_ID = "openai/gpt-5.3-codex-spark"

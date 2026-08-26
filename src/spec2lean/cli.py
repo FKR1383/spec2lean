@@ -221,17 +221,22 @@ def _command_build(args: argparse.Namespace) -> int:
         "index_schema_version": INDEX_SCHEMA_VERSION,
         "creation_timestamp": result["created_at"],
         "semantic_digest": result["semantic_digest"],
-        "sources": [
-            {
-                "source_type": item.source_type,
-                "official_url": item.official_url,
-                "local_path": item.path,
-                "sha256": item.sha256,
-                "byte_size": item.byte_size,
-            }
-            for item in sorted(parsed, key=lambda item: item.source_type)
-        ],
+        "sources": [],
     }
+    page_text_by_source = {
+        artifact["source_sha256"]: artifact for artifact in result["page_text_artifacts"]
+    }
+    for item in sorted(parsed, key=lambda item: item.source_type):
+        source_entry = {
+            "source_type": item.source_type,
+            "official_url": item.official_url,
+            "local_path": item.path,
+            "sha256": item.sha256,
+            "byte_size": item.byte_size,
+        }
+        if item.sha256 in page_text_by_source:
+            source_entry["page_text"] = page_text_by_source[item.sha256]
+        manifest["sources"].append(source_entry)
     manifest_path = database.with_name("index-manifest.json")
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     result["manifest"] = str(manifest_path)

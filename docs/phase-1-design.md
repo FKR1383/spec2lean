@@ -15,6 +15,7 @@ src/spec2lean/
   cli.py                  build, inspection, validation, and export commands
   database.py             normalized SQLite schema and deterministic writer
   model.py                parser-neutral document/node/source-span model
+  page_text.py            deterministic page-marked PDF text materialization
   references.py           explicit, syntactic cross-reference extraction
   validation.py           structural/source/completeness validation
   parsers/
@@ -37,6 +38,14 @@ Creation and validation timestamps are stored as operational metadata and are
 excluded from the semantic digest. Source SHA, parser version, and schema
 version are stored in the database and sidecar manifest; validation reports a
 stale source or implementation version.
+
+For every PDF, the same build also materializes a deterministic
+`indexes/<language>/<version>/text/<source>.<sha-prefix>.pages.txt` file. This
+is a Phase-1 representation generated directly from the already extracted
+`pages.raw_text`; it is not a later pipeline stage and never re-renders the PDF.
+The header binds it to the source SHA, parser version, schema version, and page
+count. Explicit `PDF PAGE N OF M` delimiters make sequential LLM reading and
+page lookup straightforward. SQLite remains authoritative.
 
 ## Schema
 
@@ -78,6 +87,10 @@ layout, and font signals classify paragraphs, definitions, notes, examples,
 captions, lists, code, and syntax. Each original span remains independently
 traceable to its page and rectangle.
 
+The extracted page stream is written atomically to a UTF-8 page-text sidecar
+during the same index build. The source text between page delimiters is exactly
+the text stored in `pages.raw_text`.
+
 The classifier is deterministic and conservative. A weak heading signal stays
 content instead of being promoted. Images are retained as generic nodes with
 type/dimension/extension metadata; Phase 1 does not perform OCR.
@@ -105,8 +118,10 @@ Validation runs SQLite integrity and foreign-key checks; root/parent/depth,
 cycle, uniqueness, and contiguous-sibling-order checks; source SHA checks; PDF
 page sequence, bbox bounds, and text correspondence checks; HTML anchor, DOM
 path, raw text, and section-count checks; and text-volume coverage thresholds.
+For each PDF it also regenerates the expected page-text bytes from SQLite and
+requires the sidecar to match exactly, detecting missing, stale, or edited text
+artifacts.
 Statistics expose discovered/indexed pages and sections, all node types,
 generic blocks, definitions, spans, references, correlations, and per-source
 text coverage. Successful execution is not presented as proof of perfect
 classification.
-
