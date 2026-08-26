@@ -28,9 +28,10 @@ def check_result(
     build: dict[str, Any],
     coverage: dict[str, Any],
     traceability: dict[str, Any],
+    input_hashes: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     statuses = (build["status"], coverage["status"], traceability["status"])
-    return {
+    result = {
         "schemaVersion": CHECK_SCHEMA_VERSION,
         "phase": "CHECK",
         "planRunId": plan["planRunId"],
@@ -44,3 +45,6 @@ def check_result(
         "traceability": traceability,
         "routing": {"next": routing_for(*statuses)},
     }
+    if input_hashes is not None:
+        result["inputHashes"] = dict(input_hashes)
+    return result

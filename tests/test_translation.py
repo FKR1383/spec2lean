@@ -15,7 +15,9 @@ from spec2lean.translation.models import (
     TranslationScope,
     semantics_artifact_hash,
 )
+from spec2lean.translation.prompt import build_translator_prompt
 from spec2lean.translation.runner import build_translation, opencode_config
+from spec2lean.translation.revision import revise_translation
 from spec2lean.translation.store import unit_directory
 from spec2lean.translation.validation import (
     forbidden_constructs,
@@ -318,3 +320,55 @@ def test_traceability_chain_resolves_declaration_claim_evidence_and_source(tmp_p
     assert trace["declaration"]["declaration"] == declaration
     assert trace["claims"][0]["claim"]["claimId"] == "claim:state"
     assert trace["claims"][0]["evidence"][0]["sourceNodeIds"] == ["node:alpha"]
+
+
+def test_bounded_translation_revision_updates_existing_artifact_and_keeps_build_prompt(tmp_path):
+    plan, semantics, _, semantics_root, _ = _write_inputs(tmp_path)
+    scope = _scope(plan, semantics)
+    original, diagnostics = validate_submission(scope, semantics, _submission())
+    assert diagnostics == [] and original is not None
+    translations_root = tmp_path / "translations"
+    directory = unit_directory(translations_root, plan, UNIT)
+    directory.mkdir(parents=True)
+    (directory / "Unit.lean").write_text(original["leanSource"], encoding="utf-8")
+    (directory / "translation-manifest.json").write_text(json.dumps(original["manifest"]), encoding="utf-8")
+    (directory / "translator-run.json").write_text("{}", encoding="utf-8")
+    uncovered = [{"itemType": "SEMANTIC_CLAIM", "itemId": "claim:op", "declarations": []}]
+    calls = []
+
+    def fake_session(context, *, timeout_seconds):
+        calls.append(context)
+        revised = _submission()
+        revised["leanSource"] = revised["leanSource"].replace(
+            "def result", "def operationMeaning (a b : BitVec 32) : BitVec 32 := a + b\n\ndef result"
+        )
+        revised["declarations"].append({
+            "declaration": "Spec2Lean.Synthetic.AlphaU32.operationMeaning",
+            "role": "SEMANTIC_HELPER", "semanticClaimIds": ["claim:op"],
+        })
+        candidate, inner = validate_submission(
+            TranslationScope.from_dict(context["scope"]), context["semantics"], revised
+        )
+        assert inner == []
+        return {"candidate": candidate, "error": None, "session": {"sessionId": "translation-revision"}}
+
+    revision_directory, metadata = revise_translation(
+        plan, semantics_root=semantics_root, translations_root=translations_root,
+        unit_id=UNIT["unitId"], diagnostics=uncovered, session_runner=fake_session,
+        source_check_hash="sha256:" + "1" * 64,
+        now=lambda: "2026-08-27T00:00:00Z",
+    )
+    assert len(calls) == 1 and calls[0]["diagnostics"] == uncovered
+    assert metadata["singleSession"] is True and metadata["automaticRetries"] == 0
+    assert (revision_directory / "before-Unit.lean").is_file()
+    source = (directory / "Unit.lean").read_text()
+    manifest = json.loads((directory / "translation-manifest.json").read_text())
+    assert "operationMeaning" in source and validate_manifest(plan, semantics, source, manifest) == []
+    assert "bounded Spec2Lean Phase-5 Lean translation revision" not in build_translator_prompt(scope, semantics, [])
+    with pytest.raises(FileExistsError, match="already consumed"):
+        revise_translation(
+            plan, semantics_root=semantics_root, translations_root=translations_root,
+            unit_id=UNIT["unitId"], diagnostics=uncovered, session_runner=fake_session,
+            source_check_hash="sha256:" + "1" * 64,
+        )
+    assert len(calls) == 1

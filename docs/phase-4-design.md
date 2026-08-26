@@ -1,5 +1,10 @@
 # Phase 4: Semantic Extractor
 
+The original extraction prompt and create-only build path are unchanged by the
+repair loop. Traceability failures may use the separate bounded
+`semantics revise` path, which receives the current semantic artifact, the exact
+Phase-6 broken mappings, and the same Phase-3 evidence boundary.
+
 Phase 4 consumes one accepted Phase-3 evidence bundle for one planned unit and
 produces an evidence-linked semantic artifact. It does not access Phase 1,
 retrieve evidence, browse the internet, generate Lean, prove properties, check

@@ -19,12 +19,21 @@ from .planning.models import PlanningRequest
 from .planning.render import render_dot
 from .planning.runner import build_plan
 from .semantics.runner import build_semantics
+from .semantics.revision import revise_semantics
 from .semantics.store import artifacts as semantic_artifacts
 from .semantics.store import find_claim, load_semantics, semantics_run_root
 from .translation.runner import build_translation
+from .translation.revision import revise_translation
 from .translation.models import semantics_artifact_hash
 from .translation.store import find_declaration, load_translation
 from .troubleshooting.runner import run_troubleshooter
+from .troubleshooting.models import (
+    RETURN_TO_SEMANTIC_EXTRACTOR,
+    RETURN_TO_TRANSLATOR,
+    action_for,
+    artifact_hash,
+)
+from .troubleshooting.resolver import resolve_check_failure
 from .troubleshooting.store import load_troubleshooting
 from .util import canonical_json
 from .validation import record_validation, statistics, validate_database
@@ -594,6 +603,20 @@ def _command_semantics_build(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_semantics_revise(args: argparse.Namespace) -> int:
+    _, plan = _load_semantics_plan(args)
+    _, check = load_check(Path(args.checks_root), plan, args.unit)
+    if action_for(check) != RETURN_TO_SEMANTIC_EXTRACTOR:
+        raise ValueError("semantic revision requires TRACEABILITY = FAIL as the earliest Phase-6 failure")
+    output, revision = revise_semantics(
+        plan, evidence_root=Path(args.evidence_root), semantics_root=Path(args.semantics_root),
+        unit_id=args.unit, diagnostics=check["traceability"]["brokenMappings"],
+        timeout_seconds=args.timeout, source_check_hash=artifact_hash(check),
+    )
+    _json({"directory": str(output), **revision})
+    return 0
+
+
 def _command_semantics_show(args: argparse.Namespace) -> int:
     _, plan = _load_semantics_plan(args)
     _, artifact = load_semantics(Path(args.semantics_root), plan, args.unit)
@@ -650,6 +673,21 @@ def _command_translate_build(args: argparse.Namespace) -> int:
         timeout_seconds=args.timeout,
     )
     print(output)
+    return 0
+
+
+def _command_translate_revise(args: argparse.Namespace) -> int:
+    _, plan = _load_semantics_plan(args)
+    _, check = load_check(Path(args.checks_root), plan, args.unit)
+    if action_for(check) != RETURN_TO_TRANSLATOR:
+        raise ValueError("translation revision requires COVERAGE = FAIL as the earliest Phase-6 failure")
+    output, revision = revise_translation(
+        plan, semantics_root=Path(args.semantics_root),
+        translations_root=Path(args.translations_root), unit_id=args.unit,
+        diagnostics=check["coverage"]["uncovered"], reason="COVERAGE_FAILURE",
+        timeout_seconds=args.timeout, source_check_hash=artifact_hash(check),
+    )
+    _json({"directory": str(output), **revision})
     return 0
 
 
@@ -793,6 +831,30 @@ def _command_troubleshoot_changes(args: argparse.Namespace) -> int:
         "hashes": artifact["hashes"],
         "recheck": artifact["recheck"],
     })
+    return 0
+
+
+def _command_troubleshoot_resolve(args: argparse.Namespace) -> int:
+    _, plan = _load_semantics_plan(args)
+    database = Path(args.database).resolve() if args.database else _database_for(
+        plan["language"], plan["version"]
+    )
+    output, resolution = resolve_check_failure(
+        plan, evidence_root=Path(args.evidence_root), semantics_root=Path(args.semantics_root),
+        translations_root=Path(args.translations_root), checks_root=Path(args.checks_root),
+        troubleshooting_root=Path(args.troubleshooting_root), database=database,
+        unit_id=args.unit, timeout_seconds=args.timeout, repository_root=REPOSITORY_ROOT,
+    )
+    _json({"directory": str(output), **resolution})
+    return 0 if resolution["outcome"] == "COMPLETE" else 1
+
+
+def _command_troubleshoot_resolution(args: argparse.Namespace) -> int:
+    directory, _ = _load_troubleshooting_result(args)
+    path = directory / "resolution.json"
+    if not path.is_file():
+        raise FileNotFoundError(f"Phase-7 resolution artifact does not exist for unit: {args.unit}")
+    _json({"directory": str(directory), **json.loads(path.read_text(encoding="utf-8"))})
     return 0
 
 
@@ -968,6 +1030,16 @@ def build_parser() -> argparse.ArgumentParser:
     semantics_build.add_argument("--timeout", type=int, default=1800, help="timeout per single-unit session in seconds")
     semantics_build.set_defaults(func=_command_semantics_build)
 
+    semantics_revise = semantics_sub.add_parser("revise", help="revise semantics from stored traceability diagnostics")
+    semantics_revise.add_argument("--plan-run", required=True)
+    semantics_revise.add_argument("--unit", required=True)
+    semantics_revise.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
+    semantics_revise.add_argument("--evidence-root", default=str(DEFAULT_EVIDENCE_ROOT), help=argparse.SUPPRESS)
+    semantics_revise.add_argument("--semantics-root", default=str(DEFAULT_SEMANTICS_ROOT), help=argparse.SUPPRESS)
+    semantics_revise.add_argument("--checks-root", default=str(DEFAULT_CHECKS_ROOT), help=argparse.SUPPRESS)
+    semantics_revise.add_argument("--timeout", type=int, default=1800, help="timeout for the single revision session in seconds")
+    semantics_revise.set_defaults(func=_command_semantics_revise)
+
     semantic_show = semantics_sub.add_parser("show", help="show a complete semantic artifact")
     semantic_show.add_argument("--plan-run", required=True)
     semantic_show.add_argument("--unit", required=True)
@@ -1009,6 +1081,16 @@ def build_parser() -> argparse.ArgumentParser:
     translate_build.add_argument("--timeout", type=int, default=1800, help="timeout for the single-unit session in seconds")
     translate_build.set_defaults(func=_command_translate_build)
 
+    translate_revise = translate_sub.add_parser("revise", help="revise an existing translation from coverage diagnostics")
+    translate_revise.add_argument("--plan-run", required=True)
+    translate_revise.add_argument("--unit", required=True)
+    translate_revise.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
+    translate_revise.add_argument("--semantics-root", default=str(DEFAULT_SEMANTICS_ROOT), help=argparse.SUPPRESS)
+    translate_revise.add_argument("--translations-root", default=str(DEFAULT_TRANSLATIONS_ROOT), help=argparse.SUPPRESS)
+    translate_revise.add_argument("--checks-root", default=str(DEFAULT_CHECKS_ROOT), help=argparse.SUPPRESS)
+    translate_revise.add_argument("--timeout", type=int, default=1800, help="timeout for the single revision session in seconds")
+    translate_revise.set_defaults(func=_command_translate_revise)
+
     for name, help_text, function in (
         ("show", "show the complete Lean translation artifact", _command_translate_show),
         ("manifest", "show declaration traceability and deterministic translation metadata", _command_translate_manifest),
@@ -1040,6 +1122,17 @@ def build_parser() -> argparse.ArgumentParser:
     check_run.add_argument("--checks-root", default=str(DEFAULT_CHECKS_ROOT), help=argparse.SUPPRESS)
     check_run.set_defaults(func=_command_check_run)
 
+    check_recheck = check_sub.add_parser("recheck", help="rerun all Phase-6 checks after a bounded revision")
+    check_recheck.add_argument("--plan-run", required=True)
+    check_recheck.add_argument("--unit", required=True)
+    check_recheck.add_argument("--database", help=argparse.SUPPRESS)
+    check_recheck.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
+    check_recheck.add_argument("--evidence-root", default=str(DEFAULT_EVIDENCE_ROOT), help=argparse.SUPPRESS)
+    check_recheck.add_argument("--semantics-root", default=str(DEFAULT_SEMANTICS_ROOT), help=argparse.SUPPRESS)
+    check_recheck.add_argument("--translations-root", default=str(DEFAULT_TRANSLATIONS_ROOT), help=argparse.SUPPRESS)
+    check_recheck.add_argument("--checks-root", default=str(DEFAULT_CHECKS_ROOT), help=argparse.SUPPRESS)
+    check_recheck.set_defaults(func=_command_check_run)
+
     for name, help_text, field in (
         ("show", "show the complete Phase-6 check result", None),
         ("coverage", "show coverage details for a checked unit", "coverage"),
@@ -1070,9 +1163,25 @@ def build_parser() -> argparse.ArgumentParser:
     troubleshoot_run.add_argument("--timeout", type=int, default=1800, help="timeout for the single repair session in seconds")
     troubleshoot_run.set_defaults(func=_command_troubleshoot_run)
 
+    troubleshoot_resolve = troubleshoot_sub.add_parser(
+        "resolve", help="dispatch one failure to its owner and run Phase 6 once"
+    )
+    troubleshoot_resolve.add_argument("--plan-run", required=True)
+    troubleshoot_resolve.add_argument("--unit", required=True)
+    troubleshoot_resolve.add_argument("--database", help=argparse.SUPPRESS)
+    troubleshoot_resolve.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
+    troubleshoot_resolve.add_argument("--evidence-root", default=str(DEFAULT_EVIDENCE_ROOT), help=argparse.SUPPRESS)
+    troubleshoot_resolve.add_argument("--semantics-root", default=str(DEFAULT_SEMANTICS_ROOT), help=argparse.SUPPRESS)
+    troubleshoot_resolve.add_argument("--translations-root", default=str(DEFAULT_TRANSLATIONS_ROOT), help=argparse.SUPPRESS)
+    troubleshoot_resolve.add_argument("--checks-root", default=str(DEFAULT_CHECKS_ROOT), help=argparse.SUPPRESS)
+    troubleshoot_resolve.add_argument("--troubleshooting-root", default=str(DEFAULT_TROUBLESHOOTING_ROOT), help=argparse.SUPPRESS)
+    troubleshoot_resolve.add_argument("--timeout", type=int, default=1800, help="timeout for each bounded revision session")
+    troubleshoot_resolve.set_defaults(func=_command_troubleshoot_resolve)
+
     for name, help_text, function in (
         ("show", "show the complete Phase-7 routing or repair artifact", _command_troubleshoot_show),
         ("changes", "show changed files, hashes, and recheck requirements", _command_troubleshoot_changes),
+        ("resolution", "show the latest bounded dispatch and recheck result", _command_troubleshoot_resolution),
     ):
         command = troubleshoot_sub.add_parser(name, help=help_text)
         command.add_argument("--plan-run", required=True)
@@ -1094,10 +1203,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("evidence build --timeout and --jobs must be positive")
     if getattr(args, "semantics_command", None) == "build" and args.timeout < 1:
         parser.error("semantics build --timeout must be positive")
+    if getattr(args, "semantics_command", None) == "revise" and args.timeout < 1:
+        parser.error("semantics revise --timeout must be positive")
     if getattr(args, "translate_command", None) == "build" and args.timeout < 1:
         parser.error("translate build --timeout must be positive")
+    if getattr(args, "translate_command", None) == "revise" and args.timeout < 1:
+        parser.error("translate revise --timeout must be positive")
     if getattr(args, "troubleshoot_command", None) == "run" and args.timeout < 1:
         parser.error("troubleshoot run --timeout must be positive")
+    if getattr(args, "troubleshoot_command", None) == "resolve" and args.timeout < 1:
+        parser.error("troubleshoot resolve --timeout must be positive")
     try:
         return int(args.func(args))
     except (FileNotFoundError, FileExistsError, KeyError, RuntimeError, ValueError, sqlite3.Error) as exc:

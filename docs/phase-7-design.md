@@ -54,8 +54,37 @@ count. The model supplies only the repaired source, declaration mappings, and
 human-readable change descriptions.
 
 A successful build repair is marked for a fresh Phase-6 run of all three checks:
-Build, Coverage, and Traceability. The recheck is explicit and not automatic, so
-a further repair can only follow a newly produced Phase-6 failure.
+Build, Coverage, and Traceability. `troubleshoot run` remains route/repair-only;
+`troubleshoot resolve` performs one deterministic dispatch and one recheck. It
+does not recursively act on the recheck result, so a further repair can only
+follow that newly produced Phase-6 failure.
+
+## Bounded upstream revisions
+
+Phase-4 and Phase-5 creation prompts and create-only `build` commands remain
+unchanged. Separate revision prompts consume the current artifact plus exact
+Phase-6 diagnostics:
+
+```text
+TRACEABILITY FAIL
+  -> one Semantic Extractor revision
+  -> one Translator reconciliation revision
+  -> one Phase-6 recheck
+
+COVERAGE FAIL
+  -> one Translator coverage revision
+  -> one Phase-6 recheck
+
+BUILD FAIL
+  -> one Troubleshooter syntax/elaboration repair
+  -> one Phase-6 recheck
+```
+
+Each revision stores before-state artifacts, hashes, its source Phase-6 check
+hash, model/session metadata, and zero automatic retries. A Phase-6 check can be
+consumed only once by a given revision phase. Phase 6 now records semantic,
+Lean-source, and manifest input hashes so a genuine recheck is distinguishable
+from reuse of stale diagnostics.
 
 ## CLI
 
@@ -72,10 +101,19 @@ Inspect without starting a session:
 ./spec2lean troubleshoot changes --plan-run PLAN_RUN_ID --unit UNIT_ID
 ```
 
-After `REPAIR_BUILD`, rerun Phase 6 explicitly:
+Dispatch one action and run Phase 6 exactly once:
 
 ```bash
-./spec2lean check run --plan-run PLAN_RUN_ID --unit UNIT_ID
+./spec2lean troubleshoot resolve --plan-run PLAN_RUN_ID --unit UNIT_ID
+./spec2lean troubleshoot resolution --plan-run PLAN_RUN_ID --unit UNIT_ID
+```
+
+The individual bounded commands remain available for inspection/manual control:
+
+```bash
+./spec2lean semantics revise --plan-run PLAN_RUN_ID --unit UNIT_ID
+./spec2lean translate revise --plan-run PLAN_RUN_ID --unit UNIT_ID
+./spec2lean check recheck --plan-run PLAN_RUN_ID --unit UNIT_ID
 ```
 
 Normal tests inject a mocked repair submission and never invoke OpenCode.

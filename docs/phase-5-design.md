@@ -1,5 +1,10 @@
 # Phase 5: LLM Translator
 
+The original translation prompt and create-only build path are unchanged by the
+repair loop. Coverage failures and revised Phase-4 artifacts use a separate
+bounded `translate revise` path over the current translation, exact diagnostics,
+and current Phase-4 semantic authority.
+
 Phase 5 consumes one accepted Phase-4 `semantics.json` for one planned unit and
 produces a Lean 4 semantic implementation plus declaration-level traceability.
 It does not reopen Phase 1, read Phase-3 evidence text, browse, prove theorem

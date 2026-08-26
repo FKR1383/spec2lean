@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
@@ -10,6 +11,7 @@ from typing import Any, Callable
 from ..evidence.store import load_unit_bundle
 from ..semantics.store import load_semantics
 from ..translation.store import load_translation
+from ..util import canonical_json
 from .build import run_build_test
 from .logical import logical_tests
 from .models import check_result
@@ -75,6 +77,11 @@ def run_checks(
         build=build,
         coverage=coverage,
         traceability=traceability,
+        input_hashes={
+            "semantics": "sha256:" + hashlib.sha256(canonical_json(semantics).encode("utf-8")).hexdigest(),
+            "leanSource": "sha256:" + hashlib.sha256(source.encode("utf-8")).hexdigest(),
+            "translationManifest": "sha256:" + hashlib.sha256(canonical_json(manifest).encode("utf-8")).hexdigest(),
+        },
     )
     output = unit_directory(checks_root, plan, units[0])
     output.mkdir(parents=True, exist_ok=True)

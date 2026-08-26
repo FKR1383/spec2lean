@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec2lean.local/schemas/resolution-result.schema.json",
+  "title": "Spec2Lean Bounded Failure Resolution Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "phase", "resolutionRunId", "planRunId", "unitId",
+    "initialAction", "stages", "rechecked", "checkBeforeHash", "checkAfterHash",
+    "checkResult", "nextAction", "automaticRetries", "dispatches", "startedAt",
+    "finishedAt", "outcome"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "phase": {"const": "TROUBLESHOOTER_RESOLUTION"},
+    "resolutionRunId": {"type": "string", "pattern": "^resolution-run:"},
+    "planRunId": {"type": "string", "pattern": "^plan:"},
+    "unitId": {"type": "string", "pattern": "^unit:"},
+    "initialAction": {"$ref": "#/$defs/action"},
+    "stages": {"type": "array", "items": {"type": "object"}},
+    "rechecked": {"type": "boolean"},
+    "checkBeforeHash": {"$ref": "#/$defs/hash"},
+    "checkAfterHash": {"$ref": "#/$defs/hash"},
+    "checkResult": {"type": "object"},
+    "nextAction": {"$ref": "#/$defs/action"},
+    "automaticRetries": {"const": 0},
+    "dispatches": {"type": "integer", "minimum": 0, "maximum": 1},
+    "startedAt": {"type": "string", "minLength": 1},
+    "finishedAt": {"type": "string", "minLength": 1},
+    "outcome": {"enum": ["COMPLETE", "RECHECK_FAILED"]}
+  },
+  "$defs": {
+    "hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "action": {"enum": ["RETURN_TO_SEMANTIC_EXTRACTOR", "RETURN_TO_TRANSLATOR", "REPAIR_BUILD", "NO_ACTION"]}
+  }
+}

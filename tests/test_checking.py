@@ -298,6 +298,8 @@ def test_run_preserves_simultaneous_failures_and_writes_deterministic_artifacts(
         database=html_database, unit_id=UNIT["unitId"], build_runner=_failing_build,
     )
     assert result["status"] == "FAIL"
+    assert set(result["inputHashes"]) == {"semantics", "leanSource", "translationManifest"}
+    assert all(value.startswith("sha256:") for value in result["inputHashes"].values())
     assert result["build"]["status"] == result["coverage"]["status"] == result["traceability"]["status"] == "FAIL"
     assert result["routing"]["next"] == [
         "SEMANTIC_EXTRACTOR", "TRANSLATOR", "TROUBLESHOOTER"

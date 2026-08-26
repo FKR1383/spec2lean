@@ -12,7 +12,9 @@ from spec2lean.semantics.mcp import SemanticsMcpServer, tool_definitions
 from spec2lean.semantics.models import (
     EXTRACTOR_MODEL, EXTRACTOR_REASONING, SemanticScope, evidence_bundle_hash,
 )
+from spec2lean.semantics.prompt import build_extractor_prompt
 from spec2lean.semantics.render import render_markdown
+from spec2lean.semantics.revision import revise_semantics
 from spec2lean.semantics.runner import build_semantics, opencode_config
 from spec2lean.semantics.store import unit_directory
 from spec2lean.semantics.validation import validate_artifact, validate_submission
@@ -245,3 +247,36 @@ def test_missing_exact_model_starts_no_session_and_creates_no_artifact(tmp_path,
     with pytest.raises(RuntimeError, match="required OpenCode Semantic Extractor model is unavailable"):
         build_semantics(plan, evidence_root, output, unit_ids=[UNIT["unitId"]], run_command=must_not_run)
     assert invoked is False and not output.exists()
+
+
+def test_bounded_semantic_revision_uses_trace_diagnostics_and_preserves_original_prompt(tmp_path):
+    plan, bundle, _, evidence_root = _write_inputs(tmp_path)
+    semantics_root = tmp_path / "semantics"
+    directory = unit_directory(semantics_root, plan, UNIT)
+    directory.mkdir(parents=True)
+    original_scope = _scope(plan, bundle)
+    original, diagnostics = validate_submission(original_scope, bundle, _submission())
+    assert diagnostics == [] and original is not None
+    (directory / "semantics.json").write_text(json.dumps(original), encoding="utf-8")
+    (directory / "semantics.md").write_text(render_markdown(original), encoding="utf-8")
+    (directory / "extractor-run.json").write_text("{}", encoding="utf-8")
+    broken = [{"code": "MISSING_EVIDENCE", "message": "claim evidence must be revalidated"}]
+    calls = []
+
+    def fake_session(context, *, timeout_seconds):
+        calls.append(context)
+        scope = SemanticScope.from_dict(context["scope"])
+        artifact, inner = validate_submission(scope, context["evidence"], _submission())
+        assert inner == []
+        return {"artifact": artifact, "error": None, "session": {"sessionId": "semantic-revision"}}
+
+    revision_directory, metadata = revise_semantics(
+        plan, evidence_root=evidence_root, semantics_root=semantics_root,
+        unit_id=UNIT["unitId"], diagnostics=broken, session_runner=fake_session,
+        now=lambda: "2026-08-27T00:00:00Z",
+    )
+    assert len(calls) == 1 and calls[0]["diagnostics"] == broken
+    assert metadata["singleSession"] is True and metadata["automaticRetries"] == 0
+    assert (revision_directory / "before-semantics.json").is_file()
+    assert json.loads((directory / "semantics.json").read_text())["createdAt"] == "2026-08-27T00:00:00Z"
+    assert "bounded Spec2Lean Phase-4 semantic revision" not in build_extractor_prompt(original_scope, bundle)

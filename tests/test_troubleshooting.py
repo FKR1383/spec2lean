@@ -17,6 +17,7 @@ from spec2lean.troubleshooting.models import (
     action_for,
 )
 from spec2lean.troubleshooting.opencode import opencode_config
+from spec2lean.troubleshooting.resolver import resolve_check_failure
 from spec2lean.troubleshooting.runner import run_troubleshooter
 
 
@@ -337,3 +338,98 @@ def test_inspection_cli_shows_artifact_and_changes_without_rerunning(tmp_path, c
     assert json.loads(capsys.readouterr().out)["action"] == RETURN_TO_TRANSLATOR
     assert main(["troubleshoot", "changes", *common]) == 0
     assert json.loads(capsys.readouterr().out)["changedFiles"] == []
+
+
+def test_resolver_dispatches_coverage_to_one_translation_revision_then_rechecks(tmp_path):
+    check = _check("FAIL", "FAIL", "PASS")
+    plan, roots = _write_plan_and_check(tmp_path, check)
+    calls = []
+
+    def translation_reviser(plan, **kwargs):
+        calls.append(("translate", kwargs))
+        return tmp_path / "translation-revision", {"revisionRunId": "translation-revision:test"}
+
+    def checker(plan, **kwargs):
+        calls.append(("check", kwargs))
+        return roots["checks"], _check("PASS", "PASS", "PASS")
+
+    _, resolution = resolve_check_failure(
+        plan, evidence_root=tmp_path / "evidence", semantics_root=roots["semantics"],
+        translations_root=roots["translations"], checks_root=roots["checks"],
+        troubleshooting_root=roots["troubleshooting"], database=tmp_path / "db",
+        unit_id=UNIT["unitId"], translation_reviser=translation_reviser,
+        checker=checker, now=lambda: "2026-08-27T00:00:00Z",
+        repository_root=roots["plans"],
+    )
+    assert [name for name, _ in calls] == ["translate", "check"]
+    assert calls[0][1]["diagnostics"] == check["coverage"]["uncovered"]
+    assert resolution["initialAction"] == RETURN_TO_TRANSLATOR
+    assert resolution["nextAction"] == NO_ACTION and resolution["dispatches"] == 1
+
+
+def test_resolver_dispatches_traceability_through_semantics_translation_and_one_recheck(tmp_path):
+    check = _check("FAIL", "FAIL", "FAIL")
+    plan, roots = _write_plan_and_check(tmp_path, check)
+    calls = []
+
+    def semantic_reviser(plan, **kwargs):
+        calls.append(("semantics", kwargs))
+        return tmp_path / "semantic-revision", {"revisionRunId": "semantic-revision:test"}
+
+    def translation_reviser(plan, **kwargs):
+        calls.append(("translate", kwargs))
+        return tmp_path / "translation-revision", {"revisionRunId": "translation-revision:test"}
+
+    def checker(plan, **kwargs):
+        calls.append(("check", kwargs))
+        return roots["checks"], _check("FAIL", "PASS", "PASS")
+
+    _, resolution = resolve_check_failure(
+        plan, evidence_root=tmp_path / "evidence", semantics_root=roots["semantics"],
+        translations_root=roots["translations"], checks_root=roots["checks"],
+        troubleshooting_root=roots["troubleshooting"], database=tmp_path / "db",
+        unit_id=UNIT["unitId"], semantic_reviser=semantic_reviser,
+        translation_reviser=translation_reviser, checker=checker,
+        now=lambda: "2026-08-27T00:00:00Z", repository_root=roots["plans"],
+    )
+    assert [name for name, _ in calls] == ["semantics", "translate", "check"]
+    assert calls[0][1]["diagnostics"] == check["traceability"]["brokenMappings"]
+    assert calls[1][1]["reason"] == "SEMANTICS_REVISED"
+    assert resolution["nextAction"] == REPAIR_BUILD
+    assert resolution["outcome"] == "RECHECK_FAILED"
+    assert resolution["automaticRetries"] == 0
+
+
+def test_resolver_dispatches_build_to_syntax_handler_then_rechecks_once(tmp_path):
+    plan, roots, _, manifest = _write_build_inputs(tmp_path)
+    calls = []
+
+    def repair(context, *, timeout_seconds):
+        calls.append("repair")
+        return {
+            "submission": {
+                "leanSource": REPAIRED_SOURCE,
+                "declarations": manifest["declarations"],
+                "changes": [{
+                    "description": "Repair the syntax/API spelling.",
+                    "affectedDeclarations": ["Spec2Lean.Repair.operation"],
+                }],
+            },
+            "error": None,
+            "session": {"opencodeVersion": "1.test"},
+        }
+
+    def checker(plan, **kwargs):
+        calls.append("check")
+        return roots["checks"], _check("PASS", "PASS", "PASS")
+
+    _, resolution = resolve_check_failure(
+        plan, evidence_root=tmp_path / "evidence", semantics_root=roots["semantics"],
+        translations_root=roots["translations"], checks_root=roots["checks"],
+        troubleshooting_root=roots["troubleshooting"], database=tmp_path / "db",
+        unit_id=UNIT["unitId"], checker=checker, repair_runner=repair,
+        now=lambda: "2026-08-27T00:00:00Z", repository_root=roots["plans"],
+    )
+    assert calls == ["repair", "check"]
+    assert resolution["initialAction"] == REPAIR_BUILD
+    assert resolution["outcome"] == "COMPLETE" and resolution["rechecked"] is True

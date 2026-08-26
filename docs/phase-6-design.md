@@ -59,6 +59,11 @@ The typed JSON contract is `schemas/check-result.schema.json`. Re-running a
 check replaces only that unit's two derived check reports; it does not modify
 any Phase-1 through Phase-5 artifact.
 
+Each newly produced result also records hashes of the exact Phase-4 semantics,
+Lean source, and translation manifest it checked. These hashes bind bounded
+revision attempts to a concrete check result and prevent stale diagnostics from
+being consumed repeatedly.
+
 Routing is deterministic and report-only:
 
 - Traceability failure adds `SEMANTIC_EXTRACTOR`.
@@ -84,6 +89,7 @@ Inspect the stored result without rerunning a check:
 ./spec2lean check show --plan-run PLAN_RUN_ID --unit UNIT_ID
 ./spec2lean check coverage --plan-run PLAN_RUN_ID --unit UNIT_ID
 ./spec2lean check traceability --plan-run PLAN_RUN_ID --unit UNIT_ID
+./spec2lean check recheck --plan-run PLAN_RUN_ID --unit UNIT_ID
 ```
 
 `check run` exits zero only when all three checks pass. A completed check that

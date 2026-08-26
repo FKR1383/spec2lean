@@ -54,6 +54,15 @@
           "items": {"enum": ["COMPLETE", "TROUBLESHOOTER", "TRANSLATOR", "SEMANTIC_EXTRACTOR"]}
         }
       }
+    },
+    "inputHashes": {
+      "type": "object", "additionalProperties": false,
+      "required": ["semantics", "leanSource", "translationManifest"],
+      "properties": {
+        "semantics": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "leanSource": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "translationManifest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
     }
   },
   "$defs": {
