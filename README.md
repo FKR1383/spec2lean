@@ -1,14 +1,17 @@
 # Spec2Lean
 
 Spec2Lean implements **Phase 1: Parse + Index**, **Phase 2: Request-scoped
-Planner**, **Phase 3: Retrieve Evidence**, and **Phase 4: Semantic Extractor**. Phase 1 turns an official PDF and/or HTML language specification
+Planner**, **Phase 3: Retrieve Evidence**, **Phase 4: Semantic Extractor**, and
+**Phase 5: LLM Translator**. Phase 1 turns an official PDF and/or HTML language specification
 into a deterministic, searchable, hierarchical SQLite database. Phase 2
 resolves an explicitly bounded request, invokes one restricted OpenCode Planner
 session, validates its dependency graph, and writes an inspectable plan. Phase 3
 runs one bounded Evidence Retriever session per planned unit and deterministically
 resolves its selections to exact Phase-1 text and provenance. Phase 4 runs one
 evidence-bounded Semantic Extractor session per unit and validates a structured,
-traceable semantic artifact. It does not generate Lean or check proofs.
+traceable semantic artifact. Phase 5 uses one semantic-artifact-bounded session
+to generate Lean 4 and declaration traceability. Authoritative Lean checking and
+troubleshooting are not implemented.
 
 Python is used because PyMuPDF exposes PDF layout/font/bounding-box data and
 `lxml` preserves semantic HTML structure and source lines. SQLite and FTS5
@@ -269,3 +272,30 @@ plan serially. Inspect artifacts without invoking OpenCode:
 See [the Phase 4 design](docs/phase-4-design.md) for the evidence boundary,
 semantic schema, claim classifications, operation/state separation,
 deterministic validation, OpenCode isolation, and artifact layout.
+
+## Translate one accepted semantic artifact to Lean 4
+
+Phase 5 requires the exact installed OpenCode model
+`openai/gpt-5.3-codex-spark` with reasoning variant `low`. It accepts exactly one
+unit per command, supplies only that unit's accepted `semantics.json` and any
+current-architecture shared Lean sources, and exposes only the structured
+`submit_translation` tool.
+
+```bash
+./spec2lean translate build \
+  --plan-run PLAN_RUN_ID \
+  --unit UNIT_ID
+```
+
+Inspect the generated source/metadata or resolve a declaration all the way to
+Phase-3 source provenance without starting OpenCode:
+
+```bash
+./spec2lean translate show --plan-run PLAN_RUN_ID --unit UNIT_ID
+./spec2lean translate manifest --plan-run PLAN_RUN_ID --unit UNIT_ID
+./spec2lean translate trace --declaration QUALIFIED_LEAN_DECLARATION
+```
+
+See [the Phase 5 design](docs/phase-5-design.md) for the authority boundary,
+Lean conventions, structured tool, manifest schema, forbidden constructs,
+deterministic validation, and declaration traceability chain.

@@ -27,6 +27,8 @@ evidence/**
 !evidence/.gitkeep
 semantics/**
 !semantics/.gitkeep
+translations/**
+!translations/.gitkeep
 
 # Environment files and credentials
 .env
