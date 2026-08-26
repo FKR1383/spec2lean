@@ -1,13 +1,14 @@
 # Spec2Lean
 
 Spec2Lean implements **Phase 1: Parse + Index**, **Phase 2: Request-scoped
-Planner**, and **Phase 3: Retrieve Evidence**. Phase 1 turns an official PDF and/or HTML language specification
+Planner**, **Phase 3: Retrieve Evidence**, and **Phase 4: Semantic Extractor**. Phase 1 turns an official PDF and/or HTML language specification
 into a deterministic, searchable, hierarchical SQLite database. Phase 2
 resolves an explicitly bounded request, invokes one restricted OpenCode Planner
 session, validates its dependency graph, and writes an inspectable plan. Phase 3
 runs one bounded Evidence Retriever session per planned unit and deterministically
-resolves its selections to exact Phase-1 text and provenance. It does not perform
-semantic extraction, generate Lean, or check proofs.
+resolves its selections to exact Phase-1 text and provenance. Phase 4 runs one
+evidence-bounded Semantic Extractor session per unit and validates a structured,
+traceable semantic artifact. It does not generate Lean or check proofs.
 
 Python is used because PyMuPDF exposes PDF layout/font/bounding-box data and
 `lxml` preserves semantic HTML structure and source lines. SQLite and FTS5
@@ -238,3 +239,33 @@ Inspect accepted artifacts without calling OpenCode:
 See [the Phase 3 design](docs/phase-3-design.md) for the exposure boundary,
 OpenCode isolation, schema, content-addressed IDs, provenance reconstruction,
 validation, and artifacts.
+
+## Extract structured semantics from one evidence bundle
+
+Phase 4 requires the exact installed OpenCode model
+`openai/gpt-5.3-codex-spark` with reasoning variant `low`. It supplies only the
+selected unit's Phase-3 evidence bundle and exposes only the structured
+`submit_semantics` tool. It cannot retrieve additional material.
+
+Run the first experiment on one unit that already has a valid evidence bundle:
+
+```bash
+./spec2lean semantics build \
+  --plan-run PLAN_RUN_ID \
+  --unit UNIT_ID
+```
+
+Omitting `--unit` intentionally processes every evidence-backed unit in the
+plan serially. Inspect artifacts without invoking OpenCode:
+
+```bash
+./spec2lean semantics show --plan-run PLAN_RUN_ID --unit UNIT_ID
+./spec2lean semantics claims --plan-run PLAN_RUN_ID --unit UNIT_ID
+./spec2lean semantics operation --plan-run PLAN_RUN_ID --unit UNIT_ID
+./spec2lean semantics evidence --claim CLAIM_ID
+./spec2lean semantics stats --plan-run PLAN_RUN_ID
+```
+
+See [the Phase 4 design](docs/phase-4-design.md) for the evidence boundary,
+semantic schema, claim classifications, operation/state separation,
+deterministic validation, OpenCode isolation, and artifact layout.

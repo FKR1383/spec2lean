@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec2lean.local/schemas/semantic-artifact.schema.json",
+  "title": "Spec2Lean Phase-4 Semantic Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "phase", "planRunId", "language", "version", "unit",
+    "evidenceBundleHash", "extractor", "runId", "createdAt", "outcome"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "phase": {"const": "SEMANTIC_EXTRACTOR"},
+    "planRunId": {"type": "string", "pattern": "^plan:"},
+    "language": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "minLength": 1},
+    "unit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unitId", "name", "sourceNodeIds"],
+      "properties": {
+        "unitId": {"type": "string", "pattern": "^unit:"},
+        "name": {"type": "string", "minLength": 1},
+        "sourceNodeIds": {"type": "array", "items": {"type": "string", "pattern": "^node:"}, "minItems": 1}
+      }
+    },
+    "evidenceBundleHash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "extractor": {
+      "type": "object", "additionalProperties": false,
+      "required": ["provider", "model", "reasoning"],
+      "properties": {
+        "provider": {"const": "opencode"},
+        "model": {"const": "openai/gpt-5.3-codex-spark"},
+        "reasoning": {"const": "low"}
+      }
+    },
+    "runId": {"type": "string", "pattern": "^semantic-run:"},
+    "createdAt": {"type": "string", "minLength": 1},
+    "outcome": {"enum": ["SUCCESS", "INSUFFICIENT_EVIDENCE"]},
+    "semantics": {"$ref": "#/$defs/semantics"},
+    "failure": {"$ref": "#/$defs/failure"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"outcome": {"const": "SUCCESS"}}},
+      "then": {"required": ["semantics"], "not": {"required": ["failure"]}},
+      "else": {"required": ["failure"], "not": {"required": ["semantics"]}}
+    }
+  ],
+  "$defs": {
+    "evidenceIds": {"type": "array", "items": {"type": "string", "pattern": "^evidence:"}, "uniqueItems": true},
+    "identity": {
+      "type": "object", "additionalProperties": false, "required": ["name", "evidenceIds"],
+      "properties": {"name": {"type": "string"}, "form": {"type": "string"}, "description": {"type": "string"}, "evidenceIds": {"$ref": "#/$defs/evidenceIds"}}
+    },
+    "syntax": {
+      "type": "object", "additionalProperties": false, "required": ["form", "evidenceIds"],
+      "properties": {"form": {"type": "string"}, "description": {"type": "string"}, "evidenceIds": {"$ref": "#/$defs/evidenceIds"}}
+    },
+    "operand": {
+      "type": "object", "additionalProperties": false, "required": ["name", "role", "description", "constraints", "evidenceIds"],
+      "properties": {"name": {"type": "string"}, "role": {"type": "string"}, "description": {"type": "string"}, "constraints": {"type": "array", "items": {"type": "string"}}, "evidenceIds": {"$ref": "#/$defs/evidenceIds"}}
+    },
+    "result": {
+      "type": "object", "additionalProperties": false, "required": ["name", "description", "constraints", "evidenceIds"],
+      "properties": {"name": {"type": "string"}, "description": {"type": "string"}, "constraints": {"type": "array", "items": {"type": "string"}}, "evidenceIds": {"$ref": "#/$defs/evidenceIds"}}
+    },
+    "branch": {
+      "type": "object", "additionalProperties": false, "required": ["condition", "behavior", "evidenceIds"],
+      "properties": {"condition": {"type": "string"}, "behavior": {"type": "string"}, "evidenceIds": {"$ref": "#/$defs/evidenceIds"}}
+    },
+    "operation": {
+      "type": "object", "additionalProperties": false, "required": ["description", "inputs", "result", "branches", "evidenceIds"],
+      "properties": {"description": {"type": "string"}, "inputs": {"type": "array", "items": {"type": "string"}, "minItems": 1}, "result": {"type": "string"}, "branches": {"type": "array", "items": {"$ref": "#/$defs/branch"}}, "evidenceIds": {"$ref": "#/$defs/evidenceIds"}}
+    },
+    "edge": {
+      "type": "object", "additionalProperties": false, "required": ["condition", "behavior", "evidenceIds"],
+      "properties": {"condition": {"type": "string"}, "behavior": {"type": "string"}, "evidenceIds": {"$ref": "#/$defs/evidenceIds"}}
+    },
+    "state": {
+      "type": "object", "additionalProperties": false, "required": ["target", "effect", "evidenceIds"],
+      "properties": {"target": {"type": "string"}, "effect": {"type": "string"}, "evidenceIds": {"$ref": "#/$defs/evidenceIds"}}
+    },
+    "predication": {
+      "type": "object", "additionalProperties": false, "required": ["guard", "whenTrue", "whenFalse", "evidenceIds"],
+      "properties": {"guard": {"type": "string"}, "whenTrue": {"type": "string"}, "whenFalse": {"type": "string"}, "evidenceIds": {"$ref": "#/$defs/evidenceIds"}}
+    },
+    "restriction": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "description", "evidenceIds"],
+      "properties": {"kind": {"enum": ["VERSION", "TARGET", "TYPE", "OPERAND", "OTHER"]}, "description": {"type": "string"}, "evidenceIds": {"$ref": "#/$defs/evidenceIds"}}
+    },
+    "dependency": {
+      "type": "object", "additionalProperties": false, "required": ["concept", "description", "evidenceIds"],
+      "properties": {"concept": {"type": "string"}, "description": {"type": "string"}, "artifactId": {"type": "string"}, "evidenceIds": {"$ref": "#/$defs/evidenceIds"}}
+    },
+    "claim": {
+      "type": "object", "additionalProperties": false, "required": ["claimId", "kind", "statement", "evidenceIds"],
+      "properties": {"claimId": {"type": "string", "pattern": "^claim:"}, "kind": {"enum": ["SOURCE_FACT", "DERIVED_INTERPRETATION", "DESIGN_DEPENDENCY", "ASSUMPTION"]}, "statement": {"type": "string"}, "evidenceIds": {"$ref": "#/$defs/evidenceIds"}}
+    },
+    "semantics": {
+      "type": "object", "additionalProperties": false,
+      "required": ["unitKind", "identity", "syntaxForms", "inputs", "edgeCases", "stateEffects", "restrictions", "dependencies", "claims"],
+      "properties": {
+        "unitKind": {"enum": ["INSTRUCTION", "LANGUAGE_CONSTRUCT", "SHARED_CONCEPT", "OTHER"]},
+        "identity": {"$ref": "#/$defs/identity"}, "syntaxForms": {"type": "array", "items": {"$ref": "#/$defs/syntax"}},
+        "inputs": {"type": "array", "items": {"$ref": "#/$defs/operand"}}, "result": {"$ref": "#/$defs/result"},
+        "operation": {"$ref": "#/$defs/operation"}, "edgeCases": {"type": "array", "items": {"$ref": "#/$defs/edge"}},
+        "stateEffects": {"type": "array", "items": {"$ref": "#/$defs/state"}}, "predication": {"$ref": "#/$defs/predication"},
+        "restrictions": {"type": "array", "items": {"$ref": "#/$defs/restriction"}}, "dependencies": {"type": "array", "items": {"$ref": "#/$defs/dependency"}},
+        "claims": {"type": "array", "items": {"$ref": "#/$defs/claim"}, "minItems": 1}
+      }
+    },
+    "failure": {
+      "type": "object", "additionalProperties": false, "required": ["missingAspects", "explanation", "evidenceIds"],
+      "properties": {"missingAspects": {"type": "array", "items": {"type": "string"}, "minItems": 1}, "explanation": {"type": "string"}, "evidenceIds": {"$ref": "#/$defs/evidenceIds"}}
+    }
+  }
+}

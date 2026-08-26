@@ -16,6 +16,9 @@ from .parsers import parse_html, parse_pdf
 from .planning.models import PlanningRequest
 from .planning.render import render_dot
 from .planning.runner import build_plan
+from .semantics.runner import build_semantics
+from .semantics.store import artifacts as semantic_artifacts
+from .semantics.store import find_claim, load_semantics, semantics_run_root
 from .util import canonical_json
 from .validation import record_validation, statistics, validate_database
 
@@ -24,6 +27,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_INDEX_ROOT = REPOSITORY_ROOT / "indexes"
 DEFAULT_PLANS_ROOT = REPOSITORY_ROOT / "plans"
 DEFAULT_EVIDENCE_ROOT = REPOSITORY_ROOT / "evidence"
+DEFAULT_SEMANTICS_ROOT = REPOSITORY_ROOT / "semantics"
 
 
 def _database_for(language: str, version: str) -> Path:
@@ -565,6 +569,67 @@ def _command_evidence_stats(args: argparse.Namespace) -> int:
     return 0
 
 
+def _load_semantics_plan(args: argparse.Namespace) -> tuple[Path, dict[str, Any]]:
+    run = _find_plan_run(args.plan_run, args.plans_root)
+    return run, json.loads((run / "plan.json").read_text(encoding="utf-8"))
+
+
+def _command_semantics_build(args: argparse.Namespace) -> int:
+    _, plan = _load_semantics_plan(args)
+    root = build_semantics(
+        plan, Path(args.evidence_root), Path(args.semantics_root),
+        unit_ids=args.unit, timeout_seconds=args.timeout,
+    )
+    print(root)
+    return 0
+
+
+def _command_semantics_show(args: argparse.Namespace) -> int:
+    _, plan = _load_semantics_plan(args)
+    _, artifact = load_semantics(Path(args.semantics_root), plan, args.unit)
+    _json(artifact)
+    return 0
+
+
+def _command_semantics_field(args: argparse.Namespace) -> int:
+    _, plan = _load_semantics_plan(args)
+    _, artifact = load_semantics(Path(args.semantics_root), plan, args.unit)
+    semantics = artifact.get("semantics") or {}
+    _json(semantics.get(args.semantic_field))
+    return 0
+
+
+def _command_semantics_evidence(args: argparse.Namespace) -> int:
+    semantic_path, artifact, claim = find_claim(Path(args.semantics_root), args.claim)
+    records = []
+    evidence_root = Path(args.evidence_root).resolve()
+    for evidence_id in claim.get("evidenceIds", []):
+        path, item = find_evidence(evidence_root, evidence_id)
+        records.append({"bundle": str(path), **item})
+    _json({
+        "claim": claim, "semanticArtifact": str(semantic_path),
+        "unitId": artifact["unit"]["unitId"], "evidence": records,
+    })
+    return 0
+
+
+def _command_semantics_stats(args: argparse.Namespace) -> int:
+    _, plan = _load_semantics_plan(args)
+    items = semantic_artifacts(Path(args.semantics_root), plan)
+    valid = [item["artifact"] for item in items if item["artifact"] and item["artifact"].get("outcome") == "SUCCESS"]
+    claims = [claim for artifact in valid for claim in artifact["semantics"]["claims"]]
+    _json({
+        "planRunId": plan["planRunId"], "plannedUnits": len(plan["requestedUnits"]),
+        "successfulArtifacts": len(valid),
+        "insufficientEvidence": sum((item["artifact"] or {}).get("outcome") == "INSUFFICIENT_EVIDENCE" for item in items),
+        "failedUnits": sum(item["metadata"].get("outcome") == "FAILED" for item in items),
+        "claims": len(claims),
+        "byClassification": {kind: sum(claim["kind"] == kind for claim in claims) for kind in ("SOURCE_FACT", "DERIVED_INTERPRETATION", "DESIGN_DEPENDENCY", "ASSUMPTION")},
+        "directory": str(semantics_run_root(Path(args.semantics_root), plan)),
+    })
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="spec2lean", description="Spec2Lean specification index and request-scoped planner")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -725,6 +790,47 @@ def build_parser() -> argparse.ArgumentParser:
     evidence_stats.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
     evidence_stats.add_argument("--evidence-root", default=str(DEFAULT_EVIDENCE_ROOT), help=argparse.SUPPRESS)
     evidence_stats.set_defaults(func=_command_evidence_stats)
+
+    semantics = commands.add_parser("semantics", help="build and inspect evidence-bounded Phase 4 semantics")
+    semantics_sub = semantics.add_subparsers(dest="semantics_command", required=True)
+    semantics_build = semantics_sub.add_parser("build", help="run one Semantic Extractor session per selected unit")
+    semantics_build.add_argument("--plan-run", required=True)
+    semantics_build.add_argument("--unit", action="append", help="exact evidence-backed Phase-2 unit ID; repeat to select units")
+    semantics_build.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
+    semantics_build.add_argument("--evidence-root", default=str(DEFAULT_EVIDENCE_ROOT), help=argparse.SUPPRESS)
+    semantics_build.add_argument("--semantics-root", default=str(DEFAULT_SEMANTICS_ROOT), help=argparse.SUPPRESS)
+    semantics_build.add_argument("--timeout", type=int, default=1800, help="timeout per single-unit session in seconds")
+    semantics_build.set_defaults(func=_command_semantics_build)
+
+    semantic_show = semantics_sub.add_parser("show", help="show a complete semantic artifact")
+    semantic_show.add_argument("--plan-run", required=True)
+    semantic_show.add_argument("--unit", required=True)
+    semantic_show.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
+    semantic_show.add_argument("--semantics-root", default=str(DEFAULT_SEMANTICS_ROOT), help=argparse.SUPPRESS)
+    semantic_show.set_defaults(func=_command_semantics_show)
+
+    for name, help_text, field in (
+        ("claims", "show structured claims for a unit", "claims"),
+        ("operation", "show the core operation for a unit", "operation"),
+    ):
+        command = semantics_sub.add_parser(name, help=help_text)
+        command.add_argument("--plan-run", required=True)
+        command.add_argument("--unit", required=True)
+        command.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
+        command.add_argument("--semantics-root", default=str(DEFAULT_SEMANTICS_ROOT), help=argparse.SUPPRESS)
+        command.set_defaults(func=_command_semantics_field, semantic_field=field)
+
+    semantic_evidence = semantics_sub.add_parser("evidence", help="resolve one semantic claim to Phase-3 evidence")
+    semantic_evidence.add_argument("--claim", required=True)
+    semantic_evidence.add_argument("--evidence-root", default=str(DEFAULT_EVIDENCE_ROOT), help=argparse.SUPPRESS)
+    semantic_evidence.add_argument("--semantics-root", default=str(DEFAULT_SEMANTICS_ROOT), help=argparse.SUPPRESS)
+    semantic_evidence.set_defaults(func=_command_semantics_evidence)
+
+    semantic_stats = semantics_sub.add_parser("stats", help="show per-plan semantic statistics")
+    semantic_stats.add_argument("--plan-run", required=True)
+    semantic_stats.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
+    semantic_stats.add_argument("--semantics-root", default=str(DEFAULT_SEMANTICS_ROOT), help=argparse.SUPPRESS)
+    semantic_stats.set_defaults(func=_command_semantics_stats)
     return parser
 
 
@@ -737,6 +843,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("plan build --timeout must be positive")
     if getattr(args, "evidence_command", None) == "build" and (args.timeout < 1 or args.jobs < 1):
         parser.error("evidence build --timeout and --jobs must be positive")
+    if getattr(args, "semantics_command", None) == "build" and args.timeout < 1:
+        parser.error("semantics build --timeout must be positive")
     try:
         return int(args.func(args))
     except (FileNotFoundError, FileExistsError, KeyError, RuntimeError, ValueError, sqlite3.Error) as exc:

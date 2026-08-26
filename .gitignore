@@ -25,6 +25,8 @@ plans/**
 !plans/.gitkeep
 evidence/**
 !evidence/.gitkeep
+semantics/**
+!semantics/.gitkeep
 
 # Environment files and credentials
 .env
