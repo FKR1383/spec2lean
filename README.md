@@ -1,17 +1,19 @@
 # Spec2Lean
 
 Spec2Lean implements **Phase 1: Parse + Index**, **Phase 2: Request-scoped
-Planner**, **Phase 3: Retrieve Evidence**, **Phase 4: Semantic Extractor**, and
-**Phase 5: LLM Translator**. Phase 1 turns an official PDF and/or HTML language specification
-into a deterministic, searchable, hierarchical SQLite database. Phase 2
+Planner**, **Phase 3: Retrieve Evidence**, **Phase 4: Semantic Extractor**,
+**Phase 5: LLM Translator**, and **Phase 6: Check**. Phase 1 turns an official
+PDF and/or HTML language specification into a deterministic, searchable,
+hierarchical SQLite database. Phase 2
 resolves an explicitly bounded request, invokes one restricted OpenCode Planner
 session, validates its dependency graph, and writes an inspectable plan. Phase 3
 runs one bounded Evidence Retriever session per planned unit and deterministically
 resolves its selections to exact Phase-1 text and provenance. Phase 4 runs one
 evidence-bounded Semantic Extractor session per unit and validates a structured,
 traceable semantic artifact. Phase 5 uses one semantic-artifact-bounded session
-to generate Lean 4 and declaration traceability. Authoritative Lean checking and
-troubleshooting are not implemented.
+to generate Lean 4 and declaration traceability. Phase 6 independently compiles
+that Lean and deterministically checks forward coverage and reverse traceability.
+Troubleshooting is not implemented.
 
 Python is used because PyMuPDF exposes PDF layout/font/bounding-box data and
 `lxml` preserves semantic HTML structure and source lines. SQLite and FTS5
@@ -299,3 +301,27 @@ Phase-3 source provenance without starting OpenCode:
 See [the Phase 5 design](docs/phase-5-design.md) for the authority boundary,
 Lean conventions, structured tool, manifest schema, forbidden constructs,
 deterministic validation, and declaration traceability chain.
+
+## Check one translated unit
+
+Phase 6 runs exactly three checks: Lean Build, structured Coverage, and
+structured Traceability. It consumes existing artifacts only, never modifies
+Lean, and does not invoke OpenCode. Start with one translated unit:
+
+```bash
+./spec2lean check run \
+  --plan-run PLAN_RUN_ID \
+  --unit UNIT_ID
+```
+
+The command writes `check.json` and `check.md` under the unit-specific `checks/`
+directory. Inspect the stored result without rerunning anything:
+
+```bash
+./spec2lean check show --plan-run PLAN_RUN_ID --unit UNIT_ID
+./spec2lean check coverage --plan-run PLAN_RUN_ID --unit UNIT_ID
+./spec2lean check traceability --plan-run PLAN_RUN_ID --unit UNIT_ID
+```
+
+See [the Phase 6 design](docs/phase-6-design.md) for the three checks, artifact
+contract, deterministic routing, and failure ownership.

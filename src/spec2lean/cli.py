@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from .constants import INDEX_SCHEMA_VERSION, PARSER_VERSION, __version__
+from .checking.runner import run_checks
+from .checking.store import load_check
 from .database import build_database, connect
 from .evidence.runner import build_evidence
 from .evidence.store import evidence_run_root, find_evidence, load_unit_bundle, unit_artifacts
@@ -32,6 +34,7 @@ DEFAULT_PLANS_ROOT = REPOSITORY_ROOT / "plans"
 DEFAULT_EVIDENCE_ROOT = REPOSITORY_ROOT / "evidence"
 DEFAULT_SEMANTICS_ROOT = REPOSITORY_ROOT / "semantics"
 DEFAULT_TRANSLATIONS_ROOT = REPOSITORY_ROOT / "translations"
+DEFAULT_CHECKS_ROOT = REPOSITORY_ROOT / "checks"
 
 
 def _database_for(language: str, version: str) -> Path:
@@ -714,6 +717,41 @@ def _command_translate_trace(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_check_run(args: argparse.Namespace) -> int:
+    _, plan = _load_semantics_plan(args)
+    database = Path(args.database).resolve() if args.database else _database_for(
+        plan["language"], plan["version"]
+    )
+    output, result = run_checks(
+        plan,
+        evidence_root=Path(args.evidence_root),
+        semantics_root=Path(args.semantics_root),
+        translations_root=Path(args.translations_root),
+        checks_root=Path(args.checks_root),
+        database=database,
+        unit_id=args.unit,
+    )
+    _json({"directory": str(output), **result})
+    return 0 if result["status"] == "PASS" else 1
+
+
+def _load_check_result(args: argparse.Namespace) -> tuple[Path, dict[str, Any]]:
+    _, plan = _load_semantics_plan(args)
+    return load_check(Path(args.checks_root), plan, args.unit)
+
+
+def _command_check_show(args: argparse.Namespace) -> int:
+    directory, result = _load_check_result(args)
+    _json({"directory": str(directory), **result})
+    return 0
+
+
+def _command_check_field(args: argparse.Namespace) -> int:
+    _, result = _load_check_result(args)
+    _json(result[args.check_field])
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="spec2lean", description="Spec2Lean specification index and request-scoped planner")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -944,6 +982,34 @@ def build_parser() -> argparse.ArgumentParser:
     translate_trace.add_argument("--semantics-root", default=str(DEFAULT_SEMANTICS_ROOT), help=argparse.SUPPRESS)
     translate_trace.add_argument("--evidence-root", default=str(DEFAULT_EVIDENCE_ROOT), help=argparse.SUPPRESS)
     translate_trace.set_defaults(func=_command_translate_trace)
+
+    check = commands.add_parser("check", help="run and inspect deterministic Phase 6 checks")
+    check_sub = check.add_subparsers(dest="check_command", required=True)
+    check_run = check_sub.add_parser("run", help="run build, coverage, and traceability for one translated unit")
+    check_run.add_argument("--plan-run", required=True)
+    check_run.add_argument("--unit", required=True)
+    check_run.add_argument("--database", help=argparse.SUPPRESS)
+    check_run.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
+    check_run.add_argument("--evidence-root", default=str(DEFAULT_EVIDENCE_ROOT), help=argparse.SUPPRESS)
+    check_run.add_argument("--semantics-root", default=str(DEFAULT_SEMANTICS_ROOT), help=argparse.SUPPRESS)
+    check_run.add_argument("--translations-root", default=str(DEFAULT_TRANSLATIONS_ROOT), help=argparse.SUPPRESS)
+    check_run.add_argument("--checks-root", default=str(DEFAULT_CHECKS_ROOT), help=argparse.SUPPRESS)
+    check_run.set_defaults(func=_command_check_run)
+
+    for name, help_text, field in (
+        ("show", "show the complete Phase-6 check result", None),
+        ("coverage", "show coverage details for a checked unit", "coverage"),
+        ("traceability", "show traceability details for a checked unit", "traceability"),
+    ):
+        command = check_sub.add_parser(name, help=help_text)
+        command.add_argument("--plan-run", required=True)
+        command.add_argument("--unit", required=True)
+        command.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
+        command.add_argument("--checks-root", default=str(DEFAULT_CHECKS_ROOT), help=argparse.SUPPRESS)
+        if field is None:
+            command.set_defaults(func=_command_check_show)
+        else:
+            command.set_defaults(func=_command_check_field, check_field=field)
     return parser
 
 
