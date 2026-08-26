@@ -145,8 +145,12 @@ def run_troubleshooter(
     repair_runner: RepairRunner = run_opencode_repair,
     now: Callable[[], str] = utc_now,
     repository_root: Path | None = None,
+    check_override: dict[str, Any] | None = None,
 ) -> tuple[Path, dict[str, Any]]:
-    _, check = load_check(checks_root, plan, unit_id)
+    if check_override is None:
+        _, check = load_check(checks_root, plan, unit_id)
+    else:
+        check = check_override
     units = [item for item in plan.get("requestedUnits", []) if item.get("unitId") == unit_id]
     if len(units) != 1 or check.get("unit") != units[0]:
         raise ValueError("Phase-6 check unit does not match the Phase-2 planned unit")

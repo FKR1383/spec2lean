@@ -350,7 +350,7 @@ Inspect the stored decision, changes, hashes, and Phase-6 recheck requirement:
 See [the Phase 7 design](docs/phase-7-design.md) for routing precedence, repair
 authority, the single-session OpenCode boundary, and recheck behavior.
 
-To execute exactly one routed revision/repair and then rerun all Phase-6 checks:
+To handle the routed revision/repair chain and rerun Phase 6 after every action:
 
 ```bash
 ./spec2lean troubleshoot resolve \
@@ -358,8 +358,9 @@ To execute exactly one routed revision/repair and then rerun all Phase-6 checks:
   --unit UNIT_ID
 ```
 
-This command is deliberately non-recursive. If the new check still fails, its
-new deterministic action is reported and a later invocation may consume it.
+Every additional action must be authorized by the newly generated Phase-6
+result. The command stops on all-pass, repeated no-progress state, or eight
+dispatches by default; use `--max-dispatches` to set a different explicit cap.
 Manual bounded entry points are also available as `semantics revise`,
 `translate revise`, and `check recheck`. The original Phase-4 and Phase-5 build
 prompts remain unchanged.

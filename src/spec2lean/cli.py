@@ -843,7 +843,8 @@ def _command_troubleshoot_resolve(args: argparse.Namespace) -> int:
         plan, evidence_root=Path(args.evidence_root), semantics_root=Path(args.semantics_root),
         translations_root=Path(args.translations_root), checks_root=Path(args.checks_root),
         troubleshooting_root=Path(args.troubleshooting_root), database=database,
-        unit_id=args.unit, timeout_seconds=args.timeout, repository_root=REPOSITORY_ROOT,
+        unit_id=args.unit, timeout_seconds=args.timeout,
+        max_dispatches=args.max_dispatches, repository_root=REPOSITORY_ROOT,
     )
     _json({"directory": str(output), **resolution})
     return 0 if resolution["outcome"] == "COMPLETE" else 1
@@ -1176,6 +1177,10 @@ def build_parser() -> argparse.ArgumentParser:
     troubleshoot_resolve.add_argument("--checks-root", default=str(DEFAULT_CHECKS_ROOT), help=argparse.SUPPRESS)
     troubleshoot_resolve.add_argument("--troubleshooting-root", default=str(DEFAULT_TROUBLESHOOTING_ROOT), help=argparse.SUPPRESS)
     troubleshoot_resolve.add_argument("--timeout", type=int, default=1800, help="timeout for each bounded revision session")
+    troubleshoot_resolve.add_argument(
+        "--max-dispatches", type=int, default=8,
+        help="maximum fresh-check actions handled in this invocation",
+    )
     troubleshoot_resolve.set_defaults(func=_command_troubleshoot_resolve)
 
     for name, help_text, function in (
@@ -1211,8 +1216,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("translate revise --timeout must be positive")
     if getattr(args, "troubleshoot_command", None) == "run" and args.timeout < 1:
         parser.error("troubleshoot run --timeout must be positive")
-    if getattr(args, "troubleshoot_command", None) == "resolve" and args.timeout < 1:
-        parser.error("troubleshoot resolve --timeout must be positive")
+    if getattr(args, "troubleshoot_command", None) == "resolve" and (
+        args.timeout < 1 or args.max_dispatches < 1
+    ):
+        parser.error("troubleshoot resolve --timeout and --max-dispatches must be positive")
     try:
         return int(args.func(args))
     except (FileNotFoundError, FileExistsError, KeyError, RuntimeError, ValueError, sqlite3.Error) as exc:

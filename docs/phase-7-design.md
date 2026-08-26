@@ -55,9 +55,10 @@ human-readable change descriptions.
 
 A successful build repair is marked for a fresh Phase-6 run of all three checks:
 Build, Coverage, and Traceability. `troubleshoot run` remains route/repair-only;
-`troubleshoot resolve` performs one deterministic dispatch and one recheck. It
-does not recursively act on the recheck result, so a further repair can only
-follow that newly produced Phase-6 failure.
+`troubleshoot resolve` follows a bounded deterministic cascade. After each
+dispatch it reruns Phase 6, and only that fresh result may authorize the next
+dispatch. It stops on all-pass, repeated actionable state (no progress), or the
+explicit dispatch cap (eight by default).
 
 ## Bounded upstream revisions
 
@@ -101,7 +102,7 @@ Inspect without starting a session:
 ./spec2lean troubleshoot changes --plan-run PLAN_RUN_ID --unit UNIT_ID
 ```
 
-Dispatch one action and run Phase 6 exactly once:
+Resolve the fresh-check chain within one bounded invocation:
 
 ```bash
 ./spec2lean troubleshoot resolve --plan-run PLAN_RUN_ID --unit UNIT_ID

@@ -390,13 +390,15 @@ def test_resolver_dispatches_traceability_through_semantics_translation_and_one_
         troubleshooting_root=roots["troubleshooting"], database=tmp_path / "db",
         unit_id=UNIT["unitId"], semantic_reviser=semantic_reviser,
         translation_reviser=translation_reviser, checker=checker,
+        max_dispatches=1,
         now=lambda: "2026-08-27T00:00:00Z", repository_root=roots["plans"],
     )
     assert [name for name, _ in calls] == ["semantics", "translate", "check"]
     assert calls[0][1]["diagnostics"] == check["traceability"]["brokenMappings"]
     assert calls[1][1]["reason"] == "SEMANTICS_REVISED"
     assert resolution["nextAction"] == REPAIR_BUILD
-    assert resolution["outcome"] == "RECHECK_FAILED"
+    assert resolution["outcome"] == "DISPATCH_LIMIT"
+    assert resolution["stopReason"] == "DISPATCH_LIMIT"
     assert resolution["automaticRetries"] == 0
 
 
@@ -433,3 +435,82 @@ def test_resolver_dispatches_build_to_syntax_handler_then_rechecks_once(tmp_path
     assert calls == ["repair", "check"]
     assert resolution["initialAction"] == REPAIR_BUILD
     assert resolution["outcome"] == "COMPLETE" and resolution["rechecked"] is True
+
+
+def test_resolver_handles_coverage_then_fresh_build_failure_in_one_call(tmp_path):
+    plan, roots, _, manifest = _write_build_inputs(tmp_path)
+    initial = _check("FAIL", "FAIL", "PASS")
+    initial["translationRunId"] = manifest["translationRunId"]
+    slug = unit_directory_name(UNIT)
+    check_path = roots["checks"] / "synthetic" / "1.0" / plan["planRunId"] / slug / "check.json"
+    check_path.write_text(json.dumps(initial), encoding="utf-8")
+    calls = []
+
+    def translation_reviser(plan, **kwargs):
+        calls.append("translate")
+        return tmp_path / "translation-revision", {"revisionRunId": "translation-revision:test"}
+
+    def repair(context, *, timeout_seconds):
+        calls.append("repair")
+        return {
+            "submission": {
+                "leanSource": REPAIRED_SOURCE,
+                "declarations": manifest["declarations"],
+                "changes": [{
+                    "description": "Repair the remaining syntax/API error.",
+                    "affectedDeclarations": ["Spec2Lean.Repair.operation"],
+                }],
+            },
+            "error": None,
+            "session": {"opencodeVersion": "1.test"},
+        }
+
+    check_results = [_check("FAIL", "PASS", "PASS"), _check("PASS", "PASS", "PASS")]
+    for result in check_results:
+        result["translationRunId"] = manifest["translationRunId"]
+
+    def checker(plan, **kwargs):
+        calls.append("check")
+        result = check_results.pop(0)
+        check_path.write_text(json.dumps(result), encoding="utf-8")
+        return check_path.parent, result
+
+    _, resolution = resolve_check_failure(
+        plan, evidence_root=tmp_path / "evidence", semantics_root=roots["semantics"],
+        translations_root=roots["translations"], checks_root=roots["checks"],
+        troubleshooting_root=roots["troubleshooting"], database=tmp_path / "db",
+        unit_id=UNIT["unitId"], translation_reviser=translation_reviser,
+        checker=checker, repair_runner=repair,
+        now=lambda: "2026-08-27T00:00:00Z", repository_root=roots["plans"],
+    )
+    assert calls == ["translate", "check", "repair", "check"]
+    assert resolution["dispatches"] == 2
+    assert resolution["stopReason"] == "ALL_CHECKS_PASS"
+    assert resolution["outcome"] == "COMPLETE" and resolution["nextAction"] == NO_ACTION
+
+
+def test_resolver_stops_on_repeated_actionable_state_instead_of_looping(tmp_path):
+    check = _check("PASS", "FAIL", "PASS")
+    plan, roots = _write_plan_and_check(tmp_path, check)
+    calls = []
+
+    def translation_reviser(plan, **kwargs):
+        calls.append("translate")
+        return tmp_path / "translation-revision", {"revisionRunId": "translation-revision:test"}
+
+    def checker(plan, **kwargs):
+        calls.append("check")
+        return roots["checks"], check
+
+    _, resolution = resolve_check_failure(
+        plan, evidence_root=tmp_path / "evidence", semantics_root=roots["semantics"],
+        translations_root=roots["translations"], checks_root=roots["checks"],
+        troubleshooting_root=roots["troubleshooting"], database=tmp_path / "db",
+        unit_id=UNIT["unitId"], translation_reviser=translation_reviser,
+        checker=checker, now=lambda: "2026-08-27T00:00:00Z",
+        repository_root=roots["plans"],
+    )
+    assert calls == ["translate", "check"]
+    assert resolution["dispatches"] == 1
+    assert resolution["stopReason"] == "NO_PROGRESS"
+    assert resolution["outcome"] == "NO_PROGRESS"

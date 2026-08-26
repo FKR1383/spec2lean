@@ -7,8 +7,8 @@
   "required": [
     "schemaVersion", "phase", "resolutionRunId", "planRunId", "unitId",
     "initialAction", "stages", "rechecked", "checkBeforeHash", "checkAfterHash",
-    "checkResult", "nextAction", "automaticRetries", "dispatches", "startedAt",
-    "finishedAt", "outcome"
+    "checkResult", "nextAction", "automaticRetries", "dispatches", "maxDispatches",
+    "stopReason", "startedAt", "finishedAt", "outcome"
   ],
   "properties": {
     "schemaVersion": {"const": 1},
@@ -24,10 +24,12 @@
     "checkResult": {"type": "object"},
     "nextAction": {"$ref": "#/$defs/action"},
     "automaticRetries": {"const": 0},
-    "dispatches": {"type": "integer", "minimum": 0, "maximum": 1},
+    "dispatches": {"type": "integer", "minimum": 0},
+    "maxDispatches": {"type": "integer", "minimum": 1},
+    "stopReason": {"enum": ["ALL_CHECKS_PASS", "NO_PROGRESS", "DISPATCH_LIMIT"]},
     "startedAt": {"type": "string", "minLength": 1},
     "finishedAt": {"type": "string", "minLength": 1},
-    "outcome": {"enum": ["COMPLETE", "RECHECK_FAILED"]}
+    "outcome": {"enum": ["COMPLETE", "NO_PROGRESS", "DISPATCH_LIMIT"]}
   },
   "$defs": {
     "hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
