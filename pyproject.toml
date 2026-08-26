@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "spec2lean"
 version = "0.1.0"
-description = "Hierarchical specification index and source-supported formalization planner"
+description = "Deterministic hierarchical specification parser and SQLite index"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

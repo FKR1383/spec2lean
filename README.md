@@ -1,11 +1,9 @@
 # Spec2Lean
 
-Spec2Lean implements **Phase 1: Parse + Index** and **Phase 2: Planner**. Phase 1 turns an
+Spec2Lean currently implements **Phase 1 only: Parse + Index**. It turns an
 official PDF and/or HTML language specification into a deterministic,
-searchable, hierarchical SQLite database. Phase 2 uses one restricted OpenCode
-Planner to propose source-supported formalization units and dependencies, then
-validates and orders the graph deterministically. It does not retrieve evidence,
-interpret formal semantics, generate Lean, or check proofs.
+searchable, hierarchical SQLite database. It does not plan formalizations,
+interpret semantics, invoke an LLM, generate Lean, or check proofs.
 
 Python is used because PyMuPDF exposes PDF layout/font/bounding-box data and
 `lxml` preserves semantic HTML structure and source lines. SQLite and FTS5
@@ -155,24 +153,3 @@ types, anchors, page/bounding-box provenance, FTS, cross-reference resolution,
 SHA invalidation, structural validation, subtrees, and deterministic rebuilds.
 
 See [the Phase 1 design](docs/phase-1-design.md) for schema and parser details.
-
-## Build and inspect the PTX 9.3 plan
-
-```bash
-./spec2lean plan build --language ptx --version 9.3
-./spec2lean plan validate --language ptx --version 9.3
-./spec2lean plan stats --language ptx --version 9.3
-./spec2lean plan units --language ptx --version 9.3
-./spec2lean plan show --unit ptx.instruction.shl
-./spec2lean plan deps --unit ptx.instruction.shl
-./spec2lean plan dependents --unit ptx.instruction.shl
-./spec2lean plan layers --language ptx --version 9.3
-./spec2lean plan scc --language ptx --version 9.3 --cycles-only
-./spec2lean plan graph --language ptx --version 9.3 --format dot --output /tmp/ptx-plan.dot
-```
-
-The canonical Phase-2 artifact is `plans/ptx/9.3/plan.json`. The deterministic
-Markdown rendering is `plan.md`; model, reasoning, runtime, validation, and run
-statistics are recorded in `planner-run.json`. See
-[the Phase 2 design](docs/phase-2-design.md) and
-[the plan schema](schemas/plan.schema.json).
