@@ -24,6 +24,8 @@ from .semantics.store import find_claim, load_semantics, semantics_run_root
 from .translation.runner import build_translation
 from .translation.models import semantics_artifact_hash
 from .translation.store import find_declaration, load_translation
+from .troubleshooting.runner import run_troubleshooter
+from .troubleshooting.store import load_troubleshooting
 from .util import canonical_json
 from .validation import record_validation, statistics, validate_database
 
@@ -35,6 +37,7 @@ DEFAULT_EVIDENCE_ROOT = REPOSITORY_ROOT / "evidence"
 DEFAULT_SEMANTICS_ROOT = REPOSITORY_ROOT / "semantics"
 DEFAULT_TRANSLATIONS_ROOT = REPOSITORY_ROOT / "translations"
 DEFAULT_CHECKS_ROOT = REPOSITORY_ROOT / "checks"
+DEFAULT_TROUBLESHOOTING_ROOT = REPOSITORY_ROOT / "troubleshooting"
 
 
 def _database_for(language: str, version: str) -> Path:
@@ -752,6 +755,47 @@ def _command_check_field(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_troubleshoot_run(args: argparse.Namespace) -> int:
+    _, plan = _load_semantics_plan(args)
+    output, artifact = run_troubleshooter(
+        plan,
+        semantics_root=Path(args.semantics_root),
+        translations_root=Path(args.translations_root),
+        checks_root=Path(args.checks_root),
+        troubleshooting_root=Path(args.troubleshooting_root),
+        unit_id=args.unit,
+        timeout_seconds=args.timeout,
+        repository_root=REPOSITORY_ROOT,
+    )
+    _json({"directory": str(output), **artifact})
+    return 0
+
+
+def _load_troubleshooting_result(args: argparse.Namespace) -> tuple[Path, dict[str, Any]]:
+    _, plan = _load_semantics_plan(args)
+    return load_troubleshooting(Path(args.troubleshooting_root), plan, args.unit)
+
+
+def _command_troubleshoot_show(args: argparse.Namespace) -> int:
+    directory, artifact = _load_troubleshooting_result(args)
+    _json({"directory": str(directory), **artifact})
+    return 0
+
+
+def _command_troubleshoot_changes(args: argparse.Namespace) -> int:
+    directory, artifact = _load_troubleshooting_result(args)
+    _json({
+        "directory": str(directory),
+        "runId": artifact["runId"],
+        "action": artifact["action"],
+        "changedFiles": artifact["changedFiles"],
+        "changes": artifact["changes"],
+        "hashes": artifact["hashes"],
+        "recheck": artifact["recheck"],
+    })
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="spec2lean", description="Spec2Lean specification index and request-scoped planner")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -1010,6 +1054,32 @@ def build_parser() -> argparse.ArgumentParser:
             command.set_defaults(func=_command_check_show)
         else:
             command.set_defaults(func=_command_check_field, check_field=field)
+
+    troubleshoot = commands.add_parser("troubleshoot", help="route and repair failed Phase-6 checks")
+    troubleshoot_sub = troubleshoot.add_subparsers(dest="troubleshoot_command", required=True)
+    troubleshoot_run = troubleshoot_sub.add_parser(
+        "run", help="route one failed check or run one bounded build-repair session"
+    )
+    troubleshoot_run.add_argument("--plan-run", required=True)
+    troubleshoot_run.add_argument("--unit", required=True)
+    troubleshoot_run.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
+    troubleshoot_run.add_argument("--semantics-root", default=str(DEFAULT_SEMANTICS_ROOT), help=argparse.SUPPRESS)
+    troubleshoot_run.add_argument("--translations-root", default=str(DEFAULT_TRANSLATIONS_ROOT), help=argparse.SUPPRESS)
+    troubleshoot_run.add_argument("--checks-root", default=str(DEFAULT_CHECKS_ROOT), help=argparse.SUPPRESS)
+    troubleshoot_run.add_argument("--troubleshooting-root", default=str(DEFAULT_TROUBLESHOOTING_ROOT), help=argparse.SUPPRESS)
+    troubleshoot_run.add_argument("--timeout", type=int, default=1800, help="timeout for the single repair session in seconds")
+    troubleshoot_run.set_defaults(func=_command_troubleshoot_run)
+
+    for name, help_text, function in (
+        ("show", "show the complete Phase-7 routing or repair artifact", _command_troubleshoot_show),
+        ("changes", "show changed files, hashes, and recheck requirements", _command_troubleshoot_changes),
+    ):
+        command = troubleshoot_sub.add_parser(name, help=help_text)
+        command.add_argument("--plan-run", required=True)
+        command.add_argument("--unit", required=True)
+        command.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
+        command.add_argument("--troubleshooting-root", default=str(DEFAULT_TROUBLESHOOTING_ROOT), help=argparse.SUPPRESS)
+        command.set_defaults(func=function)
     return parser
 
 
@@ -1026,6 +1096,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("semantics build --timeout must be positive")
     if getattr(args, "translate_command", None) == "build" and args.timeout < 1:
         parser.error("translate build --timeout must be positive")
+    if getattr(args, "troubleshoot_command", None) == "run" and args.timeout < 1:
+        parser.error("troubleshoot run --timeout must be positive")
     try:
         return int(args.func(args))
     except (FileNotFoundError, FileExistsError, KeyError, RuntimeError, ValueError, sqlite3.Error) as exc:

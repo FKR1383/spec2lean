@@ -2,7 +2,8 @@
 
 Spec2Lean implements **Phase 1: Parse + Index**, **Phase 2: Request-scoped
 Planner**, **Phase 3: Retrieve Evidence**, **Phase 4: Semantic Extractor**,
-**Phase 5: LLM Translator**, and **Phase 6: Check**. Phase 1 turns an official
+**Phase 5: LLM Translator**, **Phase 6: Check**, and **Phase 7: Troubleshooter**.
+Phase 1 turns an official
 PDF and/or HTML language specification into a deterministic, searchable,
 hierarchical SQLite database. Phase 2
 resolves an explicitly bounded request, invokes one restricted OpenCode Planner
@@ -13,7 +14,8 @@ evidence-bounded Semantic Extractor session per unit and validates a structured,
 traceable semantic artifact. Phase 5 uses one semantic-artifact-bounded session
 to generate Lean 4 and declaration traceability. Phase 6 independently compiles
 that Lean and deterministically checks forward coverage and reverse traceability.
-Troubleshooting is not implemented.
+Phase 7 routes semantic failures upstream and uses one compiler-guided OpenCode
+session to repair build-only failures.
 
 Python is used because PyMuPDF exposes PDF layout/font/bounding-box data and
 `lxml` preserves semantic HTML structure and source lines. SQLite and FTS5
@@ -325,3 +327,25 @@ directory. Inspect the stored result without rerunning anything:
 
 See [the Phase 6 design](docs/phase-6-design.md) for the three checks, artifact
 contract, deterministic routing, and failure ownership.
+
+## Route or repair a failed check
+
+Phase 7 chooses the earliest responsible phase: Traceability returns to the
+Semantic Extractor, Coverage returns to the Translator, and a build-only failure
+starts one bounded Troubleshooter repair session. All passing requires no action.
+
+```bash
+./spec2lean troubleshoot run \
+  --plan-run PLAN_RUN_ID \
+  --unit UNIT_ID
+```
+
+Inspect the stored decision, changes, hashes, and Phase-6 recheck requirement:
+
+```bash
+./spec2lean troubleshoot show --plan-run PLAN_RUN_ID --unit UNIT_ID
+./spec2lean troubleshoot changes --plan-run PLAN_RUN_ID --unit UNIT_ID
+```
+
+See [the Phase 7 design](docs/phase-7-design.md) for routing precedence, repair
+authority, the single-session OpenCode boundary, and recheck behavior.
