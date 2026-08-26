@@ -23,6 +23,8 @@ indexes/**/*.json.dump
 indexes/**/*.pages.txt
 plans/**
 !plans/.gitkeep
+evidence/**
+!evidence/.gitkeep
 
 # Environment files and credentials
 .env

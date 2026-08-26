@@ -10,6 +10,8 @@ from typing import Any, Sequence
 
 from .constants import INDEX_SCHEMA_VERSION, PARSER_VERSION, __version__
 from .database import build_database, connect
+from .evidence.runner import build_evidence
+from .evidence.store import evidence_run_root, find_evidence, load_unit_bundle, unit_artifacts
 from .parsers import parse_html, parse_pdf
 from .planning.models import PlanningRequest
 from .planning.render import render_dot
@@ -21,6 +23,7 @@ from .validation import record_validation, statistics, validate_database
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_INDEX_ROOT = REPOSITORY_ROOT / "indexes"
 DEFAULT_PLANS_ROOT = REPOSITORY_ROOT / "plans"
+DEFAULT_EVIDENCE_ROOT = REPOSITORY_ROOT / "evidence"
 
 
 def _database_for(language: str, version: str) -> Path:
@@ -465,6 +468,103 @@ def _command_plan_graph(args: argparse.Namespace) -> int:
     return 0
 
 
+def _load_evidence_plan(args: argparse.Namespace) -> tuple[Path, dict[str, Any]]:
+    run = _find_plan_run(args.plan_run, args.plans_root)
+    return run, json.loads((run / "plan.json").read_text(encoding="utf-8"))
+
+
+def _command_evidence_build(args: argparse.Namespace) -> int:
+    _, plan = _load_evidence_plan(args)
+    database = Path(args.database).resolve() if args.database else _database_for(plan["language"], plan["version"])
+    if not database.is_file():
+        raise FileNotFoundError(f"database does not exist: {database}")
+    root = build_evidence(
+        database,
+        plan,
+        Path(args.evidence_root),
+        unit_ids=args.unit,
+        jobs=args.jobs,
+        timeout_seconds=args.timeout,
+    )
+    print(root)
+    return 0
+
+
+def _command_evidence_units(args: argparse.Namespace) -> int:
+    _, plan = _load_evidence_plan(args)
+    artifacts = {
+        item["metadata"].get("unitId") or (item["bundle"] or {}).get("unit", {}).get("unitId"): item
+        for item in unit_artifacts(Path(args.evidence_root), plan)
+    }
+    result = []
+    for unit in plan["requestedUnits"]:
+        artifact = artifacts.get(unit["unitId"])
+        result.append({
+            "unitId": unit["unitId"],
+            "name": unit["name"],
+            "status": artifact["metadata"].get("outcome", "VALID") if artifact else "NOT_RUN",
+            "evidenceCount": len((artifact["bundle"] or {}).get("evidence", [])) if artifact else 0,
+            "directory": str(artifact["directory"]) if artifact else None,
+        })
+    _json(result)
+    return 0
+
+
+def _command_evidence_show(args: argparse.Namespace) -> int:
+    _, plan = _load_evidence_plan(args)
+    _, bundle = load_unit_bundle(Path(args.evidence_root), plan, args.unit)
+    if getattr(args, "tier", None):
+        _json([item for item in bundle["evidence"] if item["tier"] == args.tier])
+    else:
+        _json(bundle)
+    return 0
+
+
+def _command_evidence_provenance(args: argparse.Namespace) -> int:
+    path, item = find_evidence(Path(args.evidence_root), args.evidence)
+    _json({
+        "evidenceId": item["evidenceId"],
+        "bundle": str(path),
+        "unitId": item["unitId"],
+        "sourceNodeIds": item["sourceNodeIds"],
+        "sourceSpanIds": item["sourceSpanIds"],
+        "sourceType": item["sourceType"],
+        "documentId": item["documentId"],
+        "documentSha256": item["documentSha256"],
+        "officialUrl": item["officialUrl"],
+        "sectionNumber": item["sectionNumber"],
+        "sectionTitle": item["sectionTitle"],
+        "htmlAnchor": item["htmlAnchor"],
+        "pdfPage": item["pdfPage"],
+        "bbox": item["bbox"],
+        "provenance": item["provenance"],
+    })
+    return 0
+
+
+def _command_evidence_stats(args: argparse.Namespace) -> int:
+    _, plan = _load_evidence_plan(args)
+    artifacts = unit_artifacts(Path(args.evidence_root), plan)
+    bundles = [item["bundle"] for item in artifacts if item["bundle"]]
+    evidence = [record for bundle in bundles for record in bundle["evidence"]]
+    result = {
+        "planRunId": plan["planRunId"],
+        "plannedUnits": len(plan["requestedUnits"]),
+        "validBundles": len(bundles),
+        "failedUnits": sum(item["metadata"].get("outcome") == "FAILED" for item in artifacts),
+        "evidenceItems": len(evidence),
+        "uniqueEvidenceIds": len({item["evidenceId"] for item in evidence}),
+        "byTier": {tier: sum(item["tier"] == tier for item in evidence) for tier in ("CORE", "SUPPORTING")},
+        "byRole": {
+            role: sum(item["role"] == role for item in evidence)
+            for role in sorted({item["role"] for item in evidence})
+        },
+        "directory": str(evidence_run_root(Path(args.evidence_root), plan)),
+    }
+    _json(result)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="spec2lean", description="Spec2Lean specification index and request-scoped planner")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -584,6 +684,47 @@ def build_parser() -> argparse.ArgumentParser:
     graph.add_argument("--output")
     graph.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
     graph.set_defaults(func=_command_plan_graph)
+
+    evidence = commands.add_parser("evidence", help="build and inspect request-scoped Phase 3 evidence")
+    evidence_sub = evidence.add_subparsers(dest="evidence_command", required=True)
+    evidence_build = evidence_sub.add_parser("build", help="run one bounded Evidence Retriever session per selected unit")
+    evidence_build.add_argument("--plan-run", required=True)
+    evidence_build.add_argument("--unit", action="append", help="exact Phase-2 unit ID; repeat to select a small subset")
+    evidence_build.add_argument("--database", help=argparse.SUPPRESS)
+    evidence_build.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
+    evidence_build.add_argument("--evidence-root", default=str(DEFAULT_EVIDENCE_ROOT), help=argparse.SUPPRESS)
+    evidence_build.add_argument("--jobs", type=int, default=1, help="maximum concurrent independent unit sessions")
+    evidence_build.add_argument("--timeout", type=int, default=1800, help="timeout per single-unit session in seconds")
+    evidence_build.set_defaults(func=_command_evidence_build)
+
+    evidence_units = evidence_sub.add_parser("units", help="show Phase-3 status for every planned unit")
+    evidence_units.add_argument("--plan-run", required=True)
+    evidence_units.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
+    evidence_units.add_argument("--evidence-root", default=str(DEFAULT_EVIDENCE_ROOT), help=argparse.SUPPRESS)
+    evidence_units.set_defaults(func=_command_evidence_units)
+
+    for name, help_text, tier in (
+        ("show", "show a complete unit evidence bundle", None),
+        ("core", "show only CORE evidence for a unit", "CORE"),
+        ("supporting", "show only SUPPORTING evidence for a unit", "SUPPORTING"),
+    ):
+        command = evidence_sub.add_parser(name, help=help_text)
+        command.add_argument("--plan-run", required=True)
+        command.add_argument("--unit", required=True)
+        command.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
+        command.add_argument("--evidence-root", default=str(DEFAULT_EVIDENCE_ROOT), help=argparse.SUPPRESS)
+        command.set_defaults(func=_command_evidence_show, tier=tier)
+
+    provenance = evidence_sub.add_parser("provenance", help="resolve a stable evidence ID to Phase-1 provenance")
+    provenance.add_argument("--evidence", required=True)
+    provenance.add_argument("--evidence-root", default=str(DEFAULT_EVIDENCE_ROOT), help=argparse.SUPPRESS)
+    provenance.set_defaults(func=_command_evidence_provenance)
+
+    evidence_stats = evidence_sub.add_parser("stats", help="show per-plan evidence statistics")
+    evidence_stats.add_argument("--plan-run", required=True)
+    evidence_stats.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
+    evidence_stats.add_argument("--evidence-root", default=str(DEFAULT_EVIDENCE_ROOT), help=argparse.SUPPRESS)
+    evidence_stats.set_defaults(func=_command_evidence_stats)
     return parser
 
 
@@ -594,8 +735,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("index build requires --pdf and/or --html")
     if getattr(args, "plan_command", None) == "build" and args.timeout < 1:
         parser.error("plan build --timeout must be positive")
+    if getattr(args, "evidence_command", None) == "build" and (args.timeout < 1 or args.jobs < 1):
+        parser.error("evidence build --timeout and --jobs must be positive")
     try:
         return int(args.func(args))
-    except (FileNotFoundError, KeyError, RuntimeError, ValueError, sqlite3.Error) as exc:
+    except (FileNotFoundError, FileExistsError, KeyError, RuntimeError, ValueError, sqlite3.Error) as exc:
         print(f"spec2lean: error: {exc}", file=sys.stderr)
         return 2

@@ -1,11 +1,13 @@
 # Spec2Lean
 
-Spec2Lean implements **Phase 1: Parse + Index** and **Phase 2: Request-scoped
-Planner**. Phase 1 turns an official PDF and/or HTML language specification
+Spec2Lean implements **Phase 1: Parse + Index**, **Phase 2: Request-scoped
+Planner**, and **Phase 3: Retrieve Evidence**. Phase 1 turns an official PDF and/or HTML language specification
 into a deterministic, searchable, hierarchical SQLite database. Phase 2
 resolves an explicitly bounded request, invokes one restricted OpenCode Planner
-session, validates its dependency graph, and writes an inspectable plan. It
-does not perform semantic extraction, generate Lean, or check proofs.
+session, validates its dependency graph, and writes an inspectable plan. Phase 3
+runs one bounded Evidence Retriever session per planned unit and deterministically
+resolves its selections to exact Phase-1 text and provenance. It does not perform
+semantic extraction, generate Lean, or check proofs.
 
 Python is used because PyMuPDF exposes PDF layout/font/bounding-box data and
 `lxml` preserves semantic HTML structure and source lines. SQLite and FTS5
@@ -200,3 +202,39 @@ without invoking OpenCode again:
 
 See [the Phase 2 design](docs/phase-2-design.md) for scope rules, Planner
 isolation, submission validation, cycles, and artifact ownership.
+
+## Retrieve exact evidence for a planned unit
+
+Phase 3 requires the exact installed OpenCode model
+`openai/gpt-5.3-codex-spark` with reasoning variant `low`. The model selects
+only node/span IDs and relevance labels; deterministic code supplies quotations,
+hashes, anchors, pages, bounding boxes, and all other source provenance.
+
+Start with one manually selected unit rather than the complete plan:
+
+```bash
+./spec2lean plan units --run PLAN_RUN_ID
+
+./spec2lean evidence build \
+  --plan-run PLAN_RUN_ID \
+  --unit UNIT_ID
+```
+
+`--unit` may be repeated for a small subset. Omit it only when intentionally
+retrieving every requested unit. Independent unit sessions default to serial
+execution; set a small `--jobs N` to run them concurrently.
+
+Inspect accepted artifacts without calling OpenCode:
+
+```bash
+./spec2lean evidence units --plan-run PLAN_RUN_ID
+./spec2lean evidence show --plan-run PLAN_RUN_ID --unit UNIT_ID
+./spec2lean evidence core --plan-run PLAN_RUN_ID --unit UNIT_ID
+./spec2lean evidence supporting --plan-run PLAN_RUN_ID --unit UNIT_ID
+./spec2lean evidence provenance --evidence EVIDENCE_ID
+./spec2lean evidence stats --plan-run PLAN_RUN_ID
+```
+
+See [the Phase 3 design](docs/phase-3-design.md) for the exposure boundary,
+OpenCode isolation, schema, content-addressed IDs, provenance reconstruction,
+validation, and artifacts.
