@@ -10,14 +10,13 @@ from .models import (
     LEAN_LANGUAGE,
     LEAN_VERSION,
     TRANSLATION_SCHEMA_VERSION,
-    TRANSLATOR_MODEL,
-    TRANSLATOR_REASONING,
-    TranslationScope,
+    SUPPORTED_TRANSLATOR_CONFIGURATIONS,
+    TranslationGroupScope,
 )
 
 
 SUBMISSION_FIELDS = {"leanSource", "declarations"}
-MAPPING_FIELDS = {"declaration", "role", "semanticClaimIds", "supportsDeclarations"}
+MAPPING_FIELDS = {"declaration", "role", "claimRefs", "supportsDeclarations"}
 LEAN_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_']*(?:\.[A-Za-z_][A-Za-z0-9_']*)*$")
 DECLARATION = re.compile(
     r"^\s*(?:(?:private|protected|noncomputable|partial)\s+)*"
@@ -133,7 +132,9 @@ def forbidden_constructs(source: str) -> list[dict[str, str]]:
 
 
 def validate_submission(
-    scope: TranslationScope, semantics: dict[str, Any], submission: Any
+    scope: TranslationGroupScope,
+    semantics_by_unit: dict[str, dict[str, Any]],
+    submission: Any,
 ) -> tuple[dict[str, Any] | None, list[dict[str, str]]]:
     diagnostics: list[dict[str, str]] = []
     if not isinstance(submission, dict):
@@ -164,7 +165,7 @@ def validate_submission(
             continue
         for field in sorted(set(raw) - MAPPING_FIELDS):
             diagnostics.append(_diagnostic("UNEXPECTED_FIELD", f"unsupported declaration field: {field}", f"{path}.{field}"))
-        name, role, claims = raw.get("declaration"), raw.get("role"), raw.get("semanticClaimIds")
+        name, role, raw_claim_refs = raw.get("declaration"), raw.get("role"), raw.get("claimRefs")
         supports = raw.get("supportsDeclarations", [])
         if not isinstance(name, str) or not LEAN_NAME.fullmatch(name):
             diagnostics.append(_diagnostic("INVALID_DECLARATION_NAME", "declaration must be a qualified ASCII Lean identifier", f"{path}.declaration"))
@@ -180,14 +181,28 @@ def validate_submission(
             roles.add(role)
             if name in declared and declared[name] in {"structure", "inductive", "class"} and role != "PRIMARY_TYPE":
                 diagnostics.append(_diagnostic("TYPE_ROLE_MISMATCH", f"introduced type must use PRIMARY_TYPE role: {name}", f"{path}.role"))
-        if not isinstance(claims, list) or not all(isinstance(item, str) for item in claims):
-            diagnostics.append(_diagnostic("INVALID_SEMANTIC_MAPPING", "semanticClaimIds must be a string array", f"{path}.semanticClaimIds"))
-            claims = []
-        elif len(claims) != len(set(claims)):
-            diagnostics.append(_diagnostic("DUPLICATE_SEMANTIC_CLAIM", "semanticClaimIds contains a duplicate", f"{path}.semanticClaimIds"))
-        for claim_id in claims:
-            if claim_id not in known_claims:
-                diagnostics.append(_diagnostic("UNKNOWN_SEMANTIC_CLAIM", f"semantic claim is not in the Phase-4 artifact: {claim_id}", f"{path}.semanticClaimIds"))
+        claim_refs: list[dict[str, str]] = []
+        if not isinstance(raw_claim_refs, list):
+            diagnostics.append(_diagnostic("INVALID_SEMANTIC_MAPPING", "claimRefs must be an array", f"{path}.claimRefs"))
+            raw_claim_refs = []
+        seen_refs: set[tuple[str, str]] = set()
+        for ref_index, ref in enumerate(raw_claim_refs):
+            ref_path = f"{path}.claimRefs[{ref_index}]"
+            if not isinstance(ref, dict) or set(ref) != {"unitId", "claimId"}:
+                diagnostics.append(_diagnostic("INVALID_CLAIM_REFERENCE", "claim reference must contain exactly unitId and claimId", ref_path))
+                continue
+            unit_id, claim_id = ref.get("unitId"), ref.get("claimId")
+            if not isinstance(unit_id, str) or not isinstance(claim_id, str):
+                diagnostics.append(_diagnostic("INVALID_CLAIM_REFERENCE", "unitId and claimId must be strings", ref_path))
+                continue
+            key = (unit_id, claim_id)
+            if key in seen_refs:
+                diagnostics.append(_diagnostic("DUPLICATE_SEMANTIC_CLAIM", "claimRefs contains a duplicate", ref_path))
+                continue
+            seen_refs.add(key)
+            if key not in known_claims:
+                diagnostics.append(_diagnostic("UNKNOWN_SEMANTIC_CLAIM", f"semantic claim is not in the matching Phase-4 artifact: {unit_id}/{claim_id}", ref_path))
+            claim_refs.append({"unitId": unit_id, "claimId": claim_id})
         if not isinstance(supports, list) or not all(isinstance(item, str) and LEAN_NAME.fullmatch(item) for item in supports):
             diagnostics.append(_diagnostic("INVALID_SUPPORT_MAPPING", "supportsDeclarations must be an array of qualified ASCII Lean identifiers", f"{path}.supportsDeclarations"))
             supports = []
@@ -195,11 +210,11 @@ def validate_submission(
             diagnostics.append(_diagnostic("DUPLICATE_SUPPORT_MAPPING", "supportsDeclarations contains a duplicate", f"{path}.supportsDeclarations"))
         if supports and role != "IMPLEMENTATION_HELPER":
             diagnostics.append(_diagnostic("INVALID_SUPPORT_ROLE", "only IMPLEMENTATION_HELPER may use supportsDeclarations", f"{path}.supportsDeclarations"))
-        if role != "IMPLEMENTATION_HELPER" and not claims:
-            diagnostics.append(_diagnostic("MISSING_SEMANTIC_MAPPING", "semantic declarations require at least one semantic claim ID", f"{path}.semanticClaimIds"))
-        if role == "IMPLEMENTATION_HELPER" and not claims and not supports:
+        if role != "IMPLEMENTATION_HELPER" and not claim_refs:
+            diagnostics.append(_diagnostic("MISSING_SEMANTIC_MAPPING", "semantic declarations require at least one claim reference", f"{path}.claimRefs"))
+        if role == "IMPLEMENTATION_HELPER" and not claim_refs and not supports:
             diagnostics.append(_diagnostic("MISSING_SEMANTIC_MAPPING", "implementation helpers require semantic claims or a supported semantic declaration", path))
-        mapping = {"declaration": name, "role": role, "semanticClaimIds": list(claims)}
+        mapping = {"declaration": name, "role": role, "claimRefs": claim_refs}
         if supports:
             mapping["supportsDeclarations"] = list(supports)
         mappings.append(mapping)
@@ -212,67 +227,92 @@ def validate_submission(
             elif supported not in mappings_by_name:
                 diagnostics.append(_diagnostic("UNKNOWN_SUPPORT_DECLARATION", f"supported declaration has no mapping: {supported}", f"$.declarations[{index}].supportsDeclarations"))
 
-    def resolves_to_claims(name: str, seen: set[str]) -> bool:
+    def resolved_claims(name: str, seen: set[str]) -> set[tuple[str, str]]:
         if name in seen or name not in mappings_by_name:
-            return False
+            return set()
         mapping = mappings_by_name[name]
-        if mapping["semanticClaimIds"]:
-            return True
-        return any(resolves_to_claims(item, {*seen, name}) for item in mapping.get("supportsDeclarations", []))
+        claims = {(item["unitId"], item["claimId"]) for item in mapping["claimRefs"]}
+        for supported in mapping.get("supportsDeclarations", []):
+            claims.update(resolved_claims(supported, {*seen, name}))
+        return claims
 
     for index, mapping in enumerate(mappings):
-        if not resolves_to_claims(mapping["declaration"], set()):
+        if not resolved_claims(mapping["declaration"], set()):
             diagnostics.append(_diagnostic("UNRESOLVED_SUPPORT_MAPPING", "declaration traceability does not resolve to a semantic claim", f"$.declarations[{index}]"))
 
     for name in sorted(set(declared) - mapped_names):
         diagnostics.append(_diagnostic("UNMAPPED_LEAN_DECLARATION", f"named Lean declaration lacks semantic traceability: {name}", "$.declarations"))
 
-    semantic_payload = semantics.get("semantics") or {}
-    instruction = semantic_payload.get("unitKind") == "INSTRUCTION"
-    if instruction and "OPERATION" not in roles:
-        diagnostics.append(_diagnostic("MISSING_OPERATION_MAPPING", "instruction translation requires a mapped OPERATION declaration", "$.declarations"))
-    needs_execution = instruction and bool(semantic_payload.get("stateEffects") or semantic_payload.get("predication"))
-    if needs_execution and "EXECUTION" not in roles:
-        diagnostics.append(_diagnostic("MISSING_EXECUTION_MAPPING", "stateful or predicated instruction translation requires a mapped EXECUTION declaration", "$.declarations"))
+    roles_by_unit: dict[str, set[str]] = {unit_id: set() for unit_id in scope.unit_ids}
+    for mapping in mappings:
+        for unit_id, _claim_id in resolved_claims(mapping["declaration"], set()):
+            if unit_id in roles_by_unit and mapping["role"] in DECLARATION_ROLES:
+                roles_by_unit[unit_id].add(mapping["role"])
+    for unit_id in scope.unit_ids:
+        semantic_payload = (semantics_by_unit[unit_id].get("semantics") or {})
+        instruction = semantic_payload.get("unitKind") == "INSTRUCTION"
+        if instruction and "OPERATION" not in roles_by_unit[unit_id]:
+            diagnostics.append(_diagnostic("MISSING_OPERATION_MAPPING", f"instruction {unit_id} requires a mapped OPERATION declaration", "$.declarations"))
+        needs_execution = instruction and bool(semantic_payload.get("stateEffects") or semantic_payload.get("predication"))
+        if needs_execution and "EXECUTION" not in roles_by_unit[unit_id]:
+            diagnostics.append(_diagnostic("MISSING_EXECUTION_MAPPING", f"stateful or predicated instruction {unit_id} requires a mapped EXECUTION declaration", "$.declarations"))
     return ({"leanSource": source, "manifest": scope.manifest(mappings)}, []) if not diagnostics else (None, diagnostics)
 
 
 def validate_manifest(
-    plan: dict[str, Any], semantics: dict[str, Any], source: str, manifest: Any
+    plan: dict[str, Any], semantics_by_unit: dict[str, dict[str, Any]], source: str, manifest: Any
 ) -> list[dict[str, str]]:
     if not isinstance(manifest, dict):
         return [_diagnostic("EXPECTED_OBJECT", "translation manifest must be an object")]
     try:
-        scope = TranslationScope.from_inputs(
-            plan, semantics, manifest.get("unit", {}).get("unitId"), created_at=manifest.get("createdAt", "")
+        scope = TranslationGroupScope.from_inputs(
+            plan, manifest.get("group", {}).get("name", ""), semantics_by_unit,
+            created_at=manifest.get("createdAt", ""),
         )
     except (KeyError, ValueError, AttributeError) as exc:
         return [_diagnostic("INPUT_BOUNDARY", str(exc))]
-    candidate, diagnostics = validate_submission(scope, semantics, {
+    candidate, diagnostics = validate_submission(scope, semantics_by_unit, {
         "leanSource": source,
         "declarations": manifest.get("declarations"),
     })
+    translator = manifest.get("translator")
+    supported_translator = (
+        isinstance(translator, dict)
+        and translator.get("provider") == "opencode"
+        and (translator.get("model"), translator.get("reasoning"))
+        in SUPPORTED_TRANSLATOR_CONFIGURATIONS
+    )
+    if not supported_translator:
+        diagnostics.append(_diagnostic(
+            "UNSUPPORTED_TRANSLATOR",
+            "translator must use a supported model/reasoning configuration: "
+            f"{SUPPORTED_TRANSLATOR_CONFIGURATIONS}",
+            "$.translator",
+        ))
+    elif candidate is not None:
+        candidate["manifest"]["translator"] = dict(translator)
     if candidate is not None and candidate["manifest"] != manifest:
         diagnostics.append(_diagnostic("DETERMINISTIC_MISMATCH", "manifest metadata or declaration mappings differ from deterministic reconstruction"))
     return diagnostics
 
 
-def validate_run_metadata(scope: TranslationScope, metadata: Any) -> list[dict[str, str]]:
+def validate_run_metadata(scope: TranslationGroupScope, metadata: Any) -> list[dict[str, str]]:
     if not isinstance(metadata, dict):
         return [_diagnostic("EXPECTED_OBJECT", "translator run metadata must be an object")]
     expected = {
         "schemaVersion": TRANSLATION_SCHEMA_VERSION,
-        "phase": "LLM_TRANSLATOR",
+        "phase": "LLM_GROUP_TRANSLATOR",
         "planRunId": scope.plan_run_id,
-        "unitId": scope.unit_id,
+        "group": {"name": scope.group, "unitIds": list(scope.unit_ids)},
         "translationRunId": scope.translation_run_id,
         "translator": "opencode",
-        "model": TRANSLATOR_MODEL,
-        "reasoning": TRANSLATOR_REASONING,
         "singleSession": True,
         "automaticRetries": 0,
-        "semanticsArtifactHash": scope.semantics_artifact_hash,
-        "inputBoundary": "PHASE_4_SEMANTIC_ARTIFACT_ONLY",
+        "semanticsArtifacts": [
+            {"unitId": unit_id, "runId": dict(scope.semantics_run_ids)[unit_id], "artifactHash": artifact_hash}
+            for unit_id, artifact_hash in scope.semantics_artifact_hashes
+        ],
+        "inputBoundary": "PHASE_4_SEMANTIC_ARTIFACTS_ONLY",
         "targetLanguage": LEAN_LANGUAGE,
         "targetVersion": LEAN_VERSION,
         "exitCode": 0,
@@ -280,22 +320,30 @@ def validate_run_metadata(scope: TranslationScope, metadata: Any) -> list[dict[s
         "error": None,
     }
     diagnostics = []
+    configuration = (metadata.get("model"), metadata.get("reasoning"))
+    if configuration not in SUPPORTED_TRANSLATOR_CONFIGURATIONS:
+        diagnostics.append(_diagnostic(
+            "INCOMPLETE_TRANSLATOR_METADATA",
+            "translator metadata must use a supported model/reasoning configuration: "
+            f"{SUPPORTED_TRANSLATOR_CONFIGURATIONS!r}",
+            "$.model",
+        ))
     for key, value in expected.items():
         if metadata.get(key) != value:
             diagnostics.append(_diagnostic("INCOMPLETE_TRANSLATOR_METADATA", f"translator metadata {key} must equal {value!r}", f"$.{key}"))
     for key in (
-        "startedAt", "finishedAt", "semanticsArtifact", "command", "sessionId",
-        "sharedLeanFiles", "stdout", "stderr",
+        "startedAt", "finishedAt", "semanticsArtifactPaths", "command", "sessionId",
+        "stdout", "stderr",
     ):
         if key not in metadata:
             diagnostics.append(_diagnostic("INCOMPLETE_TRANSLATOR_METADATA", f"translator metadata is missing {key}", f"$.{key}"))
-    for key in ("startedAt", "finishedAt", "semanticsArtifact"):
+    for key in ("startedAt", "finishedAt"):
         if key in metadata and (not isinstance(metadata[key], str) or not metadata[key]):
             diagnostics.append(_diagnostic("INCOMPLETE_TRANSLATOR_METADATA", f"translator metadata {key} must be non-empty text", f"$.{key}"))
     if "command" in metadata and not isinstance(metadata["command"], list):
         diagnostics.append(_diagnostic("INCOMPLETE_TRANSLATOR_METADATA", "translator metadata command must be an array", "$.command"))
-    if "sharedLeanFiles" in metadata and not isinstance(metadata["sharedLeanFiles"], list):
-        diagnostics.append(_diagnostic("INCOMPLETE_TRANSLATOR_METADATA", "translator metadata sharedLeanFiles must be an array", "$.sharedLeanFiles"))
+    if "semanticsArtifactPaths" in metadata and not isinstance(metadata["semanticsArtifactPaths"], list):
+        diagnostics.append(_diagnostic("INCOMPLETE_TRANSLATOR_METADATA", "translator metadata semanticsArtifactPaths must be an array", "$.semanticsArtifactPaths"))
     for key in ("stdout", "stderr"):
         if key in metadata and not isinstance(metadata[key], str):
             diagnostics.append(_diagnostic("INCOMPLETE_TRANSLATOR_METADATA", f"translator metadata {key} must be text", f"$.{key}"))
@@ -303,17 +351,11 @@ def validate_run_metadata(scope: TranslationScope, metadata: Any) -> list[dict[s
 
 
 def validate_published(
-    plan: dict[str, Any], semantics: dict[str, Any], directory: Path
+    plan: dict[str, Any], semantics_by_unit: dict[str, dict[str, Any]], directory: Path
 ) -> list[dict[str, str]]:
     diagnostics: list[dict[str, str]] = []
-    lean_path = directory / "Unit.lean"
     manifest_path = directory / "translation-manifest.json"
     run_path = directory / "translator-run.json"
-    if not lean_path.is_file():
-        diagnostics.append(_diagnostic("MISSING_LEAN_FILE", "Unit.lean does not exist", "$.leanFile"))
-    source = lean_path.read_text(encoding="utf-8") if lean_path.is_file() else ""
-    if not source.strip():
-        diagnostics.append(_diagnostic("EMPTY_LEAN_FILE", "Unit.lean is empty", "$.leanFile"))
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -322,8 +364,15 @@ def validate_published(
     except json.JSONDecodeError:
         diagnostics.append(_diagnostic("INVALID_MANIFEST_JSON", "translation-manifest.json is invalid JSON"))
         manifest = None
+    lean_file = manifest.get("leanFile") if isinstance(manifest, dict) else None
+    lean_path = directory / str(lean_file or "Group.lean")
+    if not lean_path.is_file():
+        diagnostics.append(_diagnostic("MISSING_LEAN_FILE", f"{lean_path.name} does not exist", "$.leanFile"))
+    source = lean_path.read_text(encoding="utf-8") if lean_path.is_file() else ""
+    if not source.strip():
+        diagnostics.append(_diagnostic("EMPTY_LEAN_FILE", f"{lean_path.name} is empty", "$.leanFile"))
     if manifest is not None:
-        diagnostics.extend(validate_manifest(plan, semantics, source, manifest))
+        diagnostics.extend(validate_manifest(plan, semantics_by_unit, source, manifest))
     try:
         metadata = json.loads(run_path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -334,7 +383,10 @@ def validate_published(
         metadata = None
     if metadata is not None:
         try:
-            scope = TranslationScope.from_inputs(plan, semantics, semantics.get("unit", {}).get("unitId"), created_at=(manifest or {}).get("createdAt", ""))
+            scope = TranslationGroupScope.from_inputs(
+                plan, (manifest or {}).get("group", {}).get("name", ""), semantics_by_unit,
+                created_at=(manifest or {}).get("createdAt", ""),
+            )
             diagnostics.extend(validate_run_metadata(scope, metadata))
         except (KeyError, ValueError, AttributeError) as exc:
             diagnostics.append(_diagnostic("INPUT_BOUNDARY", str(exc)))

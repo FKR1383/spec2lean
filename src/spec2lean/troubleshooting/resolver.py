@@ -110,15 +110,37 @@ def resolve_check_failure(
         )
         dispatch_count += 1
         if action == RETURN_TO_SEMANTIC_EXTRACTOR:
-            semantic_path, semantic_revision = semantic_reviser(
-                plan, evidence_root=evidence_root, semantics_root=semantics_root,
-                unit_id=unit_id, diagnostics=current_check["traceability"]["brokenMappings"],
-                timeout_seconds=timeout_seconds, source_check_hash=source_check_hash,
-            )
-            stages.append({"dispatch": dispatch_count, "phase": "SEMANTIC_EXTRACTOR_REVISION", "directory": str(semantic_path), "runId": semantic_revision["revisionRunId"]})
+            broken = current_check["traceability"]["brokenMappings"]
+            planned_ids = {
+                str(unit["unitId"]) for unit in plan.get("requestedUnits", [])
+            }
+            diagnostic_unit_ids = sorted({
+                str(item["unitId"])
+                for item in broken
+                if isinstance(item, dict) and item.get("unitId") in planned_ids
+            })
+            semantic_targets = diagnostic_unit_ids or [unit_id]
+            for semantic_unit_id in semantic_targets:
+                targeted = [
+                    item for item in broken
+                    if not isinstance(item, dict)
+                    or item.get("unitId") in {None, semantic_unit_id}
+                ]
+                semantic_path, semantic_revision = semantic_reviser(
+                    plan, evidence_root=evidence_root, semantics_root=semantics_root,
+                    unit_id=semantic_unit_id, diagnostics=targeted,
+                    timeout_seconds=timeout_seconds, source_check_hash=source_check_hash,
+                )
+                stages.append({
+                    "dispatch": dispatch_count,
+                    "phase": "SEMANTIC_EXTRACTOR_REVISION",
+                    "unitId": semantic_unit_id,
+                    "directory": str(semantic_path),
+                    "runId": semantic_revision["revisionRunId"],
+                })
             translation_path, translation_revision = translation_reviser(
                 plan, semantics_root=semantics_root, translations_root=translations_root,
-                unit_id=unit_id, diagnostics=current_check["traceability"]["brokenMappings"],
+                unit_id=unit_id, diagnostics=broken,
                 reason="SEMANTICS_REVISED", timeout_seconds=timeout_seconds,
                 source_check_hash=source_check_hash,
             )
@@ -134,12 +156,17 @@ def resolve_check_failure(
         elif action == REPAIR_BUILD:
             stages.append({"dispatch": dispatch_count, "phase": "TROUBLESHOOTER_BUILD_REPAIR", "directory": str(unit_directory(troubleshooting_root, plan, current_check["unit"])), "runId": route["repairRunId"]})
             hashes = route.get("hashes") or {}
+            lean_hash_keys = [
+                key for key in (hashes.get("before") or {})
+                if isinstance(key, str) and key.endswith(".lean")
+            ]
+            lean_hash_key = lean_hash_keys[0] if len(lean_hash_keys) == 1 else None
             repair_history.append({
                 "repairRunId": route.get("repairRunId"),
                 "compilerDiagnostics": route.get("compilerDiagnostics", []),
                 "changes": route.get("changes", []),
-                "leanSourceHashBefore": (hashes.get("before") or {}).get("Unit.lean"),
-                "leanSourceHashAfter": (hashes.get("after") or {}).get("Unit.lean"),
+                "leanSourceHashBefore": (hashes.get("before") or {}).get(lean_hash_key),
+                "leanSourceHashAfter": (hashes.get("after") or {}).get(lean_hash_key),
             })
 
         check_path, after_check = checker(

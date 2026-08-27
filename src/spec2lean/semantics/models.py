@@ -8,9 +8,14 @@ from ..util import canonical_json, stable_id
 
 
 SEMANTICS_SCHEMA_VERSION = 1
-EXTRACTOR_MODEL = "openai/gpt-5.3-codex-spark"
-EXTRACTOR_REASONING = "low"
+EXTRACTOR_MODEL = "openai/gpt-5.6-sol"
+EXTRACTOR_REASONING = "medium"
 EXTRACTOR_AGENT = "spec2lean-semantic-extractor"
+SUPPORTED_EXTRACTOR_CONFIGURATIONS = (
+    (EXTRACTOR_MODEL, EXTRACTOR_REASONING),
+    ("openai/gpt-5.4-mini", "low"),
+    ("openai/gpt-5.3-codex-spark", "low"),
+)
 
 CLAIM_KINDS = (
     "SOURCE_FACT",

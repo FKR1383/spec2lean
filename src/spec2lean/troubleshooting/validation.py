@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
-from ..translation.models import TranslationScope
+from ..translation.models import TranslationGroupScope
 from ..translation.validation import validate_submission
 
 
@@ -11,15 +11,21 @@ REPAIR_FIELDS = {"leanSource", "declarations", "changes"}
 CHANGE_FIELDS = {"description", "affectedDeclarations"}
 
 
-def _mapping_signature(mappings: list[dict[str, Any]]) -> Counter[tuple[str, tuple[str, ...]]]:
+def _mapping_signature(
+    mappings: list[dict[str, Any]],
+) -> Counter[tuple[str, tuple[tuple[str, str], ...]]]:
     """Ignore mechanical renames while preserving resolved semantic responsibility."""
     by_name = {str(item.get("declaration", "")): item for item in mappings}
 
-    def claims_for(item: dict[str, Any], seen: set[str]) -> set[str]:
+    def claims_for(item: dict[str, Any], seen: set[str]) -> set[tuple[str, str]]:
         name = str(item.get("declaration", ""))
         if name in seen:
             return set()
-        claims = {str(claim) for claim in item.get("semanticClaimIds", [])}
+        claims = {
+            (str(ref.get("unitId", "")), str(ref.get("claimId", "")))
+            for ref in item.get("claimRefs", [])
+            if isinstance(ref, dict)
+        }
         for supported in item.get("supportsDeclarations", []):
             target = by_name.get(str(supported))
             if target is not None:
@@ -33,8 +39,8 @@ def _mapping_signature(mappings: list[dict[str, Any]]) -> Counter[tuple[str, tup
 
 
 def validate_repair_submission(
-    scope: TranslationScope,
-    semantics: dict[str, Any],
+    scope: TranslationGroupScope,
+    semantics_by_unit: dict[str, dict[str, Any]],
     original_source: str,
     original_manifest: dict[str, Any],
     submission: Any,
@@ -50,7 +56,7 @@ def validate_repair_submission(
         })
     candidate, translation_diagnostics = validate_submission(
         scope,
-        semantics,
+        semantics_by_unit,
         {
             "leanSource": submission.get("leanSource"),
             "declarations": submission.get("declarations"),

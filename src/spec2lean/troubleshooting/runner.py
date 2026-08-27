@@ -10,7 +10,8 @@ from typing import Any, Callable
 
 from ..checking.store import load_check
 from ..semantics.store import load_semantics
-from ..translation.models import TranslationScope
+from ..translation.groups import group_for_unit, grouped_units
+from ..translation.models import TranslationGroupScope
 from ..translation.store import load_translation
 from ..translation.validation import validate_manifest
 from ..util import sha256_file
@@ -171,22 +172,29 @@ def run_troubleshooter(
     translation_directory, source, manifest, _ = load_translation(
         translations_root, plan, unit_id
     )
-    _, semantics = load_semantics(semantics_root, plan, unit_id)
+    group = group_for_unit(plan, unit_id)
+    semantics_by_unit = {
+        str(member["unitId"]): load_semantics(
+            semantics_root, plan, str(member["unitId"])
+        )[1]
+        for member in grouped_units(plan)[group]
+    }
     if manifest.get("translationRunId") != check.get("translationRunId"):
         raise ValueError("Phase-6 check does not refer to the current Phase-5 translation")
-    manifest_diagnostics = validate_manifest(plan, semantics, source, manifest)
+    manifest_diagnostics = validate_manifest(plan, semantics_by_unit, source, manifest)
     if manifest_diagnostics:
         raise ValueError(
             "build repair requires a valid Phase-5 translation manifest: "
             + "; ".join(item["message"] for item in manifest_diagnostics)
         )
-    scope = TranslationScope.from_inputs(
-        plan, semantics, unit_id, created_at=str(manifest.get("createdAt", ""))
+    scope = TranslationGroupScope.from_inputs(
+        plan, group, semantics_by_unit, created_at=str(manifest.get("createdAt", ""))
     )
-    lean_path = translation_directory / str(manifest.get("leanFile", "Unit.lean"))
+    lean_name = str(manifest.get("leanFile", scope.lean_file))
+    lean_path = translation_directory / lean_name
     manifest_path = translation_directory / "translation-manifest.json"
-    before = {"Unit.lean": _file_hash(lean_path), "translation-manifest.json": _file_hash(manifest_path)}
-    artifact["runId"] = run_id(check, before["Unit.lean"], before["translation-manifest.json"])
+    before = {lean_name: _file_hash(lean_path), "translation-manifest.json": _file_hash(manifest_path)}
+    artifact["runId"] = run_id(check, before[lean_name], before["translation-manifest.json"])
     artifact["repairRunId"] = artifact["runId"].replace("troubleshoot-run:", "repair-run:", 1)
     artifact["model"] = {
         "provider": "opencode", "model": TROUBLESHOOTER_MODEL, "reasoning": TROUBLESHOOTER_REASONING
@@ -198,6 +206,7 @@ def run_troubleshooter(
             "planRunId": plan["planRunId"], "language": plan["language"], "version": plan["version"]
         },
         "unit": dict(units[0]),
+        "group": {"name": group, "unitIds": list(scope.unit_ids)},
         "translationDirectory": str(translation_directory),
         "translationScope": scope.to_dict(),
         "leanSource": source,
@@ -206,7 +215,7 @@ def run_troubleshooter(
         "compilerDiagnostics": list(check["build"].get("diagnostics", [])),
         "priorRepairAttempts": list(prior_repair_attempts or []),
         "traceability": check["traceability"],
-        "semantics": semantics,
+        "semanticsByUnit": semantics_by_unit,
     }
     try:
         result = repair_runner(context, timeout_seconds=timeout_seconds)
@@ -217,7 +226,7 @@ def run_troubleshooter(
         if result.get("error"):
             raise RuntimeError(str(result["error"]))
         candidate, diagnostics = validate_repair_submission(
-            scope, semantics, source, manifest, result.get("submission")
+            scope, semantics_by_unit, source, manifest, result.get("submission")
         )
         if diagnostics or candidate is None:
             raise ValueError(
@@ -240,8 +249,8 @@ def run_troubleshooter(
             _write_atomic(lean_path, original_source_text)
             _write_atomic(manifest_path, original_manifest_text)
             raise
-        after = {"Unit.lean": _file_hash(lean_path), "translation-manifest.json": _file_hash(manifest_path)}
-        changed = [name for name in ("Unit.lean", "translation-manifest.json") if before[name] != after[name]]
+        after = {lean_name: _file_hash(lean_path), "translation-manifest.json": _file_hash(manifest_path)}
+        changed = [name for name in (lean_name, "translation-manifest.json") if before[name] != after[name]]
         if not changed:
             raise ValueError("validated Troubleshooter submission produced no file changes")
         artifact["changedFiles"] = changed

@@ -44,10 +44,14 @@ def render_markdown(result: dict[str, Any]) -> str:
     if result["traceability"]["validMappings"]:
         lines.append("### Valid mappings")
         lines.append("")
-        lines.extend(
-            f"- `{item['declaration']}` → {', '.join(f'`{claim}`' for claim in item['semanticClaimIds'])}"
-            for item in result["traceability"]["validMappings"]
-        )
+        for item in result["traceability"]["validMappings"]:
+            if "claimRefs" in item:
+                claims = [f"{ref['unitId']}/{ref['claimId']}" for ref in item["claimRefs"]]
+            else:
+                claims = list(item.get("semanticClaimIds", []))
+            lines.append(
+                f"- `{item['declaration']}` → {', '.join(f'`{claim}`' for claim in claims)}"
+            )
         lines.append("")
     if result["traceability"]["brokenMappings"]:
         lines.append("### Broken mappings")

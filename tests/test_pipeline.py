@@ -5,6 +5,8 @@ import json
 import shutil
 from pathlib import Path
 
+import pytest
+
 from spec2lean.checking.models import check_result
 from spec2lean.database import connect
 from spec2lean.evidence.runner import unit_directory_name
@@ -12,7 +14,7 @@ from spec2lean.pipeline.runner import PipelineOptions, PipelineServices, run_pip
 from spec2lean.planning.models import PlanningRequest
 from spec2lean.planning.runner import source_database_digest
 from spec2lean.semantics.models import evidence_bundle_hash
-from spec2lean.translation.models import semantics_artifact_hash
+from spec2lean.translation.models import TranslationGroupScope
 from spec2lean.util import canonical_json
 
 
@@ -118,20 +120,13 @@ def _services(options: PipelineOptions, database: Path, calls: list[str], *, fai
     def translation_builder(current_plan, semantics_root, root, **_kwargs):
         calls.append("translate")
         semantics = json.loads((semantics_root / "synthetic" / "1.0" / current_plan["planRunId"] / slug / "semantics.json").read_text())
-        manifest = {
-            "phase": "LLM_TRANSLATOR",
-            "planRunId": current_plan["planRunId"],
-            "language": "synthetic",
-            "version": "1.0",
-            "unit": unit,
-            "translationRunId": "translation-run:pipeline",
-            "semanticsArtifactHash": semantics_artifact_hash(semantics),
-            "leanFile": "Unit.lean",
-            "declarations": [],
-        }
-        directory = root / "synthetic" / "1.0" / current_plan["planRunId"] / slug
+        scope = TranslationGroupScope.from_inputs(
+            current_plan, "Other", {unit["unitId"]: semantics}, created_at="now"
+        )
+        manifest = scope.manifest([])
+        directory = root / "synthetic" / "1.0" / current_plan["planRunId"] / "Other"
         directory.mkdir(parents=True, exist_ok=True)
-        (directory / "Unit.lean").write_text("def pipeline : Nat := 1\n", encoding="utf-8")
+        (directory / "Other.lean").write_text("def pipeline : Nat := 1\n", encoding="utf-8")
         _json(directory / "translation-manifest.json", manifest)
         _json(directory / "translator-run.json", {"outcome": "SUCCESS"})
         return directory
@@ -139,8 +134,8 @@ def _services(options: PipelineOptions, database: Path, calls: list[str], *, fai
     def checker(current_plan, *, semantics_root, translations_root, checks_root, **_kwargs):
         calls.append("check")
         semantics = json.loads((semantics_root / "synthetic" / "1.0" / current_plan["planRunId"] / slug / "semantics.json").read_text())
-        translation_dir = translations_root / "synthetic" / "1.0" / current_plan["planRunId"] / slug
-        source = (translation_dir / "Unit.lean").read_text()
+        translation_dir = translations_root / "synthetic" / "1.0" / current_plan["planRunId"] / "Other"
+        source = (translation_dir / "Other.lean").read_text()
         translation_manifest = json.loads((translation_dir / "translation-manifest.json").read_text())
         passing = {"status": "PASS", "diagnostics": []}
         coverage = {"status": "FAIL" if fail_check else "PASS", "uncovered": ["claim:pipeline"] if fail_check else []}
@@ -180,14 +175,24 @@ def test_pipeline_composes_all_phases_and_resume_reuses_fresh_artifacts(
     monkeypatch.setattr("spec2lean.pipeline.runner.validate_artifact", lambda *_args: [])
     monkeypatch.setattr("spec2lean.pipeline.runner.validate_published", lambda *_args: [])
     request = PlanningRequest.exact("synthetic", "1.0", ["alpha.u32"])
+    progress: list[str] = []
 
-    directory, manifest = run_pipeline(request, options, services=services)
+    directory, manifest = run_pipeline(
+        request, options, services=services, progress=progress.append
+    )
 
     assert directory is not None and manifest["status"] == "COMPLETE"
     assert calls == ["plan", "evidence", "semantics", "translate", "check"]
     unit = next(iter(manifest["units"].values()))
     assert unit["status"] == "PASS"
+    assert unit["stages"]["evidence"] == "BUILT"
+    assert unit["stages"]["semantics"] == "BUILT"
+    assert unit["stages"]["translate"] == "BUILT"
+    assert unit["stages"]["check"]["disposition"] == "RAN"
     assert unit["stages"]["troubleshoot"] == "NOT_REQUIRED"
+    assert any("phase 1/7 index: validating freshness" in item for item in progress)
+    assert any("group Other (1 instruction(s)) phase 5/7 translate" in item for item in progress)
+    assert progress[-1].endswith("finished with status COMPLETE")
 
     calls.clear()
     resumed_options = _options(
@@ -219,6 +224,68 @@ def test_pipeline_routes_a_failed_check_through_phase_7(planner_database, tmp_pa
     assert stage["outcome"] == "COMPLETE"
     assert stage["dispatches"] == 1
     assert stage["stopReason"] == "ALL_CHECKS_PASS"
+
+
+def test_dry_run_never_reuses_checks_when_group_translation_would_change(
+    planner_database, tmp_path, monkeypatch
+):
+    options = _options(tmp_path, planner_database)
+    calls: list[str] = []
+    database = options.index_root / "synthetic" / "1.0" / "specification.sqlite"
+    services = _services(options, database, calls)
+    monkeypatch.setattr("spec2lean.pipeline.runner.validate_artifact", lambda *_args: [])
+    monkeypatch.setattr("spec2lean.pipeline.runner.validate_published", lambda *_args: [])
+    request = PlanningRequest.exact("synthetic", "1.0", ["alpha.u32"])
+    _, first = run_pipeline(request, options, services=services)
+
+    monkeypatch.setattr("spec2lean.pipeline.runner._translation_reusable", lambda *_args: False)
+    dry_options = _options(
+        tmp_path,
+        planner_database,
+        resume=first["pipelineRunId"],
+        from_phase="translate",
+        until_phase="check",
+        dry_run=True,
+    )
+    _, dry = run_pipeline(request, dry_options, services=services)
+    state = next(iter(dry["units"].values()))
+    assert state["stages"]["translate"] == "WOULD_BUILD"
+    assert state["stages"]["check"] == {"disposition": "WOULD_RUN", "status": None}
+    assert state["status"] == "PLANNED"
+
+
+def test_keyboard_interrupt_is_persisted_with_resume_progress(planner_database, tmp_path, monkeypatch):
+    options = _options(tmp_path, planner_database)
+    calls: list[str] = []
+    database = options.index_root / "synthetic" / "1.0" / "specification.sqlite"
+    base = _services(options, database, calls)
+    monkeypatch.setattr("spec2lean.pipeline.runner.validate_artifact", lambda *_args: [])
+
+    def interrupt_translation(*_args, **_kwargs):
+        raise KeyboardInterrupt
+
+    services = PipelineServices(
+        base.plan_builder,
+        base.evidence_builder,
+        base.semantics_builder,
+        interrupt_translation,
+        base.checker,
+        base.resolver,
+    )
+    progress: list[str] = []
+    with pytest.raises(KeyboardInterrupt):
+        run_pipeline(
+            PlanningRequest.exact("synthetic", "1.0", ["alpha.u32"]),
+            options,
+            services=services,
+            progress=progress.append,
+        )
+    manifests = list(options.runs_root.glob("synthetic/1.0/*/run.json"))
+    assert len(manifests) == 1
+    manifest = json.loads(manifests[0].read_text())
+    assert manifest["status"] == "INTERRUPTED"
+    assert manifest["error"] == "interrupted by user"
+    assert progress[-1].endswith(f"resume with --resume {manifest['pipelineRunId']}")
 
 
 def test_dry_run_does_not_create_a_manifest_when_phase_1_is_missing(tmp_path):

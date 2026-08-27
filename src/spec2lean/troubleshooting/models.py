@@ -7,8 +7,8 @@ from ..util import canonical_json, stable_id
 
 
 TROUBLESHOOTING_SCHEMA_VERSION = 1
-TROUBLESHOOTER_MODEL = "openai/gpt-5.3-codex-spark"
-TROUBLESHOOTER_REASONING = "low"
+TROUBLESHOOTER_MODEL = "openai/gpt-5.6-sol"
+TROUBLESHOOTER_REASONING = "medium"
 TROUBLESHOOTER_AGENT = "spec2lean-troubleshooter"
 
 RETURN_TO_SEMANTIC_EXTRACTOR = "RETURN_TO_SEMANTIC_EXTRACTOR"

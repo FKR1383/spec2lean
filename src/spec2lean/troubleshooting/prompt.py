@@ -9,8 +9,8 @@ def build_troubleshooter_prompt(context: dict[str, Any]) -> str:
 
 Repair only the syntax, elaboration, type-checking, import, name-resolution, or Lean API problems
 identified by the supplied compiler diagnostics. Prefer the smallest local patch. Finish by calling
-troubleshooting_submit_repair exactly once with the complete repaired Lean source, complete updated
-declaration mappings, and a concise list of changes.
+troubleshooting_submit_repair exactly once with the complete repaired group Lean source, complete
+updated cross-unit declaration mappings, and a concise list of changes. Never submit a fragment.
 
 Required repair procedure:
 - Treat the supplied diagnostics and Lean version as authoritative for the installed toolchain; do
@@ -25,12 +25,13 @@ Required repair procedure:
   materially different local repair.
 
 Hard boundaries:
-- Preserve the intended Phase-4 semantics and every declaration's semantic-claim responsibility.
+- Preserve every supplied Phase-4 artifact and every declaration's unit/claim responsibility,
+  including instructions unrelated to the triggering diagnostic.
 - Do not omit, weaken, reinterpret, or replace behavior merely to make Lean compile.
 - Do not create theorems or proofs, use sorry/admit/axioms/unsafe/partial, retrieve evidence, browse,
   redesign the formalization, or act as a semantic extractor, translator, planner, or critic.
-- Modify only the affected Phase-5 Lean candidate and its declaration mappings when a mechanical
-  declaration rename makes that necessary.
+- Modify only the affected portion of the Phase-5 group candidate and its mappings when a mechanical
+  declaration rename makes that necessary; return the complete group file atomically.
 - Do not manufacture hashes, timestamps, model/version data, run IDs, or other deterministic metadata.
 - Use only troubleshooting_submit_repair. The repaired candidate will return to Phase 6; do not retry
   yourself or claim that it builds.

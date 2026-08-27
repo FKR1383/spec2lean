@@ -21,8 +21,8 @@ from .render import render_markdown
 from .validation import validate_bundle
 
 
-RETRIEVER_MODEL = "openai/gpt-5.3-codex-spark"
-RETRIEVER_REASONING = "low"
+RETRIEVER_MODEL = "openai/gpt-5.6-sol"
+RETRIEVER_REASONING = "medium"
 RETRIEVER_AGENT = "spec2lean-evidence-retriever"
 
 

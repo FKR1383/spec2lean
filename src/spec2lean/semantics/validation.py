@@ -3,7 +3,14 @@ from __future__ import annotations
 from typing import Any, Iterable
 
 from ..util import normalize_text
-from .models import CLAIM_KINDS, RESTRICTION_KINDS, UNIT_KINDS, SemanticScope, evidence_bundle_hash
+from .models import (
+    CLAIM_KINDS,
+    RESTRICTION_KINDS,
+    SUPPORTED_EXTRACTOR_CONFIGURATIONS,
+    UNIT_KINDS,
+    SemanticScope,
+    evidence_bundle_hash,
+)
 
 
 SUCCESS_FIELDS = {
@@ -231,6 +238,22 @@ def validate_artifact(plan: dict[str, Any], bundle: dict[str, Any], artifact: An
         submission.update(payload)
     rebuilt, inner = validate_submission(scope, bundle, submission)
     diagnostics.extend(inner)
+    extractor = artifact.get("extractor")
+    supported_extractor = (
+        isinstance(extractor, dict)
+        and extractor.get("provider") == "opencode"
+        and (extractor.get("model"), extractor.get("reasoning"))
+        in SUPPORTED_EXTRACTOR_CONFIGURATIONS
+    )
+    if not supported_extractor:
+        diagnostics.append(_diagnostic(
+            "UNSUPPORTED_EXTRACTOR",
+            "extractor must use a supported model/reasoning configuration: "
+            f"{SUPPORTED_EXTRACTOR_CONFIGURATIONS}",
+            "$.extractor",
+        ))
+    elif rebuilt is not None:
+        rebuilt["extractor"] = dict(extractor)
     if rebuilt is not None and rebuilt != artifact:
         diagnostics.append(_diagnostic("DETERMINISTIC_MISMATCH", "artifact metadata or semantic payload differs from deterministic reconstruction"))
     return diagnostics

@@ -48,6 +48,165 @@ def _mapping_claims(
     return claims
 
 
+def _mapping_claim_refs(
+    name: str,
+    mappings: dict[str, dict[str, Any]],
+    broken: list[dict[str, str]],
+    seen: tuple[str, ...] = (),
+) -> set[tuple[str, str]]:
+    if name in seen:
+        broken.append(_broken("DECLARATION_SUPPORT_CYCLE", f"declaration support cycle includes {name}", declaration=name))
+        return set()
+    mapping = mappings.get(name)
+    if mapping is None:
+        broken.append(_broken("MISSING_SUPPORTED_DECLARATION", f"supported declaration has no mapping: {name}", declaration=name))
+        return set()
+    refs = {
+        (item.get("unitId"), item.get("claimId"))
+        for item in mapping.get("claimRefs", [])
+        if isinstance(item, dict) and isinstance(item.get("unitId"), str) and isinstance(item.get("claimId"), str)
+    }
+    for supported in mapping.get("supportsDeclarations", []):
+        if isinstance(supported, str):
+            refs.update(_mapping_claim_refs(supported, mappings, broken, (*seen, name)))
+    return refs
+
+
+def group_coverage_test(
+    unit_id: str, semantics: dict[str, Any], source: str, manifest: dict[str, Any]
+) -> dict[str, Any]:
+    claims = {
+        item.get("claimId"): item
+        for item in (semantics.get("semantics") or {}).get("claims", [])
+        if isinstance(item, dict) and isinstance(item.get("claimId"), str)
+    }
+    declared = set(lean_declarations(source))
+    mappings = {
+        item.get("declaration"): item
+        for item in manifest.get("declarations", [])
+        if isinstance(item, dict) and isinstance(item.get("declaration"), str)
+    }
+    claim_declarations: dict[str, set[str]] = defaultdict(set)
+    ignored: list[dict[str, str]] = []
+    for name in sorted(declared & set(mappings)):
+        for ref_unit, claim_id in _mapping_claim_refs(name, mappings, ignored):
+            if ref_unit == unit_id and claim_id in claims:
+                claim_declarations[claim_id].add(name)
+    covered: list[dict[str, Any]] = []
+    uncovered: list[dict[str, Any]] = []
+    for claim_id, claim in sorted(claims.items()):
+        declarations = sorted(claim_declarations.get(claim_id, set()))
+        item = {"itemType": "SEMANTIC_CLAIM", "itemId": claim_id, "unitId": unit_id, "declarations": declarations}
+        (covered if declarations else uncovered).append(item)
+    evidence_claims: dict[str, set[str]] = defaultdict(set)
+    evidence_declarations: dict[str, set[str]] = defaultdict(set)
+    for claim_id, claim in claims.items():
+        for evidence_id in claim.get("evidenceIds", []):
+            if isinstance(evidence_id, str):
+                evidence_claims[evidence_id].add(claim_id)
+                evidence_declarations[evidence_id].update(claim_declarations.get(claim_id, set()))
+    for evidence_id in sorted(evidence_claims):
+        declarations = sorted(evidence_declarations[evidence_id])
+        item = {"itemType": "EVIDENCE", "itemId": evidence_id, "unitId": unit_id, "semanticClaimIds": sorted(evidence_claims[evidence_id]), "declarations": declarations}
+        (covered if declarations else uncovered).append(item)
+    return {"status": "PASS" if not uncovered else "FAIL", "covered": covered, "uncovered": uncovered}
+
+
+def group_traceability_test(
+    plan: dict[str, Any], bundles_by_unit: dict[str, dict[str, Any]],
+    semantics_by_unit: dict[str, dict[str, Any]], source: str,
+    manifest: dict[str, Any], database: Path,
+) -> dict[str, Any]:
+    broken: list[dict[str, str]] = []
+    declared = set(lean_declarations(source))
+    mappings = {
+        item.get("declaration"): item
+        for item in manifest.get("declarations", [])
+        if isinstance(item, dict) and isinstance(item.get("declaration"), str)
+    }
+    for name in sorted(declared - set(mappings)):
+        broken.append(_broken("MISSING_CLAIM_MAPPING", f"Lean declaration has no semantic/claim mapping: {name}", declaration=name))
+    for name in sorted(set(mappings) - declared):
+        broken.append(_broken("MISSING_LEAN_DECLARATION", f"mapped Lean declaration is absent from the group Lean file: {name}", declaration=name))
+
+    claims_by_unit = {
+        unit_id: {
+            item.get("claimId"): item
+            for item in (semantics.get("semantics") or {}).get("claims", [])
+            if isinstance(item, dict) and isinstance(item.get("claimId"), str)
+        }
+        for unit_id, semantics in semantics_by_unit.items()
+    }
+    evidence_by_unit = {
+        unit_id: {
+            item.get("evidenceId"): item
+            for item in bundle.get("evidence", [])
+            if isinstance(item, dict) and isinstance(item.get("evidenceId"), str)
+        }
+        for unit_id, bundle in bundles_by_unit.items()
+    }
+    valid: list[dict[str, Any]] = []
+    referenced_evidence: set[tuple[str, str]] = set()
+    for name in sorted(declared & set(mappings)):
+        local: list[dict[str, str]] = []
+        refs = _mapping_claim_refs(name, mappings, local)
+        broken.extend(local)
+        valid_refs: list[dict[str, Any]] = []
+        if not refs:
+            broken.append(_broken("MISSING_CLAIM_MAPPING", f"Lean declaration does not resolve to a semantic claim: {name}", declaration=name))
+        for unit_id, claim_id in sorted(refs):
+            claim = claims_by_unit.get(unit_id, {}).get(claim_id)
+            if claim is None:
+                broken.append(_broken("MISSING_SEMANTIC_CLAIM", f"mapping references a nonexistent semantic claim: {unit_id}/{claim_id}", declaration=name, unitId=unit_id, semanticClaimId=claim_id))
+                continue
+            evidence_ids = [item for item in claim.get("evidenceIds", []) if isinstance(item, str)]
+            if claim.get("kind") in EVIDENCE_REQUIRED_KINDS and not evidence_ids:
+                broken.append(_broken("MISSING_CLAIM_EVIDENCE", f"semantic claim requires evidence but cites none: {unit_id}/{claim_id}", unitId=unit_id, semanticClaimId=claim_id))
+            for evidence_id in evidence_ids:
+                if evidence_id not in evidence_by_unit.get(unit_id, {}):
+                    broken.append(_broken("MISSING_EVIDENCE", f"semantic claim references nonexistent evidence: {unit_id}/{evidence_id}", unitId=unit_id, semanticClaimId=claim_id, evidenceId=evidence_id))
+                else:
+                    referenced_evidence.add((unit_id, evidence_id))
+            valid_refs.append({"unitId": unit_id, "claimId": claim_id, "evidenceIds": sorted(evidence_ids)})
+        if valid_refs and not local:
+            valid.append({"declaration": name, "claimRefs": valid_refs})
+
+    expected_artifacts = {
+        unit_id: semantics_artifact_hash(semantics)
+        for unit_id, semantics in semantics_by_unit.items()
+    }
+    recorded_artifacts = {
+        item.get("unitId"): item.get("artifactHash")
+        for item in manifest.get("semanticsArtifacts", []) if isinstance(item, dict)
+    }
+    if recorded_artifacts != expected_artifacts:
+        broken.append(_broken("SEMANTICS_ARTIFACT_HASH_MISMATCH", "group manifest does not reference the current Phase-4 artifacts"))
+    expected_unit_ids = {str(unit["unitId"]) for unit in plan.get("requestedUnits", []) if str(unit["unitId"]) in semantics_by_unit}
+    if set((manifest.get("group") or {}).get("unitIds", [])) != expected_unit_ids:
+        broken.append(_broken("ARTIFACT_BOUNDARY_MISMATCH", "group manifest unit set does not match its semantic inputs"))
+
+    with connect(database, read_only=True) as connection:
+        if semantic_digest(connection) != plan.get("sourceDatabaseDigest"):
+            broken.append(_broken("SOURCE_DATABASE_DIGEST_MISMATCH", "the Phase-1 index does not match the plan source digest"))
+        for unit_id, semantics in semantics_by_unit.items():
+            bundle = bundles_by_unit[unit_id]
+            expected_unit = next((unit for unit in plan.get("requestedUnits", []) if unit.get("unitId") == unit_id), None)
+            for artifact_name, artifact in (("evidence", bundle), ("semantics", semantics)):
+                if artifact.get("planRunId") != plan.get("planRunId") or artifact.get("language") != plan.get("language") or artifact.get("version") != plan.get("version") or artifact.get("unit") != expected_unit:
+                    broken.append(_broken("ARTIFACT_BOUNDARY_MISMATCH", f"{artifact_name} artifact does not match plan unit {unit_id}", unitId=unit_id))
+            if semantics.get("evidenceBundleHash") != evidence_bundle_hash(bundle):
+                broken.append(_broken("EVIDENCE_BUNDLE_HASH_MISMATCH", f"semantic artifact does not reference current evidence for {unit_id}", unitId=unit_id))
+        for unit_id, evidence_id in sorted(referenced_evidence):
+            record = evidence_by_unit[unit_id][evidence_id]
+            if record.get("unitId") != unit_id:
+                broken.append(_broken("EVIDENCE_UNIT_MISMATCH", f"evidence belongs to another unit: {evidence_id}", unitId=unit_id, evidenceId=evidence_id))
+            _source_provenance(connection, record, broken)
+
+    unique = {tuple(sorted(item.items())): item for item in broken}
+    ordered = [unique[key] for key in sorted(unique)]
+    return {"status": "PASS" if not ordered else "FAIL", "validMappings": valid if not ordered else [], "brokenMappings": ordered}
+
+
 def _source_provenance(
     connection: sqlite3.Connection,
     evidence: dict[str, Any],

@@ -11,16 +11,18 @@ session, validates its dependency graph, and writes an inspectable plan. Phase 3
 runs one bounded Evidence Retriever session per planned unit and deterministically
 resolves its selections to exact Phase-1 text and provenance. Phase 4 runs one
 evidence-bounded Semantic Extractor session per unit and validates a structured,
-traceable semantic artifact. Phase 5 uses one semantic-artifact-bounded session
-to generate Lean 4 and declaration traceability. Phase 6 independently compiles
-that Lean and deterministically checks forward coverage and reverse traceability.
+traceable semantic artifact. Phase 5 runs one semantic-artifact-bounded session
+per instruction group to generate exactly one complete Lean 4 file and cross-unit
+declaration traceability. Phase 6 compiles each group once and deterministically
+checks per-unit forward coverage and group-wide reverse traceability.
 Phase 7 routes semantic failures upstream and uses one compiler-guided OpenCode
 session to repair build-only failures.
 
 The top-level Pipeline Runner composes those phase APIs without duplicating
 their logic. It validates or rebuilds Phase 1, reuses a matching fresh Phase-2
-plan when available, follows dependency layers, and advances each unit only
-after its check passes or bounded Phase-7 routing resolves the failure.
+plan when available, completes instruction-scoped evidence and semantics first,
+then advances grouped translation/checking until every unit passes or bounded
+Phase-7 routing resolves the failure.
 
 Python is used because PyMuPDF exposes PDF layout/font/bounding-box data and
 `lxml` preserves semantic HTML structure and source lines. SQLite and FTS5
@@ -187,6 +189,12 @@ The runner writes an atomic run manifest under
 --run PIPELINE_RUN_ID` shows the persisted plan, per-unit stage dispositions,
 routing outcome, and terminal status.
 
+Progress is printed immediately to stderr with the pipeline run ID, current
+unit, phase, reuse decision, check result, and Phase-7 route. The final complete
+manifest remains JSON on stdout. Ctrl-C records an `INTERRUPTED` manifest and
+prints the exact run ID to pass back to `--resume` instead of emitting a Python
+traceback.
+
 Resume the latest compatible run by repeating its scope and adding `--resume`,
 or name a run explicitly with `--resume PIPELINE_RUN_ID`:
 
@@ -235,7 +243,7 @@ starts bounded OpenCode sessions.
 ## Build a request-scoped plan
 
 Phase 2 requires the exact installed OpenCode model
-`openai/gpt-5.4-mini` and uses reasoning variant `low`. Choose exactly one
+`openai/gpt-5.6-sol` and uses reasoning variant `medium`. Choose exactly one
 scope selector. A quota-free catalog preflight fails before creating a run if
 that exact model is unavailable; no fallback model is selected.
 
@@ -280,7 +288,7 @@ isolation, submission validation, cycles, and artifact ownership.
 ## Retrieve exact evidence for a planned unit
 
 Phase 3 requires the exact installed OpenCode model
-`openai/gpt-5.3-codex-spark` with reasoning variant `low`. The model selects
+`openai/gpt-5.6-sol` with reasoning variant `medium`. The model selects
 only node/span IDs and relevance labels; deterministic code supplies quotations,
 hashes, anchors, pages, bounding boxes, and all other source provenance.
 
@@ -316,7 +324,7 @@ validation, and artifacts.
 ## Extract structured semantics from one evidence bundle
 
 Phase 4 requires the exact installed OpenCode model
-`openai/gpt-5.3-codex-spark` with reasoning variant `low`. It supplies only the
+`openai/gpt-5.6-sol` with reasoning variant `medium`. It supplies only the
 selected unit's Phase-3 evidence bundle and exposes only the structured
 `submit_semantics` tool. It cannot retrieve additional material.
 
@@ -343,19 +351,23 @@ See [the Phase 4 design](docs/phase-4-design.md) for the evidence boundary,
 semantic schema, claim classifications, operation/state separation,
 deterministic validation, OpenCode isolation, and artifact layout.
 
-## Translate one accepted semantic artifact to Lean 4
+## Translate one instruction group to one Lean 4 file
 
 Phase 5 requires the exact installed OpenCode model
-`openai/gpt-5.3-codex-spark` with reasoning variant `low`. It accepts exactly one
-unit per command, supplies only that unit's accepted `semantics.json` and any
-current-architecture shared Lean sources, and exposes only the structured
-`submit_translation` tool.
+`openai/gpt-5.6-sol` with reasoning variant `medium`. It supplies every accepted
+`semantics.json` in one deterministic instruction group and exposes only the
+structured `submit_translation` tool. One session writes one complete file such
+as `Arithmetic/Arithmetic.lean`; no fragments or per-instruction Lean files are
+created.
 
 ```bash
 ./spec2lean translate build \
   --plan-run PLAN_RUN_ID \
-  --unit UNIT_ID
+  --group Arithmetic
 ```
+
+`--unit UNIT_ID` may be used instead to select the complete group containing
+that unit.
 
 Inspect the generated source/metadata or resolve a declaration all the way to
 Phase-3 source provenance without starting OpenCode:
@@ -370,11 +382,12 @@ See [the Phase 5 design](docs/phase-5-design.md) for the authority boundary,
 Lean conventions, structured tool, manifest schema, forbidden constructs,
 deterministic validation, and declaration traceability chain.
 
-## Check one translated unit
+## Check one translated group
 
 Phase 6 runs exactly three checks: Lean Build, structured Coverage, and
 structured Traceability. It consumes existing artifacts only, never modifies
-Lean, and does not invoke OpenCode. Start with one translated unit:
+Lean, and does not invoke OpenCode. Selecting any member unit builds the shared
+group file once and refreshes the checks for all members:
 
 ```bash
 ./spec2lean check run \

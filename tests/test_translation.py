@@ -9,10 +9,11 @@ import pytest
 
 from spec2lean.cli import main
 from spec2lean.translation.mcp import TranslationMcpServer, tool_definitions
+from spec2lean.translation.groups import instruction_group
 from spec2lean.translation.models import (
     TRANSLATOR_MODEL,
     TRANSLATOR_REASONING,
-    TranslationScope,
+    TranslationGroupScope,
     semantics_artifact_hash,
 )
 from spec2lean.translation.prompt import build_translator_prompt
@@ -48,7 +49,10 @@ def _inputs() -> tuple[dict, dict]:
         "version": plan["version"],
         "unit": copy.deepcopy(UNIT),
         "evidenceBundleHash": "sha256:" + "a" * 64,
-        "extractor": {"provider": "opencode", "model": TRANSLATOR_MODEL, "reasoning": "low"},
+        "extractor": {
+            "provider": "opencode", "model": TRANSLATOR_MODEL,
+            "reasoning": TRANSLATOR_REASONING,
+        },
         "runId": "semantic-run:synthetic",
         "createdAt": "2026-01-01T00:00:00.000000Z",
         "outcome": "SUCCESS",
@@ -77,10 +81,15 @@ def _inputs() -> tuple[dict, dict]:
     return plan, semantics
 
 
-def _scope(plan: dict, semantics: dict) -> TranslationScope:
-    return TranslationScope.from_inputs(
-        plan, semantics, UNIT["unitId"], created_at="2026-01-02T03:04:05.000000Z"
+def _scope(plan: dict, semantics: dict) -> TranslationGroupScope:
+    return TranslationGroupScope.from_inputs(
+        plan, "Other", {UNIT["unitId"]: semantics},
+        created_at="2026-01-02T03:04:05.000000Z"
     )
+
+
+def _refs(*claim_ids: str) -> list[dict[str, str]]:
+    return [{"unitId": UNIT["unitId"], "claimId": claim_id} for claim_id in claim_ids]
 
 
 def _source() -> str:
@@ -103,9 +112,9 @@ def _submission() -> dict:
     return {
         "leanSource": _source(),
         "declarations": [
-            {"declaration": f"{prefix}.MachineState", "role": "PRIMARY_TYPE", "semanticClaimIds": ["claim:type", "claim:state"]},
-            {"declaration": f"{prefix}.result", "role": "OPERATION", "semanticClaimIds": ["claim:op"]},
-            {"declaration": f"{prefix}.exec", "role": "EXECUTION", "semanticClaimIds": ["claim:state", "claim:op"]},
+            {"declaration": f"{prefix}.MachineState", "role": "PRIMARY_TYPE", "claimRefs": _refs("claim:type", "claim:state")},
+            {"declaration": f"{prefix}.result", "role": "OPERATION", "claimRefs": _refs("claim:op")},
+            {"declaration": f"{prefix}.exec", "role": "EXECUTION", "claimRefs": _refs("claim:state", "claim:op")},
         ],
     }
 
@@ -117,52 +126,141 @@ def _codes(diagnostics: list[dict]) -> set[str]:
 def test_valid_translation_artifact_and_deterministic_metadata():
     plan, semantics = _inputs()
     scope = _scope(plan, semantics)
-    candidate, diagnostics = validate_submission(scope, semantics, _submission())
+    semantics_by_unit = {UNIT["unitId"]: semantics}
+    candidate, diagnostics = validate_submission(scope, semantics_by_unit, _submission())
     assert diagnostics == [] and candidate is not None
     manifest = candidate["manifest"]
-    assert manifest["semanticsArtifactHash"] == semantics_artifact_hash(semantics)
+    assert manifest["semanticsArtifacts"] == [{
+        "unitId": UNIT["unitId"], "runId": semantics["runId"],
+        "artifactHash": semantics_artifact_hash(semantics),
+    }]
     assert manifest["translator"] == {
         "provider": "opencode", "model": TRANSLATOR_MODEL, "reasoning": TRANSLATOR_REASONING,
     }
     assert manifest["target"] == {"language": "Lean", "version": "4"}
-    assert validate_manifest(plan, semantics, candidate["leanSource"], manifest) == []
+    assert validate_manifest(plan, semantics_by_unit, candidate["leanSource"], manifest) == []
 
     metadata = {
-        "schemaVersion": 1, "phase": "LLM_TRANSLATOR", "planRunId": scope.plan_run_id,
-        "unitId": scope.unit_id, "translationRunId": scope.translation_run_id,
+        "schemaVersion": 2, "phase": "LLM_GROUP_TRANSLATOR", "planRunId": scope.plan_run_id,
+        "group": {"name": "Other", "unitIds": [UNIT["unitId"]]},
+        "translationRunId": scope.translation_run_id,
         "translator": "opencode", "model": TRANSLATOR_MODEL, "reasoning": TRANSLATOR_REASONING,
         "singleSession": True, "automaticRetries": 0,
-        "semanticsArtifactHash": scope.semantics_artifact_hash,
-        "inputBoundary": "PHASE_4_SEMANTIC_ARTIFACT_ONLY",
+        "semanticsArtifacts": [{
+            "unitId": UNIT["unitId"], "runId": semantics["runId"],
+            "artifactHash": semantics_artifact_hash(semantics),
+        }],
+        "inputBoundary": "PHASE_4_SEMANTIC_ARTIFACTS_ONLY",
         "targetLanguage": "Lean", "targetVersion": "4",
         "startedAt": "start", "finishedAt": "finish", "command": [], "exitCode": 0,
-        "outcome": "SUCCESS", "error": None, "sharedLeanFiles": [],
-        "semanticsArtifact": "/synthetic/semantics.json", "sessionId": None,
+        "outcome": "SUCCESS", "error": None,
+        "semanticsArtifactPaths": ["/synthetic/semantics.json"], "sessionId": None,
         "stdout": "", "stderr": "",
     }
     assert validate_run_metadata(scope, metadata) == []
 
+    for historical_model in ("openai/gpt-5.4-mini", "openai/gpt-5.3-codex-spark"):
+        historical_manifest = copy.deepcopy(manifest)
+        historical_manifest["translator"].update(model=historical_model, reasoning="low")
+        assert validate_manifest(plan, semantics_by_unit, candidate["leanSource"], historical_manifest) == []
+        historical_metadata = copy.deepcopy(metadata)
+        historical_metadata.update(model=historical_model, reasoning="low")
+        assert validate_run_metadata(scope, historical_metadata) == []
+
 
 def test_stale_semantic_hash_is_rejected():
     plan, semantics = _inputs()
-    candidate, diagnostics = validate_submission(_scope(plan, semantics), semantics, _submission())
+    semantics_by_unit = {UNIT["unitId"]: semantics}
+    candidate, diagnostics = validate_submission(_scope(plan, semantics), semantics_by_unit, _submission())
     assert diagnostics == [] and candidate is not None
-    candidate["manifest"]["semanticsArtifactHash"] = "sha256:" + "0" * 64
+    candidate["manifest"]["semanticsArtifacts"][0]["artifactHash"] = "sha256:" + "0" * 64
     assert "DETERMINISTIC_MISMATCH" in _codes(
-        validate_manifest(plan, semantics, candidate["leanSource"], candidate["manifest"])
+        validate_manifest(plan, semantics_by_unit, candidate["leanSource"], candidate["manifest"])
     )
 
 
 def test_unknown_claim_and_operation_without_mapping_are_rejected():
     plan, semantics = _inputs()
     unknown = _submission()
-    unknown["declarations"][1]["semanticClaimIds"] = ["claim:invented"]
-    _, diagnostics = validate_submission(_scope(plan, semantics), semantics, unknown)
+    unknown["declarations"][1]["claimRefs"] = _refs("claim:invented")
+    semantics_by_unit = {UNIT["unitId"]: semantics}
+    _, diagnostics = validate_submission(_scope(plan, semantics), semantics_by_unit, unknown)
     assert "UNKNOWN_SEMANTIC_CLAIM" in _codes(diagnostics)
     missing_operation = _submission()
     del missing_operation["declarations"][1]
-    _, diagnostics = validate_submission(_scope(plan, semantics), semantics, missing_operation)
+    _, diagnostics = validate_submission(_scope(plan, semantics), semantics_by_unit, missing_operation)
     assert _codes(diagnostics) >= {"MISSING_OPERATION_MAPPING", "UNMAPPED_LEAN_DECLARATION"}
+
+
+def test_group_scope_supports_multiple_units_and_unit_scoped_claim_ids():
+    plan, alpha_semantics = _inputs()
+    beta_unit = {"unitId": "unit:beta", "name": "beta.u32", "sourceNodeIds": ["node:beta"]}
+    beta_semantics = copy.deepcopy(alpha_semantics)
+    beta_semantics["unit"] = copy.deepcopy(beta_unit)
+    beta_semantics["runId"] = "semantic-run:beta"
+    beta_semantics["semantics"]["identity"]["name"] = "beta.u32"
+    plan["requestedUnits"].append(copy.deepcopy(beta_unit))
+    semantics_by_unit = {
+        UNIT["unitId"]: alpha_semantics,
+        beta_unit["unitId"]: beta_semantics,
+    }
+    scope = TranslationGroupScope.from_inputs(
+        plan, "Other", semantics_by_unit, created_at="2026-01-02T03:04:05.000000Z"
+    )
+    source = """namespace Spec2Lean.Synthetic.Other
+
+structure MachineState where
+  destination : BitVec 32
+
+def alphaResult (a b : BitVec 32) : BitVec 32 := a + b
+def alphaExec (s : MachineState) (p : Bool) (a b : BitVec 32) : MachineState :=
+  if p then { destination := alphaResult a b } else s
+def betaResult (a b : BitVec 32) : BitVec 32 := a + b
+def betaExec (s : MachineState) (p : Bool) (a b : BitVec 32) : MachineState :=
+  if p then { destination := betaResult a b } else s
+
+end Spec2Lean.Synthetic.Other
+"""
+    prefix = "Spec2Lean.Synthetic.Other"
+    declarations = [
+        {
+            "declaration": f"{prefix}.MachineState", "role": "PRIMARY_TYPE",
+            "claimRefs": [
+                {"unitId": UNIT["unitId"], "claimId": "claim:type"},
+                {"unitId": beta_unit["unitId"], "claimId": "claim:type"},
+            ],
+        },
+        {"declaration": f"{prefix}.alphaResult", "role": "OPERATION", "claimRefs": _refs("claim:op")},
+        {"declaration": f"{prefix}.alphaExec", "role": "EXECUTION", "claimRefs": _refs("claim:state", "claim:op")},
+        {
+            "declaration": f"{prefix}.betaResult", "role": "OPERATION",
+            "claimRefs": [{"unitId": beta_unit["unitId"], "claimId": "claim:op"}],
+        },
+        {
+            "declaration": f"{prefix}.betaExec", "role": "EXECUTION",
+            "claimRefs": [
+                {"unitId": beta_unit["unitId"], "claimId": "claim:state"},
+                {"unitId": beta_unit["unitId"], "claimId": "claim:op"},
+            ],
+        },
+    ]
+    candidate, diagnostics = validate_submission(
+        scope, semantics_by_unit, {"leanSource": source, "declarations": declarations}
+    )
+    assert diagnostics == [] and candidate is not None
+    assert scope.lean_file == "Other.lean"
+    assert candidate["manifest"]["group"] == {
+        "name": "Other", "unitIds": [UNIT["unitId"], beta_unit["unitId"]]
+    }
+    assert len(candidate["manifest"]["semanticsArtifacts"]) == 2
+
+
+def test_ptx_grouping_uses_base_mnemonic_and_keeps_unknowns_visible():
+    assert instruction_group("ptx", "add.cc.u32") == "Arithmetic"
+    assert instruction_group("ptx", "addc.u32") == "Arithmetic"
+    assert instruction_group("ptx", "shr.u32") == "BitManip"
+    assert instruction_group("ptx", "and.b32") == "Logic"
+    assert instruction_group("ptx", "future.op") == "Other"
 
 
 @pytest.mark.parametrize(
@@ -185,7 +283,7 @@ def test_structured_translator_submission_tool(tmp_path):
     plan, semantics = _inputs()
     scope = _scope(plan, semantics)
     path = tmp_path / "submission.json"
-    server = TranslationMcpServer(scope, semantics, path)
+    server = TranslationMcpServer(scope, {UNIT["unitId"]: semantics}, path)
     response = server.call_tool("submit_translation", _submission())
     result = json.loads(response["content"][0]["text"])
     assert result["accepted"] is True and path.is_file()
@@ -205,10 +303,12 @@ def test_implementation_helper_may_trace_through_supported_semantic_declaration(
     submission["declarations"].insert(1, {
         "declaration": "Spec2Lean.Synthetic.AlphaU32.addImpl",
         "role": "IMPLEMENTATION_HELPER",
-        "semanticClaimIds": [],
+        "claimRefs": [],
         "supportsDeclarations": [operation],
     })
-    candidate, diagnostics = validate_submission(_scope(plan, semantics), semantics, submission)
+    candidate, diagnostics = validate_submission(
+        _scope(plan, semantics), {UNIT["unitId"]: semantics}, submission
+    )
     assert diagnostics == [] and candidate is not None
     assert candidate["manifest"]["declarations"][1]["supportsDeclarations"] == [operation]
 
@@ -243,7 +343,7 @@ def test_runner_uses_one_session_exact_model_and_phase4_only_input(tmp_path, mon
         mcp_command = config["mcp"]["translation"]["command"]
         def argument(name):
             return Path(mcp_command[mcp_command.index(name) + 1])
-        scope = TranslationScope.from_dict(json.loads(argument("--scope").read_text()))
+        scope = TranslationGroupScope.from_dict(json.loads(argument("--scope").read_text()))
         semantics = json.loads(argument("--semantics").read_text())
         server = TranslationMcpServer(scope, semantics, argument("--submission"))
         result = server.call_tool("submit_translation", _submission())
@@ -255,16 +355,16 @@ def test_runner_uses_one_session_exact_model_and_phase4_only_input(tmp_path, mon
     )
     assert len(calls) == 1
     assert {path.name for path in output.iterdir()} == {
-        "Unit.lean", "translation-manifest.json", "translator-run.json",
+        "Other.lean", "translation-manifest.json", "translator-run.json",
     }
     metadata = json.loads((output / "translator-run.json").read_text())
-    assert metadata["model"] == TRANSLATOR_MODEL == "openai/gpt-5.3-codex-spark"
-    assert metadata["reasoning"] == TRANSLATOR_REASONING == "low"
+    assert metadata["model"] == TRANSLATOR_MODEL == "openai/gpt-5.6-sol"
+    assert metadata["reasoning"] == TRANSLATOR_REASONING == "medium"
     assert metadata["singleSession"] is True and metadata["automaticRetries"] == 0
-    assert metadata["inputBoundary"] == "PHASE_4_SEMANTIC_ARTIFACT_ONLY"
+    assert metadata["inputBoundary"] == "PHASE_4_SEMANTIC_ARTIFACTS_ONLY"
     assert metadata["sessionId"] == "translator-session"
     agent = json.loads(calls[0][1]["env"]["OPENCODE_CONFIG_CONTENT"])["agent"]["spec2lean-lean-translator"]
-    assert agent["model"] == TRANSLATOR_MODEL and agent["variant"] == "low"
+    assert agent["model"] == TRANSLATOR_MODEL and agent["variant"] == "medium"
     for forbidden in ("bash", "edit", "read", "task", "webfetch", "websearch", "skill"):
         assert agent["tools"][forbidden] is False
 
@@ -291,12 +391,14 @@ def test_missing_exact_model_starts_no_session_and_creates_no_artifact(tmp_path,
 def test_traceability_chain_resolves_declaration_claim_evidence_and_source(tmp_path, capsys):
     plan, semantics, plans_root, semantics_root, evidence_root = _write_inputs(tmp_path)
     scope = _scope(plan, semantics)
-    candidate, diagnostics = validate_submission(scope, semantics, _submission())
+    candidate, diagnostics = validate_submission(
+        scope, {UNIT["unitId"]: semantics}, _submission()
+    )
     assert diagnostics == [] and candidate is not None
     translations_root = tmp_path / "translations"
     output = unit_directory(translations_root, plan, UNIT)
     output.mkdir(parents=True)
-    (output / "Unit.lean").write_text(candidate["leanSource"], encoding="utf-8")
+    (output / "Other.lean").write_text(candidate["leanSource"], encoding="utf-8")
     (output / "translation-manifest.json").write_text(json.dumps(candidate["manifest"]), encoding="utf-8")
     (output / "translator-run.json").write_text(json.dumps({"outcome": "SUCCESS"}), encoding="utf-8")
     evidence_dir = evidence_root / "synthetic" / "1.0" / plan["planRunId"] / "alpha"
@@ -325,12 +427,14 @@ def test_traceability_chain_resolves_declaration_claim_evidence_and_source(tmp_p
 def test_bounded_translation_revision_updates_existing_artifact_and_keeps_build_prompt(tmp_path):
     plan, semantics, _, semantics_root, _ = _write_inputs(tmp_path)
     scope = _scope(plan, semantics)
-    original, diagnostics = validate_submission(scope, semantics, _submission())
+    original, diagnostics = validate_submission(
+        scope, {UNIT["unitId"]: semantics}, _submission()
+    )
     assert diagnostics == [] and original is not None
     translations_root = tmp_path / "translations"
     directory = unit_directory(translations_root, plan, UNIT)
     directory.mkdir(parents=True)
-    (directory / "Unit.lean").write_text(original["leanSource"], encoding="utf-8")
+    (directory / "Other.lean").write_text(original["leanSource"], encoding="utf-8")
     (directory / "translation-manifest.json").write_text(json.dumps(original["manifest"]), encoding="utf-8")
     (directory / "translator-run.json").write_text("{}", encoding="utf-8")
     uncovered = [{"itemType": "SEMANTIC_CLAIM", "itemId": "claim:op", "declarations": []}]
@@ -344,10 +448,10 @@ def test_bounded_translation_revision_updates_existing_artifact_and_keeps_build_
         )
         revised["declarations"].append({
             "declaration": "Spec2Lean.Synthetic.AlphaU32.operationMeaning",
-            "role": "SEMANTIC_HELPER", "semanticClaimIds": ["claim:op"],
+            "role": "SEMANTIC_HELPER", "claimRefs": _refs("claim:op"),
         })
         candidate, inner = validate_submission(
-            TranslationScope.from_dict(context["scope"]), context["semantics"], revised
+            TranslationGroupScope.from_dict(context["scope"]), context["semanticsByUnit"], revised
         )
         assert inner == []
         return {"candidate": candidate, "error": None, "session": {"sessionId": "translation-revision"}}
@@ -360,11 +464,15 @@ def test_bounded_translation_revision_updates_existing_artifact_and_keeps_build_
     )
     assert len(calls) == 1 and calls[0]["diagnostics"] == uncovered
     assert metadata["singleSession"] is True and metadata["automaticRetries"] == 0
-    assert (revision_directory / "before-Unit.lean").is_file()
-    source = (directory / "Unit.lean").read_text()
+    assert (revision_directory / "before-Other.lean").is_file()
+    source = (directory / "Other.lean").read_text()
     manifest = json.loads((directory / "translation-manifest.json").read_text())
-    assert "operationMeaning" in source and validate_manifest(plan, semantics, source, manifest) == []
-    assert "bounded Spec2Lean Phase-5 Lean translation revision" not in build_translator_prompt(scope, semantics, [])
+    assert "operationMeaning" in source and validate_manifest(
+        plan, {UNIT["unitId"]: semantics}, source, manifest
+    ) == []
+    assert "bounded Spec2Lean Phase-5 Lean translation revision" not in build_translator_prompt(
+        scope, {UNIT["unitId"]: semantics}
+    )
     with pytest.raises(FileExistsError, match="already consumed"):
         revise_translation(
             plan, semantics_root=semantics_root, translations_root=translations_root,

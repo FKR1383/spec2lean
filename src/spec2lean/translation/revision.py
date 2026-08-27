@@ -12,10 +12,16 @@ from typing import Any, Callable
 
 from ..semantics.store import load_semantics
 from ..util import canonical_json, sha256_file, stable_id
-from .models import TRANSLATOR_AGENT, TRANSLATOR_MODEL, TRANSLATOR_REASONING, TranslationScope
+from .groups import group_for_unit, grouped_units
+from .models import (
+    TRANSLATOR_AGENT,
+    TRANSLATOR_MODEL,
+    TRANSLATOR_REASONING,
+    TranslationGroupScope,
+)
 from .revision_prompt import build_translation_revision_prompt
 from .runner import _session_id, opencode_config, require_translator_model
-from .store import load_translation, shared_lean_sources
+from .store import load_group_translation
 from .validation import validate_manifest, validate_published
 
 
@@ -55,23 +61,29 @@ def run_translation_revision_session(
     if executable is None:
         raise RuntimeError("OpenCode executable is not installed or not on PATH")
     require_translator_model(executable)
-    scope = TranslationScope.from_dict(context["scope"])
+    scope = TranslationGroupScope.from_dict(context["scope"])
     prompt = build_translation_revision_prompt(
-        scope, context["semantics"], context["leanSource"], context["translationManifest"],
-        context["diagnostics"], context["reason"], context["sharedLeanSources"],
+        scope,
+        context["semanticsByUnit"],
+        context["leanSource"],
+        context["translationManifest"],
+        context["diagnostics"],
+        context["reason"],
+        context["triggeringUnitId"],
     )
     with tempfile.TemporaryDirectory(prefix="spec2lean-translation-revision-") as temporary_name:
         temporary = Path(temporary_name)
-        scope_path, semantics_path = temporary / "translation-scope.json", temporary / "semantics.json"
+        scope_path = temporary / "translation-scope.json"
+        semantics_path = temporary / "semantics-by-unit.json"
         submission_path = temporary / "submission.json"
         scope_path.write_text(json.dumps(scope.to_dict(), ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
-        semantics_path.write_text(json.dumps(context["semantics"], ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+        semantics_path.write_text(json.dumps(context["semanticsByUnit"], ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
         config = opencode_config(scope_path, semantics_path, submission_path)
         command = [
             executable, "run", "--pure", "--print-logs", "--log-level", "ERROR",
             "--format", "json", "--agent", TRANSLATOR_AGENT, "--model", TRANSLATOR_MODEL,
             "--variant", TRANSLATOR_REASONING, "--title",
-            f"{scope.plan_run_id}:{scope.unit_id}:revise-translation", prompt,
+            f"{scope.plan_run_id}:{scope.group}:revise-translation", prompt,
         ]
         environment = os.environ.copy()
         environment["OPENCODE_CONFIG_CONTENT"] = json.dumps(config, separators=(",", ":"))
@@ -104,7 +116,8 @@ def run_translation_revision_session(
             except json.JSONDecodeError:
                 error = error or "Translation Revision submission is invalid JSON"
         return {
-            "candidate": candidate, "error": error,
+            "candidate": candidate,
+            "error": error,
             "session": {
                 "provider": "opencode", "model": TRANSLATOR_MODEL,
                 "reasoning": TRANSLATOR_REASONING, "singleSession": True,
@@ -118,8 +131,7 @@ def run_translation_revision_session(
 def revise_translation(
     plan: dict[str, Any], *, semantics_root: Path, translations_root: Path, unit_id: str,
     diagnostics: list[dict[str, Any]], reason: str = "COVERAGE_FAILURE",
-    timeout_seconds: int = 1800,
-    source_check_hash: str | None = None,
+    timeout_seconds: int = 1800, source_check_hash: str | None = None,
     session_runner: SessionRunner = run_translation_revision_session,
     now: Callable[[], str] = utc_now,
 ) -> tuple[Path, dict[str, Any]]:
@@ -127,35 +139,51 @@ def revise_translation(
         raise ValueError(f"unsupported translation revision reason: {reason}")
     if not diagnostics:
         raise ValueError("translation revision requires concrete upstream diagnostics")
-    semantic_directory, semantics = load_semantics(semantics_root, plan, unit_id)
-    directory, source, manifest, _ = load_translation(translations_root, plan, unit_id)
+    group = group_for_unit(plan, unit_id)
+    semantics_by_unit: dict[str, dict[str, Any]] = {}
+    semantic_directories: dict[str, Path] = {}
+    for unit in grouped_units(plan)[group]:
+        member_id = str(unit["unitId"])
+        semantic_directory, semantics = load_semantics(semantics_root, plan, member_id)
+        semantic_directories[member_id] = semantic_directory
+        semantics_by_unit[member_id] = semantics
+    directory, source, manifest, _ = load_group_translation(translations_root, plan, group)
     if source_check_hash is not None:
         for path in directory.glob("revisions/*/translation-revision.json"):
             recorded = json.loads(path.read_text(encoding="utf-8"))
             if recorded.get("sourceCheckHash") == source_check_hash:
                 raise FileExistsError(f"Phase-6 check was already consumed by translation revision: {path.parent}")
+
     started_at = now()
-    scope = TranslationScope.from_inputs(
-        plan, semantics, unit_id, created_at=str(manifest.get("createdAt") or started_at)
+    scope = TranslationGroupScope.from_inputs(
+        plan, group, semantics_by_unit, created_at=started_at
     )
+    lean_name = str(manifest.get("leanFile", scope.lean_file))
+    lean_path = directory / lean_name
+    manifest_path = directory / "translation-manifest.json"
+    run_path = directory / "translator-run.json"
     before = {
-        "Unit.lean": _file_hash(directory / "Unit.lean"),
-        "translation-manifest.json": _file_hash(directory / "translation-manifest.json"),
-        "translator-run.json": _file_hash(directory / "translator-run.json"),
+        lean_name: _file_hash(lean_path),
+        "translation-manifest.json": _file_hash(manifest_path),
+        "translator-run.json": _file_hash(run_path),
     }
     revision_id = stable_id(
-        "translation-revision", plan["planRunId"], unit_id,
-        before["Unit.lean"], before["translation-manifest.json"], _hash_json(diagnostics), reason,
+        "translation-group-revision", plan["planRunId"], group, unit_id,
+        before[lean_name], before["translation-manifest.json"], _hash_json(diagnostics), reason,
         source_check_hash or "UNBOUND",
     )
     revision_directory = directory / "revisions" / revision_id
     if revision_directory.exists():
         raise FileExistsError(f"translation revision was already recorded: {revision_directory}")
-    shared = shared_lean_sources(translations_root, plan)
     context = {
-        "scope": scope.to_dict(), "semantics": semantics, "leanSource": source,
-        "translationManifest": manifest, "diagnostics": diagnostics, "reason": reason,
-        "sharedLeanSources": shared, "translationDirectory": str(directory),
+        "scope": scope.to_dict(),
+        "semanticsByUnit": semantics_by_unit,
+        "leanSource": source,
+        "translationManifest": manifest,
+        "diagnostics": diagnostics,
+        "reason": reason,
+        "triggeringUnitId": unit_id,
+        "translationDirectory": str(directory),
     }
     result = session_runner(context, timeout_seconds=timeout_seconds)
     if result.get("error"):
@@ -165,58 +193,102 @@ def revise_translation(
         raise ValueError("translation revision did not submit a candidate")
     candidate_source = candidate.get("leanSource")
     candidate_manifest = candidate.get("manifest")
-    validation = validate_manifest(plan, semantics, candidate_source, candidate_manifest)
+    validation = validate_manifest(plan, semantics_by_unit, candidate_source, candidate_manifest)
     if validation:
-        raise ValueError("translation revision failed deterministic validation: " + "; ".join(item["message"] for item in validation))
+        raise ValueError(
+            "translation revision failed deterministic validation: "
+            + "; ".join(item["message"] for item in validation)
+        )
+    if (
+        str(candidate_source).rstrip() == source.rstrip()
+        and candidate_manifest.get("declarations") == manifest.get("declarations")
+    ):
+        raise ValueError("translation revision made no source or declaration-mapping change")
+
     new_source = str(candidate_source).rstrip() + "\n"
     new_manifest = json.dumps(candidate_manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     session = result.get("session") or {}
     run_metadata = {
-        "schemaVersion": 1, "phase": "LLM_TRANSLATOR", "planRunId": scope.plan_run_id,
-        "unitId": scope.unit_id, "translationRunId": scope.translation_run_id,
-        "translator": "opencode", "model": TRANSLATOR_MODEL, "reasoning": TRANSLATOR_REASONING,
-        "singleSession": True, "automaticRetries": 0, "startedAt": scope.created_at,
-        "finishedAt": now(), "semanticsArtifact": str(semantic_directory / "semantics.json"),
-        "semanticsArtifactHash": scope.semantics_artifact_hash,
-        "inputBoundary": "PHASE_4_SEMANTIC_ARTIFACT_ONLY", "sharedLeanFiles": [item["path"] for item in shared],
-        "targetLanguage": "Lean", "targetVersion": "4", "command": session.get("command", []),
-        "exitCode": 0, "sessionId": session.get("sessionId"), "outcome": "SUCCESS", "error": None,
-        "stdout": session.get("stdout", ""), "stderr": session.get("stderr", ""),
-        "revisionRunId": revision_id, "revisionReason": reason, "revisionStartedAt": started_at,
+        "schemaVersion": 2,
+        "phase": "LLM_GROUP_TRANSLATOR",
+        "planRunId": scope.plan_run_id,
+        "group": {"name": group, "unitIds": list(scope.unit_ids)},
+        "translationRunId": scope.translation_run_id,
+        "translator": "opencode",
+        "model": TRANSLATOR_MODEL,
+        "reasoning": TRANSLATOR_REASONING,
+        "singleSession": True,
+        "automaticRetries": 0,
+        "startedAt": started_at,
+        "finishedAt": now(),
+        "semanticsArtifactPaths": [
+            str(semantic_directories[member_id] / "semantics.json") for member_id in scope.unit_ids
+        ],
+        "semanticsArtifacts": [
+            {"unitId": member_id, "runId": dict(scope.semantics_run_ids)[member_id], "artifactHash": artifact_hash}
+            for member_id, artifact_hash in scope.semantics_artifact_hashes
+        ],
+        "inputBoundary": "PHASE_4_SEMANTIC_ARTIFACTS_ONLY",
+        "targetLanguage": "Lean",
+        "targetVersion": "4",
+        "command": session.get("command", []),
+        "exitCode": 0,
+        "sessionId": session.get("sessionId"),
+        "outcome": "SUCCESS",
+        "error": None,
+        "stdout": session.get("stdout", ""),
+        "stderr": session.get("stderr", ""),
+        "revisionRunId": revision_id,
+        "revisionReason": reason,
+        "revisionStartedAt": started_at,
+        "triggeringUnitId": unit_id,
     }
     old_text = {
-        "Unit.lean": (directory / "Unit.lean").read_text(encoding="utf-8"),
-        "translation-manifest.json": (directory / "translation-manifest.json").read_text(encoding="utf-8"),
-        "translator-run.json": (directory / "translator-run.json").read_text(encoding="utf-8"),
+        lean_name: lean_path.read_text(encoding="utf-8"),
+        "translation-manifest.json": manifest_path.read_text(encoding="utf-8"),
+        "translator-run.json": run_path.read_text(encoding="utf-8"),
     }
     revision_directory.mkdir(parents=True)
     for name, content in old_text.items():
         _write_atomic(revision_directory / f"before-{name}", content)
     try:
-        _write_atomic(directory / "Unit.lean", new_source)
-        _write_atomic(directory / "translation-manifest.json", new_manifest)
-        _write_atomic(directory / "translator-run.json", json.dumps(run_metadata, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
-        published = validate_published(plan, semantics, directory)
+        _write_atomic(lean_path, new_source)
+        _write_atomic(manifest_path, new_manifest)
+        _write_atomic(run_path, json.dumps(run_metadata, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+        published = validate_published(plan, semantics_by_unit, directory)
         if published:
-            raise ValueError("stored translation revision failed validation: " + "; ".join(item["message"] for item in published))
+            raise ValueError(
+                "stored translation revision failed validation: "
+                + "; ".join(item["message"] for item in published)
+            )
     except Exception:
         for name, content in old_text.items():
             _write_atomic(directory / name, content)
         raise
     after = {name: _file_hash(directory / name) for name in before}
     changed = [name for name in before if before[name] != after[name]]
-    if not any(name in changed for name in ("Unit.lean", "translation-manifest.json")):
-        for name, content in old_text.items():
-            _write_atomic(directory / name, content)
-        raise ValueError("translation revision made no translation or manifest change")
     metadata = {
-        "schemaVersion": 1, "phase": "LLM_TRANSLATOR_REVISION", "revisionRunId": revision_id,
-        "planRunId": plan["planRunId"], "unitId": unit_id, "reason": reason,
-        "diagnostics": diagnostics, "hashes": {"before": before, "after": after},
+        "schemaVersion": 2,
+        "phase": "LLM_GROUP_TRANSLATOR_REVISION",
+        "revisionRunId": revision_id,
+        "planRunId": plan["planRunId"],
+        "group": {"name": group, "unitIds": list(scope.unit_ids)},
+        "triggeringUnitId": unit_id,
+        "reason": reason,
+        "diagnostics": diagnostics,
+        "hashes": {"before": before, "after": after},
         "sourceCheckHash": source_check_hash,
-        "changedFiles": changed, "model": {"provider": "opencode", "model": TRANSLATOR_MODEL, "reasoning": TRANSLATOR_REASONING},
-        "singleSession": True, "automaticRetries": 0, "startedAt": started_at,
-        "finishedAt": run_metadata["finishedAt"], "session": session, "recheckRequired": True,
+        "changedFiles": changed,
+        "model": {"provider": "opencode", "model": TRANSLATOR_MODEL, "reasoning": TRANSLATOR_REASONING},
+        "singleSession": True,
+        "automaticRetries": 0,
+        "startedAt": started_at,
+        "finishedAt": run_metadata["finishedAt"],
+        "session": session,
+        "recheckRequired": True,
     }
-    _write_atomic(revision_directory / "translation-revision.json", json.dumps(metadata, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    _write_atomic(
+        revision_directory / "translation-revision.json",
+        json.dumps(metadata, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+    )
     return revision_directory, metadata

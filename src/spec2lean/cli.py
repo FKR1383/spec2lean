@@ -23,7 +23,8 @@ from .semantics.runner import build_semantics
 from .semantics.revision import revise_semantics
 from .semantics.store import artifacts as semantic_artifacts
 from .semantics.store import find_claim, load_semantics, semantics_run_root
-from .translation.runner import build_translation
+from .translation.groups import group_for_unit
+from .translation.runner import build_group_translation
 from .translation.revision import revise_translation
 from .translation.models import semantics_artifact_hash
 from .translation.store import find_declaration, load_translation
@@ -667,11 +668,12 @@ def _command_semantics_stats(args: argparse.Namespace) -> int:
 
 def _command_translate_build(args: argparse.Namespace) -> int:
     _, plan = _load_semantics_plan(args)
-    output = build_translation(
+    group = args.group or group_for_unit(plan, args.unit)
+    output = build_group_translation(
         plan,
         Path(args.semantics_root),
         Path(args.translations_root),
-        unit_id=args.unit,
+        group=group,
         timeout_seconds=args.timeout,
     )
     print(output)
@@ -709,52 +711,81 @@ def _command_translate_manifest(args: argparse.Namespace) -> int:
 
 def _command_translate_trace(args: argparse.Namespace) -> int:
     manifest_path, manifest, mapping = find_declaration(Path(args.translations_root), args.declaration)
-    semantic_path, semantic_artifact = load_semantics(
-        Path(args.semantics_root),
-        {
-            "language": manifest["language"],
-            "version": manifest["version"],
-            "planRunId": manifest["planRunId"],
-            "requestedUnits": [manifest["unit"]],
-        },
-        manifest["unit"]["unitId"],
-    )
-    claims_by_id = {
-        claim["claimId"]: claim for claim in semantic_artifact["semantics"]["claims"]
-    }
-    if semantics_artifact_hash(semantic_artifact) != manifest["semanticsArtifactHash"]:
-        raise RuntimeError("translation manifest references a stale Phase-4 semantic artifact hash")
     mappings_by_name = {
         item["declaration"]: item for item in manifest["declarations"]
     }
 
-    def claim_ids_for(item: dict[str, Any], seen: set[str]) -> list[str]:
+    def claim_refs_for(item: dict[str, Any], seen: set[str]) -> list[tuple[str, str]]:
         name = item["declaration"]
         if name in seen:
             raise RuntimeError(f"translation manifest has a declaration support cycle: {name}")
-        result = list(item.get("semanticClaimIds", []))
+        if manifest.get("schemaVersion") == 2:
+            result = [
+                (str(ref["unitId"]), str(ref["claimId"]))
+                for ref in item.get("claimRefs", []) if isinstance(ref, dict)
+            ]
+        else:
+            result = [
+                (str(manifest["unit"]["unitId"]), str(claim_id))
+                for claim_id in item.get("semanticClaimIds", [])
+            ]
         for supported in item.get("supportsDeclarations", []):
             target = mappings_by_name.get(supported)
             if target is None:
                 raise RuntimeError(f"translation manifest references missing supported declaration: {supported}")
-            result.extend(claim_ids_for(target, {*seen, name}))
+            result.extend(claim_refs_for(target, {*seen, name}))
         return list(dict.fromkeys(result))
 
+    semantic_records = {
+        str(item["unitId"]): item for item in manifest.get("semanticsArtifacts", [])
+    }
+    if manifest.get("schemaVersion") != 2:
+        semantic_records = {
+            str(manifest["unit"]["unitId"]): {
+                "unitId": manifest["unit"]["unitId"],
+                "artifactHash": manifest["semanticsArtifactHash"],
+            }
+        }
+    semantic_cache: dict[str, tuple[Path, dict[str, Any]]] = {}
+    semantic_root = Path(args.semantics_root).resolve()
+
+    def semantic_for(unit_id: str) -> tuple[Path, dict[str, Any]]:
+        if unit_id in semantic_cache:
+            return semantic_cache[unit_id]
+        matches = []
+        for path in semantic_root.glob(
+            f"{str(manifest['language']).casefold()}/{manifest['version']}/{manifest['planRunId']}/*/semantics.json"
+        ):
+            artifact = json.loads(path.read_text(encoding="utf-8"))
+            if (artifact.get("unit") or {}).get("unitId") == unit_id:
+                matches.append((path, artifact))
+        if len(matches) != 1:
+            raise FileNotFoundError(f"semantic artifact is not unique for traced unit: {unit_id}")
+        path, artifact = matches[0]
+        record = semantic_records.get(unit_id)
+        if record is None or semantics_artifact_hash(artifact) != record.get("artifactHash"):
+            raise RuntimeError(f"translation manifest references stale Phase-4 semantics for {unit_id}")
+        semantic_cache[unit_id] = (path, artifact)
+        return path, artifact
+
     claims = []
-    for claim_id in claim_ids_for(mapping, set()):
+    for unit_id, claim_id in claim_refs_for(mapping, set()):
+        semantic_path, semantic_artifact = semantic_for(unit_id)
+        claims_by_id = {
+            claim["claimId"]: claim for claim in semantic_artifact["semantics"]["claims"]
+        }
         claim = claims_by_id.get(claim_id)
         if claim is None:
-            raise RuntimeError(f"translation manifest references missing semantic claim: {claim_id}")
+            raise RuntimeError(f"translation manifest references missing semantic claim: {unit_id}/{claim_id}")
         evidence = []
         for evidence_id in claim.get("evidenceIds", []):
             path, record = find_evidence(Path(args.evidence_root), evidence_id)
             evidence.append({"bundle": str(path), **record})
-        claims.append({"claim": claim, "evidence": evidence})
+        claims.append({"unitId": unit_id, "semanticArtifact": str(semantic_path), "claim": claim, "evidence": evidence})
     _json({
         "declaration": mapping,
         "translationManifest": str(manifest_path),
-        "semanticsArtifact": str(semantic_path / "semantics.json"),
-        "semanticsArtifactHash": manifest["semanticsArtifactHash"],
+        "semanticsArtifacts": list(semantic_records.values()),
         "claims": claims,
     })
     return 0
@@ -882,7 +913,11 @@ def _pipeline_options(args: argparse.Namespace) -> PipelineOptions:
 
 
 def _command_pipeline_run(args: argparse.Namespace) -> int:
-    directory, manifest = run_pipeline(_planning_request(args), _pipeline_options(args))
+    directory, manifest = run_pipeline(
+        _planning_request(args),
+        _pipeline_options(args),
+        progress=lambda message: print(f"[spec2lean] {message}", file=sys.stderr, flush=True),
+    )
     _json({"directory": str(directory) if directory else None, **manifest})
     return 0 if manifest["status"] in {"COMPLETE", "DRY_RUN"} else 1
 
@@ -1147,13 +1182,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     translate = commands.add_parser("translate", help="build and inspect Phase 5 Lean translations")
     translate_sub = translate.add_subparsers(dest="translate_command", required=True)
-    translate_build = translate_sub.add_parser("build", help="run one bounded OpenCode Lean Translator session")
+    translate_build = translate_sub.add_parser("build", help="translate one complete instruction group in one bounded session")
     translate_build.add_argument("--plan-run", required=True)
-    translate_build.add_argument("--unit", required=True, help="exact Phase-4 semantic unit ID")
+    translate_target = translate_build.add_mutually_exclusive_group(required=True)
+    translate_target.add_argument("--group", help="exact deterministic instruction-group name")
+    translate_target.add_argument("--unit", help="select the complete group containing this Phase-4 unit ID")
     translate_build.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
     translate_build.add_argument("--semantics-root", default=str(DEFAULT_SEMANTICS_ROOT), help=argparse.SUPPRESS)
     translate_build.add_argument("--translations-root", default=str(DEFAULT_TRANSLATIONS_ROOT), help=argparse.SUPPRESS)
-    translate_build.add_argument("--timeout", type=int, default=1800, help="timeout for the single-unit session in seconds")
+    translate_build.add_argument("--timeout", type=int, default=1800, help="timeout for the single group session in seconds")
     translate_build.set_defaults(func=_command_translate_build)
 
     translate_revise = translate_sub.add_parser("revise", help="revise an existing translation from coverage diagnostics")
@@ -1296,6 +1333,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("troubleshoot resolve --timeout and --max-dispatches must be positive")
     try:
         return int(args.func(args))
+    except KeyboardInterrupt:
+        print("spec2lean: interrupted", file=sys.stderr)
+        return 130
     except (FileNotFoundError, FileExistsError, KeyError, RuntimeError, ValueError, sqlite3.Error) as exc:
         print(f"spec2lean: error: {exc}", file=sys.stderr)
         return 2

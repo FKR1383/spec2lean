@@ -14,7 +14,7 @@
     "request": {"type": "object"},
     "createdAt": {"type": "string"},
     "updatedAt": {"type": "string"},
-    "status": {"enum": ["RUNNING", "COMPLETE", "FAILED", "NEEDS_ROUTING", "DRY_RUN"]},
+    "status": {"enum": ["RUNNING", "COMPLETE", "FAILED", "INTERRUPTED", "NEEDS_ROUTING", "DRY_RUN"]},
     "fromPhase": {"enum": ["index", "plan", "evidence", "semantics", "translate", "check", "troubleshoot"]},
     "untilPhase": {"enum": ["index", "plan", "evidence", "semantics", "translate", "check", "troubleshoot"]},
     "dryRun": {"type": "boolean"},

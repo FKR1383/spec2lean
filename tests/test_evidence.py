@@ -329,8 +329,8 @@ def test_runner_pins_exact_model_and_writes_one_session_artifacts(planner_databa
         "evidence.json", "evidence.md", "retriever-run.json"
     }
     metadata = json.loads((unit_dir / "retriever-run.json").read_text())
-    assert metadata["model"] == RETRIEVER_MODEL == "openai/gpt-5.3-codex-spark"
-    assert metadata["reasoning"] == RETRIEVER_REASONING == "low"
+    assert metadata["model"] == RETRIEVER_MODEL == "openai/gpt-5.6-sol"
+    assert metadata["reasoning"] == RETRIEVER_REASONING == "medium"
     assert metadata["singleSession"] is True
     assert metadata["automaticRetries"] == 0
     assert metadata["sessionId"] == "evidence-session"
@@ -342,7 +342,7 @@ def test_opencode_config_disables_unbounded_capabilities(tmp_path):
     config = opencode_config(tmp_path / "db", tmp_path / "scope", tmp_path / "submission", tmp_path / "trace")
     agent = config["agent"]["spec2lean-evidence-retriever"]
     assert agent["model"] == RETRIEVER_MODEL
-    assert agent["variant"] == "low"
+    assert agent["variant"] == RETRIEVER_REASONING == "medium"
     for forbidden in ("bash", "edit", "read", "task", "webfetch", "websearch", "skill"):
         assert agent["tools"][forbidden] is False
 

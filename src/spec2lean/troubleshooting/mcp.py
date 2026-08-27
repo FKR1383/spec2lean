@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from ..translation.models import TranslationScope
+from ..translation.models import TranslationGroupScope
 from ..util import canonical_json
 from .validation import validate_repair_submission
 
@@ -20,9 +20,12 @@ def submission_schema() -> dict[str, Any]:
     mapping = _object({
         "declaration": {"type": "string"},
         "role": {"type": "string"},
-        "semanticClaimIds": {"type": "array", "items": {"type": "string"}},
+        "claimRefs": {"type": "array", "items": _object({
+            "unitId": {"type": "string"},
+            "claimId": {"type": "string"},
+        }, ["unitId", "claimId"])},
         "supportsDeclarations": {"type": "array", "items": {"type": "string"}},
-    }, ["declaration", "role", "semanticClaimIds"])
+    }, ["declaration", "role", "claimRefs"])
     change = _object({
         "description": {"type": "string", "minLength": 1},
         "affectedDeclarations": {"type": "array", "minItems": 1, "items": {"type": "string"}},
@@ -50,10 +53,10 @@ class TroubleshootingMcpServer:
     def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         if name != "submit_repair":
             raise KeyError(f"unknown tool: {name}")
-        scope = TranslationScope.from_dict(self.context["translationScope"])
+        scope = TranslationGroupScope.from_dict(self.context["translationScope"])
         candidate, diagnostics = validate_repair_submission(
             scope,
-            self.context["semantics"],
+            self.context["semanticsByUnit"],
             self.context["leanSource"],
             self.context["translationManifest"],
             arguments,

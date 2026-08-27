@@ -5,34 +5,71 @@ from pathlib import Path
 from typing import Any
 
 from ..evidence.runner import unit_directory_name
+from .groups import group_for_unit
 
 
 def translations_run_root(root: Path, plan: dict[str, Any]) -> Path:
     return root.resolve() / str(plan["language"]).casefold() / str(plan["version"]) / str(plan["planRunId"])
 
 
-def unit_directory(root: Path, plan: dict[str, Any], unit: dict[str, Any]) -> Path:
+def group_directory(root: Path, plan: dict[str, Any], group: str) -> Path:
+    return translations_run_root(root, plan) / group
+
+
+def legacy_unit_directory(root: Path, plan: dict[str, Any], unit: dict[str, Any]) -> Path:
+    """Locate a schema-v1 per-unit artifact without treating it as reusable Phase 5."""
     return translations_run_root(root, plan) / unit_directory_name(unit)
+
+
+def unit_directory(root: Path, plan: dict[str, Any], unit: dict[str, Any]) -> Path:
+    """Compatibility locator: grouped Phase-5 artifacts are addressed through any member unit."""
+    return group_directory(root, plan, group_for_unit(plan, str(unit["unitId"])))
+
+
+def load_group_translation(
+    root: Path, plan: dict[str, Any], group: str
+) -> tuple[Path, str, dict[str, Any], dict[str, Any]]:
+    directory = group_directory(root, plan, group)
+    manifest_path = directory / "translation-manifest.json"
+    run_path = directory / "translator-run.json"
+    if not manifest_path.is_file() or not run_path.is_file():
+        raise FileNotFoundError(f"complete translation artifact does not exist for group: {group}")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    lean_path = directory / str(manifest.get("leanFile", f"{group}.lean"))
+    if not lean_path.is_file():
+        raise FileNotFoundError(f"complete translation artifact does not exist for group: {group}")
+    return (
+        directory,
+        lean_path.read_text(encoding="utf-8"),
+        manifest,
+        json.loads(run_path.read_text(encoding="utf-8")),
+    )
 
 
 def load_translation(
     root: Path, plan: dict[str, Any], unit_id: str
 ) -> tuple[Path, str, dict[str, Any], dict[str, Any]]:
-    units = [item for item in plan.get("requestedUnits", []) if item.get("unitId") == unit_id]
-    if len(units) != 1:
-        raise KeyError(f"unit is not uniquely present in plan: {unit_id}")
-    directory = unit_directory(root, plan, units[0])
-    lean_path = directory / "Unit.lean"
-    manifest_path = directory / "translation-manifest.json"
-    run_path = directory / "translator-run.json"
-    if not lean_path.is_file() or not manifest_path.is_file() or not run_path.is_file():
-        raise FileNotFoundError(f"complete translation artifact does not exist for unit: {unit_id}")
-    return (
-        directory,
-        lean_path.read_text(encoding="utf-8"),
-        json.loads(manifest_path.read_text(encoding="utf-8")),
-        json.loads(run_path.read_text(encoding="utf-8")),
-    )
+    try:
+        return load_group_translation(root, plan, group_for_unit(plan, unit_id))
+    except FileNotFoundError as group_error:
+        units = [unit for unit in plan.get("requestedUnits", []) if unit.get("unitId") == unit_id]
+        if len(units) != 1:
+            raise group_error
+        directory = legacy_unit_directory(root, plan, units[0])
+        manifest_path = directory / "translation-manifest.json"
+        run_path = directory / "translator-run.json"
+        if not manifest_path.is_file() or not run_path.is_file():
+            raise group_error
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        lean_path = directory / str(manifest.get("leanFile", "Unit.lean"))
+        if not lean_path.is_file():
+            raise group_error
+        return (
+            directory,
+            lean_path.read_text(encoding="utf-8"),
+            manifest,
+            json.loads(run_path.read_text(encoding="utf-8")),
+        )
 
 
 def find_declaration(root: Path, declaration: str) -> tuple[Path, dict[str, Any], dict[str, Any]]:
@@ -47,14 +84,3 @@ def find_declaration(root: Path, declaration: str) -> tuple[Path, dict[str, Any]
     if len(matches) > 1:
         raise RuntimeError(f"Lean declaration is ambiguous across translation manifests: {declaration}")
     return matches[0]
-
-
-def shared_lean_sources(root: Path, plan: dict[str, Any]) -> list[dict[str, str]]:
-    shared = root.resolve() / str(plan["language"]).casefold() / str(plan["version"]) / "shared"
-    if not shared.is_dir():
-        return []
-    return [
-        {"path": path.relative_to(shared).as_posix(), "source": path.read_text(encoding="utf-8")}
-        for path in sorted(shared.rglob("*.lean"))
-        if path.is_file()
-    ]

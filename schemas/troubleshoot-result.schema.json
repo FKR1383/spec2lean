@@ -21,7 +21,7 @@
     "language": {"type": "string", "minLength": 1},
     "version": {"type": "string", "minLength": 1},
     "unit": {"type": "object"},
-    "translationRunId": {"type": "string", "pattern": "^translation-run:"},
+    "translationRunId": {"type": "string", "pattern": "^(translation-run|translation-group-run):"},
     "checkArtifactHash": {"$ref": "#/$defs/hash"},
     "action": {"enum": ["RETURN_TO_SEMANTIC_EXTRACTOR", "RETURN_TO_TRANSLATOR", "REPAIR_BUILD", "NO_ACTION"]},
     "reason": {"enum": ["TRACEABILITY_FAILURE", "COVERAGE_FAILURE", "BUILD_FAILURE", "ALL_CHECKS_PASS"]},
@@ -57,7 +57,15 @@
         }
       ]
     },
-    "changedFiles": {"type": "array", "uniqueItems": true, "items": {"enum": ["Unit.lean", "translation-manifest.json"]}},
+    "changedFiles": {
+      "type": "array", "uniqueItems": true,
+      "items": {
+        "anyOf": [
+          {"const": "translation-manifest.json"},
+          {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]*\\.lean$"}
+        ]
+      }
+    },
     "changes": {
       "type": "array",
       "items": {
@@ -90,9 +98,13 @@
           "required": ["provider", "model", "reasoning"],
           "properties": {
             "provider": {"const": "opencode"},
-            "model": {"const": "openai/gpt-5.3-codex-spark"},
-            "reasoning": {"const": "low"}
-          }
+            "model": {"enum": ["openai/gpt-5.6-sol", "openai/gpt-5.4-mini", "openai/gpt-5.3-codex-spark"]},
+            "reasoning": {"enum": ["medium", "low"]}
+          },
+          "oneOf": [
+            {"properties": {"model": {"const": "openai/gpt-5.6-sol"}, "reasoning": {"const": "medium"}}},
+            {"properties": {"model": {"enum": ["openai/gpt-5.4-mini", "openai/gpt-5.3-codex-spark"]}, "reasoning": {"const": "low"}}}
+          ]
         }
       ]
     },
@@ -119,11 +131,13 @@
   "$defs": {
     "hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "fileHashes": {
-      "type": "object", "additionalProperties": false,
-      "required": ["Unit.lean", "translation-manifest.json"],
+      "type": "object", "additionalProperties": false, "minProperties": 2,
+      "required": ["translation-manifest.json"],
       "properties": {
-        "Unit.lean": {"$ref": "#/$defs/hash"},
         "translation-manifest.json": {"$ref": "#/$defs/hash"}
+      },
+      "patternProperties": {
+        "^[A-Za-z][A-Za-z0-9]*\\.lean$": {"$ref": "#/$defs/hash"}
       }
     }
   }

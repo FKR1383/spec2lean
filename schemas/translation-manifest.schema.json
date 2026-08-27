@@ -1,79 +1,65 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://spec2lean.local/schemas/translation-manifest.schema.json",
-  "title": "Spec2Lean Phase-5 Translation Manifest",
+  "title": "Spec2Lean Phase-5 Group Translation Manifest",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "schemaVersion", "phase", "planRunId", "language", "version", "unit",
-    "translationRunId", "semanticsRunId", "semanticsArtifactHash", "translator",
-    "target", "leanFile", "createdAt", "declarations"
-  ],
+  "required": ["schemaVersion", "phase", "planRunId", "language", "version", "group", "translationRunId", "semanticsArtifacts", "translator", "target", "leanFile", "createdAt", "declarations"],
   "properties": {
-    "schemaVersion": {"const": 1},
-    "phase": {"const": "LLM_TRANSLATOR"},
+    "schemaVersion": {"const": 2},
+    "phase": {"const": "LLM_GROUP_TRANSLATOR"},
     "planRunId": {"type": "string", "pattern": "^plan:"},
     "language": {"type": "string", "minLength": 1},
     "version": {"type": "string", "minLength": 1},
-    "unit": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["unitId", "name", "sourceNodeIds"],
+    "group": {
+      "type": "object", "additionalProperties": false, "required": ["name", "unitIds"],
       "properties": {
-        "unitId": {"type": "string", "pattern": "^unit:"},
-        "name": {"type": "string", "minLength": 1},
-        "sourceNodeIds": {
-          "type": "array", "minItems": 1,
-          "items": {"type": "string", "pattern": "^node:"}
+        "name": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]*$"},
+        "unitIds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^unit:"}}
+      }
+    },
+    "translationRunId": {"type": "string", "pattern": "^translation-group-run:"},
+    "semanticsArtifacts": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["unitId", "runId", "artifactHash"],
+        "properties": {
+          "unitId": {"type": "string", "pattern": "^unit:"},
+          "runId": {"type": "string", "pattern": "^semantic-run:"},
+          "artifactHash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
         }
       }
     },
-    "translationRunId": {"type": "string", "pattern": "^translation-run:"},
-    "semanticsRunId": {"type": "string", "pattern": "^semantic-run:"},
-    "semanticsArtifactHash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "translator": {
-      "type": "object", "additionalProperties": false,
-      "required": ["provider", "model", "reasoning"],
+      "type": "object", "additionalProperties": false, "required": ["provider", "model", "reasoning"],
       "properties": {
         "provider": {"const": "opencode"},
-        "model": {"const": "openai/gpt-5.3-codex-spark"},
-        "reasoning": {"const": "low"}
-      }
+        "model": {"enum": ["openai/gpt-5.6-sol", "openai/gpt-5.4-mini", "openai/gpt-5.3-codex-spark"]},
+        "reasoning": {"enum": ["medium", "low"]}
+      },
+      "oneOf": [
+        {"properties": {"model": {"const": "openai/gpt-5.6-sol"}, "reasoning": {"const": "medium"}}},
+        {"properties": {"model": {"enum": ["openai/gpt-5.4-mini", "openai/gpt-5.3-codex-spark"]}, "reasoning": {"const": "low"}}}
+      ]
     },
-    "target": {
-      "type": "object", "additionalProperties": false,
-      "required": ["language", "version"],
-      "properties": {"language": {"const": "Lean"}, "version": {"const": "4"}}
-    },
-    "leanFile": {"const": "Unit.lean"},
+    "target": {"type": "object", "additionalProperties": false, "required": ["language", "version"], "properties": {"language": {"const": "Lean"}, "version": {"const": "4"}}},
+    "leanFile": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]*\\.lean$"},
     "createdAt": {"type": "string", "minLength": 1},
     "declarations": {
       "type": "array", "minItems": 1,
       "items": {
-        "type": "object", "additionalProperties": false,
-        "required": ["declaration", "role", "semanticClaimIds"],
+        "type": "object", "additionalProperties": false, "required": ["declaration", "role", "claimRefs"],
         "properties": {
-          "declaration": {
-            "type": "string",
-            "pattern": "^[A-Za-z_][A-Za-z0-9_']*(\\.[A-Za-z_][A-Za-z0-9_']*)*$"
-          },
-          "role": {
-            "enum": [
-              "PRIMARY_TYPE", "OPERATION", "EXECUTION", "BRANCH_HELPER",
-              "EDGE_CASE_HELPER", "SEMANTIC_HELPER", "IMPLEMENTATION_HELPER"
-            ]
-          },
-          "semanticClaimIds": {
+          "declaration": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_']*(\\.[A-Za-z_][A-Za-z0-9_']*)*$"},
+          "role": {"enum": ["PRIMARY_TYPE", "OPERATION", "EXECUTION", "BRANCH_HELPER", "EDGE_CASE_HELPER", "SEMANTIC_HELPER", "IMPLEMENTATION_HELPER"]},
+          "claimRefs": {
             "type": "array", "uniqueItems": true,
-            "items": {"type": "string", "pattern": "^claim:"}
-          },
-          "supportsDeclarations": {
-            "type": "array", "minItems": 1, "uniqueItems": true,
             "items": {
-              "type": "string",
-              "pattern": "^[A-Za-z_][A-Za-z0-9_']*(\\.[A-Za-z_][A-Za-z0-9_']*)*$"
+              "type": "object", "additionalProperties": false, "required": ["unitId", "claimId"],
+              "properties": {"unitId": {"type": "string", "pattern": "^unit:"}, "claimId": {"type": "string", "pattern": "^claim:"}}
             }
-          }
+          },
+          "supportsDeclarations": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_']*(\\.[A-Za-z_][A-Za-z0-9_']*)*$"}}
         }
       }
     }

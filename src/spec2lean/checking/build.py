@@ -78,12 +78,6 @@ def run_build_test(
     version_output = (version_run.stdout or version_run.stderr).strip()
     lean_version = version_output.splitlines()[0] if version_output else None
     environment = os.environ.copy()
-    shared_root = lean_file.parents[2] / "shared"
-    if shared_root.is_dir():
-        prior_lean_path = environment.get("LEAN_PATH")
-        environment["LEAN_PATH"] = os.pathsep.join(
-            [str(shared_root), *([prior_lean_path] if prior_lean_path else [])]
-        )
     started = monotonic()
     completed = run_command(
         [executable, lean_file.name],

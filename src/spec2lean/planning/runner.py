@@ -20,8 +20,8 @@ from .scope import Phase1Query, ScopeResolver
 from .validation import build_validated_plan
 
 
-PLANNER_MODEL = "openai/gpt-5.4-mini"
-PLANNER_REASONING = "low"
+PLANNER_MODEL = "openai/gpt-5.6-sol"
+PLANNER_REASONING = "medium"
 PLANNER_AGENT = "spec2lean-planner"
 
 

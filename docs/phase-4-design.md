@@ -23,8 +23,8 @@ The exact configuration is pinned both in the isolated agent and on the command
 line:
 
 ```text
-model: openai/gpt-5.3-codex-spark
-reasoning/variant: low
+model: openai/gpt-5.6-sol
+reasoning/variant: medium
 ```
 
 A model-catalog preflight fails before creating a run directory if that exact

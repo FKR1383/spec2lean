@@ -92,12 +92,23 @@ def test_valid_semantics_covers_operation_branches_edges_state_claims_metadata_a
     artifact, diagnostics = validate_submission(scope, bundle, _submission())
     assert diagnostics == [] and artifact is not None
     assert artifact["evidenceBundleHash"] == evidence_bundle_hash(bundle)
-    assert artifact["extractor"] == {"provider": "opencode", "model": EXTRACTOR_MODEL, "reasoning": "low"}
+    assert artifact["extractor"] == {
+        "provider": "opencode", "model": EXTRACTOR_MODEL, "reasoning": EXTRACTOR_REASONING,
+    }
     assert validate_artifact(plan, bundle, artifact) == []
     rendered = render_markdown(artifact)
     for text in ("CORE OPERATION", "Branches", "SOURCE FACTS", "DERIVED INTERPRETATIONS", "STATE EFFECTS", "EDGE CASES", "ASSUMPTIONS"):
         assert text in rendered
     assert "Lean" not in rendered
+
+
+@pytest.mark.parametrize("historical_model", ["openai/gpt-5.4-mini", "openai/gpt-5.3-codex-spark"])
+def test_historical_extractor_model_remains_valid_for_resume(historical_model):
+    plan, bundle = _inputs()
+    artifact, diagnostics = validate_submission(_scope(plan, bundle), bundle, _submission())
+    assert diagnostics == [] and artifact is not None
+    artifact["extractor"].update(model=historical_model, reasoning="low")
+    assert validate_artifact(plan, bundle, artifact) == []
 
 
 @pytest.mark.parametrize(
@@ -160,8 +171,8 @@ def test_tool_and_opencode_config_expose_submission_only(tmp_path):
     assert schema["required"] == ["outcome"]
     config = opencode_config(tmp_path / "scope", tmp_path / "evidence", tmp_path / "submission")
     agent = config["agent"]["spec2lean-semantic-extractor"]
-    assert agent["model"] == EXTRACTOR_MODEL == "openai/gpt-5.3-codex-spark"
-    assert agent["variant"] == EXTRACTOR_REASONING == "low"
+    assert agent["model"] == EXTRACTOR_MODEL == "openai/gpt-5.6-sol"
+    assert agent["variant"] == EXTRACTOR_REASONING == "medium"
     for forbidden in ("bash", "edit", "read", "task", "webfetch", "websearch", "skill"):
         assert agent["tools"][forbidden] is False
 

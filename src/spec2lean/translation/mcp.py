@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ..util import canonical_json
-from .models import DECLARATION_ROLES, TranslationScope
+from .models import DECLARATION_ROLES, TranslationGroupScope
 from .validation import validate_submission
 
 
@@ -28,9 +28,12 @@ def submission_schema() -> dict[str, Any]:
             "pattern": "^[A-Za-z_][A-Za-z0-9_']*(\\.[A-Za-z_][A-Za-z0-9_']*)*$",
         },
         "role": {"type": "string", "enum": list(DECLARATION_ROLES)},
-        "semanticClaimIds": {
+        "claimRefs": {
             "type": "array",
-            "items": {"type": "string", "pattern": "^claim:"},
+            "items": _object({
+                "unitId": {"type": "string", "pattern": "^unit:"},
+                "claimId": {"type": "string", "pattern": "^claim:"},
+            }, ["unitId", "claimId"]),
         },
         "supportsDeclarations": {
             "type": "array",
@@ -39,7 +42,7 @@ def submission_schema() -> dict[str, Any]:
                 "pattern": "^[A-Za-z_][A-Za-z0-9_']*(\\.[A-Za-z_][A-Za-z0-9_']*)*$",
             },
         },
-    }, ["declaration", "role", "semanticClaimIds"])
+    }, ["declaration", "role", "claimRefs"])
     return _object({
         "leanSource": {"type": "string", "minLength": 1},
         "declarations": {"type": "array", "items": mapping, "minItems": 1},
@@ -49,23 +52,23 @@ def submission_schema() -> dict[str, Any]:
 def tool_definitions() -> list[dict[str, Any]]:
     return [{
         "name": "submit_translation",
-        "description": "Submit one Lean 4 source candidate and its declaration-to-semantic-claim mappings for deterministic structural validation.",
+        "description": "Submit one complete group Lean 4 source and its unit-scoped declaration-to-claim mappings for deterministic validation.",
         "inputSchema": submission_schema(),
     }]
 
 
 class TranslationMcpServer:
     def __init__(
-        self, scope: TranslationScope, semantics: dict[str, Any], submission_path: Path
+        self, scope: TranslationGroupScope, semantics_by_unit: dict[str, dict[str, Any]], submission_path: Path
     ):
         self.scope = scope
-        self.semantics = semantics
+        self.semantics_by_unit = semantics_by_unit
         self.submission_path = submission_path
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         if name != "submit_translation":
             raise KeyError(f"unknown tool: {name}")
-        candidate, diagnostics = validate_submission(self.scope, self.semantics, arguments)
+        candidate, diagnostics = validate_submission(self.scope, self.semantics_by_unit, arguments)
         if diagnostics:
             value = {"accepted": False, "diagnostics": diagnostics}
         else:
@@ -93,7 +96,7 @@ class TranslationMcpServer:
                 result = {
                     "protocolVersion": message.get("params", {}).get("protocolVersion", "2024-11-05"),
                     "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "spec2lean-translation", "version": "1"},
+                    "serverInfo": {"name": "spec2lean-translation", "version": "2"},
                 }
             elif method == "tools/list":
                 result = {"tools": tool_definitions()}
@@ -110,9 +113,9 @@ class TranslationMcpServer:
 
 
 def serve(scope_path: Path, semantics_path: Path, submission_path: Path) -> None:
-    scope = TranslationScope.from_dict(json.loads(scope_path.read_text(encoding="utf-8")))
-    semantics = json.loads(semantics_path.read_text(encoding="utf-8"))
-    server = TranslationMcpServer(scope, semantics, submission_path)
+    scope = TranslationGroupScope.from_dict(json.loads(scope_path.read_text(encoding="utf-8")))
+    semantics_by_unit = json.loads(semantics_path.read_text(encoding="utf-8"))
+    server = TranslationMcpServer(scope, semantics_by_unit, submission_path)
     for line in sys.stdin:
         try:
             message = json.loads(line)

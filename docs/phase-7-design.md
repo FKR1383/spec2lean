@@ -19,21 +19,21 @@ handoff contains the exact `uncovered` array.
 ## Build repair
 
 A build-only failure starts one restricted OpenCode session using the exact
-installed model `openai/gpt-5.3-codex-spark` with `low` reasoning. No model is
-substituted if it is unavailable. The session receives the existing Lean source,
-compiler diagnostics, Phase-4 semantic artifact, Phase-5 manifest, and Phase-6
+installed model `openai/gpt-5.6-sol` with `medium` reasoning. No model is
+substituted if it is unavailable. The session receives the complete group Lean source,
+compiler diagnostics, all group Phase-4 semantic artifacts, Phase-5 manifest, and Phase-6
 traceability result. All ordinary file, shell, browsing, task, and editing tools
 are denied. Its only capability is a local `submit_repair` tool.
 
 The submitted candidate is deterministically checked using the Phase-5
 translation validator. Every named declaration must remain mapped to existing
-Phase-4 claim IDs, forbidden Lean constructs remain forbidden, and the multiset
-of declaration roles and resolved semantic-claim responsibilities must be
+Phase-4 `(unitId, claimId)` pairs, forbidden Lean constructs remain forbidden, and the multiset
+of declaration roles and resolved unit/claim responsibilities must be
 unchanged. This permits a mechanical declaration rename while preventing a
 compiler fix from silently changing semantic responsibility. A non-changing
 submission is rejected.
 
-After validation, Phase 7 atomically updates only `Unit.lean` and, when its
+After validation, Phase 7 atomically updates only the complete group Lean file and, when its
 declaration mappings actually changed, `translation-manifest.json`. It does not
 modify Phase 1, 2, 3, or 4. Phase 7 does not run the compiler in a loop and does
 not start a second session.
@@ -87,7 +87,7 @@ BUILD FAIL
   -> one Phase-6 recheck
 ```
 
-Each revision stores before-state artifacts, hashes, its source Phase-6 check
+Translator revisions always receive and resubmit the complete group. Each revision stores before-state artifacts, hashes, its source Phase-6 check
 hash, model/session metadata, and zero automatic retries. A Phase-6 check can be
 consumed only once by a given revision phase. Phase 6 now records semantic,
 Lean-source, and manifest input hashes so a genuine recheck is distinguishable

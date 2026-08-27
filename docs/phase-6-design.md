@@ -1,15 +1,15 @@
 # Phase 6: Check
 
 Phase 6 consumes the existing Phase-3 evidence bundle, successful Phase-4
-semantic artifact, Phase-5 Lean source, and Phase-5 declaration mappings for
-exactly one translated unit. It tests and reports; it does not retrieve evidence,
+semantic artifacts, Phase-5 Lean source, and Phase-5 declaration mappings for
+one complete translated group. It tests and reports; it does not retrieve evidence,
 rerun an earlier phase, edit Lean, generate theorems or proofs, or troubleshoot a
 failure.
 
 ## Three checks
 
 The Build Test invokes the `lean` executable selected by the repository's Lean
-toolchain environment on the existing `Unit.lean`. It records PASS/FAIL, exit
+toolchain environment on the existing complete group Lean file. It records PASS/FAIL, exit
 code, complete compiler diagnostics with parsed file/line/column locations when
 available, the reported Lean version, and elapsed milliseconds. It never edits
 the source or attempts a repair.
@@ -17,11 +17,11 @@ the source or attempts a repair.
 The Coverage Test follows the explicit forward mapping boundary:
 
 ```text
-Phase-3 evidence <- Phase-4 claim -> Phase-5 declaration -> Unit.lean
+Phase-3 evidence <- Phase-4 (unitId, claimId) -> Phase-5 declaration -> Group.lean
 ```
 
 Every Phase-4 claim is required to resolve to at least one declaration that is
-both present in `Unit.lean` and mapped in the translation manifest. Evidence IDs
+both present in the group source and mapped in the translation manifest. Evidence IDs
 cited by those claims are reported as covered or uncovered with them. Evidence
 that Phase 4 did not attach to a claim is not independently classified as
 translation-required: the current typed Phase-5 contract maps declarations to
@@ -42,8 +42,11 @@ document/node/span provenance. It uses the existing Phase-1 index only to verify
 stored provenance identifiers and source identity; it does not retrieve new
 evidence or perform a new semantic review.
 
-Build and logical checks run independently in a two-worker thread pool. No
-OpenCode or other model is used.
+The group source is built once. Group traceability is evaluated once across all
+member artifacts, while coverage is calculated separately for each member unit.
+Build and logical checks run independently in a two-worker thread pool. The
+shared results are written into each member's check artifact. No OpenCode or
+other model is used.
 
 ## Result and routing
 

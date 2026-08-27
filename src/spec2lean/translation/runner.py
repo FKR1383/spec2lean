@@ -12,9 +12,10 @@ from typing import Any, Callable
 
 from ..planning.runner import installed_openai_models
 from ..semantics.store import load_semantics
-from .models import TRANSLATOR_AGENT, TRANSLATOR_MODEL, TRANSLATOR_REASONING, TranslationScope
+from .groups import group_for_unit, grouped_units
+from .models import TRANSLATOR_AGENT, TRANSLATOR_MODEL, TRANSLATOR_REASONING, TranslationGroupScope
 from .prompt import build_translator_prompt
-from .store import shared_lean_sources, unit_directory
+from .store import group_directory
 from .validation import validate_published
 
 
@@ -84,36 +85,46 @@ def _session_id(stdout: str) -> str | None:
     return None
 
 
-def build_translation(
-    plan: dict[str, Any], semantics_root: Path, translations_root: Path, *, unit_id: str,
+def build_group_translation(
+    plan: dict[str, Any], semantics_root: Path, translations_root: Path, *, group: str,
     timeout_seconds: int = 1800,
     run_command: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> Path:
-    semantic_directory, semantics = load_semantics(semantics_root, plan, unit_id)
+    units = grouped_units(plan).get(group, [])
+    if not units:
+        raise KeyError(f"translation group is not present in plan: {group}")
+    semantics_by_unit: dict[str, dict[str, Any]] = {}
+    semantic_directories: dict[str, Path] = {}
+    for unit in units:
+        unit_id = str(unit["unitId"])
+        semantic_directory, semantics = load_semantics(semantics_root, plan, unit_id)
+        semantic_directories[unit_id] = semantic_directory
+        semantics_by_unit[unit_id] = semantics
     started_at = utc_now()
-    scope = TranslationScope.from_inputs(plan, semantics, unit_id, created_at=started_at)
-    output = unit_directory(translations_root, plan, scope.unit)
+    scope = TranslationGroupScope.from_inputs(
+        plan, group, semantics_by_unit, created_at=started_at
+    )
+    output = group_directory(translations_root, plan, group)
     if output.exists():
-        raise FileExistsError(f"translation unit artifact already exists: {output}")
-    shared = shared_lean_sources(translations_root, plan)
+        raise FileExistsError(f"translation group artifact already exists: {output}")
     executable = shutil.which("opencode")
     if executable is None:
         raise RuntimeError("OpenCode executable is not installed or not on PATH")
     require_translator_model(executable)
     output.mkdir(parents=True, exist_ok=False)
-    prompt = build_translator_prompt(scope, semantics, shared)
+    prompt = build_translator_prompt(scope, semantics_by_unit)
     with tempfile.TemporaryDirectory(prefix="spec2lean-translation-") as temporary_name:
         temporary = Path(temporary_name)
         scope_path = temporary / "translation-scope.json"
-        semantics_path = temporary / "semantics.json"
+        semantics_path = temporary / "semantics-by-unit.json"
         submission_path = temporary / "submission.json"
         scope_path.write_text(json.dumps(scope.to_dict(), ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
-        semantics_path.write_text(json.dumps(semantics, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+        semantics_path.write_text(json.dumps(semantics_by_unit, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
         config = opencode_config(scope_path, semantics_path, submission_path)
         command = [
             executable, "run", "--pure", "--print-logs", "--log-level", "ERROR", "--format", "json",
             "--agent", TRANSLATOR_AGENT, "--model", TRANSLATOR_MODEL, "--variant", TRANSLATOR_REASONING,
-            "--title", f"{scope.plan_run_id}:{scope.unit_id}:translate", prompt,
+            "--title", f"{scope.plan_run_id}:{scope.group}:translate", prompt,
         ]
         environment = os.environ.copy()
         environment["OPENCODE_CONFIG_CONTENT"] = json.dumps(config, separators=(",", ":"))
@@ -150,16 +161,16 @@ def build_translation(
             except json.JSONDecodeError:
                 error = error or "Lean Translator submission is invalid JSON"
         if candidate is not None and error is None:
-            (output / "Unit.lean").write_text(candidate["leanSource"].rstrip() + "\n", encoding="utf-8")
+            (output / scope.lean_file).write_text(candidate["leanSource"].rstrip() + "\n", encoding="utf-8")
             (output / "translation-manifest.json").write_text(
                 json.dumps(candidate["manifest"], ensure_ascii=False, indent=2, sort_keys=True) + "\n",
                 encoding="utf-8",
             )
         metadata = {
-            "schemaVersion": 1,
-            "phase": "LLM_TRANSLATOR",
+            "schemaVersion": 2,
+            "phase": "LLM_GROUP_TRANSLATOR",
             "planRunId": scope.plan_run_id,
-            "unitId": scope.unit_id,
+            "group": {"name": scope.group, "unitIds": list(scope.unit_ids)},
             "translationRunId": scope.translation_run_id,
             "translator": "opencode",
             "model": TRANSLATOR_MODEL,
@@ -168,10 +179,14 @@ def build_translation(
             "automaticRetries": 0,
             "startedAt": started_at,
             "finishedAt": utc_now(),
-            "semanticsArtifact": str(semantic_directory / "semantics.json"),
-            "semanticsArtifactHash": scope.semantics_artifact_hash,
-            "inputBoundary": "PHASE_4_SEMANTIC_ARTIFACT_ONLY",
-            "sharedLeanFiles": [item["path"] for item in shared],
+            "semanticsArtifactPaths": [
+                str(semantic_directories[unit_id] / "semantics.json") for unit_id in scope.unit_ids
+            ],
+            "semanticsArtifacts": [
+                {"unitId": unit_id, "runId": dict(scope.semantics_run_ids)[unit_id], "artifactHash": artifact_hash}
+                for unit_id, artifact_hash in scope.semantics_artifact_hashes
+            ],
+            "inputBoundary": "PHASE_4_SEMANTIC_ARTIFACTS_ONLY",
             "targetLanguage": "Lean",
             "targetVersion": "4",
             "command": command[:-1] + ["<lean-translator-prompt>"],
@@ -185,7 +200,7 @@ def build_translation(
         run_path = output / "translator-run.json"
         run_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         if error is None:
-            diagnostics = validate_published(plan, semantics, output)
+            diagnostics = validate_published(plan, semantics_by_unit, output)
             if diagnostics:
                 error = "stored translation failed deterministic validation: " + "; ".join(item["message"] for item in diagnostics)
                 metadata["outcome"] = "FAILED"
@@ -194,3 +209,16 @@ def build_translation(
         if error is not None:
             raise RuntimeError(f"{error}; run artifact: {output}")
     return output
+
+
+def build_translation(
+    plan: dict[str, Any], semantics_root: Path, translations_root: Path, *, unit_id: str,
+    timeout_seconds: int = 1800,
+    run_command: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+) -> Path:
+    """Compatibility command: translate the complete group containing ``unit_id``."""
+    return build_group_translation(
+        plan, semantics_root, translations_root,
+        group=group_for_unit(plan, unit_id), timeout_seconds=timeout_seconds,
+        run_command=run_command,
+    )

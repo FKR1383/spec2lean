@@ -7,13 +7,15 @@ import pytest
 
 from spec2lean.cli import main
 from spec2lean.evidence.runner import unit_directory_name
-from spec2lean.translation.models import TranslationScope
+from spec2lean.translation.models import TranslationGroupScope
 from spec2lean.translation.validation import validate_manifest
 from spec2lean.troubleshooting.models import (
     NO_ACTION,
     REPAIR_BUILD,
     RETURN_TO_SEMANTIC_EXTRACTOR,
     RETURN_TO_TRANSLATOR,
+    TROUBLESHOOTER_MODEL,
+    TROUBLESHOOTER_REASONING,
     action_for,
 )
 from spec2lean.troubleshooting.opencode import opencode_config
@@ -122,13 +124,13 @@ def _write_build_inputs(tmp_path: Path) -> tuple[dict, dict[str, Path], dict, di
             "evidenceIds": ["evidence:operation"],
         }]},
     }
-    scope = TranslationScope.from_inputs(
-        plan, semantics, UNIT["unitId"], created_at="2026-08-27T00:00:00Z"
+    scope = TranslationGroupScope.from_inputs(
+        plan, "Other", {UNIT["unitId"]: semantics}, created_at="2026-08-27T00:00:00Z"
     )
     declarations = [{
         "declaration": "Spec2Lean.Repair.operation",
         "role": "OPERATION",
-        "semanticClaimIds": ["claim:operation"],
+        "claimRefs": [{"unitId": UNIT["unitId"], "claimId": "claim:operation"}],
     }]
     manifest = scope.manifest(declarations)
     check["translationRunId"] = manifest["translationRunId"]
@@ -138,9 +140,9 @@ def _write_build_inputs(tmp_path: Path) -> tuple[dict, dict[str, Path], dict, di
     semantics_directory = roots["semantics"] / "synthetic" / "1.0" / plan["planRunId"] / slug
     semantics_directory.mkdir(parents=True)
     (semantics_directory / "semantics.json").write_text(json.dumps(semantics), encoding="utf-8")
-    translation_directory = roots["translations"] / "synthetic" / "1.0" / plan["planRunId"] / slug
+    translation_directory = roots["translations"] / "synthetic" / "1.0" / plan["planRunId"] / "Other"
     translation_directory.mkdir(parents=True)
-    (translation_directory / "Unit.lean").write_text(SOURCE, encoding="utf-8")
+    (translation_directory / "Other.lean").write_text(SOURCE, encoding="utf-8")
     (translation_directory / "translation-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     (translation_directory / "translator-run.json").write_text("{}", encoding="utf-8")
     return plan, roots, semantics, manifest
@@ -182,8 +184,8 @@ def test_build_failure_routes_to_one_troubleshooter_repair_and_records_hashes(tm
             "error": None,
             "session": {
                 "provider": "opencode",
-                "model": "openai/gpt-5.3-codex-spark",
-                "reasoning": "low",
+                "model": TROUBLESHOOTER_MODEL,
+                "reasoning": TROUBLESHOOTER_REASONING,
                 "opencodeVersion": "1.test",
                 "singleSession": True,
                 "automaticRetries": 0,
@@ -194,8 +196,8 @@ def test_build_failure_routes_to_one_troubleshooter_repair_and_records_hashes(tm
     assert len(calls) == 1
     assert artifact["action"] == REPAIR_BUILD and artifact["outcome"] == "REPAIRED"
     assert artifact["repairRunId"].startswith("repair-run:")
-    assert artifact["hashes"]["before"]["Unit.lean"] != artifact["hashes"]["after"]["Unit.lean"]
-    assert artifact["changedFiles"] == ["Unit.lean"]
+    assert artifact["hashes"]["before"]["Other.lean"] != artifact["hashes"]["after"]["Other.lean"]
+    assert artifact["changedFiles"] == ["Other.lean"]
     assert artifact["singleSession"] is True and artifact["automaticRetries"] == 0
     assert json.loads((output / "troubleshoot.json").read_text()) == artifact
 
@@ -307,11 +309,13 @@ def test_build_repair_preserves_valid_manifest_references_and_marks_all_checks(t
 
     _, artifact = _run(plan, roots, repair)
     slug = unit_directory_name(UNIT)
-    directory = roots["translations"] / "synthetic" / "1.0" / plan["planRunId"] / slug
-    source = (directory / "Unit.lean").read_text()
+    directory = roots["translations"] / "synthetic" / "1.0" / plan["planRunId"] / "Other"
+    source = (directory / "Other.lean").read_text()
     stored_manifest = json.loads((directory / "translation-manifest.json").read_text())
-    assert validate_manifest(plan, semantics, source, stored_manifest) == []
-    assert stored_manifest["declarations"][0]["semanticClaimIds"] == ["claim:operation"]
+    assert validate_manifest(plan, {UNIT["unitId"]: semantics}, source, stored_manifest) == []
+    assert stored_manifest["declarations"][0]["claimRefs"] == [
+        {"unitId": UNIT["unitId"], "claimId": "claim:operation"}
+    ]
     assert artifact["recheck"] == {
         "required": True,
         "phase": "CHECK",
@@ -354,8 +358,8 @@ def test_build_repair_cannot_change_semantic_mapping_responsibility(tmp_path):
     with pytest.raises(RuntimeError, match="preserve declaration roles"):
         _run(plan, roots, repair)
     slug = unit_directory_name(UNIT)
-    directory = roots["translations"] / "synthetic" / "1.0" / plan["planRunId"] / slug
-    assert (directory / "Unit.lean").read_text() == SOURCE
+    directory = roots["translations"] / "synthetic" / "1.0" / plan["planRunId"] / "Other"
+    assert (directory / "Other.lean").read_text() == SOURCE
     artifact = json.loads((
         roots["troubleshooting"] / "synthetic" / "1.0" / plan["planRunId"]
         / slug / "troubleshoot.json"
@@ -363,11 +367,11 @@ def test_build_repair_cannot_change_semantic_mapping_responsibility(tmp_path):
     assert artifact["outcome"] == "FAILED" and artifact["changedFiles"] == []
 
 
-def test_opencode_configuration_uses_exact_model_low_reasoning_and_one_submit_tool(tmp_path):
+def test_opencode_configuration_uses_exact_model_medium_reasoning_and_one_submit_tool(tmp_path):
     config = opencode_config(tmp_path / "context.json", tmp_path / "submission.json")
     agent = config["agent"]["spec2lean-troubleshooter"]
-    assert agent["model"] == "openai/gpt-5.3-codex-spark"
-    assert agent["variant"] == "low"
+    assert agent["model"] == TROUBLESHOOTER_MODEL == "openai/gpt-5.6-sol"
+    assert agent["variant"] == TROUBLESHOOTER_REASONING == "medium"
     assert agent["permission"] == {"*": "deny", "troubleshooting_*": "allow"}
     assert agent["tools"]["bash"] is False and agent["tools"]["edit"] is False
 

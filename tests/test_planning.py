@@ -263,8 +263,8 @@ def test_one_session_runner_owns_metadata_and_does_not_call_real_opencode(planne
 def test_opencode_config_disables_unbounded_capabilities(tmp_path):
     config = opencode_config(tmp_path / "db", tmp_path / "scope", tmp_path / "submission")
     agent = config["agent"]["spec2lean-planner"]
-    assert agent["model"] == PLANNER_MODEL == "openai/gpt-5.4-mini"
-    assert agent["variant"] == "low"
+    assert agent["model"] == PLANNER_MODEL == "openai/gpt-5.6-sol"
+    assert agent["variant"] == PLANNER_REASONING == "medium"
     for forbidden in ("bash", "edit", "read", "task", "webfetch", "websearch", "skill"):
         assert agent["tools"][forbidden] is False
 

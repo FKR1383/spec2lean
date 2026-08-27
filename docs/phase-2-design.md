@@ -32,8 +32,8 @@ Phase 1 access is row-, depth-, and text-bounded.
 The runner launches exactly one `opencode run` process with:
 
 ```text
-model: openai/gpt-5.4-mini
-reasoning/variant: low
+model: openai/gpt-5.6-sol
+reasoning/variant: medium
 ```
 
 The exact values are passed on the command line, pinned in the isolated agent

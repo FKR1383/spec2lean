@@ -42,8 +42,8 @@ second session or automatic retry state exists.
 The exact configuration is:
 
 ```text
-model: openai/gpt-5.3-codex-spark
-reasoning/variant: low
+model: openai/gpt-5.6-sol
+reasoning/variant: medium
 ```
 
 Both values are pinned on the command line, pinned in the isolated agent

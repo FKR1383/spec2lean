@@ -15,7 +15,7 @@
     "language": {"type": "string", "minLength": 1},
     "version": {"type": "string", "minLength": 1},
     "unit": {"$ref": "#/$defs/unit"},
-    "translationRunId": {"type": "string", "pattern": "^translation-run:"},
+    "translationRunId": {"type": "string", "pattern": "^(translation-run|translation-group-run):"},
     "status": {"$ref": "#/$defs/status"},
     "build": {
       "type": "object", "additionalProperties": false,
@@ -96,6 +96,7 @@
       "properties": {
         "itemType": {"enum": ["SEMANTIC_CLAIM", "EVIDENCE"]},
         "itemId": {"type": "string"},
+        "unitId": {"type": "string", "pattern": "^unit:"},
         "semanticClaimIds": {"type": "array", "items": {"type": "string"}},
         "declarations": {"type": "array", "items": {"type": "string"}}
       },
@@ -103,12 +104,28 @@
     },
     "validMapping": {
       "type": "object", "additionalProperties": false,
-      "required": ["declaration", "semanticClaimIds", "evidenceIds"],
+      "required": ["declaration"],
       "properties": {
         "declaration": {"type": "string"},
         "semanticClaimIds": {"type": "array", "items": {"type": "string"}},
-        "evidenceIds": {"type": "array", "items": {"type": "string"}}
-      }
+        "evidenceIds": {"type": "array", "items": {"type": "string"}},
+        "claimRefs": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["unitId", "claimId", "evidenceIds"],
+            "properties": {
+              "unitId": {"type": "string", "pattern": "^unit:"},
+              "claimId": {"type": "string", "pattern": "^claim:"},
+              "evidenceIds": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        }
+      },
+      "oneOf": [
+        {"required": ["semanticClaimIds", "evidenceIds"]},
+        {"required": ["claimRefs"]}
+      ]
     },
     "brokenMapping": {
       "type": "object", "additionalProperties": false,
@@ -117,6 +134,7 @@
         "code": {"type": "string"},
         "message": {"type": "string"},
         "declaration": {"type": "string"},
+        "unitId": {"type": "string"},
         "semanticClaimId": {"type": "string"},
         "evidenceId": {"type": "string"},
         "sourceNodeId": {"type": "string"},
