@@ -17,6 +17,11 @@ that Lean and deterministically checks forward coverage and reverse traceability
 Phase 7 routes semantic failures upstream and uses one compiler-guided OpenCode
 session to repair build-only failures.
 
+The top-level Pipeline Runner composes those phase APIs without duplicating
+their logic. It validates or rebuilds Phase 1, reuses a matching fresh Phase-2
+plan when available, follows dependency layers, and advances each unit only
+after its check passes or bounded Phase-7 routing resolves the failure.
+
 Python is used because PyMuPDF exposes PDF layout/font/bounding-box data and
 `lxml` preserves semantic HTML structure and source lines. SQLite and FTS5
 provide a local, inspectable canonical index without an external service.
@@ -165,6 +170,67 @@ types, anchors, page/bounding-box provenance, FTS, cross-reference resolution,
 SHA invalidation, structural validation, subtrees, and deterministic rebuilds.
 
 See [the Phase 1 design](docs/phase-1-design.md) for schema and parser details.
+
+## Run the end-to-end pipeline
+
+Use the same typed scope selectors as `plan build`:
+
+```bash
+./spec2lean run \
+  --language ptx \
+  --version 9.3 \
+  --instructions add.u32,sub.u32,shl.b32
+```
+
+The runner writes an atomic run manifest under
+`runs/<language>/<version>/<pipeline-run-id>/run.json`. `./spec2lean status
+--run PIPELINE_RUN_ID` shows the persisted plan, per-unit stage dispositions,
+routing outcome, and terminal status.
+
+Resume the latest compatible run by repeating its scope and adding `--resume`,
+or name a run explicitly with `--resume PIPELINE_RUN_ID`:
+
+```bash
+./spec2lean run \
+  --language ptx --version 9.3 --instructions add.u32,sub.u32,shl.b32 \
+  --resume
+```
+
+Resume never blindly trusts a file's presence. Phase 3 is rebound to the plan
+and Phase-1 digest; Phase 4 is rebound to the evidence hash; Phase 5 is rebound
+to the semantic-artifact hash; and Phase 6 is rebound to all three input
+hashes. Fresh artifacts are reused. An incomplete or stale generated unit
+directory is moved beneath the run's `superseded/` directory before a bounded
+retry. Phase-7 routing stops on success, repeated actionable state, or the
+`--max-dispatches` limit.
+
+Phase 1 is checked on every invocation. The existing index is reused only when
+its SQLite structure, parser/schema versions, official source hashes, and PDF
+page-text sidecar validate. Otherwise it is rebuilt from the hash-pinned local
+official sources. A resumed plan whose source digest no longer matches is
+rejected as stale.
+
+Use `--dry-run` to inspect projected reuse and work without creating a run or
+starting OpenCode. `--from PHASE` forbids creation in earlier phases and
+therefore requires their fresh artifacts; `--until PHASE` stops after the named
+phase. The phase names are `index`, `plan`, `evidence`, `semantics`, `translate`,
+`check`, and `troubleshoot`.
+
+Resolve any generated Lean declaration all the way back through semantic claims
+and exact source provenance with:
+
+```bash
+./spec2lean trace --declaration Spec2Lean.Ptx.AddU32.execute
+```
+
+A deliberately small real PTX experiment is:
+
+```bash
+./spec2lean run --language ptx --version 9.3 --instructions add.u32
+```
+
+This is intentionally not part of the deterministic test suite because it
+starts bounded OpenCode sessions.
 
 ## Build a request-scoped plan
 

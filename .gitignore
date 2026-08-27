@@ -29,6 +29,12 @@ semantics/**
 !semantics/.gitkeep
 translations/**
 !translations/.gitkeep
+checks/**
+!checks/.gitkeep
+troubleshooting/**
+!troubleshooting/.gitkeep
+runs/**
+!runs/.gitkeep
 
 # Environment files and credentials
 .env

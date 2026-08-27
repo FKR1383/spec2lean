@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "spec2lean"
 version = "0.1.0"
-description = "Deterministic hierarchical specification parser and SQLite index"
+description = "Evidence-grounded specification-to-Lean pipeline"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

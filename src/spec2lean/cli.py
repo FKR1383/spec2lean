@@ -15,6 +15,7 @@ from .database import build_database, connect
 from .evidence.runner import build_evidence
 from .evidence.store import evidence_run_root, find_evidence, load_unit_bundle, unit_artifacts
 from .parsers import parse_html, parse_pdf
+from .pipeline.runner import PHASES, PipelineOptions, load_pipeline_run, run_pipeline
 from .planning.models import PlanningRequest
 from .planning.render import render_dot
 from .planning.runner import build_plan
@@ -47,6 +48,7 @@ DEFAULT_SEMANTICS_ROOT = REPOSITORY_ROOT / "semantics"
 DEFAULT_TRANSLATIONS_ROOT = REPOSITORY_ROOT / "translations"
 DEFAULT_CHECKS_ROOT = REPOSITORY_ROOT / "checks"
 DEFAULT_TROUBLESHOOTING_ROOT = REPOSITORY_ROOT / "troubleshooting"
+DEFAULT_RUNS_ROOT = REPOSITORY_ROOT / "runs"
 
 
 def _database_for(language: str, version: str) -> Path:
@@ -859,10 +861,82 @@ def _command_troubleshoot_resolution(args: argparse.Namespace) -> int:
     return 0
 
 
+def _pipeline_options(args: argparse.Namespace) -> PipelineOptions:
+    return PipelineOptions(
+        repository_root=REPOSITORY_ROOT,
+        index_root=Path(args.index_root),
+        plans_root=Path(args.plans_root),
+        evidence_root=Path(args.evidence_root),
+        semantics_root=Path(args.semantics_root),
+        translations_root=Path(args.translations_root),
+        checks_root=Path(args.checks_root),
+        troubleshooting_root=Path(args.troubleshooting_root),
+        runs_root=Path(args.runs_root),
+        timeout_seconds=args.timeout,
+        max_dispatches=args.max_dispatches,
+        from_phase=args.from_phase,
+        until_phase=args.until_phase,
+        dry_run=args.dry_run,
+        resume=args.resume,
+    )
+
+
+def _command_pipeline_run(args: argparse.Namespace) -> int:
+    directory, manifest = run_pipeline(_planning_request(args), _pipeline_options(args))
+    _json({"directory": str(directory) if directory else None, **manifest})
+    return 0 if manifest["status"] in {"COMPLETE", "DRY_RUN"} else 1
+
+
+def _command_pipeline_status(args: argparse.Namespace) -> int:
+    directory, manifest = load_pipeline_run(Path(args.runs_root), args.run)
+    _json({"directory": str(directory), **manifest})
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="spec2lean", description="Spec2Lean specification index and request-scoped planner")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
+
+    pipeline = commands.add_parser("run", help="run or resume the complete Phase 1-7 pipeline")
+    pipeline.add_argument("--language", required=True)
+    pipeline.add_argument("--version", required=True)
+    pipeline_selector = pipeline.add_mutually_exclusive_group(required=True)
+    pipeline_selector.add_argument("--instructions", help="comma-separated exact instruction names")
+    pipeline_selector.add_argument("--family", help="conceptual instruction family")
+    pipeline_selector.add_argument("--source-node", help="exact Phase-1 node:<id> subtree")
+    pipeline_selector.add_argument("--all", action="store_true", help="explicitly process the full specification")
+    pipeline.add_argument(
+        "--resume", nargs="?", const="latest", metavar="RUN_ID",
+        help="resume the named compatible run, or the latest compatible run if no ID is supplied",
+    )
+    pipeline.add_argument("--dry-run", action="store_true", help="report reuse and work without writing or invoking OpenCode")
+    pipeline.add_argument("--from", dest="from_phase", choices=PHASES, default="index", help="first phase allowed to create artifacts")
+    pipeline.add_argument("--until", dest="until_phase", choices=PHASES, default="troubleshoot", help="last phase to execute")
+    pipeline.add_argument("--timeout", type=int, default=1800, help="timeout for each bounded OpenCode session")
+    pipeline.add_argument("--max-dispatches", type=int, default=8, help="maximum Phase-7 routing actions per unit")
+    pipeline.add_argument("--index-root", default=str(DEFAULT_INDEX_ROOT), help=argparse.SUPPRESS)
+    pipeline.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
+    pipeline.add_argument("--evidence-root", default=str(DEFAULT_EVIDENCE_ROOT), help=argparse.SUPPRESS)
+    pipeline.add_argument("--semantics-root", default=str(DEFAULT_SEMANTICS_ROOT), help=argparse.SUPPRESS)
+    pipeline.add_argument("--translations-root", default=str(DEFAULT_TRANSLATIONS_ROOT), help=argparse.SUPPRESS)
+    pipeline.add_argument("--checks-root", default=str(DEFAULT_CHECKS_ROOT), help=argparse.SUPPRESS)
+    pipeline.add_argument("--troubleshooting-root", default=str(DEFAULT_TROUBLESHOOTING_ROOT), help=argparse.SUPPRESS)
+    pipeline.add_argument("--runs-root", default=str(DEFAULT_RUNS_ROOT), help=argparse.SUPPRESS)
+    pipeline.set_defaults(func=_command_pipeline_run)
+
+    pipeline_status = commands.add_parser("status", help="show a persisted pipeline run manifest")
+    pipeline_status.add_argument("--run", required=True)
+    pipeline_status.add_argument("--runs-root", default=str(DEFAULT_RUNS_ROOT), help=argparse.SUPPRESS)
+    pipeline_status.set_defaults(func=_command_pipeline_status)
+
+    trace = commands.add_parser("trace", help="trace a Lean declaration through semantics to exact source provenance")
+    trace.add_argument("--declaration", required=True)
+    trace.add_argument("--translations-root", default=str(DEFAULT_TRANSLATIONS_ROOT), help=argparse.SUPPRESS)
+    trace.add_argument("--semantics-root", default=str(DEFAULT_SEMANTICS_ROOT), help=argparse.SUPPRESS)
+    trace.add_argument("--evidence-root", default=str(DEFAULT_EVIDENCE_ROOT), help=argparse.SUPPRESS)
+    trace.set_defaults(func=_command_translate_trace)
+
     index = commands.add_parser("index", help="build and inspect specification indexes")
     sub = index.add_subparsers(dest="index_command", required=True)
 

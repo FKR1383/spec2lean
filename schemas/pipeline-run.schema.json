@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec2lean.local/schemas/pipeline-run.schema.json",
+  "title": "Spec2Lean pipeline run",
+  "type": "object",
+  "required": [
+    "schemaVersion", "phase", "pipelineRunId", "request", "createdAt",
+    "updatedAt", "status", "fromPhase", "untilPhase", "dryRun", "units"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "phase": {"const": "PIPELINE"},
+    "pipelineRunId": {"type": "string", "pattern": "^pipeline-run:"},
+    "request": {"type": "object"},
+    "createdAt": {"type": "string"},
+    "updatedAt": {"type": "string"},
+    "status": {"enum": ["RUNNING", "COMPLETE", "FAILED", "NEEDS_ROUTING", "DRY_RUN"]},
+    "fromPhase": {"enum": ["index", "plan", "evidence", "semantics", "translate", "check", "troubleshoot"]},
+    "untilPhase": {"enum": ["index", "plan", "evidence", "semantics", "translate", "check", "troubleshoot"]},
+    "dryRun": {"type": "boolean"},
+    "phase1": {"type": ["object", "null"]},
+    "planRunId": {"type": ["string", "null"]},
+    "planDirectory": {"type": ["string", "null"]},
+    "plan": {"type": "object"},
+    "units": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["name", "status", "stages"],
+        "properties": {
+          "name": {"type": "string"},
+          "status": {"enum": ["PENDING", "RUNNING", "PLANNED", "PASS", "FAIL"]},
+          "stages": {"type": "object"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "error": {"type": ["string", "null"]}
+  },
+  "additionalProperties": true
+}
