@@ -224,9 +224,11 @@ def test_non_normative_resolution_can_only_support_assumption_claims():
     assert diagnostics == [] and artifact is not None
 
 
-def test_tool_and_opencode_config_expose_submission_only(tmp_path):
-    assert [item["name"] for item in tool_definitions()] == ["submit_semantics"]
-    schema = tool_definitions()[0]["inputSchema"]
+def test_tool_and_opencode_config_expose_bounded_evidence_and_submission(tmp_path):
+    assert [item["name"] for item in tool_definitions()] == [
+        "get_evidence", "submit_semantics",
+    ]
+    schema = tool_definitions()[1]["inputSchema"]
     assert schema["type"] == "object"
     assert "oneOf" not in schema
     assert schema["required"] == ["outcome"]
@@ -266,6 +268,7 @@ def test_runner_uses_one_fake_session_and_records_deterministic_configuration(tm
         scope = SemanticScope.from_dict(json.loads(argument("--scope").read_text()))
         bundle = json.loads(argument("--evidence").read_text())
         server = SemanticsMcpServer(scope, bundle, argument("--submission"))
+        assert server.call_tool("get_evidence", {})["isError"] is False
         response = server.call_tool("submit_semantics", _submission())
         assert json.loads(response["content"][0]["text"])["accepted"] is True
         return subprocess.CompletedProcess(command, 0, '{"sessionID":"semantic-session"}\n', "")
@@ -280,6 +283,27 @@ def test_runner_uses_one_fake_session_and_records_deterministic_configuration(tm
     assert metadata["singleSession"] is True and metadata["automaticRetries"] == 0
     assert metadata["inputBoundary"] == "PHASE_3_UNIT_EVIDENCE_BUNDLE_ONLY"
     assert metadata["sessionId"] == "semantic-session"
+
+
+def test_large_evidence_is_fetched_through_mcp_not_embedded_in_launch_prompt(tmp_path):
+    plan, bundle = _inputs()
+    marker = "large-evidence-marker-" + ("x" * 160_000)
+    bundle["evidence"][0]["exactText"] = marker
+    scope = _scope(plan, bundle)
+    prompt = build_extractor_prompt(scope, bundle)
+    assert len(prompt.encode("utf-8")) < 32_000
+    assert marker not in prompt
+    assert "semantics_get_evidence" in prompt
+
+    server = SemanticsMcpServer(scope, bundle, tmp_path / "submission.json")
+    rejected = json.loads(
+        server.call_tool("submit_semantics", _submission())["content"][0]["text"]
+    )
+    assert rejected["diagnostics"][0]["code"] == "EVIDENCE_NOT_READ"
+    fetched = json.loads(
+        server.call_tool("get_evidence", {})["content"][0]["text"]
+    )
+    assert fetched["evidence"][0]["exactText"] == marker
 
 
 def test_semantics_inspection_cli_is_deterministic_and_does_not_run_opencode(tmp_path, capsys):

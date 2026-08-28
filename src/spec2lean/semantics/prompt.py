@@ -23,10 +23,11 @@ def build_extractor_prompt(scope: SemanticScope, bundle: dict[str, Any]) -> str:
 Your only job is to interpret the supplied Phase-3 evidence bundle into a precise structured
 semantic description and finish by calling semantics_submit_semantics. Do not write Lean, propose proofs,
 retrieve more evidence, browse, use prior knowledge to fill specification gaps, or call any tool
-other than semantics_submit_semantics.
+other than semantics_get_evidence and semantics_submit_semantics.
 
 Rules:
-- Treat this exact evidence bundle as the complete source boundary for this session.
+- Call semantics_get_evidence once before extracting. Its immutable result is the complete source
+  boundary for this session. Do not attempt to read evidence from the filesystem.
 - The bundle may contain `resolutions` created by the Open Question Handler. These are explicitly
   non-normative. Any claim that cites a resolution:* ID must be ASSUMPTION, never SOURCE_FACT or
   DERIVED_INTERPRETATION. Keep its INTERNET, RUNTIME, or LLM_REASONING provenance visible through
@@ -52,6 +53,6 @@ Rules:
 Deterministic unit/run context (do not reproduce metadata in the tool call):
 {json.dumps(scope.to_dict(), ensure_ascii=False, indent=2, sort_keys=True)}
 
-Exact Phase-3 evidence bundle:
-{json.dumps(bundle, ensure_ascii=False, indent=2, sort_keys=True)}
+The exact Phase-3 bundle is available only through semantics_get_evidence so it is not duplicated
+inside this operating-system command-line argument.
 """

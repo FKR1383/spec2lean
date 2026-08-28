@@ -21,13 +21,16 @@ prompt and extraction path are not being replaced.
 
 Rules:
 - The evidence bundle remains the complete source boundary. Never retrieve or invent evidence.
+- Call semantics_get_evidence once to read that immutable bundle; it is intentionally not copied
+  into this command-line prompt.
 - Correct broken claim/evidence relationships, stale semantic structure, or missing traceability
   only where the diagnostics and evidence justify it.
 - Preserve valid semantic content and stable claim IDs whenever possible.
 - Do not write Lean, repair syntax, translate, plan, browse, or generate proofs.
 - Classify claims only as {', '.join(CLAIM_KINDS)} and cite only supplied evidence IDs.
 - If the bundle cannot support a required correction, submit INSUFFICIENT_EVIDENCE rather than guess.
-- Use only semantics_submit_semantics. This is one session with no automatic retry session.
+- Use only semantics_get_evidence and semantics_submit_semantics. This is one session with no
+  automatic retry session.
 
 Deterministic revision scope (do not reproduce metadata):
 {json.dumps(scope.to_dict(), ensure_ascii=False, indent=2, sort_keys=True)}
@@ -38,6 +41,5 @@ Exact Phase-6 broken traceability diagnostics:
 Current Phase-4 semantic artifact:
 {json.dumps(current, ensure_ascii=False, indent=2, sort_keys=True)}
 
-Exact Phase-3 evidence bundle:
-{json.dumps(bundle, ensure_ascii=False, indent=2, sort_keys=True)}
+The exact Phase-3 bundle is available through semantics_get_evidence.
 """

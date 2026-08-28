@@ -71,11 +71,20 @@ def submission_schema() -> dict[str, Any]:
 
 
 def tool_definitions() -> list[dict[str, Any]]:
-    return [{
-        "name": "submit_semantics",
-        "description": "Submit semantics or a precise insufficient-evidence failure for deterministic validation.",
-        "inputSchema": submission_schema(),
-    }]
+    return [
+        {
+            "name": "get_evidence",
+            "description": (
+                "Read the complete, immutable Phase-3 evidence bundle for this one semantic unit."
+            ),
+            "inputSchema": _object({}),
+        },
+        {
+            "name": "submit_semantics",
+            "description": "Submit semantics or a precise insufficient-evidence failure for deterministic validation.",
+            "inputSchema": submission_schema(),
+        },
+    ]
 
 
 class SemanticsMcpServer:
@@ -83,19 +92,42 @@ class SemanticsMcpServer:
         self.scope = scope
         self.bundle = bundle
         self.submission_path = submission_path
+        self.evidence_read = False
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        if name != "submit_semantics":
+        if name == "get_evidence":
+            if arguments:
+                raise ValueError("get_evidence accepts no arguments")
+            self.evidence_read = True
+            value = self.bundle
+        elif name != "submit_semantics":
             raise KeyError(f"unknown tool: {name}")
-        artifact, diagnostics = validate_submission(self.scope, self.bundle, arguments)
-        if diagnostics:
-            value = {"accepted": False, "diagnostics": diagnostics}
         else:
-            assert artifact is not None
-            temporary = self.submission_path.with_suffix(".tmp")
-            temporary.write_text(canonical_json(artifact) + "\n", encoding="utf-8")
-            os.replace(temporary, self.submission_path)
-            value = {"accepted": True, "outcome": artifact["outcome"], "message": "Semantic submission accepted."}
+            if not self.evidence_read:
+                value = {
+                    "accepted": False,
+                    "diagnostics": [{
+                        "code": "EVIDENCE_NOT_READ",
+                        "message": "call semantics_get_evidence before submitting semantics",
+                        "path": "$",
+                    }],
+                }
+                return {
+                    "content": [{
+                        "type": "text",
+                        "text": json.dumps(value, ensure_ascii=False, sort_keys=True),
+                    }],
+                    "isError": False,
+                }
+            artifact, diagnostics = validate_submission(self.scope, self.bundle, arguments)
+            if diagnostics:
+                value = {"accepted": False, "diagnostics": diagnostics}
+            else:
+                assert artifact is not None
+                temporary = self.submission_path.with_suffix(".tmp")
+                temporary.write_text(canonical_json(artifact) + "\n", encoding="utf-8")
+                os.replace(temporary, self.submission_path)
+                value = {"accepted": True, "outcome": artifact["outcome"], "message": "Semantic submission accepted."}
         return {"content": [{"type": "text", "text": json.dumps(value, ensure_ascii=False, sort_keys=True)}], "isError": False}
 
     def handle(self, message: dict[str, Any]) -> dict[str, Any] | None:

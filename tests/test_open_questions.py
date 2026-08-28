@@ -315,6 +315,7 @@ def test_semantic_runner_resolves_questions_then_reextracts(
             scope = SemanticScope.from_dict(json.loads(semantic_path("--scope").read_text()))
             current_bundle = json.loads(semantic_path("--evidence").read_text())
             server = SemanticsMcpServer(scope, current_bundle, semantic_path("--submission"))
+            server.call_tool("get_evidence", {})
             if extractor_attempt == 1:
                 submission = {
                     "outcome": "INSUFFICIENT_EVIDENCE",

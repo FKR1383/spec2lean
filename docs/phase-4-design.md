@@ -14,9 +14,13 @@ mappings, and the same Phase-3 evidence boundary.
 ## Session and input boundary
 
 Each extraction attempt receives exactly one bounded OpenCode session. Its prompt
-contains deterministic unit metadata and the exact unit `evidence.json`. The
-session has only one local tool, `submit_semantics`. Shell, filesystem, search,
-internet, task/subagent, skills, editing, and language-server tools are denied.
+contains deterministic unit metadata, while the exact unit `evidence.json` is
+returned by the bounded `get_evidence` tool. The bundle is not copied into the
+`opencode run` command-line argument, avoiding platform per-argument size limits
+without changing the source boundary. The session has only two local tools,
+`get_evidence` and `submit_semantics`; submission is rejected until the bundle
+has been read. Shell, filesystem, search, internet, task/subagent, skills,
+editing, and language-server tools are denied.
 There are no automatic retries of the same prompt. Structural diagnostics from
 a rejected tool call can be corrected only within the same session. A fresh
 extractor session is started only after the Open Question Handler has produced

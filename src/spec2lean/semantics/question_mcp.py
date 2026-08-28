@@ -53,6 +53,11 @@ def tool_definitions(*, runtime_available: bool) -> list[dict[str, Any]]:
     }
     tools = [
         {
+            "name": "get_current_evidence",
+            "description": "Read the complete immutable evidence bundle currently attached to this unit.",
+            "inputSchema": _object({}),
+        },
+        {
             "name": "spec_search",
             "description": "Search the canonical Phase-1 database for one missing semantic aspect.",
             "inputSchema": _object(question_query, ["questionId", "query", "justification"]),
@@ -438,7 +443,11 @@ class OpenQuestionMcpServer:
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         self.session.ledger.record_call(name, dict(arguments))
-        if name == "spec_search":
+        if name == "get_current_evidence":
+            if arguments:
+                raise ValueError("get_current_evidence accepts no arguments")
+            value = self.bundle
+        elif name == "spec_search":
             self._known_question(arguments["questionId"])
             value = self.session.search(
                 arguments["query"], arguments["justification"], limit=arguments.get("limit", 20)
