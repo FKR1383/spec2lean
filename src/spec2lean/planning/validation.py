@@ -2,11 +2,16 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+import re
 from typing import Any, Iterable
 
 from ..util import stable_id
 from .models import ScopeMode
 from .scope import Phase1Query, ResolvedScope
+
+
+PLAN_SCHEMA_VERSION = 2
+GROUP_NAME = re.compile(r"^[A-Z][A-Za-z0-9]{0,63}$")
 
 
 @dataclass(slots=True)
@@ -68,6 +73,10 @@ def validate_submission(
         diagnostics.append(
             _diagnostic("EMPTY_FAMILY_SELECTION", "family planning must select at least one candidate unit", "$.requestedUnitIds")
         )
+
+    translation_groups = _validate_translation_groups(
+        query, candidates, unit_ids, submission.get("translationGroups"), diagnostics
+    )
 
     raw_prerequisites = _as_list(
         submission.get("externalPrerequisites", []), "$.externalPrerequisites", diagnostics
@@ -166,10 +175,139 @@ def validate_submission(
         return None, diagnostics
     normalized = {
         "requestedUnits": [dict(candidates[unit_id]) for unit_id in unit_ids],
+        "translationGroups": translation_groups,
         "externalPrerequisites": prerequisites,
         "dependencies": dependencies,
     }
     return normalized, []
+
+
+def _validate_translation_groups(
+    query: Phase1Query,
+    candidates: dict[str, dict[str, Any]],
+    selected_unit_ids: list[str],
+    raw_value: Any,
+    diagnostics: list[dict[str, str]],
+) -> list[dict[str, Any]]:
+    """Validate a specification-supported, exact partition of selected units."""
+    raw_groups = _as_list(raw_value, "$.translationGroups", diagnostics)
+    selected = set(selected_unit_ids)
+    seen_units: set[str] = set()
+    seen_names: set[str] = set()
+    groups: list[dict[str, Any]] = []
+
+    for index, value in enumerate(raw_groups):
+        path = f"$.translationGroups[{index}]"
+        if not isinstance(value, dict):
+            diagnostics.append(_diagnostic("INVALID_TRANSLATION_GROUP", "translation group must be an object", path))
+            continue
+        name = value.get("name")
+        reason = value.get("reason")
+        origin = value.get("origin")
+        raw_unit_ids = value.get("unitIds")
+        raw_support = value.get("supportingNodeIds")
+
+        if not isinstance(name, str) or not GROUP_NAME.fullmatch(name):
+            diagnostics.append(_diagnostic(
+                "INVALID_TRANSLATION_GROUP_NAME",
+                "translation group name must be an UpperCamelCase Lean identifier of at most 64 characters",
+                f"{path}.name",
+            ))
+            normalized_name = ""
+        else:
+            normalized_name = name
+            folded = name.casefold()
+            if folded in seen_names:
+                diagnostics.append(_diagnostic(
+                    "DUPLICATE_TRANSLATION_GROUP_NAME",
+                    f"duplicate translation group name: {name}",
+                    f"{path}.name",
+                ))
+            seen_names.add(folded)
+
+        if not isinstance(reason, str) or not reason.strip():
+            diagnostics.append(_diagnostic(
+                "MISSING_TRANSLATION_GROUP_REASON",
+                "translation group requires a non-empty specification-based reason",
+                f"{path}.reason",
+            ))
+        if origin not in {"EXPLICIT", "INFERRED"}:
+            diagnostics.append(_diagnostic(
+                "INVALID_TRANSLATION_GROUP_ORIGIN",
+                "translation group origin must be EXPLICIT or INFERRED",
+                f"{path}.origin",
+            ))
+
+        group_unit_ids: list[str] = []
+        for unit_index, unit_id in enumerate(_as_list(raw_unit_ids, f"{path}.unitIds", diagnostics)):
+            unit_path = f"{path}.unitIds[{unit_index}]"
+            if not isinstance(unit_id, str) or unit_id not in selected:
+                diagnostics.append(_diagnostic(
+                    "UNKNOWN_TRANSLATION_GROUP_UNIT",
+                    f"translation group references an unselected unit: {unit_id!r}",
+                    unit_path,
+                ))
+            elif unit_id in group_unit_ids or unit_id in seen_units:
+                diagnostics.append(_diagnostic(
+                    "DUPLICATE_TRANSLATION_GROUP_UNIT",
+                    f"unit appears more than once in translation groups: {unit_id}",
+                    unit_path,
+                ))
+            else:
+                group_unit_ids.append(unit_id)
+                seen_units.add(unit_id)
+        if not group_unit_ids:
+            diagnostics.append(_diagnostic(
+                "EMPTY_TRANSLATION_GROUP",
+                "translation group must contain at least one selected unit",
+                f"{path}.unitIds",
+            ))
+
+        support_values = _as_list(raw_support, f"{path}.supportingNodeIds", diagnostics)
+        support = _validate_node_ids(
+            query,
+            support_values,
+            f"{path}.supportingNodeIds",
+            diagnostics,
+        )
+        if not support_values:
+            diagnostics.append(_diagnostic(
+                "MISSING_TRANSLATION_GROUP_SUPPORT",
+                "translation group requires existing Phase-1 source-node support",
+                f"{path}.supportingNodeIds",
+            ))
+        support_set = set(support)
+        for unit_id in group_unit_ids:
+            unit = candidates[unit_id]
+            structural_context: set[str] = set()
+            for source_node_id in unit.get("sourceNodeIds", []):
+                structural_context.add(str(source_node_id))
+                structural_context.update(
+                    str(item["nodeId"]) for item in query.ancestors(str(source_node_id))
+                )
+            if support_set.isdisjoint(structural_context):
+                diagnostics.append(_diagnostic(
+                    "UNSUPPORTED_TRANSLATION_GROUP_MEMBER",
+                    f"group support is not in the indexed source ancestry of unit {unit_id}",
+                    f"{path}.supportingNodeIds",
+                ))
+
+        groups.append({
+            "name": normalized_name,
+            "unitIds": group_unit_ids,
+            "reason": reason.strip() if isinstance(reason, str) else "",
+            "supportingNodeIds": support,
+            "origin": origin,
+        })
+
+    missing = sorted(selected - seen_units)
+    if missing:
+        diagnostics.append(_diagnostic(
+            "UNGROUPED_REQUESTED_UNITS",
+            f"every requested unit must belong to exactly one translation group; missing={missing}",
+            "$.translationGroups",
+        ))
+    return sorted(groups, key=lambda item: item["name"])
 
 
 def _validate_node_ids(
@@ -297,7 +435,7 @@ def build_validated_plan(
     unit_ids = [item["unitId"] for item in normalized["requestedUnits"]]
     layers, cycles, blocked = derive_processing_order(unit_ids, normalized["dependencies"])
     return {
-        "schemaVersion": 1,
+        "schemaVersion": PLAN_SCHEMA_VERSION,
         "language": language,
         "version": version,
         "planRunId": plan_run_id,

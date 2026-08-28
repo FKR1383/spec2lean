@@ -28,7 +28,11 @@ def submission_schema() -> dict[str, Any]:
     }, ["declaration", "role", "claimRefs"])
     change = _object({
         "description": {"type": "string", "minLength": 1},
-        "affectedDeclarations": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "affectedDeclarations": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Mapped declarations affected by the change; empty for file-level import changes.",
+        },
     }, ["description", "affectedDeclarations"])
     return _object({
         "leanSource": {"type": "string", "minLength": 1},
@@ -40,7 +44,10 @@ def submission_schema() -> dict[str, Any]:
 def tool_definitions() -> list[dict[str, Any]]:
     return [{
         "name": "submit_repair",
-        "description": "Submit one minimal compiler-directed Lean repair for deterministic validation.",
+        "description": (
+            "Submit a minimal compiler-directed Lean repair for deterministic validation. "
+            "If rejected, correct the diagnostics and resubmit within the same session."
+        ),
         "inputSchema": submission_schema(),
     }]
 

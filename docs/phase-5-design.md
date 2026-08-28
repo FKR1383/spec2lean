@@ -3,14 +3,14 @@
 ## Contract
 
 Phase 5 consumes every accepted Phase-4 `semantics.json` belonging to one
-deterministic instruction group and produces exactly one complete Lean 4 source
+Phase-2 translation group and produces exactly one complete Lean 4 source
 file for that group. It never creates per-instruction fragments or `Unit.lean`
 files.
 
-For PTX, the deterministic groups are `Arithmetic`, `BitManip`,
-`Communication`, `Comparison`, `Conversion`, `Logic`, `Memory`, and `Move`.
-Instructions outside the known table use `Other`, so a new mnemonic cannot
-silently disappear. Other source languages currently use `Other`.
+Phase 5 contains no PTX-, mnemonic-, or language-specific category table. The
+Phase-2 Planner derives group names and membership from the indexed
+specification, and deterministic validation requires an exact, source-supported
+partition of all requested units. Phase 5 only consumes that validated plan.
 
 The pipeline finishes Phases 3 and 4 for all requested units before starting
 Phase 5. It then runs one bounded OpenCode Translator session per non-empty
@@ -25,11 +25,11 @@ web, task, or retry tool is available to the Translator.
 
 ## Output
 
-For a plan containing an arithmetic group, the stored artifact is:
+For a plan containing a group named `IntegerOperations`, the stored artifact is:
 
 ```text
-translations/<language>/<version>/<planRunId>/Arithmetic/
-  Arithmetic.lean
+translations/<language>/<version>/<planRunId>/IntegerOperations/
+  IntegerOperations.lean
   translation-manifest.json
   translator-run.json
   revisions/
@@ -51,7 +51,7 @@ several unit/claim pairs.
 
 The submission is rejected unless all of the following hold:
 
-- the group contains exactly the Phase-2 units selected by the grouping table;
+- the group contains exactly the Phase-2 units in the validated plan partition;
 - every supplied semantic artifact is successful, current, and belongs to the
   plan and member unit;
 - the source is non-empty and contains no `sorry`, `admit`, axioms, constants,

@@ -31,7 +31,11 @@ Phase-4 `(unitId, claimId)` pairs, forbidden Lean constructs remain forbidden, a
 of declaration roles and resolved unit/claim responsibilities must be
 unchanged. This permits a mechanical declaration rename while preventing a
 compiler fix from silently changing semantic responsibility. A non-changing
-submission is rejected.
+submission is rejected. A file-level import repair may report an empty
+`affectedDeclarations` list because no mapped declaration body or semantic
+responsibility changed. If the submit tool rejects a candidate, the model may
+correct the returned validation diagnostics and resubmit within the same
+session; this does not start an automatic retry session.
 
 After validation, Phase 7 atomically updates only the complete group Lean file and, when its
 declaration mappings actually changed, `translation-manifest.json`. It does not

@@ -96,7 +96,12 @@ evidence/<language>/<version>/<plan-run-id>/<unit-slug>-<unit-id-prefix>/
 ```
 
 `evidence.json` is canonical. `evidence.md` is a deterministic human-readable
-view split into CORE and SUPPORTING evidence. `retriever-run.json` records the
+view split into CORE and SUPPORTING evidence. If Phase 4 discovers a genuine
+gap, the database-first Open Question Handler may atomically augment this
+bundle. Canonical Phase-1 discoveries remain ordinary evidence; internet,
+runtime, and LLM answers are stored separately as non-normative `resolution:*`
+records. `retriever-run.json` records every such augmentation and resulting
+bundle hash in `openQuestionAugmentations`, in addition to the
 exact model/reasoning, bounded scope, exposure trace, one-session status,
 command, and OpenCode event output. Phase-1 and Phase-2 artifacts are opened
 read-only and are never modified.

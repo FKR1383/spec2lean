@@ -63,8 +63,15 @@ submission, the run fails.
 
 ## Plan and validation
 
-The model submits requested candidate IDs, external prerequisite concepts, and
-dependency edges. Deterministic code supplies language/version, run identity,
+The model submits requested candidate IDs, specification-derived translation
+groups, external prerequisite concepts, and dependency edges. Every requested
+unit belongs to exactly one translation group. Group names are concise
+UpperCamelCase identifiers derived from indexed headings, ancestors,
+terminology, and semantic cohesion; each group records a reason, `EXPLICIT` or
+`INFERRED` origin, and Phase 1 source nodes supporting every member. There is no
+language- or mnemonic-specific category table in later phases.
+
+Deterministic code supplies language/version, run identity,
 source database digest, timestamps, validated source identity, external
 prerequisite IDs, processing layers, and cycle reporting.
 
@@ -72,7 +79,9 @@ An edge is directed from prerequisite to dependent. Its origin is exactly
 `EXPLICIT` or `INFERRED`, and it must have a reason and existing Phase 1 source
 nodes. External prerequisites are graph endpoints but are not scheduled units.
 
-Validation rejects out-of-scope units, missing exact units, invented nodes,
+Validation rejects out-of-scope units, missing exact units, incomplete or
+overlapping group partitions, invalid group/file identifiers, group support
+outside a member's indexed source ancestry, invented nodes,
 unknown endpoints, self edges, duplicate edges, missing reasons/support, and
 invalid origins. Layers are derived from requested-unit edges, so independent
 units share a layer. Strongly connected components are emitted in `cycles` and

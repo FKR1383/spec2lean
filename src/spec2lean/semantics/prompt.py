@@ -16,6 +16,10 @@ other than semantics_submit_semantics.
 
 Rules:
 - Treat this exact evidence bundle as the complete source boundary for this session.
+- The bundle may contain `resolutions` created by the Open Question Handler. These are explicitly
+  non-normative. Any claim that cites a resolution:* ID must be ASSUMPTION, never SOURCE_FACT or
+  DERIVED_INTERPRETATION. Keep its INTERNET, RUNTIME, or LLM_REASONING provenance visible through
+  that citation; do not describe it as official specification evidence.
 - Use instruction-specific functionality as the center of an INSTRUCTION artifact: explicit
   inputs, result, core operation, and meaningful algorithm branches where the evidence has them.
 - Separate the pure operation from destination/machine state effects and predication.

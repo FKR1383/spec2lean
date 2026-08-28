@@ -9,9 +9,22 @@ from ..database import connect, semantic_digest
 from ..semantics.models import evidence_bundle_hash
 from ..translation.models import semantics_artifact_hash
 from ..translation.validation import lean_declarations
+from ..util import canonical_json, normalize_text, stable_id
 
 
 EVIDENCE_REQUIRED_KINDS = {"SOURCE_FACT", "DERIVED_INTERPRETATION"}
+
+
+def _bundle_records(bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        item for item in [*bundle.get("evidence", []), *bundle.get("resolutions", [])]
+        if isinstance(item, dict)
+    ]
+
+
+def _record_id(item: dict[str, Any]) -> str | None:
+    value = item.get("evidenceId") or item.get("resolutionId")
+    return value if isinstance(value, str) else None
 
 
 def _broken(code: str, message: str, **references: str) -> dict[str, str]:
@@ -139,9 +152,9 @@ def group_traceability_test(
     }
     evidence_by_unit = {
         unit_id: {
-            item.get("evidenceId"): item
-            for item in bundle.get("evidence", [])
-            if isinstance(item, dict) and isinstance(item.get("evidenceId"), str)
+            _record_id(item): item
+            for item in _bundle_records(bundle)
+            if _record_id(item) is not None
         }
         for unit_id, bundle in bundles_by_unit.items()
     }
@@ -200,7 +213,10 @@ def group_traceability_test(
             record = evidence_by_unit[unit_id][evidence_id]
             if record.get("unitId") != unit_id:
                 broken.append(_broken("EVIDENCE_UNIT_MISMATCH", f"evidence belongs to another unit: {evidence_id}", unitId=unit_id, evidenceId=evidence_id))
-            _source_provenance(connection, record, broken)
+            if evidence_id.startswith("resolution:"):
+                _resolution_provenance(record, broken)
+            else:
+                _source_provenance(connection, record, broken)
 
     unique = {tuple(sorted(item.items())): item for item in broken}
     ordered = [unique[key] for key in sorted(unique)]
@@ -371,6 +387,79 @@ def _source_provenance(
         ))
 
 
+def _resolution_provenance(
+    resolution: dict[str, Any], broken: list[dict[str, str]]
+) -> None:
+    resolution_id = str(resolution.get("resolutionId", ""))
+    source = resolution.get("sourceKind")
+    if resolution.get("nonNormative") is not True:
+        broken.append(_broken(
+            "MISSING_NON_NORMATIVE_FLAG",
+            f"supplemental resolution is not flagged non-normative: {resolution_id}",
+            evidenceId=resolution_id,
+        ))
+    if source not in {"INTERNET", "RUNTIME", "LLM_REASONING"}:
+        broken.append(_broken(
+            "INVALID_RESOLUTION_SOURCE",
+            f"supplemental resolution has an invalid source: {resolution_id}",
+            evidenceId=resolution_id,
+        ))
+    provenance = resolution.get("provenance")
+    if not isinstance(provenance, dict):
+        broken.append(_broken(
+            "INVALID_RESOLUTION_PROVENANCE",
+            f"supplemental resolution has no provenance: {resolution_id}",
+            evidenceId=resolution_id,
+        ))
+        return
+    if source == "INTERNET" and (
+        not isinstance(provenance.get("url"), str)
+        or not provenance["url"].startswith(("https://", "http://"))
+        or not isinstance(provenance.get("excerpt"), str)
+        or not normalize_text(provenance["excerpt"])
+    ):
+        broken.append(_broken(
+            "INCOMPLETE_INTERNET_PROVENANCE",
+            f"internet resolution lacks URL or excerpt: {resolution_id}",
+            evidenceId=resolution_id,
+        ))
+    if source == "RUNTIME" and any(
+        field not in provenance
+        for field in ("probeId", "adapter", "request", "exitCode", "stdout", "stderr")
+    ):
+        broken.append(_broken(
+            "INCOMPLETE_RUNTIME_PROVENANCE",
+            f"runtime resolution lacks a probe ID: {resolution_id}",
+            evidenceId=resolution_id,
+        ))
+    if source == "LLM_REASONING" and (
+        not isinstance(provenance.get("model"), str)
+        or not isinstance(provenance.get("reasoning"), str)
+    ):
+        broken.append(_broken(
+            "INCOMPLETE_LLM_PROVENANCE",
+            f"LLM resolution lacks model identity: {resolution_id}",
+            evidenceId=resolution_id,
+        ))
+    identity = {
+        "questionId": resolution.get("questionId"),
+        "sourceKind": source,
+        "role": resolution.get("role"),
+        "statement": normalize_text(resolution.get("statement", ""))
+        if isinstance(resolution.get("statement"), str) else "",
+        "rationale": normalize_text(resolution.get("rationale", ""))
+        if isinstance(resolution.get("rationale"), str) else "",
+        "provenance": provenance,
+    }
+    expected_id = stable_id("resolution", canonical_json(identity), length=32)
+    if resolution_id != expected_id:
+        broken.append(_broken(
+            "RESOLUTION_ID_MISMATCH",
+            f"supplemental resolution ID does not match its content: {resolution_id}",
+            evidenceId=resolution_id,
+        ))
+
+
 def coverage_test(semantics: dict[str, Any], source: str, manifest: dict[str, Any]) -> dict[str, Any]:
     claims = {
         item.get("claimId"): item
@@ -469,9 +558,9 @@ def traceability_test(
         if isinstance(item, dict) and isinstance(item.get("claimId"), str)
     }
     evidence = {
-        item.get("evidenceId"): item
-        for item in bundle.get("evidence", [])
-        if isinstance(item, dict) and isinstance(item.get("evidenceId"), str)
+        _record_id(item): item
+        for item in _bundle_records(bundle)
+        if _record_id(item) is not None
     }
     for claim_id, claim in sorted(claims.items()):
         cited = claim.get("evidenceIds")
@@ -578,7 +667,10 @@ def traceability_test(
                     f"evidence belongs to another unit: {evidence_id}",
                     evidenceId=evidence_id,
                 ))
-            _source_provenance(connection, record, broken)
+            if evidence_id.startswith("resolution:"):
+                _resolution_provenance(record, broken)
+            else:
+                _source_provenance(connection, record, broken)
 
     unique_broken = {
         tuple(sorted(item.items())): item for item in broken

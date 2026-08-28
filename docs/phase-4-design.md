@@ -1,23 +1,26 @@
-# Phase 4: Semantic Extractor
-
-The original extraction prompt and create-only build path are unchanged by the
-repair loop. Traceability failures may use the separate bounded
-`semantics revise` path, which receives the current semantic artifact, the exact
-Phase-6 broken mappings, and the same Phase-3 evidence boundary.
+# Phase 4: Semantic Extractor and Open Question Handler
 
 Phase 4 consumes one accepted Phase-3 evidence bundle for one planned unit and
-produces an evidence-linked semantic artifact. It does not access Phase 1,
-retrieve evidence, browse the internet, generate Lean, prove properties, check
-code, or troubleshoot later phases.
+produces an evidence-linked semantic artifact. The initial Semantic Extractor
+is strictly evidence-bounded. If it returns `INSUFFICIENT_EVIDENCE`, a separate
+Open Question Handler verifies each missing aspect against the canonical
+Phase-1 database and, when necessary, records a clearly classified fallback.
+The augmented evidence is then given to a fresh Semantic Extractor session.
+
+Traceability failures still use the separate bounded `semantics revise` path,
+which receives the current semantic artifact, the exact Phase-6 broken
+mappings, and the same Phase-3 evidence boundary.
 
 ## Session and input boundary
 
-Each selected unit receives exactly one bounded OpenCode session. Its prompt
+Each extraction attempt receives exactly one bounded OpenCode session. Its prompt
 contains deterministic unit metadata and the exact unit `evidence.json`. The
 session has only one local tool, `submit_semantics`. Shell, filesystem, search,
 internet, task/subagent, skills, editing, and language-server tools are denied.
-There are no automatic retry sessions. Structural diagnostics from a rejected
-tool call can be corrected only within the same session.
+There are no automatic retries of the same prompt. Structural diagnostics from
+a rejected tool call can be corrected only within the same session. A fresh
+extractor session is started only after the Open Question Handler has produced
+a validated evidence augmentation.
 
 The exact configuration is pinned both in the isolated agent and on the command
 line:
@@ -29,8 +32,45 @@ reasoning/variant: medium
 
 A model-catalog preflight fails before creating a run directory if that exact
 ID is unavailable. No substitute model is selected. The model, reasoning,
-single-session setting, zero automatic retries, evidence hash, command, session
+single-session setting, evidence hash, command, session
 ID, timestamps, and captured output are recorded in `extractor-run.json`.
+
+## Open-question recovery
+
+An insufficient-evidence artifact is converted deterministically into stable
+`question:*` IDs. A separate OpenCode session uses the same pinned model and
+reasoning level and must give every question one disposition. It follows this
+order:
+
+1. Search the read-only Phase-1 database and read exact source nodes.
+2. If the specification truly does not answer the question, use an attributed
+   internet source, a configured runtime probe, or explicit LLM reasoning.
+3. If no responsible answer is available, mark the question `UNRESOLVED` and
+   stop the pipeline.
+
+The handler cannot submit a fallback until its tool ledger proves that the
+canonical database was searched for that specific question. Database material
+is rebuilt by deterministic code into normal `evidence:*` records with full
+Phase-1 provenance. It is never copied from free-form model output.
+
+Internet, runtime, and LLM answers become `resolution:*` records with
+`nonNormative: true` and source-specific provenance:
+
+- internet: URL and excerpt;
+- runtime: trusted adapter identity, request, exit status, stdout, and stderr;
+- LLM reasoning: exact model and reasoning variant.
+
+The runtime path is disabled unless `SPEC2LEAN_RUNTIME_PROBE_COMMAND` contains
+a trusted adapter command. The adapter receives a JSON request on stdin; the
+handler cannot supply an arbitrary command. Internet tools are available only
+inside the handler session. A semantic claim that cites any supplemental
+resolution must be classified as `ASSUMPTION`; deterministic validation rejects
+it as a source fact or derived interpretation.
+
+The default recovery bound is two rounds. Set it with
+`--max-question-rounds N`; `0` restores immediate failure on insufficient
+evidence. A partially resolved or unresolved handler submission blocks the
+pipeline rather than silently generating semantics.
 
 ## Submission and artifact schema
 
@@ -51,9 +91,10 @@ Successful submissions use typed optional components:
 
 The claim vocabulary is deliberately closed: `SOURCE_FACT`,
 `DERIVED_INTERPRETATION`, `DESIGN_DEPENDENCY`, and `ASSUMPTION`.
-`OPEN_QUESTION` is not supported. If evidence cannot establish required
-semantics, the model must use `INSUFFICIENT_EVIDENCE` with concrete missing
-aspects rather than storing an unresolved guess.
+`OPEN_QUESTION` is not a claim kind. If the current evidence cannot establish
+required semantics, the extractor must use `INSUFFICIENT_EVIDENCE` with
+concrete missing aspects; the handler, rather than the extractor, owns their
+resolution.
 
 Deterministic code, not the model, adds language/version, plan and unit IDs,
 the canonical SHA-256 hash of the Phase-3 bundle, model/reasoning, semantic run
@@ -62,7 +103,8 @@ is `schemas/semantic-artifact.schema.json`.
 
 ## Evidence linking and validation
 
-Every source-bearing component cites Phase-3 `evidenceId` values. Dependencies
+Every source-bearing component cites Phase-3 `evidence:*` or `resolution:*`
+IDs. Dependencies
 may have an empty evidence list only when they describe an explicit modeling
 need rather than a source fact. Every `SOURCE_FACT` and
 `DERIVED_INTERPRETATION` requires evidence. Design dependencies and assumptions
@@ -72,13 +114,16 @@ Before a session starts, Phase 4 checks that the unit is uniquely present in
 the plan, its evidence bundle exists, the bundle matches the plan/unit,
 language, version, and Phase-1 database digest, and every evidence record has
 the right unit and source-document identity. The bundle is passed as an input;
-Phase 1 is not opened.
+the extractor does not open Phase 1. Only the separate handler opens it.
 
 Submission and stored-artifact validation rejects:
 
 - unsupported fields and invalid enum values;
 - unknown or duplicate evidence references;
 - missing evidence on source facts or derived interpretations;
+- any non-`ASSUMPTION` claim that cites a non-normative resolution;
+- a non-normative resolution used by a semantic component but not mapped to an
+  `ASSUMPTION` claim;
 - duplicate claim IDs or duplicate classified claim statements;
 - unresolved branch, edge-case, state-effect, restriction, or predication evidence;
 - wrong instruction identity;
@@ -93,7 +138,7 @@ correct; that remains an extractor and human-review boundary.
 
 ## Artifacts and inspection
 
-Successful and insufficient-evidence sessions write:
+The current successful or insufficient-evidence extraction writes:
 
 ```text
 semantics/<language>/<version>/<plan-run-id>/<unit-slug>-<unit-id-prefix>/
@@ -101,6 +146,28 @@ semantics/<language>/<version>/<plan-run-id>/<unit-slug>-<unit-id-prefix>/
   semantics.md
   extractor-run.json
 ```
+
+Each handler round is retained for audit:
+
+```text
+  open-question-attempts/attempt-N/
+    extractor/
+      semantics.json
+      semantics.md
+      extractor-run.json
+    handler/
+      handler-run.json
+      open-questions.json
+      open-questions.md
+      before-evidence.json
+      after-evidence.json
+```
+
+`handler-run.json` records the database/tool ledger and any runtime probes.
+`open-questions.json` records each question, disposition, answer, references,
+and provenance. The Phase-3 `evidence.json` is atomically replaced by the
+validated augmented bundle, and its retriever metadata records the
+augmentation and resulting bundle hash.
 
 `semantics.json` is canonical. `semantics.md` deterministically separates the
 core operation, branches, inputs/output, each claim classification, state
@@ -114,6 +181,7 @@ Inspection is read-only and never starts OpenCode:
 ./spec2lean semantics claims --plan-run PLAN_RUN_ID --unit UNIT_ID
 ./spec2lean semantics operation --plan-run PLAN_RUN_ID --unit UNIT_ID
 ./spec2lean semantics evidence --claim CLAIM_ID
+./spec2lean semantics questions --plan-run PLAN_RUN_ID --unit UNIT_ID
 ./spec2lean semantics stats --plan-run PLAN_RUN_ID
 ```
 

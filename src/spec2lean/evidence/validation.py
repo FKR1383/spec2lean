@@ -383,7 +383,7 @@ def validate_bundle(
         return [_diagnostic("EXPECTED_OBJECT", "evidence bundle must be an object")]
     bundle_fields = {
         "schemaVersion", "phase", "planRunId", "language", "version",
-        "sourceDatabaseDigest", "unit", "evidence",
+        "sourceDatabaseDigest", "unit", "evidence", "resolutions",
     }
     for key in sorted(set(bundle) - bundle_fields):
         diagnostics.append(_diagnostic(
@@ -493,4 +493,68 @@ def validate_bundle(
         seen_sources.add(source_key)
     if not any(isinstance(item, dict) and item.get("tier") == "CORE" for item in evidence):
         diagnostics.append(_diagnostic("MISSING_CORE_EVIDENCE", "bundle has no CORE evidence", "$.evidence"))
+    resolutions = bundle.get("resolutions", [])
+    if not isinstance(resolutions, list):
+        diagnostics.append(_diagnostic("INVALID_RESOLUTIONS", "bundle resolutions must be an array", "$.resolutions"))
+        return diagnostics
+    seen_resolution_ids: set[str] = set()
+    for index, item in enumerate(resolutions):
+        path = f"$.resolutions[{index}]"
+        if not isinstance(item, dict):
+            diagnostics.append(_diagnostic("INVALID_RESOLUTION", "resolution must be an object", path))
+            continue
+        fields = {
+            "resolutionId", "unitId", "questionId", "sourceKind", "role", "statement",
+            "rationale", "nonNormative", "provenance",
+        }
+        for key in sorted(set(item) - fields):
+            diagnostics.append(_diagnostic("UNEXPECTED_FIELD", f"unsupported resolution field: {key}", f"{path}.{key}"))
+        resolution_id = item.get("resolutionId")
+        if not isinstance(resolution_id, str) or not resolution_id.startswith("resolution:"):
+            diagnostics.append(_diagnostic("INVALID_RESOLUTION_ID", "resolutionId must start with resolution:", f"{path}.resolutionId"))
+        elif resolution_id in seen_resolution_ids:
+            diagnostics.append(_diagnostic("DUPLICATE_RESOLUTION_ID", f"duplicate resolution ID: {resolution_id}", f"{path}.resolutionId"))
+        seen_resolution_ids.add(str(resolution_id))
+        if item.get("unitId") != unit_id:
+            diagnostics.append(_diagnostic("WRONG_UNIT", "resolution does not match bundle unit", f"{path}.unitId"))
+        question_id = item.get("questionId")
+        if not isinstance(question_id, str) or not question_id.startswith("question:"):
+            diagnostics.append(_diagnostic("INVALID_QUESTION_ID", "questionId must start with question:", f"{path}.questionId"))
+        source_kind = item.get("sourceKind")
+        if source_kind not in {"INTERNET", "RUNTIME", "LLM_REASONING"}:
+            diagnostics.append(_diagnostic("INVALID_RESOLUTION_SOURCE", f"invalid non-database source: {source_kind}", f"{path}.sourceKind"))
+        if item.get("role") not in EVIDENCE_ROLES:
+            diagnostics.append(_diagnostic("INVALID_ROLE", f"invalid resolution role: {item.get('role')}", f"{path}.role"))
+        for field in ("statement", "rationale"):
+            if not isinstance(item.get(field), str) or not normalize_text(item[field]):
+                diagnostics.append(_diagnostic("INVALID_TEXT", f"resolution {field} must be non-empty", f"{path}.{field}"))
+        if item.get("nonNormative") is not True:
+            diagnostics.append(_diagnostic("MISSING_NON_NORMATIVE_FLAG", "external/reasoning resolutions must be flagged nonNormative", f"{path}.nonNormative"))
+        provenance = item.get("provenance")
+        if not isinstance(provenance, dict):
+            diagnostics.append(_diagnostic("INVALID_RESOLUTION_PROVENANCE", "resolution provenance must be an object", f"{path}.provenance"))
+            provenance = {}
+        if source_kind == "INTERNET":
+            if not isinstance(provenance.get("url"), str) or not provenance["url"].startswith(("https://", "http://")):
+                diagnostics.append(_diagnostic("INVALID_URL", "internet provenance requires an HTTP(S) URL", f"{path}.provenance.url"))
+            if not isinstance(provenance.get("excerpt"), str) or not normalize_text(provenance["excerpt"]):
+                diagnostics.append(_diagnostic("EMPTY_EXCERPT", "internet provenance requires an excerpt", f"{path}.provenance.excerpt"))
+        elif source_kind == "RUNTIME":
+            for field in ("probeId", "adapter", "request", "exitCode", "stdout", "stderr"):
+                if field not in provenance:
+                    diagnostics.append(_diagnostic("INCOMPLETE_RUNTIME_PROVENANCE", f"runtime provenance is missing {field}", f"{path}.provenance.{field}"))
+        elif source_kind == "LLM_REASONING":
+            if not isinstance(provenance.get("model"), str) or not isinstance(provenance.get("reasoning"), str):
+                diagnostics.append(_diagnostic("INCOMPLETE_LLM_PROVENANCE", "LLM provenance requires model and reasoning", f"{path}.provenance"))
+        identity = {
+            "questionId": question_id,
+            "sourceKind": source_kind,
+            "role": item.get("role"),
+            "statement": normalize_text(item.get("statement", "")) if isinstance(item.get("statement"), str) else "",
+            "rationale": normalize_text(item.get("rationale", "")) if isinstance(item.get("rationale"), str) else "",
+            "provenance": provenance,
+        }
+        expected_id = stable_id("resolution", canonical_json(identity), length=32)
+        if resolution_id != expected_id:
+            diagnostics.append(_diagnostic("RESOLUTION_ID_MISMATCH", "resolutionId does not match deterministic content", f"{path}.resolutionId"))
     return diagnostics

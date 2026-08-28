@@ -23,6 +23,14 @@ def render_markdown(plan: dict[str, Any]) -> str:
     for unit in plan["requestedUnits"]:
         sources = ", ".join(f"`{item}`" for item in unit["sourceNodeIds"])
         lines.append(f"- **{unit['name']}** (`{unit['unitId']}`): {sources}")
+    lines.extend(["", "## Translation groups", ""])
+    for group in plan["translationGroups"]:
+        members = ", ".join(names[unit_id] for unit_id in group["unitIds"])
+        support = ", ".join(f"`{node}`" for node in group["supportingNodeIds"])
+        lines.append(
+            f"- **{group['name']}** ({group['origin']}): {members}. "
+            f"{group['reason']} ({support})"
+        )
     lines.extend(["", "## External prerequisites", ""])
     if plan["externalPrerequisites"]:
         for item in plan["externalPrerequisites"]:

@@ -20,7 +20,10 @@ def _object(properties: dict[str, Any], required: list[str] | None = None) -> di
 
 
 TEXT = {"type": "string", "minLength": 1}
-EVIDENCE_IDS = {"type": "array", "items": {"type": "string", "pattern": "^evidence:"}}
+EVIDENCE_IDS = {
+    "type": "array",
+    "items": {"type": "string", "pattern": "^(evidence|resolution):"},
+}
 
 
 def _component(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:

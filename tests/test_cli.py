@@ -70,7 +70,7 @@ def test_plan_inspection_commands_and_dot_export(tmp_path):
     run = plans_root / "synthetic" / "1.0" / run_id
     run.mkdir(parents=True)
     plan = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "language": "synthetic",
         "version": "1.0",
         "planRunId": run_id,
@@ -80,6 +80,13 @@ def test_plan_inspection_commands_and_dot_export(tmp_path):
             {"unitId": "unit:a", "name": "alpha.u32", "sourceNodeIds": ["node:a"]},
             {"unitId": "unit:b", "name": "beta.u32", "sourceNodeIds": ["node:b"]},
         ],
+        "translationGroups": [{
+            "name": "InstructionSemantics",
+            "unitIds": ["unit:a", "unit:b"],
+            "reason": "The indexed synthetic source presents one instruction family.",
+            "supportingNodeIds": ["node:a", "node:b"],
+            "origin": "INFERRED",
+        }],
         "externalPrerequisites": [],
         "dependencies": [{
             "from": "unit:a", "to": "unit:b", "reason": "alpha first",
@@ -94,7 +101,7 @@ def test_plan_inspection_commands_and_dot_export(tmp_path):
     }
     (run / "plan.json").write_text(json.dumps(plan))
     common = ("--run", run_id, "--plans-root", str(plans_root))
-    for command in ("show", "units", "deps", "layers", "prerequisites"):
+    for command in ("show", "units", "groups", "deps", "layers", "prerequisites"):
         result = _run_plan(command, *common)
         assert result.returncode == 0, (command, result.stderr)
         json.loads(result.stdout)

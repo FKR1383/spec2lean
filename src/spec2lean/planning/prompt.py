@@ -27,8 +27,9 @@ def build_planner_prompt(query: Phase1Query, scope: ResolvedScope) -> str:
     }
     return f"""You are the single Spec2Lean request-scoped Planner.
 
-Plan only the resolved request below. Your task is planning dependency/order, not semantic
-extraction or Lean generation. Never invent an instruction, unit ID, or Phase-1 node ID.
+Plan only the resolved request below. Your task is planning dependency/order and specification-
+derived output grouping, not semantic extraction or Lean generation. Never invent an instruction,
+unit ID, Phase-1 node ID, or a language-specific category table.
 Use only candidate units and source nodes returned by the read-only specdb tools.
 
 Rules:
@@ -39,12 +40,23 @@ Rules:
 - Edge direction is prerequisite -> dependent.
 - Every edge needs a non-empty reason, source-node support, and origin EXPLICIT or INFERRED.
 - Genuine cycles must remain in the submitted edges; deterministic code will represent them.
+- Partition every requested unit into exactly one `translationGroups` entry. Derive concise
+  UpperCamelCase group names from indexed specification headings, ancestors, terminology, and
+  semantic cohesion. Prefer an explicit specification family/section when one exists; otherwise
+  infer the smallest coherent group from the indexed structure.
+- Units under the same meaningful indexed family should share a group. Prefer the family concept
+  over repeating an individual instruction name in the group name; do not split sibling units that
+  the specification presents as one semantic family merely because each has its own subsection.
+- Every group needs a non-empty reason, origin EXPLICIT or INFERRED, and source nodes that support
+  every member through that member's own indexed node or ancestors. Never classify by a built-in
+  mnemonic list, and never use a catch-all merely because the source language is unfamiliar.
 - Do not attempt filesystem, shell, internet, subagent, semantic extraction, or Lean work.
 - You must finish by calling specdb_submit_plan. If it returns validation diagnostics, correct the
   semantic submission and call it again within this same session. Do not merely print JSON.
 
 For external prerequisites, choose a short unique `key`; dependency endpoints may use that key or
-a requested unit ID. The deterministic submit tool assigns prerequisite IDs and derives layers.
+a requested unit ID. The deterministic submit tool assigns prerequisite IDs, verifies group
+partitions and structural support, and derives layers.
 
 Resolved bounded context:
 {json.dumps(context, ensure_ascii=False, indent=2, sort_keys=True)}

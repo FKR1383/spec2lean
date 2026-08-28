@@ -30,7 +30,10 @@ The run manifest references them; it does not copy or reinterpret them.
   digest.
 - Phase 3 must bind to the accepted plan, planned unit, specification identity,
   and Phase-1 digest.
-- Phase 4 must validate against the current Phase-3 bundle hash.
+- Phase 4 must validate against the current Phase-3 bundle hash. An
+  `INSUFFICIENT_EVIDENCE` result enters the bounded database-first Open Question
+  Handler, atomically augments Phase 3, and restarts extraction. Unresolved
+  questions terminate the run with their handler artifact path.
 - Phase 5 must validate the group manifest against every current member
   Phase-4 semantic-artifact hash.
 - Phase 6 must contain the current semantic, Lean-source, and translation
@@ -39,6 +42,13 @@ The run manifest references them; it does not copy or reinterpret them.
 Incomplete or stale generated Phase-3/4 unit directories and Phase-5 group directories are moved to the
 current run's `superseded/` tree before retry, making interruption recovery
 inspectable and non-destructive.
+
+Open-question progress reports the missing aspects, handler round, disposition,
+and counts of canonical evidence and non-normative resolutions added. The
+maximum number of rounds is controlled by `--max-question-rounds` (default 2).
+A trusted runtime adapter may be configured with
+`SPEC2LEAN_RUNTIME_PROBE_COMMAND`; arbitrary model-selected shell execution is
+never enabled.
 
 ## Routing and loop safety
 

@@ -59,6 +59,7 @@ Thumbs.db
 tmp/
 *.tmp
 *.log
+pipeline-time*.txt
 *.vsix
 
 # Locally cached official specifications

@@ -23,6 +23,7 @@ from .semantics.runner import build_semantics
 from .semantics.revision import revise_semantics
 from .semantics.store import artifacts as semantic_artifacts
 from .semantics.store import find_claim, load_semantics, semantics_run_root
+from .semantics.store import unit_directory as semantic_unit_directory
 from .translation.groups import group_for_unit
 from .translation.runner import build_group_translation
 from .translation.revision import revise_translation
@@ -530,6 +531,7 @@ def _command_evidence_units(args: argparse.Namespace) -> int:
             "name": unit["name"],
             "status": artifact["metadata"].get("outcome", "VALID") if artifact else "NOT_RUN",
             "evidenceCount": len((artifact["bundle"] or {}).get("evidence", [])) if artifact else 0,
+            "resolutionCount": len((artifact["bundle"] or {}).get("resolutions", [])) if artifact else 0,
             "directory": str(artifact["directory"]) if artifact else None,
         })
     _json(result)
@@ -548,6 +550,17 @@ def _command_evidence_show(args: argparse.Namespace) -> int:
 
 def _command_evidence_provenance(args: argparse.Namespace) -> int:
     path, item = find_evidence(Path(args.evidence_root), args.evidence)
+    if "resolutionId" in item:
+        _json({
+            "resolutionId": item["resolutionId"],
+            "bundle": str(path),
+            "unitId": item["unitId"],
+            "questionId": item["questionId"],
+            "sourceKind": item["sourceKind"],
+            "nonNormative": item["nonNormative"],
+            "provenance": item["provenance"],
+        })
+        return 0
     _json({
         "evidenceId": item["evidenceId"],
         "bundle": str(path),
@@ -573,6 +586,7 @@ def _command_evidence_stats(args: argparse.Namespace) -> int:
     artifacts = unit_artifacts(Path(args.evidence_root), plan)
     bundles = [item["bundle"] for item in artifacts if item["bundle"]]
     evidence = [record for bundle in bundles for record in bundle["evidence"]]
+    resolutions = [record for bundle in bundles for record in bundle.get("resolutions", [])]
     result = {
         "planRunId": plan["planRunId"],
         "plannedUnits": len(plan["requestedUnits"]),
@@ -580,6 +594,11 @@ def _command_evidence_stats(args: argparse.Namespace) -> int:
         "failedUnits": sum(item["metadata"].get("outcome") == "FAILED" for item in artifacts),
         "evidenceItems": len(evidence),
         "uniqueEvidenceIds": len({item["evidenceId"] for item in evidence}),
+        "supplementalResolutions": len(resolutions),
+        "byResolutionSource": {
+            source: sum(item["sourceKind"] == source for item in resolutions)
+            for source in sorted({item["sourceKind"] for item in resolutions})
+        },
         "byTier": {tier: sum(item["tier"] == tier for item in evidence) for tier in ("CORE", "SUPPORTING")},
         "byRole": {
             role: sum(item["role"] == role for item in evidence)
@@ -598,9 +617,14 @@ def _load_semantics_plan(args: argparse.Namespace) -> tuple[Path, dict[str, Any]
 
 def _command_semantics_build(args: argparse.Namespace) -> int:
     _, plan = _load_semantics_plan(args)
+    database = Path(args.database).resolve() if args.database else _database_for(
+        plan["language"], plan["version"]
+    )
     root = build_semantics(
         plan, Path(args.evidence_root), Path(args.semantics_root),
-        unit_ids=args.unit, timeout_seconds=args.timeout,
+        unit_ids=args.unit, timeout_seconds=args.timeout, database=database,
+        max_question_rounds=args.max_question_rounds,
+        progress=lambda message: print(f"[spec2lean] phase 4 open questions: {message}", file=sys.stderr, flush=True),
     )
     print(root)
     return 0
@@ -645,6 +669,36 @@ def _command_semantics_evidence(args: argparse.Namespace) -> int:
     _json({
         "claim": claim, "semanticArtifact": str(semantic_path),
         "unitId": artifact["unit"]["unitId"], "evidence": records,
+    })
+    return 0
+
+
+def _command_semantics_questions(args: argparse.Namespace) -> int:
+    _, plan = _load_semantics_plan(args)
+    units = [item for item in plan["requestedUnits"] if item["unitId"] == args.unit]
+    if len(units) != 1:
+        raise KeyError(f"unit is not uniquely present in the plan: {args.unit}")
+    directory = semantic_unit_directory(Path(args.semantics_root), plan, units[0])
+    attempts = []
+    for artifact_path in sorted(
+        directory.glob("open-question-attempts/attempt-*/handler/open-questions.json")
+    ):
+        handler_path = artifact_path.with_name("handler-run.json")
+        artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+        metadata = (
+            json.loads(handler_path.read_text(encoding="utf-8"))
+            if handler_path.is_file() else None
+        )
+        attempts.append({
+            "directory": str(artifact_path.parent),
+            "artifact": artifact,
+            "metadata": metadata,
+        })
+    _json({
+        "planRunId": plan["planRunId"],
+        "unitId": args.unit,
+        "attempts": attempts,
+        "directory": str(directory),
     })
     return 0
 
@@ -905,6 +959,7 @@ def _pipeline_options(args: argparse.Namespace) -> PipelineOptions:
         runs_root=Path(args.runs_root),
         timeout_seconds=args.timeout,
         max_dispatches=args.max_dispatches,
+        max_question_rounds=args.max_question_rounds,
         from_phase=args.from_phase,
         until_phase=args.until_phase,
         dry_run=args.dry_run,
@@ -950,6 +1005,7 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline.add_argument("--until", dest="until_phase", choices=PHASES, default="troubleshoot", help="last phase to execute")
     pipeline.add_argument("--timeout", type=int, default=1800, help="timeout for each bounded OpenCode session")
     pipeline.add_argument("--max-dispatches", type=int, default=8, help="maximum Phase-7 routing actions per unit")
+    pipeline.add_argument("--max-question-rounds", type=int, default=2, help="maximum database-first Phase-4 open-question recovery rounds")
     pipeline.add_argument("--index-root", default=str(DEFAULT_INDEX_ROOT), help=argparse.SUPPRESS)
     pipeline.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
     pipeline.add_argument("--evidence-root", default=str(DEFAULT_EVIDENCE_ROOT), help=argparse.SUPPRESS)
@@ -1069,6 +1125,7 @@ def build_parser() -> argparse.ArgumentParser:
     for name, help_text, field in (
         ("show", "show the complete plan", None),
         ("units", "show requested plan units", "requestedUnits"),
+        ("groups", "show specification-derived translation groups", "translationGroups"),
         ("deps", "show dependency edges", "dependencies"),
         ("layers", "show derived processing layers", "processingLayers"),
         ("prerequisites", "show external prerequisites", "externalPrerequisites"),
@@ -1137,7 +1194,9 @@ def build_parser() -> argparse.ArgumentParser:
     semantics_build.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
     semantics_build.add_argument("--evidence-root", default=str(DEFAULT_EVIDENCE_ROOT), help=argparse.SUPPRESS)
     semantics_build.add_argument("--semantics-root", default=str(DEFAULT_SEMANTICS_ROOT), help=argparse.SUPPRESS)
+    semantics_build.add_argument("--database", help=argparse.SUPPRESS)
     semantics_build.add_argument("--timeout", type=int, default=1800, help="timeout per single-unit session in seconds")
+    semantics_build.add_argument("--max-question-rounds", type=int, default=2, help="maximum database-first open-question recovery rounds")
     semantics_build.set_defaults(func=_command_semantics_build)
 
     semantics_revise = semantics_sub.add_parser("revise", help="revise semantics from stored traceability diagnostics")
@@ -1173,6 +1232,15 @@ def build_parser() -> argparse.ArgumentParser:
     semantic_evidence.add_argument("--evidence-root", default=str(DEFAULT_EVIDENCE_ROOT), help=argparse.SUPPRESS)
     semantic_evidence.add_argument("--semantics-root", default=str(DEFAULT_SEMANTICS_ROOT), help=argparse.SUPPRESS)
     semantic_evidence.set_defaults(func=_command_semantics_evidence)
+
+    semantic_questions = semantics_sub.add_parser(
+        "questions", help="show database-first open-question handler attempts for a unit"
+    )
+    semantic_questions.add_argument("--plan-run", required=True)
+    semantic_questions.add_argument("--unit", required=True)
+    semantic_questions.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
+    semantic_questions.add_argument("--semantics-root", default=str(DEFAULT_SEMANTICS_ROOT), help=argparse.SUPPRESS)
+    semantic_questions.set_defaults(func=_command_semantics_questions)
 
     semantic_stats = semantics_sub.add_parser("stats", help="show per-plan semantic statistics")
     semantic_stats.add_argument("--plan-run", required=True)

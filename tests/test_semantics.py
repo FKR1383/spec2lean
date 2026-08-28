@@ -18,6 +18,7 @@ from spec2lean.semantics.revision import revise_semantics
 from spec2lean.semantics.runner import build_semantics, opencode_config
 from spec2lean.semantics.store import unit_directory
 from spec2lean.semantics.validation import validate_artifact, validate_submission
+from spec2lean.semantics.questions import resolution_record, OpenQuestionScope
 
 
 UNIT = {"unitId": "unit:alpha", "name": "alpha.u32", "sourceNodeIds": ["node:alpha"]}
@@ -163,6 +164,45 @@ def test_insufficient_evidence_is_a_structured_accepted_failure():
     assert "INSUFFICIENT EVIDENCE" in render_markdown(artifact)
 
 
+def test_non_normative_resolution_can_only_support_assumption_claims():
+    plan, bundle = _inputs()
+    initial_scope = _scope(plan, bundle)
+    failure = initial_scope.artifact({
+        "outcome": "INSUFFICIENT_EVIDENCE",
+        "missingAspects": ["Unspecified maximal-input behavior"],
+        "explanation": "The official evidence does not determine this case.",
+        "evidenceIds": ["evidence:operation"],
+    })
+    question_scope = OpenQuestionScope.from_inputs(
+        plan, bundle, failure, created_at="2026-01-02T03:04:06Z"
+    )
+    resolution = resolution_record(
+        question_scope,
+        question_id=question_scope.questions[0]["questionId"],
+        source_kind="LLM_REASONING",
+        role="EDGE_CASE",
+        statement="Use the bounded result selected by the project.",
+        rationale="Explicit non-normative modeling choice.",
+        provenance={"model": "openai/gpt-5.6-sol", "reasoning": "medium"},
+    )
+    bundle["resolutions"] = [resolution]
+    scope = _scope(plan, bundle)
+    invalid = _submission()
+    invalid["claims"][0]["evidenceIds"].append(resolution["resolutionId"])
+    _, diagnostics = validate_submission(scope, bundle, invalid)
+    assert "NON_NORMATIVE_CLAIM_KIND" in _codes(diagnostics)
+
+    unmapped = _submission()
+    unmapped["edgeCases"][0]["evidenceIds"] = [resolution["resolutionId"]]
+    _, diagnostics = validate_submission(scope, bundle, unmapped)
+    assert "UNMAPPED_NON_NORMATIVE_RESOLUTION" in _codes(diagnostics)
+
+    valid = _submission()
+    valid["claims"][3]["evidenceIds"] = [resolution["resolutionId"]]
+    artifact, diagnostics = validate_submission(scope, bundle, valid)
+    assert diagnostics == [] and artifact is not None
+
+
 def test_tool_and_opencode_config_expose_submission_only(tmp_path):
     assert [item["name"] for item in tool_definitions()] == ["submit_semantics"]
     schema = tool_definitions()[0]["inputSchema"]
@@ -231,12 +271,26 @@ def test_semantics_inspection_cli_is_deterministic_and_does_not_run_opencode(tmp
     directory.mkdir(parents=True)
     (directory / "semantics.json").write_text(json.dumps(artifact), encoding="utf-8")
     (directory / "extractor-run.json").write_text(json.dumps({"outcome": "SUCCESS"}), encoding="utf-8")
+    handler = directory / "open-question-attempts" / "attempt-1" / "handler"
+    handler.mkdir(parents=True)
+    (handler / "open-questions.json").write_text(json.dumps({
+        "outcome": "RESOLVED", "questions": [{"questionId": "question:one"}],
+    }), encoding="utf-8")
+    (handler / "handler-run.json").write_text(json.dumps({
+        "outcome": "RESOLVED", "model": "openai/gpt-5.6-sol",
+    }), encoding="utf-8")
     common = ["--plans-root", str(plans_root), "--semantics-root", str(semantics_root)]
     for command in ("show", "claims", "operation"):
         assert main(["semantics", command, "--plan-run", plan["planRunId"], "--unit", UNIT["unitId"], *common]) == 0
         json.loads(capsys.readouterr().out)
     assert main(["semantics", "stats", "--plan-run", plan["planRunId"], *common]) == 0
     assert json.loads(capsys.readouterr().out)["successfulArtifacts"] == 1
+    assert main([
+        "semantics", "questions", "--plan-run", plan["planRunId"],
+        "--unit", UNIT["unitId"], *common,
+    ]) == 0
+    questions = json.loads(capsys.readouterr().out)
+    assert questions["attempts"][0]["artifact"]["outcome"] == "RESOLVED"
     assert main([
         "semantics", "evidence", "--claim", "claim:source", "--semantics-root", str(semantics_root),
         "--evidence-root", str(evidence_root),

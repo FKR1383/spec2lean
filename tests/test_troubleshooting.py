@@ -22,9 +22,11 @@ from spec2lean.troubleshooting.opencode import opencode_config
 from spec2lean.troubleshooting.prompt import build_troubleshooter_prompt
 from spec2lean.troubleshooting.resolver import resolve_check_failure
 from spec2lean.troubleshooting.runner import run_troubleshooter
+from spec2lean.troubleshooting.validation import validate_repair_submission
 
 
 UNIT = {"unitId": "unit:repair", "name": "repair.unit", "sourceNodeIds": ["node:repair"]}
+GROUP = "InstructionSemantics"
 SOURCE = """namespace Spec2Lean.Repair
 
 def operation (a b : Nat) : Nat := a + b
@@ -36,11 +38,18 @@ REPAIRED_SOURCE = SOURCE.replace("a + b", "Nat.add a b")
 
 def _plan() -> dict:
     return {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "planRunId": "plan:troubleshooting-test",
         "language": "synthetic",
         "version": "1.0",
         "requestedUnits": [dict(UNIT)],
+        "translationGroups": [{
+            "name": GROUP,
+            "unitIds": [UNIT["unitId"]],
+            "reason": "Derived from the indexed synthetic instruction section.",
+            "supportingNodeIds": ["node:repair"],
+            "origin": "INFERRED",
+        }],
     }
 
 
@@ -125,7 +134,7 @@ def _write_build_inputs(tmp_path: Path) -> tuple[dict, dict[str, Path], dict, di
         }]},
     }
     scope = TranslationGroupScope.from_inputs(
-        plan, "Other", {UNIT["unitId"]: semantics}, created_at="2026-08-27T00:00:00Z"
+        plan, GROUP, {UNIT["unitId"]: semantics}, created_at="2026-08-27T00:00:00Z"
     )
     declarations = [{
         "declaration": "Spec2Lean.Repair.operation",
@@ -140,9 +149,9 @@ def _write_build_inputs(tmp_path: Path) -> tuple[dict, dict[str, Path], dict, di
     semantics_directory = roots["semantics"] / "synthetic" / "1.0" / plan["planRunId"] / slug
     semantics_directory.mkdir(parents=True)
     (semantics_directory / "semantics.json").write_text(json.dumps(semantics), encoding="utf-8")
-    translation_directory = roots["translations"] / "synthetic" / "1.0" / plan["planRunId"] / "Other"
+    translation_directory = roots["translations"] / "synthetic" / "1.0" / plan["planRunId"] / GROUP
     translation_directory.mkdir(parents=True)
-    (translation_directory / "Other.lean").write_text(SOURCE, encoding="utf-8")
+    (translation_directory / f"{GROUP}.lean").write_text(SOURCE, encoding="utf-8")
     (translation_directory / "translation-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     (translation_directory / "translator-run.json").write_text("{}", encoding="utf-8")
     return plan, roots, semantics, manifest
@@ -196,8 +205,8 @@ def test_build_failure_routes_to_one_troubleshooter_repair_and_records_hashes(tm
     assert len(calls) == 1
     assert artifact["action"] == REPAIR_BUILD and artifact["outcome"] == "REPAIRED"
     assert artifact["repairRunId"].startswith("repair-run:")
-    assert artifact["hashes"]["before"]["Other.lean"] != artifact["hashes"]["after"]["Other.lean"]
-    assert artifact["changedFiles"] == ["Other.lean"]
+    assert artifact["hashes"]["before"][f"{GROUP}.lean"] != artifact["hashes"]["after"][f"{GROUP}.lean"]
+    assert artifact["changedFiles"] == [f"{GROUP}.lean"]
     assert artifact["singleSession"] is True and artifact["automaticRetries"] == 0
     assert json.loads((output / "troubleshoot.json").read_text()) == artifact
 
@@ -246,6 +255,31 @@ def test_build_repair_context_includes_toolchain_and_prior_attempts(tmp_path):
     prompt = build_troubleshooter_prompt(captured)
     assert "diagnostics and Lean version as authoritative" in prompt
     assert "Do not repeat" in prompt
+    assert "correct the submission and call it again" in prompt
+
+
+def test_file_level_import_repair_needs_no_affected_declaration(tmp_path):
+    plan, _, semantics, manifest = _write_build_inputs(tmp_path)
+    scope = TranslationGroupScope.from_inputs(
+        plan, GROUP, {UNIT["unitId"]: semantics}, created_at=manifest["createdAt"]
+    )
+    candidate, diagnostics = validate_repair_submission(
+        scope,
+        {UNIT["unitId"]: semantics},
+        SOURCE,
+        manifest,
+        {
+            "leanSource": "import Std\n\n" + SOURCE,
+            "declarations": manifest["declarations"],
+            "changes": [{
+                "description": "Replace a missing module with the installed root import.",
+                "affectedDeclarations": [],
+            }],
+        },
+    )
+    assert diagnostics == []
+    assert candidate is not None
+    assert candidate["changes"][0]["affectedDeclarations"] == []
 
 
 def test_coverage_failure_routes_to_translator_with_exact_uncovered_ids(tmp_path):
@@ -309,8 +343,8 @@ def test_build_repair_preserves_valid_manifest_references_and_marks_all_checks(t
 
     _, artifact = _run(plan, roots, repair)
     slug = unit_directory_name(UNIT)
-    directory = roots["translations"] / "synthetic" / "1.0" / plan["planRunId"] / "Other"
-    source = (directory / "Other.lean").read_text()
+    directory = roots["translations"] / "synthetic" / "1.0" / plan["planRunId"] / GROUP
+    source = (directory / f"{GROUP}.lean").read_text()
     stored_manifest = json.loads((directory / "translation-manifest.json").read_text())
     assert validate_manifest(plan, {UNIT["unitId"]: semantics}, source, stored_manifest) == []
     assert stored_manifest["declarations"][0]["claimRefs"] == [
@@ -358,8 +392,8 @@ def test_build_repair_cannot_change_semantic_mapping_responsibility(tmp_path):
     with pytest.raises(RuntimeError, match="preserve declaration roles"):
         _run(plan, roots, repair)
     slug = unit_directory_name(UNIT)
-    directory = roots["translations"] / "synthetic" / "1.0" / plan["planRunId"] / "Other"
-    assert (directory / "Other.lean").read_text() == SOURCE
+    directory = roots["translations"] / "synthetic" / "1.0" / plan["planRunId"] / GROUP
+    assert (directory / f"{GROUP}.lean").read_text() == SOURCE
     artifact = json.loads((
         roots["troubleshooting"] / "synthetic" / "1.0" / plan["planRunId"]
         / slug / "troubleshoot.json"

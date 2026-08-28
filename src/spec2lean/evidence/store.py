@@ -45,11 +45,17 @@ def find_evidence(evidence_root: Path, evidence_id: str) -> tuple[Path, dict[str
     matches: list[tuple[Path, dict[str, Any]]] = []
     for path in evidence_root.resolve().glob("*/*/*/*/evidence.json"):
         bundle = json.loads(path.read_text(encoding="utf-8"))
-        for item in bundle.get("evidence", []):
-            if item.get("evidenceId") == evidence_id:
+        for item in [*bundle.get("evidence", []), *bundle.get("resolutions", [])]:
+            item_id = item.get("evidenceId") or item.get("resolutionId")
+            if item_id == evidence_id:
                 matches.append((path, item))
     if not matches:
         raise FileNotFoundError(f"evidence ID was not found: {evidence_id}")
+    if evidence_id.startswith("resolution:"):
+        identities = {json.dumps(item, sort_keys=True) for _, item in matches}
+        if len(identities) > 1:
+            raise RuntimeError(f"resolution ID resolves to conflicting records: {evidence_id}")
+        return matches[0]
     provenance_fields = (
         "evidenceId", "role", "tier", "sourceNodeId", "sourceNodeIds", "sourceSpanIds",
         "sourceType", "sectionNumber", "sectionTitle", "exactText", "documentId",

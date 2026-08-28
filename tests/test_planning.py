@@ -21,8 +21,19 @@ def _resolved(planner_database: Path, names: list[str]):
 
 
 def _submission(scope, *, selected=None, prerequisites=None, dependencies=None):
+    unit_ids = selected or [item["unitId"] for item in scope.candidate_units]
+    selected_units = [item for item in scope.candidate_units if item["unitId"] in unit_ids]
     return {
-        "requestedUnitIds": selected or [item["unitId"] for item in scope.candidate_units],
+        "requestedUnitIds": unit_ids,
+        "translationGroups": [{
+            "name": "InstructionSemantics",
+            "unitIds": unit_ids,
+            "reason": "The indexed specification places these units in one instruction family.",
+            "supportingNodeIds": sorted({
+                node_id for item in selected_units for node_id in item["sourceNodeIds"]
+            }),
+            "origin": "INFERRED",
+        }],
         "externalPrerequisites": prerequisites or [],
         "dependencies": dependencies or [],
     }
@@ -106,6 +117,10 @@ def test_two_independent_instructions_share_layer_zero(planner_database):
             "unitIds": sorted(item["unitId"] for item in scope.candidate_units),
         }]
         assert plan["graphStatus"] == "ACYCLIC"
+        assert plan["schemaVersion"] == 2
+        assert plan["translationGroups"][0]["unitIds"] == [
+            item["unitId"] for item in scope.candidate_units
+        ]
     finally:
         connection.close()
 
@@ -225,6 +240,18 @@ def test_one_session_runner_owns_metadata_and_does_not_call_real_opencode(planne
         scope = json.loads(scope_path.read_text())
         submission_path.write_text(json.dumps({
             "requestedUnitIds": scope["exactUnitIds"],
+            "translationGroups": [{
+                "name": "InstructionSemantics",
+                "unitIds": scope["exactUnitIds"],
+                "reason": "The indexed source presents these as one instruction family.",
+                "supportingNodeIds": sorted({
+                    node_id
+                    for unit in scope["candidateUnits"]
+                    if unit["unitId"] in scope["exactUnitIds"]
+                    for node_id in unit["sourceNodeIds"]
+                }),
+                "origin": "INFERRED",
+            }],
             "externalPrerequisites": [],
             "dependencies": [],
         }))
@@ -310,6 +337,7 @@ def test_submit_tool_can_diagnose_then_accept_in_the_same_server_session(planner
         }
         invalid = json.loads(server.call_tool("submit_plan", {
             "requestedUnitIds": ["unit:invented"],
+            "translationGroups": [],
             "externalPrerequisites": [],
             "dependencies": [],
         })["content"][0]["text"])
@@ -323,3 +351,32 @@ def test_submit_tool_can_diagnose_then_accept_in_the_same_server_session(planner
         assert json.loads(submission_path.read_text()) == valid_submission
     finally:
         server.close()
+
+
+def test_translation_groups_are_general_exact_and_source_supported(planner_database):
+    connection, scope = _resolved(planner_database, ["alpha.u32", "beta.u32"])
+    try:
+        alpha, beta = [item["unitId"] for item in scope.candidate_units]
+        support = scope.candidate_units[0]["sourceNodeIds"][0]
+        submission = _submission(scope)
+        submission["translationGroups"] = [{
+            "name": "IndexedFamily",
+            "unitIds": [alpha],
+            "reason": "The indexed section supports this family.",
+            "supportingNodeIds": [support],
+            "origin": "EXPLICIT",
+        }]
+        _, diagnostics = validate_submission(Phase1Query(connection), scope, submission)
+        assert "UNGROUPED_REQUESTED_UNITS" in {item["code"] for item in diagnostics}
+
+        submission = _submission(scope)
+        submission["translationGroups"][0]["name"] = "hard-coded name"
+        _, diagnostics = validate_submission(Phase1Query(connection), scope, submission)
+        assert "INVALID_TRANSLATION_GROUP_NAME" in {item["code"] for item in diagnostics}
+
+        submission = _submission(scope)
+        submission["translationGroups"][0]["unitIds"] = [alpha, beta, alpha]
+        _, diagnostics = validate_submission(Phase1Query(connection), scope, submission)
+        assert "DUPLICATE_TRANSLATION_GROUP_UNIT" in {item["code"] for item in diagnostics}
+    finally:
+        connection.close()

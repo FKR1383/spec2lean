@@ -9,7 +9,7 @@ import pytest
 
 from spec2lean.cli import main
 from spec2lean.translation.mcp import TranslationMcpServer, tool_definitions
-from spec2lean.translation.groups import instruction_group
+from spec2lean.translation.groups import group_for_unit, grouped_units
 from spec2lean.translation.models import (
     TRANSLATOR_MODEL,
     TRANSLATOR_REASONING,
@@ -29,17 +29,25 @@ from spec2lean.translation.validation import (
 
 
 UNIT = {"unitId": "unit:alpha", "name": "alpha.u32", "sourceNodeIds": ["node:alpha"]}
+GROUP = "InstructionSemantics"
 
 
 def _inputs() -> tuple[dict, dict]:
     plan = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "planRunId": "plan:translation-test",
         "language": "synthetic",
         "version": "1.0",
         "sourceDatabaseDigest": "digest:phase1",
         "request": {"scope": {"mode": "EXACT_INSTRUCTIONS"}},
         "requestedUnits": [copy.deepcopy(UNIT)],
+        "translationGroups": [{
+            "name": GROUP,
+            "unitIds": [UNIT["unitId"]],
+            "reason": "Derived from the indexed synthetic instruction section.",
+            "supportingNodeIds": ["node:alpha"],
+            "origin": "INFERRED",
+        }],
     }
     semantics = {
         "schemaVersion": 1,
@@ -83,7 +91,7 @@ def _inputs() -> tuple[dict, dict]:
 
 def _scope(plan: dict, semantics: dict) -> TranslationGroupScope:
     return TranslationGroupScope.from_inputs(
-        plan, "Other", {UNIT["unitId"]: semantics},
+        plan, GROUP, {UNIT["unitId"]: semantics},
         created_at="2026-01-02T03:04:05.000000Z"
     )
 
@@ -142,7 +150,7 @@ def test_valid_translation_artifact_and_deterministic_metadata():
 
     metadata = {
         "schemaVersion": 2, "phase": "LLM_GROUP_TRANSLATOR", "planRunId": scope.plan_run_id,
-        "group": {"name": "Other", "unitIds": [UNIT["unitId"]]},
+        "group": {"name": GROUP, "unitIds": [UNIT["unitId"]]},
         "translationRunId": scope.translation_run_id,
         "translator": "opencode", "model": TRANSLATOR_MODEL, "reasoning": TRANSLATOR_REASONING,
         "singleSession": True, "automaticRetries": 0,
@@ -200,12 +208,14 @@ def test_group_scope_supports_multiple_units_and_unit_scoped_claim_ids():
     beta_semantics["runId"] = "semantic-run:beta"
     beta_semantics["semantics"]["identity"]["name"] = "beta.u32"
     plan["requestedUnits"].append(copy.deepcopy(beta_unit))
+    plan["translationGroups"][0]["unitIds"].append(beta_unit["unitId"])
+    plan["translationGroups"][0]["supportingNodeIds"].append("node:beta")
     semantics_by_unit = {
         UNIT["unitId"]: alpha_semantics,
         beta_unit["unitId"]: beta_semantics,
     }
     scope = TranslationGroupScope.from_inputs(
-        plan, "Other", semantics_by_unit, created_at="2026-01-02T03:04:05.000000Z"
+        plan, GROUP, semantics_by_unit, created_at="2026-01-02T03:04:05.000000Z"
     )
     source = """namespace Spec2Lean.Synthetic.Other
 
@@ -248,19 +258,22 @@ end Spec2Lean.Synthetic.Other
         scope, semantics_by_unit, {"leanSource": source, "declarations": declarations}
     )
     assert diagnostics == [] and candidate is not None
-    assert scope.lean_file == "Other.lean"
+    assert scope.lean_file == f"{GROUP}.lean"
     assert candidate["manifest"]["group"] == {
-        "name": "Other", "unitIds": [UNIT["unitId"], beta_unit["unitId"]]
+        "name": GROUP, "unitIds": [UNIT["unitId"], beta_unit["unitId"]]
     }
     assert len(candidate["manifest"]["semanticsArtifacts"]) == 2
 
 
-def test_ptx_grouping_uses_base_mnemonic_and_keeps_unknowns_visible():
-    assert instruction_group("ptx", "add.cc.u32") == "Arithmetic"
-    assert instruction_group("ptx", "addc.u32") == "Arithmetic"
-    assert instruction_group("ptx", "shr.u32") == "BitManip"
-    assert instruction_group("ptx", "and.b32") == "Logic"
-    assert instruction_group("ptx", "future.op") == "Other"
+def test_group_mapping_comes_only_from_the_phase2_plan():
+    plan, _ = _inputs()
+    assert group_for_unit(plan, UNIT["unitId"]) == GROUP
+    assert grouped_units(plan) == {GROUP: [UNIT]}
+    plan["requestedUnits"][0]["name"] = "completely.unknown.mnemonic"
+    assert group_for_unit(plan, UNIT["unitId"]) == GROUP
+    del plan["translationGroups"]
+    with pytest.raises(ValueError, match="rerun from the plan phase"):
+        grouped_units(plan)
 
 
 @pytest.mark.parametrize(
@@ -355,7 +368,7 @@ def test_runner_uses_one_session_exact_model_and_phase4_only_input(tmp_path, mon
     )
     assert len(calls) == 1
     assert {path.name for path in output.iterdir()} == {
-        "Other.lean", "translation-manifest.json", "translator-run.json",
+        f"{GROUP}.lean", "translation-manifest.json", "translator-run.json",
     }
     metadata = json.loads((output / "translator-run.json").read_text())
     assert metadata["model"] == TRANSLATOR_MODEL == "openai/gpt-5.6-sol"
@@ -398,7 +411,7 @@ def test_traceability_chain_resolves_declaration_claim_evidence_and_source(tmp_p
     translations_root = tmp_path / "translations"
     output = unit_directory(translations_root, plan, UNIT)
     output.mkdir(parents=True)
-    (output / "Other.lean").write_text(candidate["leanSource"], encoding="utf-8")
+    (output / f"{GROUP}.lean").write_text(candidate["leanSource"], encoding="utf-8")
     (output / "translation-manifest.json").write_text(json.dumps(candidate["manifest"]), encoding="utf-8")
     (output / "translator-run.json").write_text(json.dumps({"outcome": "SUCCESS"}), encoding="utf-8")
     evidence_dir = evidence_root / "synthetic" / "1.0" / plan["planRunId"] / "alpha"
@@ -434,7 +447,7 @@ def test_bounded_translation_revision_updates_existing_artifact_and_keeps_build_
     translations_root = tmp_path / "translations"
     directory = unit_directory(translations_root, plan, UNIT)
     directory.mkdir(parents=True)
-    (directory / "Other.lean").write_text(original["leanSource"], encoding="utf-8")
+    (directory / f"{GROUP}.lean").write_text(original["leanSource"], encoding="utf-8")
     (directory / "translation-manifest.json").write_text(json.dumps(original["manifest"]), encoding="utf-8")
     (directory / "translator-run.json").write_text("{}", encoding="utf-8")
     uncovered = [{"itemType": "SEMANTIC_CLAIM", "itemId": "claim:op", "declarations": []}]
@@ -464,8 +477,8 @@ def test_bounded_translation_revision_updates_existing_artifact_and_keeps_build_
     )
     assert len(calls) == 1 and calls[0]["diagnostics"] == uncovered
     assert metadata["singleSession"] is True and metadata["automaticRetries"] == 0
-    assert (revision_directory / "before-Other.lean").is_file()
-    source = (directory / "Other.lean").read_text()
+    assert (revision_directory / f"before-{GROUP}.lean").is_file()
+    source = (directory / f"{GROUP}.lean").read_text()
     manifest = json.loads((directory / "translation-manifest.json").read_text())
     assert "operationMeaning" in source and validate_manifest(
         plan, {UNIT["unitId"]: semantics}, source, manifest

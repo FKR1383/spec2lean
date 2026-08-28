@@ -31,6 +31,15 @@ def _plan(planner_database: Path, names: list[str], *, shared_prerequisite: bool
         scope = ScopeResolver(connection).resolve(PlanningRequest.exact("synthetic", "1.0", names))
         submission = {
             "requestedUnitIds": [item["unitId"] for item in scope.candidate_units],
+            "translationGroups": [{
+                "name": "InstructionSemantics",
+                "unitIds": [item["unitId"] for item in scope.candidate_units],
+                "reason": "The indexed synthetic source presents one instruction family.",
+                "supportingNodeIds": sorted({
+                    node_id for item in scope.candidate_units for node_id in item["sourceNodeIds"]
+                }),
+                "origin": "INFERRED",
+            }],
             "externalPrerequisites": [],
             "dependencies": [],
         }

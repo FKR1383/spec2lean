@@ -95,6 +95,23 @@ def _require_component_texts(value: dict[str, Any], names: Iterable[str], path: 
         _text(value.get(name), f"{path}.{name}", diagnostics)
 
 
+def _resolution_references(value: Any) -> set[str]:
+    if isinstance(value, dict):
+        result = {
+            item for item in value.get("evidenceIds", [])
+            if isinstance(item, str) and item.startswith("resolution:")
+        } if isinstance(value.get("evidenceIds"), list) else set()
+        for item in value.values():
+            result.update(_resolution_references(item))
+        return result
+    if isinstance(value, list):
+        result: set[str] = set()
+        for item in value:
+            result.update(_resolution_references(item))
+        return result
+    return set()
+
+
 def validate_submission(
     scope: SemanticScope, bundle: dict[str, Any], submission: Any
 ) -> tuple[dict[str, Any] | None, list[dict[str, str]]]:
@@ -109,9 +126,18 @@ def validate_submission(
         missing = _list(value.get("missingAspects"), "$.missingAspects", diagnostics)
         if not missing:
             diagnostics.append(_diagnostic("MISSING_ASPECT", "at least one missing semantic aspect is required", "$.missingAspects"))
+        normalized_missing: list[str] = []
         for index, item in enumerate(missing):
             if not isinstance(item, str) or not normalize_text(item):
                 diagnostics.append(_diagnostic("INVALID_TEXT", "missing aspect must be non-empty", f"$.missingAspects[{index}]"))
+            else:
+                normalized_missing.append(normalize_text(item))
+        if len(normalized_missing) != len(set(normalized_missing)):
+            diagnostics.append(_diagnostic(
+                "DUPLICATE_MISSING_ASPECT",
+                "missingAspects must contain unique normalized questions",
+                "$.missingAspects",
+            ))
         _text(value.get("explanation"), "$.explanation", diagnostics)
         _evidence_ids(value.get("evidenceIds", []), allowed_evidence, "$.evidenceIds", diagnostics, required=False)
         return (scope.artifact(value), []) if not diagnostics else (None, diagnostics)
@@ -169,7 +195,12 @@ def validate_submission(
                 if branch is not None:
                     _require_component_texts(branch, ("condition", "behavior"), f"$.operation.branches[{index}]", diagnostics)
 
-    evidence_roles = {item.get("evidenceId"): item.get("role") for item in bundle.get("evidence", [])}
+    evidence_roles = {
+        item.get("evidenceId"): item.get("role") for item in bundle.get("evidence", [])
+    }
+    evidence_roles.update({
+        item.get("resolutionId"): item.get("role") for item in bundle.get("resolutions", [])
+    })
     is_instruction = unit_kind == "INSTRUCTION" or any(role in {"OPERATION", "ALGORITHM"} for role in evidence_roles.values())
     if is_instruction:
         if operation_item is None:
@@ -196,6 +227,7 @@ def validate_submission(
 
     claim_ids: set[str] = set()
     claim_meanings: set[tuple[str, str]] = set()
+    assumption_resolutions: set[str] = set()
     for index, raw in enumerate(_list(value.get("claims"), "$.claims", diagnostics)):
         path = f"$.claims[{index}]"
         item = _component(raw, "claim", path, allowed_evidence, diagnostics, evidence_required=False)
@@ -217,8 +249,28 @@ def validate_submission(
         claim_meanings.add(meaning)
         if claim_kind in {"SOURCE_FACT", "DERIVED_INTERPRETATION"} and not item.get("evidenceIds"):
             diagnostics.append(_diagnostic("MISSING_EVIDENCE", "SOURCE_FACT and DERIVED_INTERPRETATION claims require evidence", f"{path}.evidenceIds"))
+        resolution_refs = [
+            evidence_id for evidence_id in item.get("evidenceIds", [])
+            if isinstance(evidence_id, str) and evidence_id.startswith("resolution:")
+        ]
+        if resolution_refs and claim_kind != "ASSUMPTION":
+            diagnostics.append(_diagnostic(
+                "NON_NORMATIVE_CLAIM_KIND",
+                "claims using internet, runtime, or LLM resolutions must be classified ASSUMPTION",
+                f"{path}.kind",
+            ))
+        if claim_kind == "ASSUMPTION":
+            assumption_resolutions.update(resolution_refs)
     if not value.get("claims"):
         diagnostics.append(_diagnostic("MISSING_CLAIMS", "at least one structured semantic claim is required", "$.claims"))
+    unclassified_resolutions = _resolution_references(value) - assumption_resolutions
+    if unclassified_resolutions:
+        diagnostics.append(_diagnostic(
+            "UNMAPPED_NON_NORMATIVE_RESOLUTION",
+            "every used non-normative resolution must be cited by an ASSUMPTION claim: "
+            + ", ".join(sorted(unclassified_resolutions)),
+            "$.claims",
+        ))
     return (scope.artifact(value), []) if not diagnostics else (None, diagnostics)
 
 

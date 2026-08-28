@@ -69,6 +69,17 @@ class SemanticScope:
                 raise ValueError("Phase-3 evidence record belongs to a different unit")
             if not item.get("documentId") or not item.get("documentSha256") or item.get("sourceType") not in {"html", "pdf"}:
                 raise ValueError("Phase-3 evidence record has incomplete source specification identity")
+        resolutions = bundle.get("resolutions", [])
+        if not isinstance(resolutions, list):
+            raise ValueError("Phase-3 supplemental resolutions must be an array")
+        resolution_ids = tuple(str(item.get("resolutionId", "")) for item in resolutions)
+        if any(not value.startswith("resolution:") for value in resolution_ids):
+            raise ValueError("supplemental resolution IDs must be present")
+        if len(resolution_ids) != len(set(resolution_ids)) or set(ids) & set(resolution_ids):
+            raise ValueError("evidence and resolution IDs must be globally unique")
+        for item in resolutions:
+            if item.get("unitId") != unit_id or item.get("nonNormative") is not True:
+                raise ValueError("supplemental resolution has an invalid unit or authority flag")
         bundle_hash = evidence_bundle_hash(bundle)
         return cls(
             plan_run_id=str(plan["planRunId"]),
@@ -76,7 +87,7 @@ class SemanticScope:
             version=str(plan["version"]),
             unit=unit,
             evidence_bundle_hash=bundle_hash,
-            evidence_ids=ids,
+            evidence_ids=(*ids, *resolution_ids),
             run_id=stable_id("semantic-run", plan["planRunId"], unit_id, bundle_hash),
             created_at=created_at,
         )

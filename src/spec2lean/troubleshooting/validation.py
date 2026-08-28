@@ -97,8 +97,8 @@ def validate_repair_submission(
         affected = change.get("affectedDeclarations")
         if not isinstance(description, str) or not description.strip():
             diagnostics.append({"code": "EMPTY_DESCRIPTION", "message": "change description must be non-empty", "path": f"{path}.description"})
-        if not isinstance(affected, list) or not affected or not all(isinstance(item, str) for item in affected):
-            diagnostics.append({"code": "INVALID_AFFECTED_DECLARATIONS", "message": "affectedDeclarations must be a non-empty string array", "path": f"{path}.affectedDeclarations"})
+        if not isinstance(affected, list) or not all(isinstance(item, str) for item in affected):
+            diagnostics.append({"code": "INVALID_AFFECTED_DECLARATIONS", "message": "affectedDeclarations must be a string array (empty for file-level import changes)", "path": f"{path}.affectedDeclarations"})
             affected = []
         elif len(affected) != len(set(affected)):
             diagnostics.append({"code": "DUPLICATE_AFFECTED_DECLARATION", "message": "affectedDeclarations contains a duplicate", "path": f"{path}.affectedDeclarations"})

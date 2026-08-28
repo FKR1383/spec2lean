@@ -18,6 +18,9 @@ from spec2lean.translation.models import TranslationGroupScope
 from spec2lean.util import canonical_json
 
 
+GROUP = "InstructionSemantics"
+
+
 def _json(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value), encoding="utf-8")
@@ -52,12 +55,19 @@ def _services(options: PipelineOptions, database: Path, calls: list[str], *, fai
         ).fetchone()
     unit = {"unitId": "unit:pipeline", "name": "alpha.u32", "sourceNodeIds": [row["node_id"]]}
     plan = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "planRunId": "plan:pipeline",
         "language": "synthetic",
         "version": "1.0",
         "sourceDatabaseDigest": digest,
         "requestedUnits": [unit],
+        "translationGroups": [{
+            "name": GROUP,
+            "unitIds": [unit["unitId"]],
+            "reason": "Derived from the indexed synthetic instruction section.",
+            "supportingNodeIds": [row["node_id"]],
+            "origin": "INFERRED",
+        }],
         "graphStatus": "ACYCLIC",
         "processingLayers": [{"layer": 0, "unitIds": [unit["unitId"]]}],
     }
@@ -121,12 +131,12 @@ def _services(options: PipelineOptions, database: Path, calls: list[str], *, fai
         calls.append("translate")
         semantics = json.loads((semantics_root / "synthetic" / "1.0" / current_plan["planRunId"] / slug / "semantics.json").read_text())
         scope = TranslationGroupScope.from_inputs(
-            current_plan, "Other", {unit["unitId"]: semantics}, created_at="now"
+            current_plan, GROUP, {unit["unitId"]: semantics}, created_at="now"
         )
         manifest = scope.manifest([])
-        directory = root / "synthetic" / "1.0" / current_plan["planRunId"] / "Other"
+        directory = root / "synthetic" / "1.0" / current_plan["planRunId"] / GROUP
         directory.mkdir(parents=True, exist_ok=True)
-        (directory / "Other.lean").write_text("def pipeline : Nat := 1\n", encoding="utf-8")
+        (directory / f"{GROUP}.lean").write_text("def pipeline : Nat := 1\n", encoding="utf-8")
         _json(directory / "translation-manifest.json", manifest)
         _json(directory / "translator-run.json", {"outcome": "SUCCESS"})
         return directory
@@ -134,8 +144,8 @@ def _services(options: PipelineOptions, database: Path, calls: list[str], *, fai
     def checker(current_plan, *, semantics_root, translations_root, checks_root, **_kwargs):
         calls.append("check")
         semantics = json.loads((semantics_root / "synthetic" / "1.0" / current_plan["planRunId"] / slug / "semantics.json").read_text())
-        translation_dir = translations_root / "synthetic" / "1.0" / current_plan["planRunId"] / "Other"
-        source = (translation_dir / "Other.lean").read_text()
+        translation_dir = translations_root / "synthetic" / "1.0" / current_plan["planRunId"] / GROUP
+        source = (translation_dir / f"{GROUP}.lean").read_text()
         translation_manifest = json.loads((translation_dir / "translation-manifest.json").read_text())
         passing = {"status": "PASS", "diagnostics": []}
         coverage = {"status": "FAIL" if fail_check else "PASS", "uncovered": ["claim:pipeline"] if fail_check else []}
@@ -182,6 +192,7 @@ def test_pipeline_composes_all_phases_and_resume_reuses_fresh_artifacts(
     )
 
     assert directory is not None and manifest["status"] == "COMPLETE"
+    assert manifest["maxQuestionRounds"] == 2
     assert calls == ["plan", "evidence", "semantics", "translate", "check"]
     unit = next(iter(manifest["units"].values()))
     assert unit["status"] == "PASS"
@@ -191,7 +202,7 @@ def test_pipeline_composes_all_phases_and_resume_reuses_fresh_artifacts(
     assert unit["stages"]["check"]["disposition"] == "RAN"
     assert unit["stages"]["troubleshoot"] == "NOT_REQUIRED"
     assert any("phase 1/7 index: validating freshness" in item for item in progress)
-    assert any("group Other (1 instruction(s)) phase 5/7 translate" in item for item in progress)
+    assert any(f"group {GROUP} (1 instruction(s)) phase 5/7 translate" in item for item in progress)
     assert progress[-1].endswith("finished with status COMPLETE")
 
     calls.clear()
@@ -203,6 +214,38 @@ def test_pipeline_composes_all_phases_and_resume_reuses_fresh_artifacts(
     assert calls == []
     assert resumed["plan"]["disposition"] == "REUSED"
     assert {resumed["units"][key]["stages"]["evidence"] for key in resumed["units"]} == {"REUSED"}
+
+
+def test_resume_rejects_legacy_grouping_plan_after_plan_phase(
+    planner_database, tmp_path, monkeypatch
+):
+    options = _options(tmp_path, planner_database)
+    calls: list[str] = []
+    services = _services(
+        options,
+        options.index_root / "synthetic" / "1.0" / "specification.sqlite",
+        calls,
+    )
+    monkeypatch.setattr("spec2lean.pipeline.runner.validate_artifact", lambda *_args: [])
+    monkeypatch.setattr("spec2lean.pipeline.runner.validate_published", lambda *_args: [])
+    request = PlanningRequest.exact("synthetic", "1.0", ["alpha.u32"])
+    _, manifest = run_pipeline(request, options, services=services)
+    plan_path = options.plans_root / "synthetic" / "1.0" / manifest["planRunId"] / "plan.json"
+    legacy = json.loads(plan_path.read_text())
+    legacy["schemaVersion"] = 1
+    legacy.pop("translationGroups")
+    _json(plan_path, legacy)
+
+    calls.clear()
+    resumed_options = _options(
+        tmp_path,
+        planner_database,
+        resume=manifest["pipelineRunId"],
+        from_phase="semantics",
+    )
+    with pytest.raises(RuntimeError, match="rerun with --from plan"):
+        run_pipeline(request, resumed_options, services=services)
+    assert calls == []
 
 
 def test_pipeline_routes_a_failed_check_through_phase_7(planner_database, tmp_path, monkeypatch):

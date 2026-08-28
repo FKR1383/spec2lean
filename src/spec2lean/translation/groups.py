@@ -1,53 +1,40 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from typing import Any
 
 
-PTX_GROUPS: dict[str, frozenset[str]] = {
-    "Arithmetic": frozenset({
-        "abs", "add", "addc", "div", "dp2a", "dp4a", "fma", "mad", "mad24",
-        "madc", "max", "min", "mma", "mul", "mul24", "neg", "rcp", "rem",
-        "rsqrt", "sad", "sqrt", "sub", "subc", "wgmma", "wmma",
-    }),
-    "BitManip": frozenset({
-        "bfe", "bfi", "bfind", "bmsk", "brev", "clz", "fns", "popc", "prmt",
-        "shf", "shl", "shr",
-    }),
-    "Communication": frozenset({
-        "activemask", "bar", "barrier", "clusterlaunchcontrol", "elect", "fence",
-        "griddepcontrol", "membar", "redux", "shfl", "vote",
-    }),
-    "Comparison": frozenset({"isspacep", "match", "selp", "set", "setp", "slct", "testp"}),
-    "Conversion": frozenset({"cvt", "cvta"}),
-    "Logic": frozenset({"and", "cnot", "lop3", "not", "or", "xor"}),
-    "Memory": frozenset({
-        "applypriority", "atom", "cp", "createpolicy", "discard", "ld", "ldmatrix",
-        "ldu", "prefetch", "prefetchu", "red", "st", "stmatrix", "suld", "sured",
-        "sust", "tex", "tld4",
-    }),
-    "Move": frozenset({"mov", "movmatrix", "pack", "unpack"}),
-}
-
-
-def instruction_group(language: str, instruction: str) -> str:
-    """Return the deterministic Phase-5 output group for an instruction spelling."""
-    if language.casefold() != "ptx":
-        return "Other"
-    mnemonic = instruction.casefold().split(".", 1)[0]
-    matches = [group for group, mnemonics in PTX_GROUPS.items() if mnemonic in mnemonics]
-    if not matches:
-        return "Other"
-    if len(matches) != 1:
-        raise ValueError(f"PTX instruction has no unique translation group: {instruction}")
-    return matches[0]
-
-
 def grouped_units(plan: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
-    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for unit in plan.get("requestedUnits", []):
-        groups[instruction_group(str(plan["language"]), str(unit["name"]))].append(dict(unit))
-    return {group: groups[group] for group in sorted(groups)}
+    """Return Phase-2's validated, specification-derived unit partition."""
+    units = {str(unit["unitId"]): dict(unit) for unit in plan.get("requestedUnits", [])}
+    raw_groups = plan.get("translationGroups")
+    if not isinstance(raw_groups, list) or not raw_groups:
+        raise ValueError(
+            "Phase-2 plan has no specification-derived translationGroups; rerun from the plan phase"
+        )
+    groups: dict[str, list[dict[str, Any]]] = {}
+    seen: set[str] = set()
+    for item in raw_groups:
+        if not isinstance(item, dict) or not isinstance(item.get("name"), str):
+            raise ValueError("Phase-2 plan contains a malformed translation group")
+        name = str(item["name"])
+        if name in groups:
+            raise ValueError(f"Phase-2 plan contains a duplicate translation group: {name}")
+        member_ids = item.get("unitIds")
+        if not isinstance(member_ids, list) or not member_ids:
+            raise ValueError(f"Phase-2 translation group is empty: {name}")
+        members: list[dict[str, Any]] = []
+        for unit_id in member_ids:
+            if unit_id not in units:
+                raise ValueError(f"Phase-2 translation group references an unknown unit: {unit_id}")
+            if unit_id in seen:
+                raise ValueError(f"Phase-2 unit appears in more than one translation group: {unit_id}")
+            seen.add(unit_id)
+            members.append(units[unit_id])
+        groups[name] = members
+    if seen != set(units):
+        missing = sorted(set(units) - seen)
+        raise ValueError(f"Phase-2 translation groups do not cover every requested unit: {missing}")
+    return {name: groups[name] for name in sorted(groups)}
 
 
 def group_for_unit(plan: dict[str, Any], unit_id: str) -> str:

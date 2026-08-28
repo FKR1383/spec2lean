@@ -1,4 +1,4 @@
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 PARSER_VERSION = "phase1-1"
 INDEX_SCHEMA_VERSION = 1
 PAGE_TEXT_FORMAT_VERSION = 1

@@ -47,12 +47,19 @@ def _inputs(database: Path) -> tuple[dict, dict, dict, dict]:
     unit = copy.deepcopy(UNIT)
     unit["sourceNodeIds"] = [node["node_id"]]
     plan = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "planRunId": "plan:check-test",
         "language": "synthetic",
         "version": "1.0",
         "sourceDatabaseDigest": digest,
         "requestedUnits": [unit],
+        "translationGroups": [{
+            "name": "InstructionSemantics",
+            "unitIds": [unit["unitId"]],
+            "reason": "Derived from the indexed synthetic instruction section.",
+            "supportingNodeIds": [node["node_id"]],
+            "origin": "INFERRED",
+        }],
     }
     evidence_id = "evidence:source"
     evidence = {

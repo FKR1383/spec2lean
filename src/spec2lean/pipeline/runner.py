@@ -19,6 +19,7 @@ from ..evidence.store import evidence_run_root, load_unit_bundle
 from ..parsers import parse_html, parse_pdf
 from ..planning.models import PlanningRequest
 from ..planning.runner import build_plan, source_database_digest
+from ..planning.validation import PLAN_SCHEMA_VERSION
 from ..semantics.models import SemanticScope
 from ..semantics.runner import build_semantics
 from ..semantics.store import load_semantics, unit_directory as semantics_unit_directory
@@ -76,6 +77,7 @@ class PipelineOptions:
     runs_root: Path
     timeout_seconds: int = 1800
     max_dispatches: int = 8
+    max_question_rounds: int = 2
     from_phase: str = "index"
     until_phase: str = "troubleshoot"
     dry_run: bool = False
@@ -86,8 +88,8 @@ class PipelineOptions:
             raise ValueError(f"pipeline phases must be one of: {', '.join(PHASES)}")
         if PHASES.index(self.from_phase) > PHASES.index(self.until_phase):
             raise ValueError("--from cannot come after --until")
-        if self.timeout_seconds < 1 or self.max_dispatches < 1:
-            raise ValueError("pipeline timeout and max dispatches must be positive")
+        if self.timeout_seconds < 1 or self.max_dispatches < 1 or self.max_question_rounds < 0:
+            raise ValueError("pipeline timeout/dispatches must be positive and question rounds non-negative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -247,7 +249,12 @@ def _matching_plan(plans_root: Path, request: PlanningRequest, digest: str) -> t
             metadata = json.loads((directory / "planner-run.json").read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        if stored_request == expected and plan.get("sourceDatabaseDigest") == digest and metadata.get("outcome") == "VALID":
+        if (
+            stored_request == expected
+            and plan.get("schemaVersion") == PLAN_SCHEMA_VERSION
+            and plan.get("sourceDatabaseDigest") == digest
+            and metadata.get("outcome") == "VALID"
+        ):
             matches.append((str(metadata.get("finishedAt", "")), directory, plan))
     if not matches:
         return None
@@ -367,6 +374,7 @@ def _new_manifest(request: PlanningRequest, options: PipelineOptions) -> tuple[P
         "fromPhase": options.from_phase,
         "untilPhase": options.until_phase,
         "dryRun": options.dry_run,
+        "maxQuestionRounds": options.max_question_rounds,
         "phase1": None,
         "planRunId": None,
         "planDirectory": None,
@@ -415,6 +423,7 @@ def run_pipeline(
         manifest["fromPhase"] = options.from_phase
         manifest["untilPhase"] = options.until_phase
         manifest["dryRun"] = options.dry_run
+        manifest["maxQuestionRounds"] = options.max_question_rounds
         manifest["error"] = None
     else:
         directory, manifest = _new_manifest(request, options)
@@ -445,6 +454,14 @@ def run_pipeline(
             plan_pair = _plan_for_manifest(options, manifest)
             if plan_pair[1].get("sourceDatabaseDigest") != digest:
                 raise RuntimeError("resumed Phase-2 plan is stale relative to the current Phase-1 index")
+            if plan_pair[1].get("schemaVersion") != PLAN_SCHEMA_VERSION:
+                if not _phase_selected(options, "plan"):
+                    raise RuntimeError(
+                        "resumed Phase-2 plan predates specification-derived translation groups; "
+                        "rerun with --from plan"
+                    )
+                report("phase 2/7 plan: legacy grouping plan cannot be reused; replanning")
+                plan_pair = None
         if plan_pair is None:
             plan_pair = _matching_plan(options.plans_root, request, digest)
         if plan_pair is None:
@@ -529,6 +546,10 @@ def run_pipeline(
                     services.semantics_builder(
                         plan, options.evidence_root, options.semantics_root,
                         unit_ids=[unit_id], timeout_seconds=options.timeout_seconds,
+                        database=database, max_question_rounds=options.max_question_rounds,
+                        progress=lambda message, label=unit_label: report(
+                            f"{label} phase 4/7 semantics: {message}"
+                        ),
                     )
                     reusable, disposition = True, "BUILT"
                 state["stages"]["semantics"] = disposition

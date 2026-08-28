@@ -44,6 +44,25 @@ def tool_definitions() -> list[dict[str, Any]]:
         },
         ["from", "to", "reason", "supportingNodeIds", "origin"],
     )
+    translation_group = _schema_object(
+        {
+            "name": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Za-z0-9]{0,63}$",
+                "maxLength": 64,
+                "description": "Concise UpperCamelCase name derived from indexed specification structure.",
+            },
+            "unitIds": {
+                "type": "array",
+                "items": {"type": "string", "pattern": "^unit:"},
+                "minItems": 1,
+            },
+            "reason": {"type": "string", "minLength": 1},
+            "supportingNodeIds": {"type": "array", "items": NODE_ID, "minItems": 1},
+            "origin": {"type": "string", "enum": ["EXPLICIT", "INFERRED"]},
+        },
+        ["name", "unitIds", "reason", "supportingNodeIds", "origin"],
+    )
     return [
         {
             "name": "spec_search",
@@ -103,10 +122,11 @@ def tool_definitions() -> list[dict[str, Any]]:
                         "type": "array",
                         "items": {"type": "string", "pattern": "^unit:"},
                     },
+                    "translationGroups": {"type": "array", "items": translation_group, "minItems": 1},
                     "externalPrerequisites": {"type": "array", "items": prerequisite},
                     "dependencies": {"type": "array", "items": dependency},
                 },
-                ["requestedUnitIds", "externalPrerequisites", "dependencies"],
+                ["requestedUnitIds", "translationGroups", "externalPrerequisites", "dependencies"],
             ),
         },
     ]

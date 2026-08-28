@@ -1,7 +1,10 @@
 # Spec2Lean
 
+Current release: **1.0.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes.
+
 Spec2Lean implements **Phase 1: Parse + Index**, **Phase 2: Request-scoped
-Planner**, **Phase 3: Retrieve Evidence**, **Phase 4: Semantic Extractor**,
+Planner**, **Phase 3: Retrieve Evidence**, **Phase 4: Semantic Extractor and
+Open Question Handler**,
 **Phase 5: LLM Translator**, **Phase 6: Check**, and **Phase 7: Troubleshooter**.
 Phase 1 turns an official
 PDF and/or HTML language specification into a deterministic, searchable,
@@ -11,8 +14,11 @@ session, validates its dependency graph, and writes an inspectable plan. Phase 3
 runs one bounded Evidence Retriever session per planned unit and deterministically
 resolves its selections to exact Phase-1 text and provenance. Phase 4 runs one
 evidence-bounded Semantic Extractor session per unit and validates a structured,
-traceable semantic artifact. Phase 5 runs one semantic-artifact-bounded session
-per instruction group to generate exactly one complete Lean 4 file and cross-unit
+traceable semantic artifact. If evidence is insufficient, a separate handler
+checks the canonical database first and records any internet, runtime, or LLM
+fallback as explicitly non-normative before extraction restarts. Phase 5 runs
+one semantic-artifact-bounded session per instruction group to generate exactly
+one complete Lean 4 file and cross-unit
 declaration traceability. Phase 6 compiles each group once and deterministically
 checks per-unit forward coverage and group-wide reverse traceability.
 Phase 7 routes semantic failures upstream and uses one compiler-guided OpenCode
@@ -276,6 +282,7 @@ without invoking OpenCode again:
 ```bash
 ./spec2lean plan show --run PLAN_RUN_ID
 ./spec2lean plan units --run PLAN_RUN_ID
+./spec2lean plan groups --run PLAN_RUN_ID
 ./spec2lean plan deps --run PLAN_RUN_ID
 ./spec2lean plan layers --run PLAN_RUN_ID
 ./spec2lean plan prerequisites --run PLAN_RUN_ID
@@ -324,9 +331,13 @@ validation, and artifacts.
 ## Extract structured semantics from one evidence bundle
 
 Phase 4 requires the exact installed OpenCode model
-`openai/gpt-5.6-sol` with reasoning variant `medium`. It supplies only the
-selected unit's Phase-3 evidence bundle and exposes only the structured
-`submit_semantics` tool. It cannot retrieve additional material.
+`openai/gpt-5.6-sol` with reasoning variant `medium`. The extractor receives
+only the selected unit's Phase-3 evidence bundle and exposes only the structured
+`submit_semantics` tool. On `INSUFFICIENT_EVIDENCE`, a separate handler searches
+the canonical Phase-1 database first. Only when the specification does not
+answer the question may it use attributed internet evidence, a configured
+runtime probe, or explicitly flagged LLM reasoning. The augmented bundle is
+validated before a fresh extraction attempt.
 
 Run the first experiment on one unit that already has a valid evidence bundle:
 
@@ -344,8 +355,14 @@ plan serially. Inspect artifacts without invoking OpenCode:
 ./spec2lean semantics claims --plan-run PLAN_RUN_ID --unit UNIT_ID
 ./spec2lean semantics operation --plan-run PLAN_RUN_ID --unit UNIT_ID
 ./spec2lean semantics evidence --claim CLAIM_ID
+./spec2lean semantics questions --plan-run PLAN_RUN_ID --unit UNIT_ID
 ./spec2lean semantics stats --plan-run PLAN_RUN_ID
 ```
+
+Recovery is bounded to two rounds by default. Use
+`--max-question-rounds N` on `semantics build` or `run`; set
+`SPEC2LEAN_RUNTIME_PROBE_COMMAND` only when a trusted JSON-stdin runtime adapter
+is available. Unresolved questions stop the pipeline.
 
 See [the Phase 4 design](docs/phase-4-design.md) for the evidence boundary,
 semantic schema, claim classifications, operation/state separation,
@@ -355,15 +372,17 @@ deterministic validation, OpenCode isolation, and artifact layout.
 
 Phase 5 requires the exact installed OpenCode model
 `openai/gpt-5.6-sol` with reasoning variant `medium`. It supplies every accepted
-`semantics.json` in one deterministic instruction group and exposes only the
-structured `submit_translation` tool. One session writes one complete file such
-as `Arithmetic/Arithmetic.lean`; no fragments or per-instruction Lean files are
-created.
+`semantics.json` in one specification-derived Phase-2 translation group and
+exposes only the structured `submit_translation` tool. One session writes one
+complete `<Group>/<Group>.lean` file; no fragments or per-instruction Lean
+files are created. Group names and membership come from the Planner's validated
+reading of the indexed specification; Phase 5 has no PTX mnemonic category
+table.
 
 ```bash
 ./spec2lean translate build \
   --plan-run PLAN_RUN_ID \
-  --group Arithmetic
+  --group GROUP_FROM_PLAN
 ```
 
 `--unit UNIT_ID` may be used instead to select the complete group containing

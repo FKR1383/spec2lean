@@ -9,8 +9,10 @@ def build_troubleshooter_prompt(context: dict[str, Any]) -> str:
 
 Repair only the syntax, elaboration, type-checking, import, name-resolution, or Lean API problems
 identified by the supplied compiler diagnostics. Prefer the smallest local patch. Finish by calling
-troubleshooting_submit_repair exactly once with the complete repaired group Lean source, complete
-updated cross-unit declaration mappings, and a concise list of changes. Never submit a fragment.
+troubleshooting_submit_repair with the complete repaired group Lean source, complete updated
+cross-unit declaration mappings, and a concise list of changes. Never submit a fragment. If the
+tool returns validation diagnostics, correct the submission and call it again within this same
+bounded session; do not stop after a rejected call.
 
 Required repair procedure:
 - Treat the supplied diagnostics and Lean version as authoritative for the installed toolchain; do
@@ -32,9 +34,12 @@ Hard boundaries:
   redesign the formalization, or act as a semantic extractor, translator, planner, or critic.
 - Modify only the affected portion of the Phase-5 group candidate and its mappings when a mechanical
   declaration rename makes that necessary; return the complete group file atomically.
+- For a file-level import change that affects no mapped declaration body or responsibility, use an
+  empty `affectedDeclarations` array. Otherwise list every mapped declaration actually affected.
 - Do not manufacture hashes, timestamps, model/version data, run IDs, or other deterministic metadata.
-- Use only troubleshooting_submit_repair. The repaired candidate will return to Phase 6; do not retry
-  yourself or claim that it builds.
+- Use only troubleshooting_submit_repair. The repaired candidate will return to Phase 6; do not run
+  the compiler, start another repair session, or claim that it builds. Correcting rejected tool
+  arguments within this same session is allowed as described above.
 
 Compiler-guided repair context:
 {json.dumps(context, ensure_ascii=False, indent=2, sort_keys=True)}

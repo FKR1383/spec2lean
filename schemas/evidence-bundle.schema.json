@@ -40,6 +40,10 @@
       "type": "array",
       "minItems": 1,
       "items": {"$ref": "#/$defs/evidenceRecord"}
+    },
+    "resolutions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/resolutionRecord"}
     }
   },
   "$defs": {
@@ -107,6 +111,32 @@
       "properties": {
         "sourceNodeId": {"type": "string", "pattern": "^node:"},
         "basis": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}, "uniqueItems": true}
+      }
+    },
+    "resolutionRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resolutionId", "unitId", "questionId", "sourceKind", "role",
+        "statement", "rationale", "nonNormative", "provenance"
+      ],
+      "properties": {
+        "resolutionId": {"type": "string", "pattern": "^resolution:[0-9a-f]{32}$"},
+        "unitId": {"type": "string", "pattern": "^unit:"},
+        "questionId": {"type": "string", "pattern": "^question:"},
+        "sourceKind": {"enum": ["INTERNET", "RUNTIME", "LLM_REASONING"]},
+        "role": {
+          "enum": [
+            "SYNTAX", "OPERANDS", "TYPE_RULES", "OPERATION", "ALGORITHM",
+            "EDGE_CASE", "STATE_EFFECT", "PREDICATION",
+            "VERSION_OR_TARGET_RESTRICTION", "EXAMPLE", "SUPPORTING_DEFINITION",
+            "OTHER"
+          ]
+        },
+        "statement": {"type": "string", "minLength": 1},
+        "rationale": {"type": "string", "minLength": 1},
+        "nonNormative": {"const": true},
+        "provenance": {"type": "object"}
       }
     },
     "evidenceRecord": {

@@ -18,6 +18,7 @@
     "fromPhase": {"enum": ["index", "plan", "evidence", "semantics", "translate", "check", "troubleshoot"]},
     "untilPhase": {"enum": ["index", "plan", "evidence", "semantics", "translate", "check", "troubleshoot"]},
     "dryRun": {"type": "boolean"},
+    "maxQuestionRounds": {"type": "integer", "minimum": 0},
     "phase1": {"type": ["object", "null"]},
     "planRunId": {"type": ["string", "null"]},
     "planDirectory": {"type": ["string", "null"]},

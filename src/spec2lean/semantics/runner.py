@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -11,8 +12,15 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..evidence.store import load_unit_bundle
+from ..evidence.render import render_markdown as render_evidence_markdown
 from ..planning.runner import installed_openai_models
-from .models import EXTRACTOR_AGENT, EXTRACTOR_MODEL, EXTRACTOR_REASONING, SemanticScope
+from .models import (
+    EXTRACTOR_AGENT,
+    EXTRACTOR_MODEL,
+    EXTRACTOR_REASONING,
+    SemanticScope,
+    evidence_bundle_hash,
+)
 from .prompt import build_extractor_prompt
 from .render import render_markdown
 from .store import semantics_run_root, unit_directory
@@ -79,8 +87,12 @@ def _session_id(stdout: str) -> str | None:
 def _run_unit(
     plan: dict[str, Any], bundle: dict[str, Any], output: Path, executable: str, *,
     timeout_seconds: int, run_command: Callable[..., subprocess.CompletedProcess[str]],
+    raise_on_insufficient: bool = True,
 ) -> Path:
-    output.mkdir(parents=True, exist_ok=False)
+    output.mkdir(parents=True, exist_ok=True)
+    occupied = [output / name for name in ("semantics.json", "semantics.md", "extractor-run.json")]
+    if any(path.exists() for path in occupied):
+        raise FileExistsError(f"semantic unit output already contains a current attempt: {output}")
     started_at = utc_now()
     scope = SemanticScope.from_inputs(plan, bundle, bundle["unit"]["unitId"], created_at=started_at)
     prompt = build_extractor_prompt(scope, bundle)
@@ -140,6 +152,7 @@ def _run_unit(
             "singleSession": True, "automaticRetries": 0, "startedAt": started_at,
             "finishedAt": utc_now(), "evidenceBundleHash": scope.evidence_bundle_hash,
             "evidenceCount": len(bundle["evidence"]),
+            "supplementalResolutionCount": len(bundle.get("resolutions", [])),
             "inputBoundary": "PHASE_3_UNIT_EVIDENCE_BUNDLE_ONLY",
             "command": command[:-1] + ["<semantic-extractor-prompt>"], "exitCode": completed.returncode,
             "sessionId": _session_id(completed.stdout), "outcome": outcome, "error": error,
@@ -148,7 +161,7 @@ def _run_unit(
         (output / "extractor-run.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         if error is not None:
             raise RuntimeError(f"{error}; run artifact: {output}")
-        if outcome == "INSUFFICIENT_EVIDENCE":
+        if outcome == "INSUFFICIENT_EVIDENCE" and raise_on_insufficient:
             missing = "; ".join(artifact["failure"]["missingAspects"]) if artifact else "unspecified"
             raise RuntimeError(f"INSUFFICIENT_EVIDENCE: {missing}; run artifact: {output}")
     return output
@@ -158,7 +171,16 @@ def build_semantics(
     plan: dict[str, Any], evidence_root: Path, semantics_root: Path, *, unit_ids: list[str] | None = None,
     timeout_seconds: int = 1800,
     run_command: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+    database: Path | None = None,
+    max_question_rounds: int = 2,
+    runtime_probe_command: tuple[str, ...] | None = None,
+    progress: Callable[[str], None] | None = None,
 ) -> Path:
+    if max_question_rounds < 0:
+        raise ValueError("max_question_rounds cannot be negative")
+    progress = progress or (lambda _message: None)
+    if runtime_probe_command is None:
+        runtime_probe_command = tuple(shlex.split(os.environ.get("SPEC2LEAN_RUNTIME_PROBE_COMMAND", "")))
     all_ids = [item["unitId"] for item in plan.get("requestedUnits", [])]
     selected = unit_ids or all_ids
     if not selected:
@@ -185,6 +207,97 @@ def build_semantics(
     require_extractor_model(executable)
     root = semantics_run_root(semantics_root, plan)
     root.mkdir(parents=True, exist_ok=True)
-    for bundle, output in zip(bundles, outputs, strict=True):
-        _run_unit(plan, bundle, output, executable, timeout_seconds=timeout_seconds, run_command=run_command)
+    for initial_bundle, output in zip(bundles, outputs, strict=True):
+        bundle = initial_bundle
+        _run_unit(
+            plan, bundle, output, executable,
+            timeout_seconds=timeout_seconds, run_command=run_command,
+            raise_on_insufficient=False,
+        )
+        artifact = json.loads((output / "semantics.json").read_text(encoding="utf-8"))
+        question_round = 0
+        while artifact.get("outcome") == "INSUFFICIENT_EVIDENCE":
+            missing = "; ".join((artifact.get("failure") or {}).get("missingAspects", []))
+            progress(f"open questions detected: {missing}")
+            if database is None or question_round >= max_question_rounds:
+                reason = (
+                    "canonical Phase-1 database was not supplied to the semantic builder"
+                    if database is None else
+                    f"open-question round limit reached ({max_question_rounds})"
+                )
+                raise RuntimeError(
+                    f"INSUFFICIENT_EVIDENCE: {missing}; {reason}; run artifact: {output}"
+                )
+            question_round += 1
+            attempt = output / "open-question-attempts" / f"attempt-{question_round}"
+            progress(f"starting Open Question Handler round {question_round}/{max_question_rounds}")
+            from .question_runner import handle_open_questions
+
+            question_artifact, augmented = handle_open_questions(
+                database,
+                plan,
+                bundle,
+                artifact,
+                attempt / "handler",
+                timeout_seconds=timeout_seconds,
+                runtime_command=runtime_probe_command,
+                run_command=run_command,
+            )
+            progress(
+                f"Open Question Handler {question_artifact['outcome'].lower().replace('_', ' ')}; "
+                f"database additions={len(question_artifact['databaseEvidenceAdded'])}, "
+                f"supplemental resolutions={len(question_artifact['supplementalResolutionsAdded'])}"
+            )
+            if question_artifact["outcome"] != "RESOLVED":
+                open_ids = [
+                    item["questionId"] for item in question_artifact["questions"]
+                    if item["status"] == "OPEN"
+                ]
+                raise RuntimeError(
+                    "OPEN_QUESTIONS_UNRESOLVED: " + ", ".join(open_ids) +
+                    f"; handler artifact: {attempt / 'handler'}"
+                )
+
+            evidence_directory, current_bundle = load_unit_bundle(
+                evidence_root, plan, str(bundle["unit"]["unitId"])
+            )
+            if current_bundle != bundle:
+                raise RuntimeError("Phase-3 evidence changed during open-question handling")
+            temporary_json = evidence_directory / ".evidence.json.open-question.tmp"
+            temporary_md = evidence_directory / ".evidence.md.open-question.tmp"
+            temporary_json.write_text(
+                json.dumps(augmented, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            temporary_md.write_text(render_evidence_markdown(augmented), encoding="utf-8")
+            os.replace(temporary_json, evidence_directory / "evidence.json")
+            os.replace(temporary_md, evidence_directory / "evidence.md")
+            metadata_path = evidence_directory / "retriever-run.json"
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata.setdefault("openQuestionAugmentations", []).append({
+                "questionRunId": question_artifact["runId"],
+                "outcome": question_artifact["outcome"],
+                "databaseEvidenceAdded": question_artifact["databaseEvidenceAdded"],
+                "supplementalResolutionsAdded": question_artifact["supplementalResolutionsAdded"],
+                "resultingEvidenceBundleHash": evidence_bundle_hash(augmented),
+            })
+            temporary_metadata = evidence_directory / ".retriever-run.json.open-question.tmp"
+            temporary_metadata.write_text(
+                json.dumps(metadata, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            os.replace(temporary_metadata, metadata_path)
+            progress("augmented Phase-3 evidence and restarting the Semantic Extractor")
+
+            extractor_archive = attempt / "extractor"
+            extractor_archive.mkdir(parents=True)
+            for name in ("semantics.json", "semantics.md", "extractor-run.json"):
+                shutil.move(str(output / name), str(extractor_archive / name))
+            bundle = augmented
+            _run_unit(
+                plan, bundle, output, executable,
+                timeout_seconds=timeout_seconds, run_command=run_command,
+                raise_on_insufficient=False,
+            )
+            artifact = json.loads((output / "semantics.json").read_text(encoding="utf-8"))
     return root

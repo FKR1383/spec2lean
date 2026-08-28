@@ -52,7 +52,7 @@
     }
   ],
   "$defs": {
-    "evidenceIds": {"type": "array", "items": {"type": "string", "pattern": "^evidence:"}, "uniqueItems": true},
+    "evidenceIds": {"type": "array", "items": {"type": "string", "pattern": "^(evidence|resolution):"}, "uniqueItems": true},
     "identity": {
       "type": "object", "additionalProperties": false, "required": ["name", "evidenceIds"],
       "properties": {"name": {"type": "string"}, "form": {"type": "string"}, "description": {"type": "string"}, "evidenceIds": {"$ref": "#/$defs/evidenceIds"}}

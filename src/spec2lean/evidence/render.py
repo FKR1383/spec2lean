@@ -48,4 +48,20 @@ def render_markdown(bundle: dict[str, Any]) -> str:
                 "```",
                 "",
             ])
+    resolutions = bundle.get("resolutions", [])
+    if resolutions:
+        lines.extend(["## Explicitly non-normative resolutions", ""])
+        for item in resolutions:
+            lines.extend([
+                f"### [{item['resolutionId']}] {item['sourceKind']} / {item['role']}",
+                "",
+                f"Question: `{item['questionId']}`",
+                "",
+                f"Resolution: {item['statement']}",
+                "",
+                f"Rationale: {item['rationale']}",
+                "",
+                "Authority: **NON-NORMATIVE**",
+                "",
+            ])
     return "\n".join(lines).rstrip() + "\n"
