@@ -18,6 +18,16 @@ def build_open_question_prompt(
         if runtime_available else
         "No runtime-probe adapter is configured; do not select RUNTIME."
     )
+    official_types = {
+        item.get("sourceType") for item in bundle.get("evidence", [])
+        if isinstance(item, dict)
+    } & {"html", "pdf"}
+    dual_source_rule = (
+        "This unit has official HTML and PDF renditions. For every DATABASE answer, use "
+        "spec_correlated as needed, read both exact passages, and submit one as sourceNodeIds/"
+        "sourceSpanIds and the other as counterpartSourceNodeIds/counterpartSourceSpanIds.\n"
+        if official_types == {"html", "pdf"} else ""
+    )
     return f"""You are the Spec2Lean Open Question Handler for one failed Phase-4 unit.
 
 Resolve every supplied question and finish with open_questions_submit_questions. Work in this order:
@@ -35,6 +45,7 @@ Resolve every supplied question and finish with open_questions_submit_questions.
 
 All INTERNET, RUNTIME, and LLM_REASONING results are deterministically flagged non-normative and
 must later become ASSUMPTION claims. Database selections remain canonical Phase-1 evidence.
+{dual_source_rule}
 {runtime_rule}
 
 Deterministic question scope:

@@ -182,6 +182,7 @@ def test_pipeline_composes_all_phases_and_resume_reuses_fresh_artifacts(
     options = _options(tmp_path, planner_database)
     calls: list[str] = []
     services = _services(options, options.index_root / "synthetic" / "1.0" / "specification.sqlite", calls)
+    monkeypatch.setattr("spec2lean.pipeline.runner.validate_bundle", lambda *_args: [])
     monkeypatch.setattr("spec2lean.pipeline.runner.validate_artifact", lambda *_args: [])
     monkeypatch.setattr("spec2lean.pipeline.runner.validate_published", lambda *_args: [])
     request = PlanningRequest.exact("synthetic", "1.0", ["alpha.u32"])
@@ -214,6 +215,44 @@ def test_pipeline_composes_all_phases_and_resume_reuses_fresh_artifacts(
     assert calls == []
     assert resumed["plan"]["disposition"] == "REUSED"
     assert {resumed["units"][key]["stages"]["evidence"] for key in resumed["units"]} == {"REUSED"}
+
+
+def test_resume_rebuilds_evidence_rejected_by_current_validation(
+    planner_database, tmp_path, monkeypatch
+):
+    options = _options(tmp_path, planner_database, until_phase="evidence")
+    calls: list[str] = []
+    services = _services(
+        options,
+        options.index_root / "synthetic" / "1.0" / "specification.sqlite",
+        calls,
+    )
+    monkeypatch.setattr("spec2lean.pipeline.runner.validate_bundle", lambda *_args: [])
+    request = PlanningRequest.exact("synthetic", "1.0", ["alpha.u32"])
+    _, first = run_pipeline(request, options, services=services)
+    assert calls == ["plan", "evidence"]
+
+    calls.clear()
+    monkeypatch.setattr(
+        "spec2lean.pipeline.runner.validate_bundle",
+        lambda *_args: [{
+            "code": "MISSING_SOURCE_RENDITION",
+            "message": "dual-source evidence is stale",
+            "path": "$.evidence",
+        }],
+    )
+    resumed_options = _options(
+        tmp_path,
+        planner_database,
+        resume=first["pipelineRunId"],
+        from_phase="evidence",
+        until_phase="evidence",
+    )
+    _, resumed = run_pipeline(request, resumed_options, services=services)
+    assert calls == ["evidence"]
+    assert {
+        resumed["units"][key]["stages"]["evidence"] for key in resumed["units"]
+    } == {"BUILT"}
 
 
 def test_resume_rejects_legacy_grouping_plan_after_plan_phase(
@@ -276,6 +315,7 @@ def test_dry_run_never_reuses_checks_when_group_translation_would_change(
     calls: list[str] = []
     database = options.index_root / "synthetic" / "1.0" / "specification.sqlite"
     services = _services(options, database, calls)
+    monkeypatch.setattr("spec2lean.pipeline.runner.validate_bundle", lambda *_args: [])
     monkeypatch.setattr("spec2lean.pipeline.runner.validate_artifact", lambda *_args: [])
     monkeypatch.setattr("spec2lean.pipeline.runner.validate_published", lambda *_args: [])
     request = PlanningRequest.exact("synthetic", "1.0", ["alpha.u32"])

@@ -15,7 +15,9 @@ from ..checking.store import load_check
 from ..constants import INDEX_SCHEMA_VERSION, PARSER_VERSION
 from ..database import build_database, connect
 from ..evidence.runner import build_evidence, unit_directory_name
+from ..evidence.query import EvidenceQuery
 from ..evidence.store import evidence_run_root, load_unit_bundle
+from ..evidence.validation import validate_bundle
 from ..parsers import parse_html, parse_pdf
 from ..planning.models import PlanningRequest
 from ..planning.runner import build_plan, source_database_digest
@@ -296,11 +298,14 @@ def _archive_directory(path: Path, run_directory: Path, phase: str, unit_id: str
     shutil.move(str(path), str(destination))
 
 
-def _evidence_reusable(options: PipelineOptions, plan: dict[str, Any], unit_id: str) -> bool:
+def _evidence_reusable(
+    options: PipelineOptions, plan: dict[str, Any], unit_id: str, database: Path
+) -> bool:
     try:
         _, bundle = load_unit_bundle(options.evidence_root, plan, unit_id)
         SemanticScope.from_inputs(plan, bundle, unit_id, created_at="reuse-check")
-        return True
+        with connect(database, read_only=True) as connection:
+            return not validate_bundle(EvidenceQuery(connection), plan, bundle)
     except (FileNotFoundError, KeyError, RuntimeError, ValueError, json.JSONDecodeError):
         return False
 
@@ -507,7 +512,7 @@ def run_pipeline(
             unit_label = unit_positions[unit_id]
             state = _unit_stage(manifest, unit)
             state["status"] = "RUNNING"
-            reusable = _evidence_reusable(options, plan, unit_id)
+            reusable = _evidence_reusable(options, plan, unit_id, database)
             disposition = "REUSED" if reusable else "WOULD_BUILD"
             if not reusable and not _phase_selected(options, "evidence"):
                 raise FileNotFoundError(f"no fresh Phase-3 evidence exists for {unit_id}")

@@ -10,6 +10,9 @@ from .models import EVIDENCE_ROLES, EVIDENCE_TIERS, EvidenceScope
 from .query import EvidenceQuery, ExposureLedger
 
 
+OFFICIAL_RENDITIONS = frozenset({"html", "pdf"})
+
+
 @dataclass(slots=True)
 class EvidenceValidationError(ValueError):
     diagnostics: list[dict[str, str]]
@@ -24,6 +27,51 @@ def _diagnostic(code: str, message: str, path: str = "$") -> dict[str, str]:
 
 def _node_rows(query: EvidenceQuery, node_ids: list[str]) -> list[sqlite3.Row]:
     return [query._row(node_id) for node_id in node_ids]
+
+
+def required_official_renditions(
+    query: EvidenceQuery, scope: EvidenceScope
+) -> frozenset[str]:
+    """Return both official renditions only when Phase 2 attached both to the unit."""
+    source_types = {
+        str(query._row(node_id)["source_type"])
+        for node_id in scope.unit.get("sourceNodeIds", [])
+        if isinstance(node_id, str) and query.node_exists(node_id)
+    }
+    return OFFICIAL_RENDITIONS if OFFICIAL_RENDITIONS <= source_types else frozenset()
+
+
+def _rendition_diagnostics(
+    records: Iterable[dict[str, Any]], required: frozenset[str], path: str
+) -> list[dict[str, str]]:
+    if not required:
+        return []
+    values = [item for item in records if isinstance(item, dict)]
+    diagnostics: list[dict[str, str]] = []
+    present = {str(item.get("sourceType")) for item in values}
+    missing = sorted(required - present)
+    if missing:
+        diagnostics.append(_diagnostic(
+            "MISSING_SOURCE_RENDITION",
+            "this unit has official HTML and PDF sources; evidence is missing: "
+            + ", ".join(missing),
+            path,
+        ))
+    grouped: dict[tuple[Any, Any], set[str]] = {}
+    for item in values:
+        role, tier, source_type = item.get("role"), item.get("tier"), item.get("sourceType")
+        if role in EVIDENCE_ROLES and tier in EVIDENCE_TIERS and source_type in required:
+            grouped.setdefault((role, tier), set()).add(str(source_type))
+    for (role, tier), source_types in sorted(grouped.items()):
+        missing = sorted(required - source_types)
+        if missing:
+            diagnostics.append(_diagnostic(
+                "UNPAIRED_SOURCE_RENDITION",
+                f"{tier} {role} evidence must include corresponding HTML and PDF selections; "
+                f"missing: {', '.join(missing)}",
+                path,
+            ))
+    return diagnostics
 
 
 def _canonical_nodes(
@@ -350,6 +398,9 @@ def validate_submission(
 
     if records and not any(item["tier"] == "CORE" for item in records):
         diagnostics.append(_diagnostic("MISSING_CORE_EVIDENCE", "a valid bundle requires at least one CORE item", "$.selections"))
+    diagnostics.extend(_rendition_diagnostics(
+        records, required_official_renditions(query, scope), "$.selections"
+    ))
     evidence_ids = [item["evidenceId"] for item in records]
     if len(evidence_ids) != len(set(evidence_ids)):
         diagnostics.append(_diagnostic("DUPLICATE_EVIDENCE_ID", "evidence IDs must be unique", "$.selections"))
@@ -493,6 +544,9 @@ def validate_bundle(
         seen_sources.add(source_key)
     if not any(isinstance(item, dict) and item.get("tier") == "CORE" for item in evidence):
         diagnostics.append(_diagnostic("MISSING_CORE_EVIDENCE", "bundle has no CORE evidence", "$.evidence"))
+    diagnostics.extend(_rendition_diagnostics(
+        evidence, required_official_renditions(query, scope), "$.evidence"
+    ))
     resolutions = bundle.get("resolutions", [])
     if not isinstance(resolutions, list):
         diagnostics.append(_diagnostic("INVALID_RESOLUTIONS", "bundle resolutions must be an array", "$.resolutions"))

@@ -4,6 +4,7 @@ import json
 
 from .models import EVIDENCE_ROLES, EvidenceScope
 from .query import EvidenceQuery
+from .validation import required_official_renditions
 
 
 MAX_INITIAL_TEXT_CHARS = 8_000
@@ -24,6 +25,7 @@ def build_retriever_prompt(query: EvidenceQuery, scope: EvidenceScope) -> str:
         "relevantExternalPrerequisites": list(scope.prerequisites),
         "relatedDependencies": list(scope.dependencies),
         "initialSourceNodes": initial,
+        "requiredOfficialRenditions": sorted(required_official_renditions(query, scope)),
     }
     roles = ", ".join(EVIDENCE_ROLES)
     return f"""You are the single Spec2Lean Phase-3 Evidence Retriever for exactly one planned unit.
@@ -43,6 +45,9 @@ Rules:
   small contiguous group of adjacent nodes. Avoid whole chapters and sentence-per-item slicing.
 - CORE means directly needed to understand/formalize this unit. SUPPORTING means a bounded
   definition, shared rule, context, example, or explicit-reference aid.
+- When requiredOfficialRenditions is ["html", "pdf"], use both official renditions. For every
+  selected CORE/SUPPORTING role, select the corresponding passage from both HTML and PDF with
+  the same role and tier. Do not pair unrelated text merely to satisfy this rule.
 - Roles are relevance labels only: {roles}.
 - Finish by calling specdb_submit_evidence with this exact unit ID and your selections.
 - Each selection contains sourceNodeIds, optional sourceSpanIds, role, CORE/SUPPORTING tier, and

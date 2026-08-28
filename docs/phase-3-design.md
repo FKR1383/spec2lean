@@ -37,6 +37,13 @@ does not accept quotations, provenance, claims, interpretations, or generated
 code. Invalid submissions return concise diagnostics to the same session. No
 second session or automatic retry state exists.
 
+When Phase 2 attaches both official HTML and PDF roots to a unit, Phase 3 has a
+dual-rendition requirement. Each selected role/tier combination must contain
+the corresponding passage from both renditions. The model chooses the two
+relevant Phase-1 nodes independently; deterministic code reconstructs their
+text and provenance and rejects a missing or unpaired rendition. If Phase 2
+contains only one rendition for a unit, this requirement is not enabled.
+
 ## OpenCode isolation
 
 The exact configuration is:
@@ -80,9 +87,10 @@ ID in multiple unit bundles.
 The validator rejects wrong units, missing nodes/spans, identifiers not exposed
 in the session, noncontiguous groups, empty text, invalid roles/tiers, duplicate
 source selections or IDs, missing CORE evidence, database digest mismatches,
-and any mismatch in deterministic quotation, document SHA, HTML provenance,
-PDF provenance, or exposure basis. Stored bundles can be replayed against the
-read-only Phase-1 database.
+missing or unpaired HTML/PDF evidence for a dual-source unit, and any mismatch
+in deterministic quotation, document SHA, HTML provenance, PDF provenance, or
+exposure basis. Stored bundles can be replayed against the read-only Phase-1
+database.
 
 ## Artifacts and inspection
 
@@ -98,7 +106,8 @@ evidence/<language>/<version>/<plan-run-id>/<unit-slug>-<unit-id-prefix>/
 `evidence.json` is canonical. `evidence.md` is a deterministic human-readable
 view split into CORE and SUPPORTING evidence. If Phase 4 discovers a genuine
 gap, the database-first Open Question Handler may atomically augment this
-bundle. Canonical Phase-1 discoveries remain ordinary evidence; internet,
+bundle. For dual-source units its canonical database additions are paired HTML
+and PDF records too. Canonical Phase-1 discoveries remain ordinary evidence; internet,
 runtime, and LLM answers are stored separately as non-normative `resolution:*`
 records. `retriever-run.json` records every such augmentation and resulting
 bundle hash in `openQuestionAugmentations`, in addition to the

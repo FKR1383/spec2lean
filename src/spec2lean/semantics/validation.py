@@ -121,6 +121,13 @@ def validate_submission(
         return None, diagnostics
     outcome = value.get("outcome")
     allowed_evidence = set(scope.evidence_ids)
+    evidence_source_types = {
+        item.get("evidenceId"): item.get("sourceType")
+        for item in bundle.get("evidence", [])
+        if isinstance(item, dict)
+    }
+    official_types = set(evidence_source_types.values()) & {"html", "pdf"}
+    required_claim_renditions = {"html", "pdf"} if official_types == {"html", "pdf"} else set()
     if outcome == "INSUFFICIENT_EVIDENCE":
         _fields(value, FAILURE_FIELDS, "$", diagnostics)
         missing = _list(value.get("missingAspects"), "$.missingAspects", diagnostics)
@@ -249,6 +256,20 @@ def validate_submission(
         claim_meanings.add(meaning)
         if claim_kind in {"SOURCE_FACT", "DERIVED_INTERPRETATION"} and not item.get("evidenceIds"):
             diagnostics.append(_diagnostic("MISSING_EVIDENCE", "SOURCE_FACT and DERIVED_INTERPRETATION claims require evidence", f"{path}.evidenceIds"))
+        if claim_kind in {"SOURCE_FACT", "DERIVED_INTERPRETATION"} and required_claim_renditions:
+            cited_types = {
+                evidence_source_types.get(evidence_id)
+                for evidence_id in item.get("evidenceIds", [])
+                if isinstance(evidence_id, str)
+            }
+            missing_renditions = sorted(required_claim_renditions - cited_types)
+            if missing_renditions:
+                diagnostics.append(_diagnostic(
+                    "MISSING_CLAIM_RENDITION",
+                    "a factual claim in a dual-source bundle must cite supporting HTML and PDF "
+                    f"evidence; missing: {', '.join(missing_renditions)}",
+                    f"{path}.evidenceIds",
+                ))
         resolution_refs = [
             evidence_id for evidence_id in item.get("evidenceIds", [])
             if isinstance(evidence_id, str) and evidence_id.startswith("resolution:")

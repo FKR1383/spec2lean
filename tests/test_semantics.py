@@ -24,11 +24,13 @@ from spec2lean.semantics.questions import resolution_record, OpenQuestionScope
 UNIT = {"unitId": "unit:alpha", "name": "alpha.u32", "sourceNodeIds": ["node:alpha"]}
 
 
-def _record(evidence_id: str, role: str) -> dict:
+def _record(evidence_id: str, role: str, source_type: str = "html") -> dict:
     return {
         "evidenceId": evidence_id, "unitId": UNIT["unitId"], "role": role, "tier": "CORE",
-        "documentId": "doc:spec", "documentSha256": "a" * 64, "sourceType": "html",
-        "sourceNodeId": "node:alpha", "sourceNodeIds": ["node:alpha"], "sourceSpanIds": [],
+        "documentId": f"doc:spec-{source_type}", "documentSha256": "a" * 64,
+        "sourceType": source_type,
+        "sourceNodeId": f"node:alpha-{source_type}",
+        "sourceNodeIds": [f"node:alpha-{source_type}"], "sourceSpanIds": [],
         "exactText": f"Synthetic {role} specification text.",
     }
 
@@ -101,6 +103,25 @@ def test_valid_semantics_covers_operation_branches_edges_state_claims_metadata_a
     for text in ("CORE OPERATION", "Branches", "SOURCE FACTS", "DERIVED INTERPRETATIONS", "STATE EFFECTS", "EDGE CASES", "ASSUMPTIONS"):
         assert text in rendered
     assert "Lean" not in rendered
+
+
+def test_dual_source_factual_claims_must_cite_html_and_pdf():
+    plan, bundle = _inputs()
+    bundle["evidence"].extend([
+        _record("evidence:operation-pdf", "OPERATION", "pdf"),
+        _record("evidence:algorithm-pdf", "ALGORITHM", "pdf"),
+    ])
+    value = _submission()
+    _, diagnostics = validate_submission(_scope(plan, bundle), bundle, value)
+    assert "MISSING_CLAIM_RENDITION" in _codes(diagnostics)
+
+    value["claims"][0]["evidenceIds"].append("evidence:operation-pdf")
+    value["claims"][1]["evidenceIds"].append("evidence:algorithm-pdf")
+    artifact, diagnostics = validate_submission(_scope(plan, bundle), bundle, value)
+    assert diagnostics == [] and artifact is not None
+    assert validate_artifact(plan, bundle, artifact) == []
+    prompt = build_extractor_prompt(_scope(plan, bundle), bundle)
+    assert "must cite supporting evidence from both renditions" in prompt
 
 
 @pytest.mark.parametrize("historical_model", ["openai/gpt-5.4-mini", "openai/gpt-5.3-codex-spark"])

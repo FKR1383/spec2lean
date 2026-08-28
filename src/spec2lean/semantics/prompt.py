@@ -7,6 +7,17 @@ from .models import CLAIM_KINDS, SemanticScope
 
 
 def build_extractor_prompt(scope: SemanticScope, bundle: dict[str, Any]) -> str:
+    official_types = {
+        item.get("sourceType") for item in bundle.get("evidence", [])
+        if isinstance(item, dict)
+    } & {"html", "pdf"}
+    dual_source_rule = (
+        "- This bundle contains official HTML and PDF renditions. Every SOURCE_FACT and "
+        "DERIVED_INTERPRETATION claim must cite supporting evidence from both renditions. "
+        "Use the matching HTML/PDF passages; never add an unrelated citation just to satisfy "
+        "the rule.\n"
+        if official_types == {"html", "pdf"} else ""
+    )
     return f"""You are the Spec2Lean Phase-4 Semantic Extractor for exactly one planned unit.
 
 Your only job is to interpret the supplied Phase-3 evidence bundle into a precise structured
@@ -26,7 +37,7 @@ Rules:
 - Preserve exceptional, invalid, undefined, edge, version, and target behavior only when supported.
 - Every semantic component must cite evidence IDs from this bundle. A DESIGN_DEPENDENCY may omit
   evidence only when it is explicitly a later modeling need rather than a specification fact.
-- Classify claims only as {', '.join(CLAIM_KINDS)}. Never create OPEN_QUESTION.
+{dual_source_rule}- Classify claims only as {', '.join(CLAIM_KINDS)}. Never create OPEN_QUESTION.
 - SOURCE_FACT is directly stated by evidence. DERIVED_INTERPRETATION is the operational reading
   derived from cited evidence. DESIGN_DEPENDENCY is a later modeling need. ASSUMPTION is a genuine
   assumption not established by the evidence. Do not disguise modeling choices as source facts.

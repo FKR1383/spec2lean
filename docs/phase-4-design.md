@@ -110,6 +110,12 @@ need rather than a source fact. Every `SOURCE_FACT` and
 `DERIVED_INTERPRETATION` requires evidence. Design dependencies and assumptions
 may be source-independent.
 
+If the Phase-3 bundle contains both official HTML and PDF evidence, every
+`SOURCE_FACT` and `DERIVED_INTERPRETATION` must cite supporting evidence from
+both renditions. This is checked per claim, so a PDF item elsewhere in the
+bundle cannot satisfy an unrelated claim. The rule is inactive for legitimate
+single-rendition bundles.
+
 Before a session starts, Phase 4 checks that the unit is uniquely present in
 the plan, its evidence bundle exists, the bundle matches the plan/unit,
 language, version, and Phase-1 database digest, and every evidence record has
@@ -121,6 +127,7 @@ Submission and stored-artifact validation rejects:
 - unsupported fields and invalid enum values;
 - unknown or duplicate evidence references;
 - missing evidence on source facts or derived interpretations;
+- a factual or derived claim missing its HTML or PDF citation in a dual-source bundle;
 - any non-`ASSUMPTION` claim that cites a non-normative resolution;
 - a non-normative resolution used by a semantic component but not mapped to an
   `ASSUMPTION` claim;

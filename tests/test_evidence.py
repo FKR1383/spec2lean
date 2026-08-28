@@ -11,6 +11,7 @@ from spec2lean.database import build_database, connect
 from spec2lean.cli import main
 from spec2lean.evidence.mcp import EvidenceMcpServer, tool_definitions
 from spec2lean.evidence.models import EvidenceScope
+from spec2lean.evidence.prompt import build_retriever_prompt
 from spec2lean.evidence.query import EvidenceQuery, SessionQuery
 from spec2lean.evidence.render import render_markdown
 from spec2lean.evidence.runner import (
@@ -21,6 +22,7 @@ from spec2lean.evidence.runner import (
 )
 from spec2lean.evidence.validation import validate_bundle, validate_submission
 from spec2lean.parsers.pdf import parse_pdf
+from spec2lean.parsers.html import parse_html
 from spec2lean.planning.models import PlanningRequest
 from spec2lean.planning.scope import Phase1Query, ScopeResolver
 from spec2lean.planning.validation import build_validated_plan
@@ -241,6 +243,92 @@ def _make_evidence_pdf(path: Path) -> None:
     page.insert_textbox((72, 190, 540, 230), "The operation adds two operands.", fontsize=10)
     document.save(path)
     document.close()
+
+
+def _make_dual_source_pdf(path: Path) -> None:
+    document = fitz.open()
+    page = document.new_page(width=612, height=792)
+    page.insert_text((72, 80), "1. Integer Arithmetic Instructions", fontsize=18, fontname="hebo")
+    page.insert_text(
+        (72, 120), "1.1. Integer Arithmetic Instructions: alpha", fontsize=15, fontname="hebo"
+    )
+    page.insert_textbox(
+        (72, 150, 540, 190), "alpha.type d, a, b;\n.type = { .u32, .u64 };",
+        fontsize=10, fontname="cour",
+    )
+    page.insert_textbox(
+        (72, 210, 540, 245), "Alpha is independently defined.", fontsize=10
+    )
+    document.save(path)
+    document.close()
+
+
+def test_dual_source_units_require_paired_html_and_pdf_evidence(tmp_path):
+    pdf_source = tmp_path / "planner.pdf"
+    _make_dual_source_pdf(pdf_source)
+    database = tmp_path / "dual.sqlite"
+    html_source = Path(__file__).parent / "fixtures" / "planner_specification.html"
+    build_database(
+        database,
+        language="synthetic",
+        version="1.0",
+        documents=[
+            parse_html(html_source, "https://example.test/planner.html"),
+            parse_pdf(pdf_source, "https://example.test/planner.pdf"),
+        ],
+    )
+    plan = _plan(database, ["alpha.u32"])
+    with connect(database, read_only=True) as connection:
+        pdf_root = connection.execute(
+            """SELECT n.node_id FROM nodes n JOIN documents d USING(document_id)
+               WHERE d.source_type = 'pdf' AND n.section_number = '1.1'"""
+        ).fetchone()[0]
+    # The synthetic PDF parser does not classify its monospace block as an HTML-style
+    # syntax_block, so attach the matching planned section explicitly for this policy test.
+    plan["requestedUnits"][0]["sourceNodeIds"].append(pdf_root)
+    unit_id = plan["requestedUnits"][0]["unitId"]
+    with connect(database, read_only=True) as connection:
+        scope, query, session = _session_for(connection, plan, unit_id)
+        assert {
+            query._row(node_id)["source_type"] for node_id in scope.unit["sourceNodeIds"]
+        } == {"html", "pdf"}
+        candidates = [
+            item
+            for root in scope.unit["sourceNodeIds"]
+            for item in session.subtree(root, max_depth=1, limit=20)
+            if "independently defined" in item["exactText"].casefold()
+        ]
+        by_type = {query._row(item["nodeId"])["source_type"]: item for item in candidates}
+        html_only = {
+            "unitId": unit_id,
+            "selections": [_selection([by_type["html"]["nodeId"]])],
+        }
+        _, diagnostics = validate_submission(query, scope, session.ledger, html_only)
+        assert {item["code"] for item in diagnostics} >= {
+            "MISSING_SOURCE_RENDITION", "UNPAIRED_SOURCE_RENDITION",
+        }
+
+        paired = {
+            "unitId": unit_id,
+            "selections": [
+                _selection([by_type["html"]["nodeId"]]),
+                _selection([by_type["pdf"]["nodeId"]]),
+            ],
+        }
+        bundle, diagnostics = validate_submission(query, scope, session.ledger, paired)
+        assert diagnostics == [] and bundle is not None
+        assert {item["sourceType"] for item in bundle["evidence"]} == {"html", "pdf"}
+        assert validate_bundle(query, plan, bundle) == []
+        changed = json.loads(json.dumps(bundle))
+        changed["evidence"] = [
+            item for item in changed["evidence"] if item["sourceType"] == "html"
+        ]
+        assert {item["code"] for item in validate_bundle(query, plan, changed)} >= {
+            "MISSING_SOURCE_RENDITION", "UNPAIRED_SOURCE_RENDITION",
+        }
+        prompt = build_retriever_prompt(query, scope)
+        assert '"requiredOfficialRenditions": [' in prompt
+        assert "corresponding passage from both HTML and PDF" in prompt
 
 
 def test_pdf_page_and_bbox_provenance_are_deterministic(tmp_path):

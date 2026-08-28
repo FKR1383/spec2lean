@@ -27,6 +27,12 @@ path, and source lines; PDF records render the source page on demand with the
 stored bounding box highlighted. Evidence and claim cards also show reverse
 links back to declarations.
 
+For newly generated units whose Phase-2 scope contains both official
+renditions, factual and derived claims are required to cite both. The same
+claim therefore exposes its HTML record and its exact highlighted PDF page in
+the evidence list. Historical and genuinely single-rendition artifacts remain
+readable without synthesized provenance.
+
 The remaining tabs provide structured semantics, evidence grouped by tier and
 role, Build/Coverage/Traceability results, repair history, pipeline timing when
 recorded, and an optional raw-artifact panel. Missing or malformed optional

@@ -18,6 +18,9 @@ All notable changes to Spec2Lean are documented here.
 
 ### Changed
 
+- Dual-source units now require paired HTML/PDF Phase-3 evidence and both
+  citations on every factual or derived Phase-4 claim; the GUI displays both
+  records through its existing claim evidence view.
 - Phase-2 plans now use schema version 2 and contain `translationGroups`; older plans must be
   regenerated from the plan phase.
 - Translation grouping is language-neutral and no longer relies on a hard-coded PTX mnemonic table.
@@ -26,5 +29,5 @@ All notable changes to Spec2Lean are documented here.
 
 ### Validation
 
-- 118 automated tests pass.
+- 126 automated tests pass.
 - A live PTX `add.u32` run completed all seven phases with BUILD, COVERAGE, and TRACEABILITY passing.

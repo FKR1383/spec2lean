@@ -11,7 +11,11 @@ from typing import Any
 from ..database import connect
 from ..evidence.models import EVIDENCE_ROLES, EvidenceScope
 from ..evidence.query import EvidenceQuery, SessionQuery
-from ..evidence.validation import EvidenceValidationError, build_evidence_record
+from ..evidence.validation import (
+    EvidenceValidationError,
+    build_evidence_record,
+    required_official_renditions,
+)
 from ..util import canonical_json, normalize_text, stable_id
 from .questions import (
     QUESTION_MODEL,
@@ -83,6 +87,11 @@ def tool_definitions(*, runtime_available: bool) -> list[dict[str, Any]]:
                 ["nodeId"],
             ),
         },
+        {
+            "name": "spec_correlated",
+            "description": "Find the correlated HTML/PDF representation of an exposed Phase-1 node.",
+            "inputSchema": _object({"nodeId": NODE_ID}, ["nodeId"]),
+        },
     ]
     if runtime_available:
         tools.append({
@@ -104,6 +113,8 @@ def tool_definitions(*, runtime_available: bool) -> list[dict[str, Any]]:
             "rationale": TEXT,
             "sourceNodeIds": {"type": "array", "items": NODE_ID},
             "sourceSpanIds": {"type": "array", "items": SPAN_ID},
+            "counterpartSourceNodeIds": {"type": "array", "items": NODE_ID},
+            "counterpartSourceSpanIds": {"type": "array", "items": SPAN_ID},
             "url": TEXT,
             "excerpt": TEXT,
             "probeId": {"type": "string", "pattern": "^probe:"},
@@ -240,9 +251,11 @@ class OpenQuestionMcpServer:
         original_evidence = {item.get("evidenceId") for item in self.bundle.get("evidence", [])}
         added_evidence: dict[str, dict[str, Any]] = {}
         existing_resolutions = {item.get("resolutionId") for item in self.bundle.get("resolutions", [])}
+        required_renditions = required_official_renditions(self.query, self.evidence_scope)
         allowed_fields = {
             "questionId", "source", "role", "answer", "rationale", "sourceNodeIds",
-            "sourceSpanIds", "url", "excerpt", "probeId",
+            "sourceSpanIds", "counterpartSourceNodeIds", "counterpartSourceSpanIds",
+            "url", "excerpt", "probeId",
         }
         for index, raw in enumerate(raw_items):
             path = f"$.resolutions[{index}]"
@@ -276,51 +289,72 @@ class OpenQuestionMcpServer:
             references: list[str] = []
             provenance: dict[str, Any] = {}
             if source == "DATABASE":
-                node_ids, span_ids = raw.get("sourceNodeIds"), raw.get("sourceSpanIds", [])
-                if not isinstance(node_ids, list) or not node_ids or not all(isinstance(item, str) for item in node_ids):
-                    diagnostics.append({"code": "INVALID_SOURCE_NODES", "message": "database resolution requires sourceNodeIds", "path": f"{path}.sourceNodeIds"})
+                fields = [("sourceNodeIds", "sourceSpanIds")]
+                if required_renditions:
+                    fields.append(("counterpartSourceNodeIds", "counterpartSourceSpanIds"))
+                records: list[dict[str, Any]] = []
+                initial_diagnostic_count = len(diagnostics)
+                for node_field, span_field in fields:
+                    node_ids, span_ids = raw.get(node_field), raw.get(span_field, [])
+                    if not isinstance(node_ids, list) or not node_ids or not all(isinstance(item, str) for item in node_ids):
+                        diagnostics.append({"code": "INVALID_SOURCE_NODES", "message": f"database resolution requires {node_field}", "path": f"{path}.{node_field}"})
+                        continue
+                    if not isinstance(span_ids, list) or not all(isinstance(item, str) for item in span_ids):
+                        diagnostics.append({"code": "INVALID_SOURCE_SPANS", "message": f"{span_field} must be an array", "path": f"{path}.{span_field}"})
+                        continue
+                    if len(node_ids) != len(set(node_ids)):
+                        diagnostics.append({"code": "DUPLICATE_SOURCE_NODE", "message": f"{node_field} contains a duplicate", "path": f"{path}.{node_field}"})
+                    if len(span_ids) != len(set(span_ids)):
+                        diagnostics.append({"code": "DUPLICATE_SOURCE_SPAN", "message": f"{span_field} contains a duplicate", "path": f"{path}.{span_field}"})
+                    for node_id in node_ids:
+                        if node_id not in self.session.ledger.selectable_nodes:
+                            diagnostics.append({"code": "NODE_NOT_EXPOSED", "message": f"node was not read with exact text: {node_id}", "path": f"{path}.{node_field}"})
+                    for span_id in span_ids:
+                        if span_id not in self.session.ledger.spans:
+                            diagnostics.append({"code": "SPAN_NOT_EXPOSED", "message": f"span was not read with exact text: {span_id}", "path": f"{path}.{span_field}"})
+                    try:
+                        records.append(build_evidence_record(
+                            self.query,
+                            self.evidence_scope,
+                            node_ids=node_ids,
+                            span_ids=span_ids,
+                            role=role,
+                            tier="SUPPORTING",
+                            rationale=rationale,
+                            selection_basis={node: sorted(self.session.ledger.nodes.get(node, ())) for node in node_ids},
+                        ))
+                    except (EvidenceValidationError, KeyError) as exc:
+                        if isinstance(exc, EvidenceValidationError):
+                            diagnostics.extend(exc.diagnostics)
+                        else:
+                            diagnostics.append({"code": "INVALID_DATABASE_EVIDENCE", "message": str(exc), "path": path})
+                if len(diagnostics) != initial_diagnostic_count:
                     continue
-                if not isinstance(span_ids, list) or not all(isinstance(item, str) for item in span_ids):
-                    diagnostics.append({"code": "INVALID_SOURCE_SPANS", "message": "sourceSpanIds must be an array", "path": f"{path}.sourceSpanIds"})
+                if required_renditions and {record["sourceType"] for record in records} != required_renditions:
+                    diagnostics.append({
+                        "code": "UNPAIRED_SOURCE_RENDITION",
+                        "message": "database evidence must select corresponding HTML and PDF passages",
+                        "path": path,
+                    })
                     continue
-                if len(node_ids) != len(set(node_ids)):
-                    diagnostics.append({"code": "DUPLICATE_SOURCE_NODE", "message": "sourceNodeIds contains a duplicate", "path": f"{path}.sourceNodeIds"})
-                if len(span_ids) != len(set(span_ids)):
-                    diagnostics.append({"code": "DUPLICATE_SOURCE_SPAN", "message": "sourceSpanIds contains a duplicate", "path": f"{path}.sourceSpanIds"})
-                for node_id in node_ids:
-                    if node_id not in self.session.ledger.selectable_nodes:
-                        diagnostics.append({"code": "NODE_NOT_EXPOSED", "message": f"node was not read with exact text: {node_id}", "path": f"{path}.sourceNodeIds"})
-                for span_id in span_ids:
-                    if span_id not in self.session.ledger.spans:
-                        diagnostics.append({"code": "SPAN_NOT_EXPOSED", "message": f"span was not read with exact text: {span_id}", "path": f"{path}.sourceSpanIds"})
-                try:
-                    record = build_evidence_record(
-                        self.query,
-                        self.evidence_scope,
-                        node_ids=node_ids,
-                        span_ids=span_ids,
-                        role=role,
-                        tier="SUPPORTING",
-                        rationale=rationale,
-                        selection_basis={node: sorted(self.session.ledger.nodes.get(node, ())) for node in node_ids},
-                    )
-                except (EvidenceValidationError, KeyError) as exc:
-                    if isinstance(exc, EvidenceValidationError):
-                        diagnostics.extend(exc.diagnostics)
-                    else:
-                        diagnostics.append({"code": "INVALID_DATABASE_EVIDENCE", "message": str(exc), "path": path})
-                    continue
-                if record["evidenceId"] in original_evidence:
+                if any(record["evidenceId"] in original_evidence for record in records):
                     diagnostics.append({"code": "DUPLICATE_EXISTING_EVIDENCE", "message": "selected database evidence is already in the bundle", "path": path})
                     continue
-                # One newly discovered canonical record may answer more than one
-                # missing aspect in the same handler submission. Store it once
-                # while retaining the reference from every resolved question.
-                if record["evidenceId"] not in added_evidence:
-                    added_evidence[record["evidenceId"]] = record
-                    official_additions.append(record)
-                references.append(record["evidenceId"])
-                provenance = {"sourceNodeIds": record["sourceNodeIds"], "sourceSpanIds": record["sourceSpanIds"]}
+                # A paired canonical selection may answer more than one missing aspect.
+                for record in records:
+                    if record["evidenceId"] not in added_evidence:
+                        added_evidence[record["evidenceId"]] = record
+                        official_additions.append(record)
+                    references.append(record["evidenceId"])
+                provenance = {
+                    "sourceNodeIds": records[0]["sourceNodeIds"],
+                    "sourceSpanIds": records[0]["sourceSpanIds"],
+                }
+                if len(records) == 2:
+                    provenance.update({
+                        "counterpartSourceNodeIds": records[1]["sourceNodeIds"],
+                        "counterpartSourceSpanIds": records[1]["sourceSpanIds"],
+                    })
             elif source == "INTERNET":
                 url, excerpt = raw.get("url"), raw.get("excerpt")
                 if not isinstance(url, str) or not url.startswith(("https://", "http://")):
@@ -420,6 +454,8 @@ class OpenQuestionMcpServer:
             value = self.session.subtree(
                 arguments["nodeId"], max_depth=arguments.get("maxDepth", 3), limit=arguments.get("limit", 20)
             )
+        elif name == "spec_correlated":
+            value = self.session.correlated(arguments["nodeId"])
         elif name == "execute_probe":
             value = self._execute_probe(arguments["questionId"], arguments.get("input"))
         elif name == "submit_questions":
