@@ -24,6 +24,7 @@ from .questions import (
     OpenQuestionScope,
     resolution_record,
 )
+from .mcp import semantic_evidence_view
 
 
 def _object(properties: dict[str, Any], required: list[str] | None = None) -> dict[str, Any]:
@@ -446,7 +447,7 @@ class OpenQuestionMcpServer:
         if name == "get_current_evidence":
             if arguments:
                 raise ValueError("get_current_evidence accepts no arguments")
-            value = self.bundle
+            value = semantic_evidence_view(self.scope, self.bundle)
         elif name == "spec_search":
             self._known_question(arguments["questionId"])
             value = self.session.search(

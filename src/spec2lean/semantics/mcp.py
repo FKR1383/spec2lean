@@ -25,6 +25,31 @@ EVIDENCE_IDS = {
     "items": {"type": "string", "pattern": "^(evidence|resolution):"},
 }
 
+SEMANTIC_EVIDENCE_FIELDS = (
+    "evidenceId", "role", "tier", "rationale", "sourceType", "sectionNumber",
+    "sectionTitle", "exactText", "sourceNodeIds", "htmlAnchor", "pdfPage",
+)
+
+
+def semantic_evidence_view(scope: Any, bundle: dict[str, Any]) -> dict[str, Any]:
+    """Project out verbose GUI provenance while preserving every semantic source passage."""
+    evidence = [
+        {field: item.get(field) for field in SEMANTIC_EVIDENCE_FIELDS}
+        for item in bundle.get("evidence", [])
+        if isinstance(item, dict)
+    ]
+    return {
+        "schemaVersion": 1,
+        "unit": dict(bundle.get("unit", {})),
+        "evidence": evidence,
+        "resolutions": list(bundle.get("resolutions", [])),
+        "transport": {
+            "complete": True,
+            "evidenceBundleHash": scope.evidence_bundle_hash,
+            "evidenceCount": len(evidence),
+        },
+    }
+
 
 def _component(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
     return _object({**properties, "evidenceIds": EVIDENCE_IDS}, [*required, "evidenceIds"])
@@ -99,7 +124,7 @@ class SemanticsMcpServer:
             if arguments:
                 raise ValueError("get_evidence accepts no arguments")
             self.evidence_read = True
-            value = self.bundle
+            value = semantic_evidence_view(self.scope, self.bundle)
         elif name != "submit_semantics":
             raise KeyError(f"unknown tool: {name}")
         else:

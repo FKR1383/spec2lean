@@ -307,6 +307,10 @@ def test_semantic_runner_resolves_questions_then_reextracts(
         config = json.loads(kwargs["env"]["OPENCODE_CONFIG_CONTENT"])
         if agent == "spec2lean-semantic-extractor":
             extractor_attempt += 1
+            if extractor_attempt == 2:
+                # Handler additions stay tentative until this extraction succeeds.
+                persisted = json.loads((evidence_dir / "evidence.json").read_text())
+                assert len(persisted["evidence"]) == 1
             mcp = config["mcp"]["semantics"]["command"]
 
             def semantic_path(flag):

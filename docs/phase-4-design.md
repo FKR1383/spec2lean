@@ -15,7 +15,10 @@ mappings, and the same Phase-3 evidence boundary.
 
 Each extraction attempt receives exactly one bounded OpenCode session. Its prompt
 contains deterministic unit metadata, while the exact unit `evidence.json` is
-returned by the bounded `get_evidence` tool. The bundle is not copied into the
+projected by the bounded `get_evidence` tool into the fields Phase 4 needs:
+evidence IDs, roles, tiers, source types, exact text, sections, rationales, and
+compact source locations. Verbose HTML/PDF span and bounding-box provenance
+remains in the canonical bundle for deterministic validation and the GUI. The bundle is not copied into the
 `opencode run` command-line argument, avoiding platform per-argument size limits
 without changing the source boundary. The session has only two local tools,
 `get_evidence` and `submit_semantics`; submission is rejected until the bundle
@@ -25,6 +28,12 @@ There are no automatic retries of the same prompt. Structural diagnostics from
 a rejected tool call can be corrected only within the same session. A fresh
 extractor session is started only after the Open Question Handler has produced
 a validated evidence augmentation.
+
+Open-question additions remain tentative across recovery rounds. They are
+committed to the Phase-3 bundle only after a restarted extractor returns valid
+successful semantics; a transport error or terminal failure leaves Phase 3
+unchanged. A truncated `get_evidence` response is classified as
+`EVIDENCE_TRANSPORT_FAILURE` and never routed as a specification question.
 
 The exact configuration is pinned both in the isolated agent and on the command
 line:

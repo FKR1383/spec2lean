@@ -16,6 +16,7 @@ from spec2lean.semantics.prompt import build_extractor_prompt
 from spec2lean.semantics.render import render_markdown
 from spec2lean.semantics.revision import revise_semantics
 from spec2lean.semantics.runner import build_semantics, opencode_config
+from spec2lean.semantics.runner import _evidence_transport_truncated
 from spec2lean.semantics.store import unit_directory
 from spec2lean.semantics.validation import validate_artifact, validate_submission
 from spec2lean.semantics.questions import resolution_record, OpenQuestionScope
@@ -287,8 +288,9 @@ def test_runner_uses_one_fake_session_and_records_deterministic_configuration(tm
 
 def test_large_evidence_is_fetched_through_mcp_not_embedded_in_launch_prompt(tmp_path):
     plan, bundle = _inputs()
-    marker = "large-evidence-marker-" + ("x" * 160_000)
-    bundle["evidence"][0]["exactText"] = marker
+    marker = "large-provenance-marker-" + ("x" * 160_000)
+    bundle["evidence"][0]["provenance"] = [{"verboseLayout": marker}]
+    exact_text = bundle["evidence"][0]["exactText"]
     scope = _scope(plan, bundle)
     prompt = build_extractor_prompt(scope, bundle)
     assert len(prompt.encode("utf-8")) < 32_000
@@ -303,7 +305,23 @@ def test_large_evidence_is_fetched_through_mcp_not_embedded_in_launch_prompt(tmp
     fetched = json.loads(
         server.call_tool("get_evidence", {})["content"][0]["text"]
     )
-    assert fetched["evidence"][0]["exactText"] == marker
+    assert fetched["evidence"][0]["exactText"] == exact_text
+    assert "provenance" not in fetched["evidence"][0]
+    assert fetched["transport"]["complete"] is True
+    assert len(json.dumps(fetched).encode("utf-8")) < 32_000
+
+
+def test_truncated_evidence_transport_is_detected_before_question_recovery():
+    stdout = json.dumps({
+        "type": "tool_use",
+        "part": {
+            "type": "tool",
+            "tool": "semantics_get_evidence",
+            "state": {"metadata": {"truncated": True}},
+        },
+    })
+    assert _evidence_transport_truncated(stdout) is True
+    assert _evidence_transport_truncated('{"type":"text"}') is False
 
 
 def test_semantics_inspection_cli_is_deterministic_and_does_not_run_opencode(tmp_path, capsys):

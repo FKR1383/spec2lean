@@ -19,7 +19,8 @@ All notable changes to Spec2Lean are documented here.
 ### Changed
 
 - Large Phase-3 bundles are now fetched through the bounded semantics MCP tool instead of being
-  copied into an operating-system command-line argument.
+  copied into an operating-system command-line argument. The tool omits verbose GUI provenance,
+  detects transport truncation, and keeps question-handler additions tentative until extraction succeeds.
 - Dual-source units now require paired HTML/PDF Phase-3 evidence and both
   citations on every factual or derived Phase-4 claim; the GUI displays both
   records through its existing claim evidence view.
@@ -31,5 +32,5 @@ All notable changes to Spec2Lean are documented here.
 
 ### Validation
 
-- 127 automated tests pass.
+- 128 automated tests pass.
 - A live PTX `add.u32` run completed all seven phases with BUILD, COVERAGE, and TRACEABILITY passing.

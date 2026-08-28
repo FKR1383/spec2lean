@@ -84,6 +84,24 @@ def _session_id(stdout: str) -> str | None:
     return None
 
 
+def _evidence_transport_truncated(stdout: str) -> bool:
+    for line in stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        part = event.get("part")
+        if not isinstance(part, dict) or part.get("type") != "tool":
+            continue
+        if part.get("tool") != "semantics_get_evidence":
+            continue
+        state = part.get("state")
+        metadata = state.get("metadata") if isinstance(state, dict) else None
+        if isinstance(metadata, dict) and metadata.get("truncated") is True:
+            return True
+    return False
+
+
 def _run_unit(
     plan: dict[str, Any], bundle: dict[str, Any], output: Path, executable: str, *,
     timeout_seconds: int, run_command: Callable[..., subprocess.CompletedProcess[str]],
@@ -127,8 +145,16 @@ def _run_unit(
         except subprocess.TimeoutExpired as exc:
             completed = subprocess.CompletedProcess(command, 124, exc.stdout or "", exc.stderr or "")
             error = f"OpenCode Semantic Extractor session timed out after {timeout_seconds} seconds"
+        except OSError as exc:
+            completed = subprocess.CompletedProcess(command, 126, "", str(exc))
+            error = f"OpenCode Semantic Extractor could not start: {exc}"
         if error is None and completed.returncode != 0:
             error = f"OpenCode Semantic Extractor exited with status {completed.returncode}"
+        if error is None and _evidence_transport_truncated(completed.stdout):
+            error = (
+                "EVIDENCE_TRANSPORT_FAILURE: OpenCode truncated the bounded semantic evidence "
+                "response; open-question recovery was not started"
+            )
         if error is None and not submission_path.is_file():
             error = "OpenCode Semantic Extractor session finished without a valid submit_semantics call"
         artifact: dict[str, Any] | None = None
@@ -165,6 +191,37 @@ def _run_unit(
             missing = "; ".join(artifact["failure"]["missingAspects"]) if artifact else "unspecified"
             raise RuntimeError(f"INSUFFICIENT_EVIDENCE: {missing}; run artifact: {output}")
     return output
+
+
+def _commit_evidence_augmentation(
+    evidence_root: Path,
+    plan: dict[str, Any],
+    initial_bundle: dict[str, Any],
+    augmented_bundle: dict[str, Any],
+    augmentations: list[dict[str, Any]],
+) -> None:
+    unit_id = str(initial_bundle["unit"]["unitId"])
+    evidence_directory, current_bundle = load_unit_bundle(evidence_root, plan, unit_id)
+    if current_bundle != initial_bundle:
+        raise RuntimeError("Phase-3 evidence changed during open-question handling")
+    temporary_json = evidence_directory / ".evidence.json.open-question.tmp"
+    temporary_md = evidence_directory / ".evidence.md.open-question.tmp"
+    temporary_json.write_text(
+        json.dumps(augmented_bundle, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    temporary_md.write_text(render_evidence_markdown(augmented_bundle), encoding="utf-8")
+    os.replace(temporary_json, evidence_directory / "evidence.json")
+    os.replace(temporary_md, evidence_directory / "evidence.md")
+    metadata_path = evidence_directory / "retriever-run.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata.setdefault("openQuestionAugmentations", []).extend(augmentations)
+    temporary_metadata = evidence_directory / ".retriever-run.json.open-question.tmp"
+    temporary_metadata.write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(temporary_metadata, metadata_path)
 
 
 def build_semantics(
@@ -209,6 +266,7 @@ def build_semantics(
     root.mkdir(parents=True, exist_ok=True)
     for initial_bundle, output in zip(bundles, outputs, strict=True):
         bundle = initial_bundle
+        pending_augmentations: list[dict[str, Any]] = []
         _run_unit(
             plan, bundle, output, executable,
             timeout_seconds=timeout_seconds, run_command=run_command,
@@ -258,35 +316,13 @@ def build_semantics(
                     f"; handler artifact: {attempt / 'handler'}"
                 )
 
-            evidence_directory, current_bundle = load_unit_bundle(
-                evidence_root, plan, str(bundle["unit"]["unitId"])
-            )
-            if current_bundle != bundle:
-                raise RuntimeError("Phase-3 evidence changed during open-question handling")
-            temporary_json = evidence_directory / ".evidence.json.open-question.tmp"
-            temporary_md = evidence_directory / ".evidence.md.open-question.tmp"
-            temporary_json.write_text(
-                json.dumps(augmented, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
-            temporary_md.write_text(render_evidence_markdown(augmented), encoding="utf-8")
-            os.replace(temporary_json, evidence_directory / "evidence.json")
-            os.replace(temporary_md, evidence_directory / "evidence.md")
-            metadata_path = evidence_directory / "retriever-run.json"
-            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-            metadata.setdefault("openQuestionAugmentations", []).append({
+            pending_augmentations.append({
                 "questionRunId": question_artifact["runId"],
                 "outcome": question_artifact["outcome"],
                 "databaseEvidenceAdded": question_artifact["databaseEvidenceAdded"],
                 "supplementalResolutionsAdded": question_artifact["supplementalResolutionsAdded"],
                 "resultingEvidenceBundleHash": evidence_bundle_hash(augmented),
             })
-            temporary_metadata = evidence_directory / ".retriever-run.json.open-question.tmp"
-            temporary_metadata.write_text(
-                json.dumps(metadata, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
-            os.replace(temporary_metadata, metadata_path)
             progress("augmented Phase-3 evidence and restarting the Semantic Extractor")
 
             extractor_archive = attempt / "extractor"
@@ -300,4 +336,8 @@ def build_semantics(
                 raise_on_insufficient=False,
             )
             artifact = json.loads((output / "semantics.json").read_text(encoding="utf-8"))
+        if pending_augmentations:
+            _commit_evidence_augmentation(
+                evidence_root, plan, initial_bundle, bundle, pending_augmentations
+            )
     return root
