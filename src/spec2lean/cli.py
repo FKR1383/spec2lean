@@ -983,10 +983,28 @@ def _command_pipeline_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_gui(args: argparse.Namespace) -> int:
+    from .gui.repository import ArtifactRepository
+    from .gui.server import serve
+
+    repository = ArtifactRepository.at(REPOSITORY_ROOT, runs=Path(args.runs_root))
+    if args.run:
+        repository.get_run(args.run)
+    serve(repository, host=args.host, port=args.port, initial_run=args.run)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="spec2lean", description="Spec2Lean specification index and request-scoped planner")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
+
+    gui = commands.add_parser("gui", help="open the local read-only artifact explorer")
+    gui.add_argument("--run", help="open a specific pipeline run on launch")
+    gui.add_argument("--port", type=int, default=8000, help="local HTTP port (default: 8000)")
+    gui.add_argument("--host", default="127.0.0.1", help=argparse.SUPPRESS)
+    gui.add_argument("--runs-root", default=str(DEFAULT_RUNS_ROOT), help=argparse.SUPPRESS)
+    gui.set_defaults(func=_command_gui)
 
     pipeline = commands.add_parser("run", help="run or resume the complete Phase 1-7 pipeline")
     pipeline.add_argument("--language", required=True)
@@ -1379,6 +1397,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if getattr(args, "command", None) == "gui" and not (0 <= args.port <= 65535):
+        parser.error("gui --port must be between 0 and 65535")
     if getattr(args, "index_command", None) == "build" and not (args.pdf or args.html):
         parser.error("index build requires --pdf and/or --html")
     if getattr(args, "plan_command", None) == "build" and args.timeout < 1:

@@ -44,6 +44,28 @@ python3 -m venv .venv
 The repository-local wrapper automatically uses `.venv/bin/python` when it is
 present.
 
+## Open the artifact explorer
+
+After a pipeline run, launch the read-only local GUI:
+
+```bash
+./spec2lean gui
+```
+
+Then open `http://127.0.0.1:8000`. To open a particular run immediately or use
+a different local port:
+
+```bash
+./spec2lean gui --run pipeline-run:RUN_ID
+./spec2lean gui --port 8080
+```
+
+The explorer lists complete, partial, and failed runs. Its primary unit view
+connects generated Lean declarations to their Phase-4 claims, exact Phase-3
+evidence, and Phase-1 HTML/PDF provenance. PDF evidence pages are rendered on
+demand with their recorded bounding boxes highlighted. The GUI does not edit
+artifacts or run pipeline phases, and binds to localhost by default.
+
 ## Build and validate PTX 9.3
 
 ```bash
