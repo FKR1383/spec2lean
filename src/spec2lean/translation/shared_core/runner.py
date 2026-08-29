@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -23,6 +22,7 @@ from .models import (
     REPRESENTATION_SCHEMA_VERSION,
     FrozenSharedCore,
     SharedRequirement,
+    core_namespace_for,
     core_run_id_for,
     json_hash,
     text_hash,
@@ -48,24 +48,65 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
-def _component(value: str) -> str:
-    words = re.findall(r"[A-Za-z0-9]+", value)
-    result = "".join(word[:1].upper() + word[1:] for word in words) or "Specification"
-    return f"V{result}" if result[0].isdigit() else result
-
-
-def _module_location(plan: dict[str, Any], source_hash: str) -> tuple[str, str]:
+def _module_location(lean_namespace: str, source_hash: str) -> tuple[str, str]:
     token = "C" + source_hash.removeprefix("sha256:")[:16]
-    module = ".".join((
-        "Spec2LeanShared", _component(str(plan["language"])),
-        _component(str(plan["version"])), token, "Core",
-    ))
+    module = ".".join((lean_namespace, token, "Core"))
     return module, "modules/" + "/".join(module.split(".")) + ".lean"
 
 
-def _empty_source(plan: dict[str, Any]) -> str:
-    namespace = f"Spec2Lean.{_component(str(plan['language']))}.Shared"
-    return f"namespace {namespace}\n\nend {namespace}\n"
+def _empty_source() -> str:
+    return "-- This specification has no shared semantic declarations.\n"
+
+
+def _wrap_root_source(source: str, lean_namespace: str) -> str:
+    """Nest declarations under the lineage namespace, keeping Lean imports first."""
+    lines = source.rstrip().splitlines()
+    header_end = 0
+    for index, line in enumerate(lines):
+        if line.strip() == "prelude" or line.lstrip().startswith("import "):
+            header_end = index + 1
+    header, body = lines[:header_end], lines[header_end:]
+    wrapped: list[str] = list(header)
+    if wrapped and wrapped[-1].strip():
+        wrapped.append("")
+    wrapped.extend((f"namespace {lean_namespace}", ""))
+    wrapped.extend(body)
+    if wrapped and wrapped[-1].strip():
+        wrapped.append("")
+    wrapped.append(f"end {lean_namespace}")
+    return "\n".join(wrapped).rstrip() + "\n"
+
+
+def _isolate_root_candidate(
+    plan: dict[str, Any], candidate: dict[str, Any]
+) -> tuple[dict[str, Any], str]:
+    """Place a new root representation in its content-derived Lean namespace."""
+    lean_namespace = core_namespace_for(plan, candidate)
+
+    def qualified(name: str) -> str:
+        return f"{lean_namespace}.{name}"
+
+    concepts = []
+    for item in candidate["concepts"]:
+        value = dict(item)
+        value["leanDeclarations"] = [
+            qualified(name) for name in item["leanDeclarations"]
+        ]
+        concepts.append(value)
+    declarations = []
+    for item in candidate["declarations"]:
+        value = dict(item)
+        value["declaration"] = qualified(item["declaration"])
+        if "supportsDeclarations" in item:
+            value["supportsDeclarations"] = [
+                qualified(name) for name in item["supportsDeclarations"]
+            ]
+        declarations.append(value)
+    return {
+        "leanSource": _wrap_root_source(candidate["leanSource"], lean_namespace),
+        "concepts": concepts,
+        "declarations": declarations,
+    }, lean_namespace
 
 
 def _core_context(
@@ -80,6 +121,9 @@ def _core_context(
             "sourceDatabaseDigest": plan["sourceDatabaseDigest"],
         },
         "requirements": [item.to_dict() for item in requirements],
+        "leanNamespace": (
+            parent.manifest.get("leanNamespace") if parent is not None else None
+        ),
         "parentCore": (
             {"manifest": parent.manifest, "leanSource": parent.source}
             if parent is not None else None
@@ -210,7 +254,10 @@ def _run_materializer(
             "declarations": raw_candidate.get("declarations"),
         }
         candidate, diagnostics = normalize_core_submission(
-            requirements, reconstructed, parent=parent
+            requirements, reconstructed, parent=parent,
+            lean_namespace=(
+                str(parent.manifest["leanNamespace"]) if parent is not None else None
+            ),
         )
         if diagnostics or candidate is None:
             raise RuntimeError(
@@ -366,7 +413,7 @@ def ensure_shared_core(
 
         if not requirements and parent is None:
             raw_candidate: dict[str, Any] = {
-                "leanSource": _empty_source(plan), "concepts": [], "declarations": [],
+                "leanSource": _empty_source(), "concepts": [], "declarations": [],
             }
             candidate, diagnostics = normalize_core_submission(requirements, raw_candidate)
             if diagnostics or candidate is None:
@@ -381,9 +428,13 @@ def ensure_shared_core(
                 timeout_seconds=timeout_seconds, run_command=run_command,
             )
 
+        if parent is None:
+            candidate, lean_namespace = _isolate_root_candidate(plan, candidate)
+        else:
+            lean_namespace = str(parent.manifest["leanNamespace"])
         source = str(candidate["leanSource"]).rstrip() + "\n"
         source_hash = text_hash(source)
-        lean_module, lean_file = _module_location(plan, source_hash)
+        lean_module, lean_file = _module_location(lean_namespace, source_hash)
         concepts = [dict(item) for item in candidate["concepts"]]
         declarations = [dict(item) for item in candidate["declarations"]]
         core_run_id = core_run_id_for(
@@ -409,6 +460,7 @@ def ensure_shared_core(
             "target": {"language": "Lean", "version": "4"},
             "leanFile": lean_file,
             "leanModule": lean_module,
+            "leanNamespace": lean_namespace,
             "createdAt": created_at,
             "sourceHash": source_hash,
             "concepts": concepts,

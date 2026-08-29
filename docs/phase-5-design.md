@@ -138,28 +138,29 @@ considering another model call.
 
 ## Core manifest and representation registry
 
-`core-manifest.json` uses schema version 1 and has this complete field shape:
+`core-manifest.json` uses schema version 2 and has this complete field shape:
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "phase": "SHARED_CORE",
   "language": "...",
   "version": "...",
   "sourceDatabaseDigest": "...",
   "coreRunId": "shared-core-run:...",
   "parentCoreRunId": null,
-  "representationSchemaVersion": 1,
+  "representationSchemaVersion": 2,
   "generator": {
     "provider": "opencode",
     "model": "openai/gpt-5.6-sol",
     "reasoning": "medium",
-    "policyVersion": 1,
+    "policyVersion": 2,
     "invoked": true
   },
   "target": {"language": "Lean", "version": "4"},
   "leanFile": "modules/.../Core.lean",
   "leanModule": "Spec2LeanShared....Core",
+  "leanNamespace": "Spec2LeanShared.<Language>.<Version>.N<lineage-token>",
   "createdAt": "...",
   "sourceHash": "sha256:...",
   "concepts": [
@@ -199,6 +200,13 @@ declaration. All other core declarations cite valid claims owned by their
 `dependencyIds`. Every named declaration in the source is mapped, every
 concept/declaration ownership edge agrees in both registry directions, and
 introduced Lean types use the `PRIMARY_TYPE` role.
+
+Each independent root representation is deterministically nested below a
+language/version/content lineage namespace. Append-only extensions inherit
+that namespace and preserve their parent source prefix. The module adds a
+final source-hash component, so incompatible roots can be imported together
+without declaration collisions while compatible extensions retain stable
+registered names.
 
 The canonical manifest hash is stored in pointers and group references, not
 inside the self-hashed manifest.
@@ -306,6 +314,18 @@ by the group. Claim references are reconstructed from current Phase-4
 relevant planned shared prerequisites use `sharedCore: null` and
 `sharedUses: []`.
 
+Fresh declaration mappings also contain a deterministic `sourceRange` with the
+Lean filename and one-based start/end lines. The model-facing tool cannot submit
+this field: Phase 5 derives it from the accepted source and rechecks it when a
+manifest is loaded. Historical schema-v3 manifests without ranges remain
+readable.
+
+For instruction-like units, the pure `OPERATION` is the primary declaration.
+An `EXECUTION` mapping is accepted only when it adds Phase-4-supported state,
+side-effect, or guard behavior. A value-level destination assignment does not
+force a wrapper, and a definition that only applies the mapped operation is
+rejected as redundant. Predication still requires an execution-level mapping.
+
 Deterministic translation validation additionally requires:
 
 - the exact Phase-2 group boundary and current semantic artifact hashes;
@@ -315,7 +335,7 @@ Deterministic translation validation additionally requires:
   a core-owned shared dependency;
 - every local declaration to be mapped to current `(unitId, claimId)` pairs or
   a resolvable implementation-helper support chain;
-- all required per-unit operation/execution responsibilities; and
+- all required per-unit operation and predication responsibilities;
 - no forbidden Lean construct or unmapped named declaration.
 
 The deterministic translation run ID includes both all member semantic hashes

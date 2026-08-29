@@ -129,12 +129,18 @@ def _candidate(context: dict) -> dict:
             lean_names = list(parent_concepts[dependency_id]["leanDeclarations"])
         else:
             local = _lean_component(dependency_id.split(":", 1)[1])
-            qualified = f"Spec2Lean.Synthetic.Shared.{local}"
+            base_namespace = "Spec2Lean.Synthetic.Shared"
+            lineage_namespace = context.get("leanNamespace")
+            declaration_namespace = (
+                f"{lineage_namespace}.{base_namespace}"
+                if lineage_namespace else base_namespace
+            )
+            qualified = f"{declaration_namespace}.{local}"
             lean_names = [qualified]
             additions.append(
-                "namespace Spec2Lean.Synthetic.Shared\n\n"
+                f"namespace {declaration_namespace}\n\n"
                 f"structure {local} where\n  payload : Nat\n\n"
-                "end Spec2Lean.Synthetic.Shared\n"
+                f"end {declaration_namespace}\n"
             )
             requirement = requirements[dependency_id]
             declarations.append({
@@ -148,6 +154,55 @@ def _candidate(context: dict) -> dict:
     if additions:
         source += ("\n" if source else "") + "\n".join(additions)
     return {"leanSource": source, "concepts": concepts, "declarations": declarations}
+
+
+def _finite_width_candidate(width: int):
+    def candidate(context: dict) -> dict:
+        assert context.get("parentCore") is None
+        requirement = context["requirements"][0]
+        dependency_id = requirement["dependencyId"]
+        claim_refs = copy.deepcopy(requirement["claimRefs"])
+        namespace = "SharedBoundary"
+        word = f"{namespace}.Word"
+        width_name = f"{namespace}.width"
+        clamp = f"{namespace}.clampAmount"
+        return {
+            "leanSource": (
+                "import Std\n\n"
+                f"namespace {namespace}\n\n"
+                f"abbrev Word := BitVec {width}\n\n"
+                f"def width : Nat := {width}\n\n"
+                "def clampAmount (amount : Word) : Nat :=\n"
+                "  min amount.toNat width\n\n"
+                f"end {namespace}\n"
+            ),
+            "concepts": [{
+                "dependencyId": dependency_id,
+                "leanDeclarations": [word, width_name, clamp],
+            }],
+            "declarations": [
+                {
+                    "declaration": word,
+                    "role": "PRIMARY_TYPE",
+                    "dependencyIds": [dependency_id],
+                    "claimRefs": claim_refs,
+                },
+                {
+                    "declaration": width_name,
+                    "role": "SEMANTIC_HELPER",
+                    "dependencyIds": [dependency_id],
+                    "claimRefs": claim_refs,
+                },
+                {
+                    "declaration": clamp,
+                    "role": "EDGE_CASE_HELPER",
+                    "dependencyIds": [dependency_id],
+                    "claimRefs": claim_refs,
+                },
+            ],
+        }
+
+    return candidate
 
 
 def _fake_run(calls: list[dict], candidate_builder=_candidate):
@@ -397,11 +452,16 @@ def test_controlled_extension_adds_concept_once_and_is_then_reused(
     assert extended.core_run_id != first.core_run_id
     assert extended.source.startswith(first.source)
     assert extended.manifest["parentCoreRunId"] == first.core_run_id
+    assert extended.manifest["leanNamespace"] == first.manifest["leanNamespace"]
+    assert extended.lean_module != first.lean_module
     assert [item["dependencyId"] for item in extended.manifest["concepts"]] == [
         "shared:environment", "shared:value"
     ]
     names = [item["declaration"] for item in extended.manifest["declarations"]]
     assert len(names) == len(set(names)) == 2
+    assert all(
+        name.startswith(first.manifest["leanNamespace"] + ".") for name in names
+    )
     assert first.manifest["declarations"][0] in extended.manifest["declarations"]
     reused = ensure_shared_core(
         extended_plan, extended_semantics, tmp_path,
@@ -552,6 +612,123 @@ end Spec2Lean.Synthetic.Shared
     candidate, diagnostics = normalize_core_submission(requirements, submission)
     assert diagnostics == [] and candidate is not None
     assert [item["declaration"] for item in candidate["declarations"]].count(helper) == 1
+
+
+@pytest.mark.skipif(shutil.which("lean") is None, reason="Lean toolchain is not installed")
+def test_incompatible_root_cores_with_same_inner_names_coimport(
+    tmp_path, materializer
+):
+    plan, semantics = _inputs()
+    calls: list[dict] = []
+
+    def incompatible_candidate(context: dict) -> dict:
+        candidate = _candidate(context)
+        revised = any(
+            "revised" in str(claim.get("statement", ""))
+            for requirement in context["requirements"]
+            for claim in requirement["claims"]
+        )
+        if revised:
+            assert context.get("parentCore") is None
+            candidate["leanSource"] = candidate["leanSource"].replace(
+                "payload : Nat", "payload : Int"
+            )
+        return candidate
+
+    runner = _fake_run(calls, incompatible_candidate)
+    first = ensure_shared_core(
+        plan, semantics, tmp_path,
+        run_command=runner, build_runner=run_build_test,
+    )
+    revised_semantics = {
+        unit["unitId"]: _semantics(plan, unit, revision="revised")
+        for unit in UNITS
+    }
+    second = ensure_shared_core(
+        plan, revised_semantics, tmp_path,
+        run_command=runner, build_runner=run_build_test,
+    )
+
+    first_namespace = first.manifest["leanNamespace"]
+    second_namespace = second.manifest["leanNamespace"]
+    first_declaration = first.manifest["concepts"][0]["leanDeclarations"][0]
+    second_declaration = second.manifest["concepts"][0]["leanDeclarations"][0]
+    assert calls[1]["parentCore"] is None
+    assert first_namespace != second_namespace
+    assert first.lean_module != second.lean_module
+    assert first_declaration.removeprefix(first_namespace + ".") == (
+        second_declaration.removeprefix(second_namespace + ".")
+    ) == "Spec2Lean.Synthetic.Shared.Value"
+
+    together = tmp_path / "Together.lean"
+    together.write_text(
+        f"import {first.lean_module}\n"
+        f"import {second.lean_module}\n\n"
+        f"#check {first_declaration}\n"
+        f"#check {second_declaration}\n",
+        encoding="utf-8",
+    )
+    result = run_build_test(together, dependency_modules=[
+        (first.lean_module, first.source_path),
+        (second.lean_module, second.source_path),
+    ])
+    assert result["status"] == "PASS", result["diagnostics"]
+
+
+@pytest.mark.skipif(shutil.which("lean") is None, reason="Lean toolchain is not installed")
+def test_generic_finite_width_helper_compiles_boundary_guards(
+    tmp_path, materializer
+):
+    width = 8
+    plan, semantics = _inputs()
+    prerequisite = plan["sharedPrerequisites"][0]
+    prerequisite.update({
+        "name": "Finite-width amount domain",
+        "kind": "finite-width-boundary-domain",
+        "reason": "Both constructs use the same finite-width clamping boundary.",
+    })
+    for artifact in semantics.values():
+        dependency = artifact["semantics"]["dependencies"][0]
+        dependency["concept"] = prerequisite["name"]
+        dependency["description"] = (
+            f"Amounts inhabit width {width}; values above {width} clamp to {width}."
+        )
+        artifact["semantics"]["claims"][0]["statement"] = (
+            f"The finite width is {width}, and amounts above it clamp to {width}."
+        )
+
+    core = ensure_shared_core(
+        plan, semantics, tmp_path,
+        run_command=_fake_run([], _finite_width_candidate(width)),
+        build_runner=run_build_test,
+    )
+    mappings = {
+        item["declaration"]: item for item in core.manifest["declarations"]
+    }
+    word = next(name for name in mappings if name.endswith(".SharedBoundary.Word"))
+    clamp = next(
+        name for name in mappings if name.endswith(".SharedBoundary.clampAmount")
+    )
+    assert mappings[clamp]["claimRefs"] == [
+        {"unitId": "unit:alpha", "claimId": "claim:value"},
+        {"unitId": "unit:beta", "claimId": "claim:value"},
+    ]
+
+    amounts = (0, width // 2, width - 1, width, width + 1)
+    expected = (0, width // 2, width - 1, width, width)
+    guards = "\n".join(
+        f"#guard {clamp} ({amount} : {word}) == {result}"
+        for amount, result in zip(amounts, expected)
+    )
+    boundary_file = tmp_path / "SharedBoundaryTests.lean"
+    boundary_file.write_text(
+        f"import {core.lean_module}\n\n{guards}\n", encoding="utf-8"
+    )
+    result = run_build_test(
+        boundary_file,
+        dependency_modules=[(core.lean_module, core.source_path)],
+    )
+    assert result["status"] == "PASS", result["diagnostics"]
 
 
 @pytest.mark.skipif(shutil.which("lean") is None, reason="Lean toolchain is not installed")

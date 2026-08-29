@@ -18,6 +18,7 @@ from spec2lean.troubleshooting.models import (
     TROUBLESHOOTER_REASONING,
     action_for,
 )
+from spec2lean.troubleshooting.mcp import TroubleshootingMcpServer
 from spec2lean.troubleshooting.opencode import opencode_config
 from spec2lean.troubleshooting.prompt import build_troubleshooter_prompt
 from spec2lean.troubleshooting.resolver import resolve_check_failure
@@ -280,6 +281,80 @@ def test_file_level_import_repair_needs_no_affected_declaration(tmp_path):
     assert diagnostics == []
     assert candidate is not None
     assert candidate["changes"][0]["affectedDeclarations"] == []
+    assert "sourceRange" not in candidate["manifest"]["declarations"][0]
+
+
+def test_repair_rederives_ranges_for_a_current_translation_manifest(tmp_path):
+    plan, _, semantics, manifest = _write_build_inputs(tmp_path)
+    scope = TranslationGroupScope.from_inputs(
+        plan, GROUP, {UNIT["unitId"]: semantics}, created_at=manifest["createdAt"]
+    )
+    current_manifest = {
+        **manifest,
+        "declarations": [{
+            **manifest["declarations"][0],
+            "sourceRange": {
+                "file": f"{GROUP}.lean", "startLine": 3, "endLine": 5,
+            },
+        }],
+    }
+    candidate, diagnostics = validate_repair_submission(
+        scope,
+        {UNIT["unitId"]: semantics},
+        SOURCE,
+        current_manifest,
+        {
+            "leanSource": "import Std\n\n" + REPAIRED_SOURCE,
+            "declarations": manifest["declarations"],
+            "changes": [{
+                "description": "Use the installed import and API spelling.",
+                "affectedDeclarations": ["Spec2Lean.Repair.operation"],
+            }],
+        },
+    )
+    assert diagnostics == []
+    assert candidate is not None
+    assert candidate["manifest"]["declarations"][0]["sourceRange"] == {
+        "file": f"{GROUP}.lean", "startLine": 5, "endLine": 7,
+    }
+
+
+def test_repair_mcp_does_not_return_derived_ranges_as_model_arguments(tmp_path):
+    plan, _, semantics, manifest = _write_build_inputs(tmp_path)
+    scope = TranslationGroupScope.from_inputs(
+        plan, GROUP, {UNIT["unitId"]: semantics}, created_at=manifest["createdAt"]
+    )
+    current_manifest = {
+        **manifest,
+        "declarations": [{
+            **manifest["declarations"][0],
+            "sourceRange": {
+                "file": f"{GROUP}.lean", "startLine": 3, "endLine": 5,
+            },
+        }],
+    }
+    submission_path = tmp_path / "repair-submission.json"
+    server = TroubleshootingMcpServer({
+        "translationScope": scope.to_dict(),
+        "semanticsByUnit": {UNIT["unitId"]: semantics},
+        "leanSource": SOURCE,
+        "translationManifest": current_manifest,
+    }, submission_path)
+    result = server.call_tool("submit_repair", {
+        "leanSource": REPAIRED_SOURCE,
+        "declarations": manifest["declarations"],
+        "changes": [{
+            "description": "Use the resolved Nat.add API spelling.",
+            "affectedDeclarations": ["Spec2Lean.Repair.operation"],
+        }],
+    })
+    assert result["isError"] is False
+    stored = json.loads(submission_path.read_text())
+    assert "sourceRange" not in stored["declarations"][0]
+    candidate, diagnostics = validate_repair_submission(
+        scope, {UNIT["unitId"]: semantics}, SOURCE, current_manifest, stored
+    )
+    assert diagnostics == [] and candidate is not None
 
 
 def test_coverage_failure_routes_to_translator_with_exact_uncovered_ids(tmp_path):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -9,9 +10,9 @@ from ...util import canonical_json, stable_id
 from ..models import TRANSLATOR_MODEL, TRANSLATOR_REASONING
 
 
-CORE_SCHEMA_VERSION = 1
-REPRESENTATION_SCHEMA_VERSION = 1
-GENERATOR_POLICY_VERSION = 1
+CORE_SCHEMA_VERSION = 2
+REPRESENTATION_SCHEMA_VERSION = 2
+GENERATOR_POLICY_VERSION = 2
 CORE_GENERATOR_MODEL = TRANSLATOR_MODEL
 CORE_GENERATOR_REASONING = TRANSLATOR_REASONING
 CORE_GENERATOR_AGENT = "spec2lean-shared-core-materializer"
@@ -23,6 +24,34 @@ def json_hash(value: Any) -> str:
 
 def text_hash(value: str) -> str:
     return "sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def lean_component(value: str) -> str:
+    words = re.findall(r"[A-Za-z0-9]+", value)
+    result = "".join(word[:1].upper() + word[1:] for word in words) or "Specification"
+    return f"V{result}" if result[0].isdigit() else result
+
+
+def core_namespace_for(plan: dict[str, Any], candidate: dict[str, Any]) -> str:
+    """Return the deterministic namespace for one independent core lineage."""
+    identity = {
+        "language": plan.get("language"),
+        "version": plan.get("version"),
+        "sourceDatabaseDigest": plan.get("sourceDatabaseDigest"),
+        "coreSchemaVersion": CORE_SCHEMA_VERSION,
+        "representationSchemaVersion": REPRESENTATION_SCHEMA_VERSION,
+        "generatorPolicyVersion": GENERATOR_POLICY_VERSION,
+        "leanSource": candidate.get("leanSource"),
+        "concepts": candidate.get("concepts"),
+        "declarations": candidate.get("declarations"),
+    }
+    token = hashlib.sha256(canonical_json(identity).encode("utf-8")).hexdigest()[:16]
+    return ".".join((
+        "Spec2LeanShared",
+        lean_component(str(plan.get("language", "specification"))),
+        lean_component(str(plan.get("version", "version"))),
+        "N" + token,
+    ))
 
 
 def core_run_id_for(

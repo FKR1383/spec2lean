@@ -47,6 +47,12 @@ Rules:
 - For SEMANTICS_REVISED, reconcile the complete group source and mappings with all current artifacts.
 - Preserve valid existing declarations and behavior where compatible; prefer a focused patch.
 {core_rule.rstrip()}
+- Keep each instruction's pure OPERATION as its small, readable primary semantic declaration.
+- Use EXECUTION only when it implements genuine behavior beyond the pure result and the matching
+  Phase-4 stateEffects or predication supports that behavior. Predication still requires EXECUTION;
+  a value-level destination assignment does not.
+- Destination-shaped syntax or a result alone does not justify EXECUTION. Remove execute* wrappers
+  with unused destination parameters that merely return the pure operation.
 - Do not weaken semantics to compile, retrieve evidence, browse, critique Phase 4, or add proof padding.
 - Map every named declaration using only these roles: {', '.join(DECLARATION_ROLES)}.
 - Every semantic mapping uses claimRefs containing an exact unitId and claimId. Do not manufacture

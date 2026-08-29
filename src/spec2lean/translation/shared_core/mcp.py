@@ -120,7 +120,11 @@ class SharedCoreMcpServer:
                 value = {"accepted": True, "context": self.context}
         elif name == "submit_core":
             candidate, diagnostics = normalize_core_submission(
-                self.requirements, arguments, parent=self.parent
+                self.requirements, arguments, parent=self.parent,
+                lean_namespace=(
+                    str(self.context["leanNamespace"])
+                    if self.parent is not None else None
+                ),
             )
             if diagnostics:
                 value = {"accepted": False, "diagnostics": diagnostics}

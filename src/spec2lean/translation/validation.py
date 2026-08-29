@@ -83,6 +83,21 @@ def _diagnostic(code: str, message: str, path: str = "$") -> dict[str, str]:
     return {"code": code, "message": message, "path": path}
 
 
+def has_genuine_execution_semantics(semantic_payload: Any) -> bool:
+    """Return whether Phase 4 records behavior beyond a pure result operation.
+
+    Destination-shaped syntax, operands, and results deliberately do not affect this
+    decision.  In the current Phase-4 schema, state effects and predication are the
+    explicit execution-level components.
+    """
+    if not isinstance(semantic_payload, dict):
+        return False
+    state_effects = semantic_payload.get("stateEffects")
+    return (
+        isinstance(state_effects, list) and bool(state_effects)
+    ) or isinstance(semantic_payload.get("predication"), dict)
+
+
 def _without_comments_and_strings(source: str) -> str:
     """Blank Lean comments and strings while preserving newlines for line parsing."""
     result: list[str] = []
@@ -139,11 +154,11 @@ def _without_comments_and_strings(source: str) -> str:
     return "".join(result)
 
 
-def lean_declarations(source: str) -> dict[str, str]:
+def _lean_declaration_entries(source: str) -> list[tuple[str, str, int]]:
     clean = _without_comments_and_strings(source)
     contexts: list[list[str]] = []
-    found: dict[str, str] = {}
-    for line in clean.splitlines():
+    found: list[tuple[str, str, int]] = []
+    for line_number, line in enumerate(clean.splitlines(), start=1):
         namespace = NAMESPACE.match(line)
         if namespace:
             contexts.append(namespace.group(1).split("."))
@@ -161,8 +176,68 @@ def lean_declarations(source: str) -> dict[str, str]:
         kind, name = declaration.groups()
         prefix = [part for context in contexts for part in context]
         qualified = ".".join([*prefix, name]) if prefix else name
-        found[qualified] = kind
+        found.append((qualified, kind, line_number))
     return found
+
+
+def lean_declarations(source: str) -> dict[str, str]:
+    return {
+        name: kind
+        for name, kind, _line_number in _lean_declaration_entries(source)
+    }
+
+
+def declaration_source_ranges(
+    source: str, lean_file: str,
+) -> dict[str, dict[str, str | int]]:
+    """Locate named declarations after Lean source exists.
+
+    The translator never supplies these locations.  A declaration extends from
+    its declaration line through the line before the next named declaration (or
+    the end of the file), matching the source slices shown by artifact viewers.
+    """
+    entries = _lean_declaration_entries(source)
+    line_count = len(source.splitlines())
+    ranges: dict[str, dict[str, str | int]] = {}
+    for index, (name, _kind, start_line) in enumerate(entries):
+        end_line = (
+            entries[index + 1][2] - 1
+            if index + 1 < len(entries)
+            else line_count
+        )
+        ranges[name] = {
+            "file": lean_file,
+            "startLine": start_line,
+            "endLine": end_line,
+        }
+    return ranges
+
+
+def _is_direct_operation_wrapper(
+    source: str, declaration: str, operation_declarations: set[str]
+) -> bool:
+    """Detect a definition whose entire body is just an OPERATION application."""
+    source_range = declaration_source_ranges(source, "<source>").get(declaration)
+    if source_range is None:
+        return False
+    lines = source.splitlines()
+    fragment = "\n".join(
+        lines[int(source_range["startLine"]) - 1:int(source_range["endLine"])]
+    )
+    clean = " ".join(_without_comments_and_strings(fragment).split())
+    if ":=" not in clean:
+        return False
+    body = clean.split(":=", 1)[1].strip()
+    while body.startswith("(") and body.endswith(")"):
+        body = body[1:-1].strip()
+    for operation in operation_declarations:
+        for spelling in (operation, operation.rsplit(".", 1)[-1]):
+            if re.fullmatch(
+                rf"{re.escape(spelling)}(?:\s+[A-Za-z_][A-Za-z0-9_'.]*)+",
+                body,
+            ):
+                return True
+    return False
 
 
 def forbidden_constructs(source: str) -> list[dict[str, str]]:
@@ -318,6 +393,7 @@ def validate_submission(
         raw_mappings = []
     known_claims = set(scope.semantic_claim_ids)
     mappings: list[dict[str, Any]] = []
+    mapping_source_indices: list[int] = []
     mapped_names: set[str] = set()
     roles: set[str] = set()
     for index, raw in enumerate(raw_mappings):
@@ -393,6 +469,7 @@ def validate_submission(
         if supports:
             mapping["supportsDeclarations"] = list(supports)
         mappings.append(mapping)
+        mapping_source_indices.append(index)
 
     mappings_by_name = {item["declaration"]: item for item in mappings}
     for index, mapping in enumerate(mappings):
@@ -415,6 +492,46 @@ def validate_submission(
         if not resolved_claims(mapping["declaration"], set()):
             diagnostics.append(_diagnostic("UNRESOLVED_SUPPORT_MAPPING", "declaration traceability does not resolve to a semantic claim", f"$.declarations[{index}]"))
 
+    execution_semantics_by_unit = {
+        unit_id: has_genuine_execution_semantics(
+            (semantics_by_unit[unit_id].get("semantics") or {})
+        )
+        for unit_id in scope.unit_ids
+    }
+    operation_declarations = {
+        item["declaration"] for item in mappings if item["role"] == "OPERATION"
+    }
+    for source_index, mapping in zip(mapping_source_indices, mappings):
+        if mapping["role"] != "EXECUTION":
+            continue
+        mapped_units = {
+            unit_id
+            for unit_id, _claim_id in resolved_claims(mapping["declaration"], set())
+            if unit_id in execution_semantics_by_unit
+        }
+        operation_only_units = sorted(
+            unit_id
+            for unit_id in mapped_units
+            if not execution_semantics_by_unit[unit_id]
+        )
+        if operation_only_units:
+            diagnostics.append(_diagnostic(
+                "REDUNDANT_EXECUTION_MAPPING",
+                "EXECUTION is permitted only when Phase 4 records state effects or predication "
+                "beyond the pure operation; destination-shaped syntax or results do not justify "
+                f"an execution wrapper: {operation_only_units}",
+                f"$.declarations[{source_index}].role",
+            ))
+        elif _is_direct_operation_wrapper(
+            source, mapping["declaration"], operation_declarations
+        ):
+            diagnostics.append(_diagnostic(
+                "REDUNDANT_EXECUTION_MAPPING",
+                "EXECUTION must add source-supported execution behavior; this declaration "
+                "is only a direct application of a mapped OPERATION",
+                f"$.declarations[{source_index}].role",
+            ))
+
     for name in sorted(set(declared) - mapped_names):
         diagnostics.append(_diagnostic("UNMAPPED_LEAN_DECLARATION", f"named Lean declaration lacks semantic traceability: {name}", "$.declarations"))
 
@@ -428,12 +545,25 @@ def validate_submission(
         instruction = semantic_payload.get("unitKind") == "INSTRUCTION"
         if instruction and "OPERATION" not in roles_by_unit[unit_id]:
             diagnostics.append(_diagnostic("MISSING_OPERATION_MAPPING", f"instruction {unit_id} requires a mapped OPERATION declaration", "$.declarations"))
-        needs_execution = instruction and bool(semantic_payload.get("stateEffects") or semantic_payload.get("predication"))
+        # A destination assignment recorded at value level does not force a state
+        # wrapper. Predication cannot be represented by the unconditional pure
+        # operation and therefore still requires an execution-level declaration.
+        needs_execution = instruction and isinstance(
+            semantic_payload.get("predication"), dict
+        )
         if needs_execution and "EXECUTION" not in roles_by_unit[unit_id]:
             diagnostics.append(_diagnostic("MISSING_EXECUTION_MAPPING", f"stateful or predicated instruction {unit_id} requires a mapped EXECUTION declaration", "$.declarations"))
-    return (
-        {"leanSource": source, "manifest": scope.manifest(mappings, shared_uses)}, []
-    ) if not diagnostics else (None, diagnostics)
+    if diagnostics:
+        return None, diagnostics
+    source_ranges = declaration_source_ranges(source, scope.lean_file)
+    manifested_mappings = [
+        {**mapping, "sourceRange": source_ranges[mapping["declaration"]]}
+        for mapping in mappings
+    ]
+    return {
+        "leanSource": source,
+        "manifest": scope.manifest(manifested_mappings, shared_uses),
+    }, []
 
 
 def validate_manifest(
@@ -457,9 +587,18 @@ def validate_manifest(
         )
     except (KeyError, ValueError, AttributeError) as exc:
         return [_diagnostic("INPUT_BOUNDARY", str(exc))]
+    manifest_mappings = manifest.get("declarations")
+    submission_mappings = (
+        [
+            {key: value for key, value in item.items() if key != "sourceRange"}
+            if isinstance(item, dict) else item
+            for item in manifest_mappings
+        ]
+        if isinstance(manifest_mappings, list) else manifest_mappings
+    )
     candidate, diagnostics = validate_submission(scope, semantics_by_unit, {
         "leanSource": source,
-        "declarations": manifest.get("declarations"),
+        "declarations": submission_mappings,
         "sharedUses": [
             {
                 "dependencyId": item.get("dependencyId"),
@@ -485,7 +624,24 @@ def validate_manifest(
         ))
     elif candidate is not None:
         candidate["manifest"]["translator"] = dict(translator)
-    if candidate is not None and candidate["manifest"] != manifest:
+    candidate_manifest = candidate["manifest"] if candidate is not None else None
+    historical_without_ranges = (
+        isinstance(manifest_mappings, list)
+        and bool(manifest_mappings)
+        and all(
+            isinstance(item, dict) and "sourceRange" not in item
+            for item in manifest_mappings
+        )
+    )
+    if candidate_manifest is not None and historical_without_ranges:
+        candidate_manifest = {
+            **candidate_manifest,
+            "declarations": [
+                {key: value for key, value in item.items() if key != "sourceRange"}
+                for item in candidate_manifest["declarations"]
+            ],
+        }
+    if candidate_manifest is not None and candidate_manifest != manifest:
         diagnostics.append(_diagnostic("DETERMINISTIC_MISMATCH", "manifest metadata or declaration mappings differ from deterministic reconstruction"))
     return diagnostics
 

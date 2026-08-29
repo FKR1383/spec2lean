@@ -46,9 +46,17 @@ Translation rules:
   fragments exist.
 - Put the complete group under namespace {scope.suggested_namespace}.
 {core_rules.rstrip()}
-- Implement each exact instruction spelling as a distinct operation and, when required, execution
-  function. Do not let an unmodified instruction expose behavior belonging to a modifier variant.
-- Where applicable, separate a pure result function from execution/state update semantics so later
+- Implement each exact instruction spelling as a distinct pure operation. Make this OPERATION the
+  small, readable primary semantic declaration; do not let an unmodified instruction expose behavior
+  belonging to a modifier variant.
+- Generate an EXECUTION declaration only when it implements genuine behavior beyond the pure result
+  and that behavior is supported by the unit's accepted Phase-4 stateEffects or predication. A
+  destination-shaped syntax operand, result, or value-level destination assignment alone never
+  requires EXECUTION.
+- When Phase 4 has neither stateEffects nor predication, the pure OPERATION is the complete
+  formalization. Do not add an execute* wrapper, an unused destination parameter, or a definition
+  that merely returns the pure operation.
+- Where execution semantics are present, keep them secondary to the pure result function so later
   checking can reason directly about the operation.
 - Preserve explicit operational and implementation-oriented algorithms as independently meaningful
   definitions only when the semantic artifact distinguishes them. Never manufacture duplicate
@@ -66,8 +74,9 @@ Translation rules:
   exact unitId and claimId. A pure
   IMPLEMENTATION_HELPER may instead use supportsDeclarations. Never invent IDs or reproduce evidence
   hashes, source anchors, quotations, or deterministic metadata.
-- Every INSTRUCTION needs its own OPERATION mapping. If its semantics has state effects or predication,
-  it also needs its own EXECUTION mapping. Introduced structures/inductives/classes use PRIMARY_TYPE.
+- Every INSTRUCTION needs its own OPERATION mapping. Predicated semantics also need an EXECUTION
+  mapping; other execution/state wrappers are optional and valid only when they implement genuine
+  source-supported behavior. Introduced structures/inductives/classes use PRIMARY_TYPE.
 - If deterministic diagnostics reject the tool call, correct the candidate and resubmit within this
   same session. There is no second Translator session.
 

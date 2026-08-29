@@ -23,6 +23,7 @@ from spec2lean.translation.revision import revise_translation
 from spec2lean.translation.shared_core import MissingSharedAbstraction
 from spec2lean.translation.store import unit_directory
 from spec2lean.translation.validation import (
+    declaration_source_ranges,
     forbidden_constructs,
     validate_manifest,
     validate_run_metadata,
@@ -194,6 +195,11 @@ def test_valid_translation_artifact_and_deterministic_metadata():
         "provider": "opencode", "model": TRANSLATOR_MODEL, "reasoning": TRANSLATOR_REASONING,
     }
     assert manifest["target"] == {"language": "Lean", "version": "4"}
+    assert [item["sourceRange"] for item in manifest["declarations"]] == [
+        {"file": "InstructionSemantics.lean", "startLine": 3, "endLine": 5},
+        {"file": "InstructionSemantics.lean", "startLine": 6, "endLine": 7},
+        {"file": "InstructionSemantics.lean", "startLine": 8, "endLine": 11},
+    ]
     assert validate_manifest(plan, semantics_by_unit, candidate["leanSource"], manifest) == []
 
     metadata = {
@@ -222,6 +228,61 @@ def test_valid_translation_artifact_and_deterministic_metadata():
         historical_metadata = copy.deepcopy(metadata)
         historical_metadata.update(model=historical_model, reasoning="low")
         assert validate_run_metadata(scope, historical_metadata) == []
+
+
+def test_manifest_source_ranges_are_post_source_deterministic_metadata():
+    plan, semantics = _inputs()
+    scope = _scope(plan, semantics)
+    semantics_by_unit = {UNIT["unitId"]: semantics}
+
+    guessed = _submission()
+    guessed["declarations"][0]["sourceRange"] = {
+        "file": scope.lean_file, "startLine": 1, "endLine": 1,
+    }
+    _, diagnostics = validate_submission(scope, semantics_by_unit, guessed)
+    assert "UNEXPECTED_FIELD" in _codes(diagnostics)
+
+    candidate, diagnostics = validate_submission(
+        scope, semantics_by_unit, _submission()
+    )
+    assert diagnostics == [] and candidate is not None
+    tampered = copy.deepcopy(candidate["manifest"])
+    tampered["declarations"][1]["sourceRange"]["startLine"] = 1
+    assert "DETERMINISTIC_MISMATCH" in _codes(
+        validate_manifest(plan, semantics_by_unit, candidate["leanSource"], tampered)
+    )
+
+
+def test_historical_manifest_without_source_ranges_remains_valid():
+    plan, semantics = _inputs()
+    semantics_by_unit = {UNIT["unitId"]: semantics}
+    candidate, diagnostics = validate_submission(
+        _scope(plan, semantics), semantics_by_unit, _submission()
+    )
+    assert diagnostics == [] and candidate is not None
+    historical = copy.deepcopy(candidate["manifest"])
+    for mapping in historical["declarations"]:
+        mapping.pop("sourceRange")
+    assert validate_manifest(
+        plan, semantics_by_unit, candidate["leanSource"], historical
+    ) == []
+
+
+def test_declaration_source_ranges_follow_qualified_namespace_declarations():
+    source = """namespace Outer
+/- def ignored : Nat := 0 -/
+section Inner
+theorem first : True := by
+  trivial
+
+def second : String := \"def alsoIgnored := 0\"
+end Inner
+end Outer
+"""
+    assert declaration_source_ranges(source, "Example.lean") == {
+        "Outer.first": {"file": "Example.lean", "startLine": 4, "endLine": 6},
+        "Outer.second": {"file": "Example.lean", "startLine": 7, "endLine": 9},
+    }
 
 
 def test_stale_semantic_hash_is_rejected():

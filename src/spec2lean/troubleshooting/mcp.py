@@ -75,7 +75,15 @@ class TroubleshootingMcpServer:
             temporary = self.submission_path.with_suffix(".tmp")
             temporary.write_text(canonical_json({
                 "leanSource": candidate["leanSource"],
-                "declarations": candidate["manifest"]["declarations"],
+                # Source ranges are deterministic manifest metadata, not repair-tool
+                # arguments.  The runner derives them again from the returned source.
+                "declarations": [
+                    {
+                        key: value for key, value in item.items()
+                        if key != "sourceRange"
+                    }
+                    for item in candidate["manifest"]["declarations"]
+                ],
                 "changes": candidate["changes"],
             }) + "\n", encoding="utf-8")
             os.replace(temporary, self.submission_path)

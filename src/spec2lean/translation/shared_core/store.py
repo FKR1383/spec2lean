@@ -18,7 +18,7 @@ CORE_RUN_ID = re.compile(r"^shared-core-run:[0-9a-f]{24}$")
 ADDRESSED_MANIFEST_FIELDS = {
     "schemaVersion", "phase", "language", "version", "sourceDatabaseDigest",
     "representationSchemaVersion", "generator", "target", "leanFile",
-    "leanModule", "sourceHash", "concepts", "declarations",
+    "leanModule", "leanNamespace", "sourceHash", "concepts", "declarations",
 }
 _LOCKS_GUARD = threading.Lock()
 _THREAD_LOCKS: dict[str, threading.Lock] = {}

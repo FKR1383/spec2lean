@@ -71,6 +71,32 @@ def validate_repair_submission(
         },
     )
     diagnostics.extend(translation_diagnostics)
+    historical_without_ranges = (
+        isinstance(original_manifest.get("declarations"), list)
+        and bool(original_manifest["declarations"])
+        and all(
+            isinstance(item, dict) and "sourceRange" not in item
+            for item in original_manifest["declarations"]
+        )
+    )
+    if candidate is not None and historical_without_ranges:
+        candidate["manifest"]["declarations"] = [
+            {key: value for key, value in item.items() if key != "sourceRange"}
+            for item in candidate["manifest"]["declarations"]
+        ]
+    submitted_mappings = submission.get("declarations")
+    if not isinstance(submitted_mappings, list):
+        submitted_mappings = []
+    before_mapping = _mapping_signature(original_manifest.get("declarations", []))
+    after_mapping = _mapping_signature([
+        item for item in submitted_mappings if isinstance(item, dict)
+    ])
+    if before_mapping != after_mapping:
+        diagnostics.append({
+            "code": "SEMANTIC_MAPPING_CHANGED",
+            "message": "compiler repair must preserve declaration roles and semantic-claim responsibilities",
+            "path": "$.declarations",
+        })
 
     changes = submission.get("changes")
     normalized_changes: list[dict[str, Any]] = []
@@ -130,14 +156,6 @@ def validate_repair_submission(
             and candidate["manifest"] == original_manifest
         ):
             diagnostics.append({"code": "NO_REPAIR", "message": "repair did not change the translation", "path": "$"})
-        before = _mapping_signature(original_manifest.get("declarations", []))
-        after = _mapping_signature(candidate["manifest"].get("declarations", []))
-        if before != after:
-            diagnostics.append({
-                "code": "SEMANTIC_MAPPING_CHANGED",
-                "message": "compiler repair must preserve declaration roles and semantic-claim responsibilities",
-                "path": "$.declarations",
-            })
     if diagnostics or candidate is None:
         return None, diagnostics
     return {

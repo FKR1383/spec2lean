@@ -18,6 +18,7 @@ def build_core_prompt(
         "sourceDatabaseDigest": plan["sourceDatabaseDigest"],
         "dependencyIds": [item.dependency_id for item in requirements],
         "parentCoreRunId": (parent_manifest or {}).get("coreRunId"),
+        "leanNamespace": (parent_manifest or {}).get("leanNamespace"),
     }
     declaration_roles = ", ".join(DECLARATION_ROLES)
     return f"""You are the generic Spec2Lean Phase-5 Shared-Core Materializer.
@@ -42,7 +43,8 @@ Rules:
   a mapped semantic declaration through supportsDeclarations.
 - If a parent exists, return source beginning with the complete parent source byte-for-byte and append
   only new definitions. Preserve every existing concept/declaration mapping exactly; add each missing
-  abstraction once.
+  abstraction once. Put every appended declaration below the exact leanNamespace supplied in the
+  context. New root cores are placed in their isolated namespace deterministically after submission.
 - Prefer interfaces that permit consistent pure unit semantics and shared evaluation/execution
   infrastructure when the supplied semantics support that boundary. Do not force it otherwise.
 - Use readable Lean 4 with no sorry, admit, axioms, constants, unsafe, or partial declarations.

@@ -33,7 +33,7 @@ MANIFEST_FIELDS = {
     "schemaVersion", "phase", "language", "version", "sourceDatabaseDigest",
     "coreRunId", "parentCoreRunId", "representationSchemaVersion", "generator",
     "target", "leanFile", "leanModule", "createdAt", "sourceHash", "concepts",
-    "declarations", "semanticArtifacts",
+    "leanNamespace", "declarations", "semanticArtifacts",
 }
 SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
 NODE_ID = re.compile(r"^node:")
@@ -98,6 +98,7 @@ def _normalize_declarations(
     allowed_dependency_ids: set[str],
     allowed_claims_by_dependency: dict[str, set[tuple[str, str]]],
     diagnostics: list[dict[str, str]],
+    lean_namespace: str | None = None,
 ) -> list[dict[str, Any]]:
     if not isinstance(raw, list):
         diagnostics.append(_diagnostic("EXPECTED_ARRAY", "declarations must be an array", "$.declarations"))
@@ -116,6 +117,12 @@ def _normalize_declarations(
         if not isinstance(name, str) or not LEAN_NAME.fullmatch(name):
             diagnostics.append(_diagnostic("INVALID_DECLARATION_NAME", "declaration must be a qualified ASCII Lean identifier", f"{path}.declaration"))
             continue
+        if lean_namespace is not None and not name.startswith(lean_namespace + "."):
+            diagnostics.append(_diagnostic(
+                "DECLARATION_OUTSIDE_CORE_NAMESPACE",
+                f"shared-core declaration must be below {lean_namespace}: {name}",
+                f"{path}.declaration",
+            ))
         if name in names:
             diagnostics.append(_diagnostic("DUPLICATE_DECLARATION_MAPPING", f"duplicate declaration mapping: {name}", f"{path}.declaration"))
         names.add(name)
@@ -205,6 +212,7 @@ def normalize_core_submission(
     submission: Any,
     *,
     parent: FrozenSharedCore | None = None,
+    lean_namespace: str | None = None,
 ) -> tuple[dict[str, Any] | None, list[dict[str, str]]]:
     diagnostics: list[dict[str, str]] = []
     if not isinstance(submission, dict):
@@ -294,7 +302,8 @@ def normalize_core_submission(
         if requirement is not None:
             allowed_claims[dependency_id].update(requirement.claim_refs)
     declarations = _normalize_declarations(
-        submission.get("declarations"), source, target_ids, allowed_claims, diagnostics
+        submission.get("declarations"), source, target_ids, allowed_claims, diagnostics,
+        lean_namespace,
     )
     by_name = {item["declaration"]: item for item in declarations}
     for index, concept in enumerate(concepts):
@@ -421,7 +430,8 @@ def _registry_diagnostics(source: str, manifest: dict[str, Any]) -> list[dict[st
             "$.concepts",
         ))
     normalized = _normalize_declarations(
-        declarations, source, concept_ids, known_claims, diagnostics
+        declarations, source, concept_ids, known_claims, diagnostics,
+        manifest.get("leanNamespace") if isinstance(manifest.get("leanNamespace"), str) else None,
     )
     canonical_declarations = sorted(
         (item for item in declarations if isinstance(item, dict)),
@@ -474,6 +484,11 @@ def validate_core_artifact(
         ))
     lean_module = manifest.get("leanModule")
     lean_file = manifest.get("leanFile")
+    lean_namespace = manifest.get("leanNamespace")
+    if not isinstance(lean_namespace, str) or not LEAN_MODULE.fullmatch(lean_namespace):
+        diagnostics.append(_diagnostic(
+            "INVALID_LEAN_NAMESPACE", "leanNamespace is malformed", "$.leanNamespace"
+        ))
     if not isinstance(lean_module, str) or not LEAN_MODULE.fullmatch(lean_module):
         diagnostics.append(_diagnostic(
             "INVALID_LEAN_MODULE", "leanModule is malformed", "$.leanModule"
@@ -491,6 +506,17 @@ def validate_core_artifact(
         diagnostics.append(_diagnostic(
             "LEAN_MODULE_MISMATCH",
             "loaded core and manifest Lean modules differ",
+            "$.leanModule",
+        ))
+    if (
+        isinstance(lean_namespace, str)
+        and isinstance(manifest.get("sourceHash"), str)
+        and lean_module
+        != f"{lean_namespace}.C{manifest['sourceHash'].removeprefix('sha256:')[:16]}.Core"
+    ):
+        diagnostics.append(_diagnostic(
+            "LEAN_NAMESPACE_MISMATCH",
+            "leanModule must be rooted in leanNamespace and addressed by sourceHash",
             "$.leanModule",
         ))
     parent_core_run_id = manifest.get("parentCoreRunId")
@@ -632,6 +658,12 @@ def validate_core_artifact(
             diagnostics.append(_diagnostic("PARENT_CORE_MISMATCH", "parentCoreRunId does not name the accepted parent", "$.parentCoreRunId"))
         if not core.source.startswith(parent.source):
             diagnostics.append(_diagnostic("CORE_PREFIX_CHANGED", "extension changed the immutable parent source prefix", "$.sourceHash"))
+        if manifest.get("leanNamespace") != parent.manifest.get("leanNamespace"):
+            diagnostics.append(_diagnostic(
+                "CORE_NAMESPACE_CHANGED",
+                "extension changed the immutable parent Lean namespace",
+                "$.leanNamespace",
+            ))
         current_mappings = {item.get("declaration"): item for item in manifest.get("declarations", []) if isinstance(item, dict)}
         for old in parent.manifest.get("declarations", []):
             if current_mappings.get(old.get("declaration")) != old:

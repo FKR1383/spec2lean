@@ -813,8 +813,14 @@ def _command_translate_trace(args: argparse.Namespace) -> int:
             result.extend(claim_refs_for(target, {*seen, name}))
         return list(dict.fromkeys(result))
 
+    semantic_artifact_field = (
+        "semanticArtifacts"
+        if manifest.get("phase") == "SHARED_CORE"
+        else "semanticsArtifacts"
+    )
     semantic_records = {
-        str(item["unitId"]): item for item in manifest.get("semanticsArtifacts", [])
+        str(item["unitId"]): item
+        for item in manifest.get(semantic_artifact_field, [])
     }
     if manifest.get("phase") not in {"LLM_GROUP_TRANSLATOR", "SHARED_CORE"}:
         semantic_records = {
