@@ -54,7 +54,18 @@ def render_markdown(artifact: dict[str, Any]) -> str:
         ("stateEffects", "STATE EFFECTS", lambda item: f"{item['target']}: {item['effect']}"),
         ("edgeCases", "EDGE CASES", lambda item: f"If {item['condition']}: {item['behavior']}"),
         ("restrictions", "VERSION / TARGET / OTHER RESTRICTIONS", lambda item: f"{item['kind']}: {item['description']}"),
-        ("dependencies", "SHARED SEMANTIC DEPENDENCIES", lambda item: f"{item['concept']}: {item['description']}"),
+        (
+            "dependencies",
+            "SHARED SEMANTIC DEPENDENCIES",
+            lambda item: (
+                (f"[{item['dependencyId']}] " if item.get("dependencyId") else "[unbound] ")
+                + f"{item['concept']}: {item['description']}"
+                + (
+                    f" (claims: {', '.join(item['semanticClaimIds'])})"
+                    if item.get("semanticClaimIds") else ""
+                )
+            ),
+        ),
     ):
         lines.extend([f"## {heading}", ""])
         items = semantics.get(field, [])

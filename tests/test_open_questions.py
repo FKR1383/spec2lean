@@ -42,6 +42,7 @@ def _inputs(database: Path) -> tuple[dict, dict, dict]:
                 }],
                 "externalPrerequisites": [],
                 "dependencies": [],
+                "sharedPrerequisites": [],
             },
             language="synthetic",
             version="1.0",

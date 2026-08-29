@@ -29,7 +29,10 @@ COMPONENT_FIELDS: dict[str, set[str]] = {
     "state": {"target", "effect", "evidenceIds"},
     "predication": {"guard", "whenTrue", "whenFalse", "evidenceIds"},
     "restriction": {"kind", "description", "evidenceIds"},
-    "dependency": {"concept", "description", "artifactId", "evidenceIds"},
+    "dependency": {
+        "dependencyId", "concept", "description", "artifactId", "semanticClaimIds",
+        "evidenceIds",
+    },
     "claim": {"claimId", "kind", "statement", "evidenceIds"},
 }
 
@@ -227,10 +230,80 @@ def validate_submission(
         if item is not None:
             _require_component_texts(item, ("guard", "whenTrue", "whenFalse"), "$.predication", diagnostics)
 
+    relevant_shared = {
+        str(item["dependencyId"]): item for item in scope.shared_prerequisites
+    }
+    seen_shared: set[str] = set()
+    dependency_items: list[tuple[str, dict[str, Any], list[str]]] = []
     for index, raw in enumerate(_list(value.get("dependencies", []), "$.dependencies", diagnostics)):
-        item = _component(raw, "dependency", f"$.dependencies[{index}]", allowed_evidence, diagnostics, evidence_required=False)
+        path = f"$.dependencies[{index}]"
+        item = _component(
+            raw, "dependency", path, allowed_evidence, diagnostics, evidence_required=False
+        )
         if item is not None:
-            _require_component_texts(item, ("concept", "description"), f"$.dependencies[{index}]", diagnostics)
+            _require_component_texts(item, ("concept", "description"), path, diagnostics)
+            dependency_id = item.get("dependencyId")
+            raw_claim_ids = item.get("semanticClaimIds")
+            semantic_claim_ids: list[str] = []
+            if raw_claim_ids is not None:
+                if not isinstance(raw_claim_ids, list):
+                    diagnostics.append(_diagnostic(
+                        "INVALID_SEMANTIC_CLAIM_IDS",
+                        "semanticClaimIds must be an array of claim IDs",
+                        f"{path}.semanticClaimIds",
+                    ))
+                else:
+                    for claim_index, claim_id in enumerate(raw_claim_ids):
+                        claim_path = f"{path}.semanticClaimIds[{claim_index}]"
+                        if not isinstance(claim_id, str) or not claim_id.startswith("claim:"):
+                            diagnostics.append(_diagnostic(
+                                "INVALID_SEMANTIC_CLAIM_ID",
+                                "semantic claim ID must start with claim:",
+                                claim_path,
+                            ))
+                        elif claim_id in semantic_claim_ids:
+                            diagnostics.append(_diagnostic(
+                                "DUPLICATE_SEMANTIC_CLAIM_ID",
+                                f"dependency repeats semantic claim ID: {claim_id}",
+                                claim_path,
+                            ))
+                        else:
+                            semantic_claim_ids.append(claim_id)
+            if dependency_id is not None:
+                if not isinstance(dependency_id, str) or not dependency_id.startswith("shared:"):
+                    diagnostics.append(_diagnostic(
+                        "INVALID_SHARED_DEPENDENCY_ID",
+                        "dependencyId must start with shared:",
+                        f"{path}.dependencyId",
+                    ))
+                elif dependency_id not in relevant_shared:
+                    diagnostics.append(_diagnostic(
+                        "UNKNOWN_SHARED_DEPENDENCY",
+                        f"dependency is not a relevant Phase-2 shared prerequisite: {dependency_id}",
+                        f"{path}.dependencyId",
+                    ))
+                elif dependency_id in seen_shared:
+                    diagnostics.append(_diagnostic(
+                        "DUPLICATE_SHARED_DEPENDENCY",
+                        f"shared dependency appears more than once: {dependency_id}",
+                        f"{path}.dependencyId",
+                    ))
+                else:
+                    seen_shared.add(dependency_id)
+                    planned_name = relevant_shared[dependency_id].get("name")
+                    if item.get("concept") != planned_name:
+                        diagnostics.append(_diagnostic(
+                            "SHARED_DEPENDENCY_NAME_MISMATCH",
+                            "linked dependency concept must exactly match its Phase-2 name",
+                            f"{path}.concept",
+                        ))
+                if not semantic_claim_ids:
+                    diagnostics.append(_diagnostic(
+                        "MISSING_SHARED_DEPENDENCY_CLAIMS",
+                        "a linked shared dependency requires at least one semanticClaimId",
+                        f"{path}.semanticClaimIds",
+                    ))
+            dependency_items.append((path, item, semantic_claim_ids))
 
     claim_ids: set[str] = set()
     claim_meanings: set[tuple[str, str]] = set()
@@ -284,6 +357,22 @@ def validate_submission(
             assumption_resolutions.update(resolution_refs)
     if not value.get("claims"):
         diagnostics.append(_diagnostic("MISSING_CLAIMS", "at least one structured semantic claim is required", "$.claims"))
+    for path, _item, semantic_claim_ids in dependency_items:
+        for index, claim_id in enumerate(semantic_claim_ids):
+            if claim_id not in claim_ids:
+                diagnostics.append(_diagnostic(
+                    "UNKNOWN_SEMANTIC_CLAIM_ID",
+                    f"dependency references a claim not defined by this artifact: {claim_id}",
+                    f"{path}.semanticClaimIds[{index}]",
+                ))
+    missing_shared = sorted(set(relevant_shared) - seen_shared)
+    if missing_shared:
+        diagnostics.append(_diagnostic(
+            "MISSING_SHARED_DEPENDENCY",
+            "semantic artifact is missing relevant Phase-2 shared dependencies: "
+            + ", ".join(missing_shared),
+            "$.dependencies",
+        ))
     unclassified_resolutions = _resolution_references(value) - assumption_resolutions
     if unclassified_resolutions:
         diagnostics.append(_diagnostic(

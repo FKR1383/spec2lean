@@ -5,10 +5,10 @@
   "type": "object",
   "required": [
     "schemaVersion", "phase", "pipelineRunId", "request", "createdAt",
-    "updatedAt", "status", "fromPhase", "untilPhase", "dryRun", "units"
+    "updatedAt", "status", "fromPhase", "untilPhase", "dryRun", "sharedCore", "units"
   ],
   "properties": {
-    "schemaVersion": {"const": 1},
+    "schemaVersion": {"const": 2},
     "phase": {"const": "PIPELINE"},
     "pipelineRunId": {"type": "string", "pattern": "^pipeline-run:"},
     "request": {"type": "object"},
@@ -23,6 +23,36 @@
     "planRunId": {"type": ["string", "null"]},
     "planDirectory": {"type": ["string", "null"]},
     "plan": {"type": "object"},
+    "sharedCore": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "required": ["disposition"],
+          "properties": {
+            "disposition": {"enum": ["NOT_REQUIRED", "REUSED", "BUILT", "WOULD_BUILD"]},
+            "coreRunId": {"type": "string", "pattern": "^shared-core-run:[0-9a-f]{24}$"},
+            "manifestHash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            "sourceHash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            "leanModule": {"type": "string", "minLength": 1},
+            "staleReasons": {
+              "type": "array", "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1}
+            }
+          },
+          "allOf": [{
+            "if": {
+              "properties": {"disposition": {"enum": ["REUSED", "BUILT"]}},
+              "required": ["disposition"]
+            },
+            "then": {
+              "required": ["coreRunId", "manifestHash", "sourceHash", "leanModule"]
+            }
+          }],
+          "additionalProperties": false
+        }
+      ]
+    },
     "units": {
       "type": "object",
       "additionalProperties": {

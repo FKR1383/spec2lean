@@ -24,8 +24,9 @@ from .semantics.revision import revise_semantics
 from .semantics.store import artifacts as semantic_artifacts
 from .semantics.store import find_claim, load_semantics, semantics_run_root
 from .semantics.store import unit_directory as semantic_unit_directory
-from .translation.groups import group_for_unit
+from .translation.groups import group_for_unit, grouped_units
 from .translation.runner import build_group_translation
+from .translation.shared_core import ensure_shared_core
 from .translation.revision import revise_translation
 from .translation.models import semantics_artifact_hash
 from .translation.store import find_declaration, load_translation
@@ -723,12 +724,34 @@ def _command_semantics_stats(args: argparse.Namespace) -> int:
 def _command_translate_build(args: argparse.Namespace) -> int:
     _, plan = _load_semantics_plan(args)
     group = args.group or group_for_unit(plan, args.unit)
+    shared_core = None
+    group_unit_ids = {
+        str(unit["unitId"]) for unit in grouped_units(plan).get(group, [])
+    }
+    if any(
+        isinstance(item, dict)
+        and bool(set(item.get("requiredBy", [])) & group_unit_ids)
+        for item in plan.get("sharedPrerequisites", [])
+    ):
+        semantics_by_unit = {
+            str(unit["unitId"]): load_semantics(
+                Path(args.semantics_root), plan, str(unit["unitId"])
+            )[1]
+            for unit in plan.get("requestedUnits", [])
+        }
+        shared_core = ensure_shared_core(
+            plan,
+            semantics_by_unit,
+            Path(args.translations_root),
+            timeout_seconds=args.timeout,
+        )
     output = build_group_translation(
         plan,
         Path(args.semantics_root),
         Path(args.translations_root),
         group=group,
         timeout_seconds=args.timeout,
+        shared_core=shared_core,
     )
     print(output)
     return 0
@@ -773,7 +796,7 @@ def _command_translate_trace(args: argparse.Namespace) -> int:
         name = item["declaration"]
         if name in seen:
             raise RuntimeError(f"translation manifest has a declaration support cycle: {name}")
-        if manifest.get("schemaVersion") == 2:
+        if manifest.get("phase") in {"LLM_GROUP_TRANSLATOR", "SHARED_CORE"}:
             result = [
                 (str(ref["unitId"]), str(ref["claimId"]))
                 for ref in item.get("claimRefs", []) if isinstance(ref, dict)
@@ -793,7 +816,7 @@ def _command_translate_trace(args: argparse.Namespace) -> int:
     semantic_records = {
         str(item["unitId"]): item for item in manifest.get("semanticsArtifacts", [])
     }
-    if manifest.get("schemaVersion") != 2:
+    if manifest.get("phase") not in {"LLM_GROUP_TRANSLATOR", "SHARED_CORE"}:
         semantic_records = {
             str(manifest["unit"]["unitId"]): {
                 "unitId": manifest["unit"]["unitId"],
@@ -806,9 +829,15 @@ def _command_translate_trace(args: argparse.Namespace) -> int:
     def semantic_for(unit_id: str) -> tuple[Path, dict[str, Any]]:
         if unit_id in semantic_cache:
             return semantic_cache[unit_id]
+        record = semantic_records.get(unit_id)
+        plan_run_id = (
+            record.get("planRunId")
+            if isinstance(record, dict) and isinstance(record.get("planRunId"), str)
+            else manifest.get("planRunId")
+        )
         matches = []
         for path in semantic_root.glob(
-            f"{str(manifest['language']).casefold()}/{manifest['version']}/{manifest['planRunId']}/*/semantics.json"
+            f"{str(manifest['language']).casefold()}/{manifest['version']}/{plan_run_id}/*/semantics.json"
         ):
             artifact = json.loads(path.read_text(encoding="utf-8"))
             if (artifact.get("unit") or {}).get("unitId") == unit_id:
@@ -816,7 +845,6 @@ def _command_translate_trace(args: argparse.Namespace) -> int:
         if len(matches) != 1:
             raise FileNotFoundError(f"semantic artifact is not unique for traced unit: {unit_id}")
         path, artifact = matches[0]
-        record = semantic_records.get(unit_id)
         if record is None or semantics_artifact_hash(artifact) != record.get("artifactHash"):
             raise RuntimeError(f"translation manifest references stale Phase-4 semantics for {unit_id}")
         semantic_cache[unit_id] = (path, artifact)

@@ -23,6 +23,7 @@ def build_retriever_prompt(query: EvidenceQuery, scope: EvidenceScope) -> str:
         "planRunId": scope.plan_run_id,
         "unit": scope.unit,
         "relevantExternalPrerequisites": list(scope.prerequisites),
+        "relevantSharedPrerequisites": list(scope.shared_prerequisites),
         "relatedDependencies": list(scope.dependencies),
         "initialSourceNodes": initial,
         "requiredOfficialRenditions": sorted(required_official_renditions(query, scope)),
@@ -36,7 +37,7 @@ claims, interpretations, assumptions, Lean, theorems, proofs, checking steps, or
 Rules:
 - Stay within the one unit below. Begin with its attached Phase-1 nodes.
 - Explore only their subtree/ancestors, explicit cross-references, definitions, correlations,
-  relevant Phase-2 prerequisites, and nearby nodes needed for this unit.
+  relevant Phase-2 external/shared prerequisites, and nearby nodes needed for this unit.
 - Use spec_search only as a last resort and give a specific relevance justification.
 - Call spec_show before selecting a node discovered by another tool.
 - Never invent or manually quote source text, node IDs, span IDs, provenance, hashes, anchors,

@@ -5,13 +5,20 @@ from dataclasses import dataclass
 import re
 from typing import Any, Iterable
 
-from ..util import stable_id
+from ..util import normalize_text, stable_id
 from .models import ScopeMode
 from .scope import Phase1Query, ResolvedScope
 
 
-PLAN_SCHEMA_VERSION = 2
+PLAN_SCHEMA_VERSION = 3
 GROUP_NAME = re.compile(r"^[A-Z][A-Za-z0-9]{0,63}$")
+SUBMISSION_FIELDS = {
+    "requestedUnitIds",
+    "translationGroups",
+    "externalPrerequisites",
+    "sharedPrerequisites",
+    "dependencies",
+}
 
 
 @dataclass(slots=True)
@@ -33,6 +40,15 @@ def _as_list(value: Any, path: str, diagnostics: list[dict[str, str]]) -> list[A
     return value
 
 
+def _reject_unexpected_fields(
+    value: dict[str, Any], allowed: set[str], path: str, diagnostics: list[dict[str, str]]
+) -> None:
+    for key in sorted(set(value) - allowed):
+        diagnostics.append(
+            _diagnostic("UNEXPECTED_FIELD", f"unsupported planning field: {key}", f"{path}.{key}")
+        )
+
+
 def validate_submission(
     query: Phase1Query,
     scope: ResolvedScope,
@@ -42,6 +58,7 @@ def validate_submission(
     diagnostics: list[dict[str, str]] = []
     if not isinstance(submission, dict):
         return None, [_diagnostic("EXPECTED_OBJECT", "submission must be an object")]
+    _reject_unexpected_fields(submission, SUBMISSION_FIELDS, "$", diagnostics)
 
     candidates = scope.candidate_by_id
     raw_unit_ids = _as_list(submission.get("requestedUnitIds"), "$.requestedUnitIds", diagnostics)
@@ -78,6 +95,128 @@ def validate_submission(
         query, candidates, unit_ids, submission.get("translationGroups"), diagnostics
     )
 
+    raw_shared = _as_list(
+        submission.get("sharedPrerequisites"), "$.sharedPrerequisites", diagnostics
+    )
+    shared_prerequisites: list[dict[str, Any]] = []
+    shared_keys: set[str] = set()
+    shared_ids: set[str] = set()
+    for index, value in enumerate(raw_shared):
+        path = f"$.sharedPrerequisites[{index}]"
+        if not isinstance(value, dict):
+            diagnostics.append(
+                _diagnostic("INVALID_SHARED_PREREQUISITE", "shared prerequisite must be an object", path)
+            )
+            continue
+        _reject_unexpected_fields(
+            value,
+            {"key", "name", "kind", "reason", "sourceNodeIds", "requiredBy"},
+            path,
+            diagnostics,
+        )
+        key, name, kind, reason = (
+            value.get("key"), value.get("name"), value.get("kind"), value.get("reason")
+        )
+        normalized_key = normalize_text(key).casefold() if isinstance(key, str) else ""
+        normalized_name = normalize_text(name) if isinstance(name, str) else ""
+        normalized_kind = normalize_text(kind) if isinstance(kind, str) else ""
+        normalized_reason = normalize_text(reason) if isinstance(reason, str) else ""
+        if not normalized_key:
+            diagnostics.append(_diagnostic(
+                "INVALID_SHARED_PREREQUISITE_KEY",
+                "shared prerequisite key must be non-empty",
+                f"{path}.key",
+            ))
+        elif normalized_key in shared_keys:
+            diagnostics.append(_diagnostic(
+                "DUPLICATE_SHARED_PREREQUISITE_KEY",
+                f"duplicate shared prerequisite key: {key}",
+                f"{path}.key",
+            ))
+        else:
+            shared_keys.add(normalized_key)
+        if not normalized_name:
+            diagnostics.append(_diagnostic(
+                "MISSING_SHARED_PREREQUISITE_NAME",
+                "shared prerequisite name must be non-empty",
+                f"{path}.name",
+            ))
+        if not normalized_kind:
+            diagnostics.append(_diagnostic(
+                "MISSING_SHARED_PREREQUISITE_KIND",
+                "shared prerequisite kind must be a non-empty extensible concept label",
+                f"{path}.kind",
+            ))
+        if not normalized_reason:
+            diagnostics.append(_diagnostic(
+                "MISSING_SHARED_PREREQUISITE_REASON",
+                "shared prerequisite reason must be non-empty",
+                f"{path}.reason",
+            ))
+
+        raw_sources = value.get("sourceNodeIds")
+        if not isinstance(raw_sources, list) or not raw_sources:
+            diagnostics.append(_diagnostic(
+                "MISSING_SOURCE_SUPPORT",
+                "shared prerequisite requires source node IDs",
+                f"{path}.sourceNodeIds",
+            ))
+            raw_sources = []
+        checked_sources = _validate_node_ids(
+            query, raw_sources, f"{path}.sourceNodeIds", diagnostics
+        )
+
+        raw_required_by = value.get("requiredBy")
+        required_by: list[str] = []
+        if not isinstance(raw_required_by, list) or not raw_required_by:
+            diagnostics.append(_diagnostic(
+                "MISSING_SHARED_PREREQUISITE_CONSUMER",
+                "shared prerequisite requiredBy must contain at least one requested unit",
+                f"{path}.requiredBy",
+            ))
+            raw_required_by = []
+        for unit_index, unit_id in enumerate(raw_required_by):
+            unit_path = f"{path}.requiredBy[{unit_index}]"
+            if not isinstance(unit_id, str) or unit_id not in selected:
+                diagnostics.append(_diagnostic(
+                    "UNKNOWN_SHARED_PREREQUISITE_CONSUMER",
+                    f"shared prerequisite references an unselected unit: {unit_id!r}",
+                    unit_path,
+                ))
+            elif unit_id in required_by:
+                diagnostics.append(_diagnostic(
+                    "DUPLICATE_SHARED_PREREQUISITE_CONSUMER",
+                    f"shared prerequisite repeats a required unit: {unit_id}",
+                    unit_path,
+                ))
+            else:
+                required_by.append(unit_id)
+
+        dependency_id = stable_id(
+            "shared",
+            scope.request.language.casefold(),
+            scope.request.version,
+            normalized_key,
+            normalized_name.casefold(),
+            normalized_kind.casefold(),
+            *checked_sources,
+        )
+        if dependency_id in shared_ids:
+            diagnostics.append(_diagnostic(
+                "DUPLICATE_SHARED_PREREQUISITE_ID",
+                f"shared prerequisites resolve to the same dependency ID: {dependency_id}",
+                path,
+            ))
+        shared_ids.add(dependency_id)
+        shared_prerequisites.append({
+            "dependencyId": dependency_id,
+            "name": normalized_name,
+            "kind": normalized_kind,
+            "reason": normalized_reason,
+            "sourceNodeIds": checked_sources,
+            "requiredBy": sorted(required_by),
+        })
+
     raw_prerequisites = _as_list(
         submission.get("externalPrerequisites", []), "$.externalPrerequisites", diagnostics
     )
@@ -88,6 +227,9 @@ def validate_submission(
         if not isinstance(value, dict):
             diagnostics.append(_diagnostic("INVALID_PREREQUISITE", "prerequisite must be an object", path))
             continue
+        _reject_unexpected_fields(
+            value, {"key", "name", "reason", "sourceNodeIds"}, path, diagnostics
+        )
         key, name, reason = value.get("key"), value.get("name"), value.get("reason")
         source_ids = value.get("sourceNodeIds")
         if not isinstance(key, str) or not key.strip():
@@ -127,6 +269,12 @@ def validate_submission(
         if not isinstance(value, dict):
             diagnostics.append(_diagnostic("INVALID_DEPENDENCY", "dependency must be an object", path))
             continue
+        _reject_unexpected_fields(
+            value,
+            {"from", "to", "reason", "supportingNodeIds", "origin"},
+            path,
+            diagnostics,
+        )
         source, target = value.get("from"), value.get("to")
         reason, origin = value.get("reason"), value.get("origin")
         support = value.get("supportingNodeIds")
@@ -177,6 +325,9 @@ def validate_submission(
         "requestedUnits": [dict(candidates[unit_id]) for unit_id in unit_ids],
         "translationGroups": translation_groups,
         "externalPrerequisites": prerequisites,
+        "sharedPrerequisites": sorted(
+            shared_prerequisites, key=lambda item: item["dependencyId"]
+        ),
         "dependencies": dependencies,
     }
     return normalized, []
@@ -201,6 +352,12 @@ def _validate_translation_groups(
         if not isinstance(value, dict):
             diagnostics.append(_diagnostic("INVALID_TRANSLATION_GROUP", "translation group must be an object", path))
             continue
+        _reject_unexpected_fields(
+            value,
+            {"name", "unitIds", "reason", "supportingNodeIds", "origin"},
+            path,
+            diagnostics,
+        )
         name = value.get("name")
         reason = value.get("reason")
         origin = value.get("origin")

@@ -14,7 +14,24 @@ def build_translation_revision_prompt(
     diagnostics: list[dict[str, Any]],
     reason: str,
     triggering_unit_id: str,
+    shared_core_source: str | None = None,
 ) -> str:
+    core_rule = (
+        "- Preserve the exact frozen shared-core import and reuse its registered declarations. "
+        "You may repair this group's use of the core, but must not redefine or redesign it.\n"
+        if scope.shared_core is not None else ""
+    )
+    core_context = (
+        f"""Frozen shared-core registry:
+{json.dumps(scope.shared_core, ensure_ascii=False, indent=2, sort_keys=True)}
+
+Frozen shared-core source (read-only):
+```lean
+{shared_core_source or ''}
+```
+"""
+        if scope.shared_core is not None else ""
+    )
     return f"""You are performing one bounded Spec2Lean Phase-5 group translation revision.
 
 Update the current group translation only as needed to address the supplied upstream diagnostics,
@@ -29,6 +46,7 @@ Rules:
 - For COVERAGE_FAILURE, represent every listed uncovered semantic claim/evidence relationship.
 - For SEMANTICS_REVISED, reconcile the complete group source and mappings with all current artifacts.
 - Preserve valid existing declarations and behavior where compatible; prefer a focused patch.
+{core_rule.rstrip()}
 - Do not weaken semantics to compile, retrieve evidence, browse, critique Phase 4, or add proof padding.
 - Map every named declaration using only these roles: {', '.join(DECLARATION_ROLES)}.
 - Every semantic mapping uses claimRefs containing an exact unitId and claimId. Do not manufacture
@@ -53,4 +71,6 @@ Current {scope.lean_file}:
 
 Current translation manifest:
 {json.dumps(current_manifest, ensure_ascii=False, indent=2, sort_keys=True)}
+
+{core_context}
 """

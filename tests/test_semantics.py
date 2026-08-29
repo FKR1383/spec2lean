@@ -23,6 +23,14 @@ from spec2lean.semantics.questions import resolution_record, OpenQuestionScope
 
 
 UNIT = {"unitId": "unit:alpha", "name": "alpha.u32", "sourceNodeIds": ["node:alpha"]}
+SHARED = {
+    "dependencyId": "shared:finite-width-values",
+    "name": "finite-width values",
+    "kind": "value-domain",
+    "reason": "The requested unit uses the shared value domain.",
+    "sourceNodeIds": ["node:alpha"],
+    "requiredBy": [UNIT["unitId"]],
+}
 
 
 def _record(evidence_id: str, role: str, source_type: str = "html") -> dict:
@@ -38,9 +46,9 @@ def _record(evidence_id: str, role: str, source_type: str = "html") -> dict:
 
 def _inputs() -> tuple[dict, dict]:
     plan = {
-        "schemaVersion": 1, "planRunId": "plan:semantic-test", "language": "synthetic", "version": "1.0",
+        "schemaVersion": 3, "planRunId": "plan:semantic-test", "language": "synthetic", "version": "1.0",
         "sourceDatabaseDigest": "digest:phase1", "request": {"scope": {"mode": "EXACT_INSTRUCTIONS"}},
-        "requestedUnits": [copy.deepcopy(UNIT)],
+        "requestedUnits": [copy.deepcopy(UNIT)], "sharedPrerequisites": [],
     }
     bundle = {
         "schemaVersion": 1, "phase": "RETRIEVE_EVIDENCE", "planRunId": plan["planRunId"],
@@ -58,6 +66,12 @@ def _inputs() -> tuple[dict, dict]:
 
 def _scope(plan: dict, bundle: dict) -> SemanticScope:
     return SemanticScope.from_inputs(plan, bundle, UNIT["unitId"], created_at="2026-01-02T03:04:05.000000Z")
+
+
+def _shared_inputs() -> tuple[dict, dict]:
+    plan, bundle = _inputs()
+    plan["sharedPrerequisites"] = [copy.deepcopy(SHARED)]
+    return plan, bundle
 
 
 def _submission() -> dict:
@@ -95,6 +109,7 @@ def test_valid_semantics_covers_operation_branches_edges_state_claims_metadata_a
     scope = _scope(plan, bundle)
     artifact, diagnostics = validate_submission(scope, bundle, _submission())
     assert diagnostics == [] and artifact is not None
+    assert artifact["schemaVersion"] == 2
     assert artifact["evidenceBundleHash"] == evidence_bundle_hash(bundle)
     assert artifact["extractor"] == {
         "provider": "opencode", "model": EXTRACTOR_MODEL, "reasoning": EXTRACTOR_REASONING,
@@ -104,6 +119,72 @@ def test_valid_semantics_covers_operation_branches_edges_state_claims_metadata_a
     for text in ("CORE OPERATION", "Branches", "SOURCE FACTS", "DERIVED INTERPRETATIONS", "STATE EFFECTS", "EDGE CASES", "ASSUMPTIONS"):
         assert text in rendered
     assert "Lean" not in rendered
+
+
+def test_planned_shared_dependency_is_exactly_linked_to_local_semantic_claims():
+    plan, bundle = _shared_inputs()
+    scope = _scope(plan, bundle)
+    value = _submission()
+    value["dependencies"][0].update({
+        "dependencyId": SHARED["dependencyId"],
+        "semanticClaimIds": ["claim:design"],
+    })
+    artifact, diagnostics = validate_submission(scope, bundle, value)
+    assert diagnostics == [] and artifact is not None
+    assert scope.to_dict()["relevantSharedPrerequisites"] == [SHARED]
+    assert artifact["semantics"]["dependencies"][0]["dependencyId"] == SHARED["dependencyId"]
+    assert "claim:design" in render_markdown(artifact)
+    assert "relevantSharedPrerequisites" in build_extractor_prompt(scope, bundle)
+    assert validate_artifact(plan, bundle, artifact) == []
+
+
+@pytest.mark.parametrize(
+    ("mutate", "expected"),
+    [
+        (lambda value: value.update(dependencies=[]), "MISSING_SHARED_DEPENDENCY"),
+        (
+            lambda value: value["dependencies"][0].update(dependencyId="shared:unknown"),
+            "UNKNOWN_SHARED_DEPENDENCY",
+        ),
+        (
+            lambda value: value["dependencies"].append(copy.deepcopy(value["dependencies"][0])),
+            "DUPLICATE_SHARED_DEPENDENCY",
+        ),
+        (
+            lambda value: value["dependencies"][0].update(
+                semanticClaimIds=["claim:not-defined"]
+            ),
+            "UNKNOWN_SEMANTIC_CLAIM_ID",
+        ),
+        (
+            lambda value: value["dependencies"][0].update(concept="different concept"),
+            "SHARED_DEPENDENCY_NAME_MISMATCH",
+        ),
+        (
+            lambda value: value["dependencies"][0].update(semanticClaimIds=[]),
+            "MISSING_SHARED_DEPENDENCY_CLAIMS",
+        ),
+    ],
+)
+def test_planned_shared_dependency_linkage_failures(mutate, expected):
+    plan, bundle = _shared_inputs()
+    value = _submission()
+    value["dependencies"][0].update({
+        "dependencyId": SHARED["dependencyId"],
+        "semanticClaimIds": ["claim:design"],
+    })
+    mutate(value)
+    _, diagnostics = validate_submission(_scope(plan, bundle), bundle, value)
+    assert expected in _codes(diagnostics)
+
+
+def test_unbound_semantic_dependency_remains_valid_without_a_planned_shared_concept():
+    plan, bundle = _inputs()
+    artifact, diagnostics = validate_submission(_scope(plan, bundle), bundle, _submission())
+    assert diagnostics == [] and artifact is not None
+    dependency = artifact["semantics"]["dependencies"][0]
+    assert "dependencyId" not in dependency
+    assert "[unbound] finite-width values" in render_markdown(artifact)
 
 
 def test_dual_source_factual_claims_must_cite_html_and_pdf():
@@ -233,6 +314,8 @@ def test_tool_and_opencode_config_expose_bounded_evidence_and_submission(tmp_pat
     assert schema["type"] == "object"
     assert "oneOf" not in schema
     assert schema["required"] == ["outcome"]
+    dependency = schema["properties"]["dependencies"]["items"]
+    assert {"dependencyId", "semanticClaimIds"} <= set(dependency["properties"])
     config = opencode_config(tmp_path / "scope", tmp_path / "evidence", tmp_path / "submission")
     agent = config["agent"]["spec2lean-semantic-extractor"]
     assert agent["model"] == EXTRACTOR_MODEL == "openai/gpt-5.6-sol"

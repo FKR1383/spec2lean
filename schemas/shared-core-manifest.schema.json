@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec2lean.local/schemas/shared-core-manifest.schema.json",
+  "title": "Spec2Lean Phase-5 Shared Lean Core Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "phase", "language", "version", "sourceDatabaseDigest",
+    "coreRunId", "parentCoreRunId", "representationSchemaVersion", "generator",
+    "target", "leanFile", "leanModule", "createdAt", "sourceHash", "concepts",
+    "declarations", "semanticArtifacts"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "phase": {"const": "SHARED_CORE"},
+    "language": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "minLength": 1},
+    "sourceDatabaseDigest": {"type": "string", "minLength": 1},
+    "coreRunId": {"type": "string", "pattern": "^shared-core-run:[0-9a-f]{24}$"},
+    "parentCoreRunId": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^shared-core-run:[0-9a-f]{24}$"}
+      ]
+    },
+    "representationSchemaVersion": {"const": 1},
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "model", "reasoning", "policyVersion", "invoked"],
+      "properties": {
+        "provider": {"const": "opencode"},
+        "model": {"const": "openai/gpt-5.6-sol"},
+        "reasoning": {"const": "medium"},
+        "policyVersion": {"const": 1},
+        "invoked": {"type": "boolean"}
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["language", "version"],
+      "properties": {
+        "language": {"const": "Lean"},
+        "version": {"const": "4"}
+      }
+    },
+    "leanFile": {
+      "type": "string",
+      "pattern": "^modules/(?:[A-Za-z_][A-Za-z0-9_']*/)+[A-Za-z_][A-Za-z0-9_']*\\.lean$"
+    },
+    "leanModule": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_']*(\\.[A-Za-z_][A-Za-z0-9_']*)+$"
+    },
+    "createdAt": {"type": "string", "minLength": 1},
+    "sourceHash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "concepts": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/concept"}
+    },
+    "declarations": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/declaration"}
+    },
+    "semanticArtifacts": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/semanticArtifact"}
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"concepts": {"minItems": 1}},
+        "required": ["concepts"]
+      },
+      "then": {
+        "properties": {"semanticArtifacts": {"minItems": 1}}
+      }
+    }
+  ],
+  "$defs": {
+    "claimRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unitId", "claimId"],
+      "properties": {
+        "unitId": {"type": "string", "pattern": "^unit:"},
+        "claimId": {"type": "string", "pattern": "^claim:"}
+      }
+    },
+    "concept": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dependencyId", "name", "kind", "sourceNodeIds", "requiredBy",
+        "semanticInputHash", "leanDeclarations", "claimRefs"
+      ],
+      "properties": {
+        "dependencyId": {"type": "string", "pattern": "^shared:"},
+        "name": {"type": "string", "minLength": 1},
+        "kind": {"type": "string", "minLength": 1},
+        "sourceNodeIds": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^node:"}
+        },
+        "requiredBy": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^unit:"}
+        },
+        "semanticInputHash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "leanDeclarations": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/leanName"}
+        },
+        "claimRefs": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/claimRef"}
+        }
+      }
+    },
+    "declaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["declaration", "role", "dependencyIds", "claimRefs"],
+      "properties": {
+        "declaration": {"$ref": "#/$defs/leanName"},
+        "role": {
+          "enum": [
+            "PRIMARY_TYPE", "OPERATION", "EXECUTION", "BRANCH_HELPER",
+            "EDGE_CASE_HELPER", "SEMANTIC_HELPER", "IMPLEMENTATION_HELPER"
+          ]
+        },
+        "dependencyIds": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^shared:"}
+        },
+        "claimRefs": {
+          "type": "array", "uniqueItems": true,
+          "items": {"$ref": "#/$defs/claimRef"}
+        },
+        "supportsDeclarations": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/leanName"}
+        }
+      }
+    },
+    "semanticArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["planRunId", "unitId", "runId", "artifactHash"],
+      "properties": {
+        "planRunId": {"type": "string", "pattern": "^plan:"},
+        "unitId": {"type": "string", "pattern": "^unit:"},
+        "runId": {"type": "string", "pattern": "^semantic-run:"},
+        "artifactHash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "leanName": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_']*(\\.[A-Za-z_][A-Za-z0-9_']*)*$"
+    }
+  }
+}

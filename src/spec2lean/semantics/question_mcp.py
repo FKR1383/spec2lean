@@ -162,6 +162,7 @@ class OpenQuestionMcpServer:
             source_database_digest=scope.source_database_digest,
             unit=dict(scope.unit),
             prerequisites=(),
+            shared_prerequisites=(),
             dependencies=(),
             seed_nodes=tuple((node, "UNIT_SOURCE") for node in scope.unit.get("sourceNodeIds", [])),
         )

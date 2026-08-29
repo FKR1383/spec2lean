@@ -34,6 +34,8 @@ Hard boundaries:
   redesign the formalization, or act as a semantic extractor, translator, planner, or critic.
 - Modify only the affected portion of the Phase-5 group candidate and its mappings when a mechanical
   declaration rename makes that necessary; return the complete group file atomically.
+- If `sharedCore` is present, it is frozen and read-only. Repair only this group's import or use of
+  registered declarations; never redesign, replace, or claim ownership of the shared representation.
 - For a file-level import change that affects no mapped declaration body or responsibility, use an
   empty `affectedDeclarations` array. Otherwise list every mapped declaration actually affected.
 - Do not manufacture hashes, timestamps, model/version data, run IDs, or other deterministic metadata.

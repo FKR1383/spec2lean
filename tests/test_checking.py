@@ -5,14 +5,20 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from spec2lean.checking.build import run_build_test
-from spec2lean.checking.logical import coverage_test, traceability_test
+from spec2lean.checking.logical import (
+    coverage_test,
+    group_coverage_test,
+    group_traceability_test,
+    traceability_test,
+)
 from spec2lean.checking.models import check_result, routing_for
 from spec2lean.checking.render import render_markdown
-from spec2lean.checking.runner import run_checks
+from spec2lean.checking.runner import run_checks, run_group_checks
 from spec2lean.cli import main
 from spec2lean.database import connect, semantic_digest
 from spec2lean.evidence.runner import unit_directory_name
@@ -47,7 +53,7 @@ def _inputs(database: Path) -> tuple[dict, dict, dict, dict]:
     unit = copy.deepcopy(UNIT)
     unit["sourceNodeIds"] = [node["node_id"]]
     plan = {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "planRunId": "plan:check-test",
         "language": "synthetic",
         "version": "1.0",
@@ -60,6 +66,7 @@ def _inputs(database: Path) -> tuple[dict, dict, dict, dict]:
             "supportingNodeIds": [node["node_id"]],
             "origin": "INFERRED",
         }],
+        "sharedPrerequisites": [],
     }
     evidence_id = "evidence:source"
     evidence = {
@@ -242,6 +249,29 @@ def test_build_test_typechecks_valid_lean_with_project_toolchain(tmp_path):
     assert result["leanVersion"].startswith("Lean (version 4")
 
 
+@pytest.mark.skipif(shutil.which("lean") is None, reason="Lean toolchain is not installed")
+def test_build_test_stages_one_frozen_dependency_for_multiple_modules(tmp_path):
+    frozen = tmp_path / "frozen" / "Core.lean"
+    frozen.parent.mkdir()
+    frozen.write_text(
+        "namespace Spec2Lean.Synthetic.Shared\n"
+        "abbrev Value := Nat\n"
+        "end Spec2Lean.Synthetic.Shared\n",
+        encoding="utf-8",
+    )
+    module = "Spec2Lean.Synthetic.Shared.Core"
+    for index in (1, 2):
+        source = tmp_path / f"Unit{index}.lean"
+        source.write_text(
+            f"import {module}\n"
+            f"def sharedCoreConsumer{index} : Spec2Lean.Synthetic.Shared.Value := {index}\n",
+            encoding="utf-8",
+        )
+        result = run_build_test(source, dependency_modules=[(module, frozen)])
+        assert result["status"] == "PASS", result["diagnostics"]
+    assert not frozen.with_suffix(".olean").exists()
+
+
 def test_coverage_pass_and_missing_claim_routes_to_translator(html_database):
     plan, _, semantics, manifest = _inputs(html_database)
     covered = coverage_test(semantics, SOURCE, manifest)
@@ -291,6 +321,324 @@ def test_traceability_detects_broken_phase1_source_provenance(html_database):
     manifest["semanticsArtifactHash"] = semantics_artifact_hash(semantics)
     traced = traceability_test(plan, bundle, semantics, SOURCE, manifest, html_database)
     assert "MISSING_SOURCE_NODE" in {item["code"] for item in traced["brokenMappings"]}
+
+
+def test_group_coverage_and_traceability_resolve_imported_shared_core(html_database):
+    plan, bundle, semantics, _ = _inputs(html_database)
+    unit_id = plan["requestedUnits"][0]["unitId"]
+    semantics["semantics"]["dependencies"] = [{
+        "dependencyId": "shared:operation",
+        "concept": "Common operation domain",
+        "description": "The operation is shared with other requested units.",
+        "semanticClaimIds": ["claim:operation"],
+        "evidenceIds": ["evidence:source"],
+    }]
+    group_source = """namespace Spec2Lean.Synthetic.Unit
+
+def execute (a b : Nat) : Nat := a + b
+
+end Spec2Lean.Synthetic.Unit
+"""
+    group_manifest = {
+        "schemaVersion": 2,
+        "phase": "LLM_GROUP_TRANSLATOR",
+        "planRunId": plan["planRunId"],
+        "language": plan["language"],
+        "version": plan["version"],
+        "group": {"name": "InstructionSemantics", "unitIds": [unit_id]},
+        "translationRunId": "translation-group-run:check",
+        "semanticsArtifacts": [{
+            "unitId": unit_id,
+            "runId": semantics["runId"],
+            "artifactHash": semantics_artifact_hash(semantics),
+        }],
+        "declarations": [{
+            "declaration": "Spec2Lean.Synthetic.Unit.execute",
+            "role": "EXECUTION",
+            "claimRefs": [{"unitId": unit_id, "claimId": "claim:execution"}],
+        }],
+        "sharedUses": [{
+            "dependencyId": "shared:operation",
+            "leanDeclarations": ["Spec2Lean.Synthetic.Shared.operation"],
+            "claimRefs": [{"unitId": unit_id, "claimId": "claim:operation"}],
+        }],
+    }
+    core_source = """namespace Spec2Lean.Synthetic.Shared
+
+def operation (a b : Nat) : Nat := a + b
+
+end Spec2Lean.Synthetic.Shared
+"""
+    core_manifest = {
+        "concepts": [{
+            "dependencyId": "shared:operation",
+            "name": "Common operation domain",
+            "kind": "semantic-domain",
+            "sourceNodeIds": plan["requestedUnits"][0]["sourceNodeIds"],
+            "requiredBy": [unit_id],
+            "semanticInputHash": "sha256:" + "a" * 64,
+            "leanDeclarations": ["Spec2Lean.Synthetic.Shared.operation"],
+            "claimRefs": [{"unitId": unit_id, "claimId": "claim:operation"}],
+        }],
+        "declarations": [{
+            "declaration": "Spec2Lean.Synthetic.Shared.operation",
+            "role": "OPERATION",
+            "dependencyIds": ["shared:operation"],
+            "claimRefs": [{"unitId": unit_id, "claimId": "claim:operation"}],
+        }],
+    }
+
+    without_core = group_coverage_test(unit_id, semantics, group_source, group_manifest)
+    assert [item["itemId"] for item in without_core["uncovered"]] == [
+        "claim:operation", "evidence:source"
+    ]
+    coverage = group_coverage_test(
+        unit_id,
+        semantics,
+        group_source,
+        group_manifest,
+        core_source=core_source,
+        core_manifest=core_manifest,
+    )
+    assert coverage["status"] == "PASS" and coverage["uncovered"] == []
+    traceability = group_traceability_test(
+        plan,
+        {unit_id: bundle},
+        {unit_id: semantics},
+        group_source,
+        group_manifest,
+        html_database,
+        core_source=core_source,
+        core_manifest=core_manifest,
+    )
+    assert traceability["status"] == "PASS", traceability["brokenMappings"]
+    assert {item["declaration"] for item in traceability["validMappings"]} == {
+        "Spec2Lean.Synthetic.Shared.operation",
+        "Spec2Lean.Synthetic.Unit.execute",
+    }
+    shared = next(
+        item for item in traceability["validMappings"]
+        if item["declaration"] == "Spec2Lean.Synthetic.Shared.operation"
+    )
+    assert shared["claimRefs"] == [{
+        "unitId": unit_id,
+        "claimId": "claim:operation",
+        "evidenceIds": ["evidence:source"],
+    }]
+
+    broken_manifest = copy.deepcopy(core_manifest)
+    broken_manifest["concepts"][0]["claimRefs"] = []
+    broken = group_traceability_test(
+        plan,
+        {unit_id: bundle},
+        {unit_id: semantics},
+        group_source,
+        group_manifest,
+        html_database,
+        core_source=core_source,
+        core_manifest=broken_manifest,
+    )
+    assert "SHARED_CONCEPT_CLAIM_MISMATCH" in {
+        item["code"] for item in broken["brokenMappings"]
+    }
+
+    extra_core = copy.deepcopy(core_manifest)
+    extra_core["concepts"][0]["leanDeclarations"].append(
+        "Spec2Lean.Synthetic.Shared.unused"
+    )
+    extra_core["declarations"].append({
+        "declaration": "Spec2Lean.Synthetic.Shared.unused",
+        "role": "SEMANTIC_HELPER",
+        "dependencyIds": ["shared:operation"],
+        "claimRefs": [{"unitId": unit_id, "claimId": "claim:operation"}],
+    })
+    extra_source = core_source.replace(
+        "end Spec2Lean.Synthetic.Shared",
+        "def unused : Nat := 0\n\nend Spec2Lean.Synthetic.Shared",
+    )
+    subset = group_traceability_test(
+        plan,
+        {unit_id: bundle},
+        {unit_id: semantics},
+        group_source,
+        group_manifest,
+        html_database,
+        core_source=extra_source,
+        core_manifest=extra_core,
+    )
+    assert subset["status"] == "PASS", subset["brokenMappings"]
+    assert "Spec2Lean.Synthetic.Shared.unused" not in {
+        item["declaration"] for item in subset["validMappings"]
+    }
+
+
+def test_group_run_loads_frozen_core_builds_with_it_and_hashes_it(
+    tmp_path, html_database, monkeypatch
+):
+    plan, bundle, semantics, _ = _inputs(html_database)
+    unit = plan["requestedUnits"][0]
+    unit_id = unit["unitId"]
+    dependency_id = "shared:operation"
+    plan["sharedPrerequisites"] = [{
+        "dependencyId": dependency_id,
+        "name": "Common operation domain",
+        "kind": "semantic-domain",
+        "reason": "The operation is shared by translated units.",
+        "sourceNodeIds": unit["sourceNodeIds"],
+        "requiredBy": [unit_id],
+    }]
+    semantics["semantics"]["dependencies"] = [{
+        "dependencyId": dependency_id,
+        "concept": "Common operation domain",
+        "description": "The operation is provided by the shared core.",
+        "semanticClaimIds": ["claim:operation"],
+        "evidenceIds": ["evidence:source"],
+    }]
+
+    core_module = "Spec2Lean.Synthetic.Shared.Core"
+    core_run_id = "shared-core-run:" + "1" * 24
+    core_source_hash = "sha256:" + "a" * 64
+    core_manifest_hash = "sha256:" + "b" * 64
+    core_source = """namespace Spec2Lean.Synthetic.Shared
+
+def operation (a b : Nat) : Nat := a + b
+
+end Spec2Lean.Synthetic.Shared
+"""
+    core_manifest = {
+        "concepts": [{
+            "dependencyId": dependency_id,
+            "name": "Common operation domain",
+            "kind": "semantic-domain",
+            "sourceNodeIds": unit["sourceNodeIds"],
+            "requiredBy": [unit_id],
+            "semanticInputHash": "sha256:" + "c" * 64,
+            "leanDeclarations": ["Spec2Lean.Synthetic.Shared.operation"],
+            "claimRefs": [{"unitId": unit_id, "claimId": "claim:operation"}],
+        }],
+        "declarations": [{
+            "declaration": "Spec2Lean.Synthetic.Shared.operation",
+            "role": "OPERATION",
+            "dependencyIds": [dependency_id],
+            "claimRefs": [{"unitId": unit_id, "claimId": "claim:operation"}],
+        }],
+    }
+    group_source = f"""import {core_module}
+
+namespace Spec2Lean.Synthetic.Unit
+
+def execute (a b : Nat) : Nat := Spec2Lean.Synthetic.Shared.operation a b
+
+end Spec2Lean.Synthetic.Unit
+"""
+    group_manifest = {
+        "schemaVersion": 3,
+        "phase": "LLM_GROUP_TRANSLATOR",
+        "planRunId": plan["planRunId"],
+        "language": plan["language"],
+        "version": plan["version"],
+        "group": {"name": "InstructionSemantics", "unitIds": [unit_id]},
+        "translationRunId": "translation-group-run:check-core",
+        "semanticsArtifacts": [{
+            "unitId": unit_id,
+            "runId": semantics["runId"],
+            "artifactHash": semantics_artifact_hash(semantics),
+        }],
+        "translator": {
+            "provider": "opencode",
+            "model": "openai/gpt-5.6-sol",
+            "reasoning": "medium",
+        },
+        "target": {"language": "Lean", "version": "4"},
+        "leanFile": "InstructionSemantics.lean",
+        "createdAt": "2026-08-29T00:00:00Z",
+        "declarations": [{
+            "declaration": "Spec2Lean.Synthetic.Unit.execute",
+            "role": "EXECUTION",
+            "claimRefs": [{"unitId": unit_id, "claimId": "claim:execution"}],
+        }],
+        "sharedCore": {
+            "coreRunId": core_run_id,
+            "manifestHash": core_manifest_hash,
+            "sourceHash": core_source_hash,
+            "leanModule": core_module,
+        },
+        "sharedUses": [{
+            "dependencyId": dependency_id,
+            "leanDeclarations": ["Spec2Lean.Synthetic.Shared.operation"],
+            "claimRefs": [{"unitId": unit_id, "claimId": "claim:operation"}],
+        }],
+    }
+
+    evidence_root = tmp_path / "evidence"
+    semantics_root = tmp_path / "semantics"
+    translations_root = tmp_path / "translations"
+    checks_root = tmp_path / "checks"
+    relative = Path(plan["language"]) / plan["version"] / plan["planRunId"]
+    unit_slug = unit_directory_name(unit)
+    evidence_directory = evidence_root / relative / unit_slug
+    semantics_directory = semantics_root / relative / unit_slug
+    translation_directory = translations_root / relative / "InstructionSemantics"
+    for directory in (evidence_directory, semantics_directory, translation_directory):
+        directory.mkdir(parents=True)
+    (evidence_directory / "evidence.json").write_text(
+        json.dumps(bundle), encoding="utf-8"
+    )
+    (semantics_directory / "semantics.json").write_text(
+        json.dumps(semantics), encoding="utf-8"
+    )
+    (translation_directory / "translation-manifest.json").write_text(
+        json.dumps(group_manifest), encoding="utf-8"
+    )
+    (translation_directory / "translator-run.json").write_text("{}", encoding="utf-8")
+    (translation_directory / "InstructionSemantics.lean").write_text(
+        group_source, encoding="utf-8"
+    )
+    frozen_source = tmp_path / "frozen" / "Core.lean"
+    frozen_source.parent.mkdir()
+    frozen_source.write_text(core_source, encoding="utf-8")
+    frozen = SimpleNamespace(
+        source=core_source,
+        manifest=core_manifest,
+        source_path=frozen_source,
+        core_run_id=core_run_id,
+        lean_module=core_module,
+        source_hash=core_source_hash,
+        manifest_hash=core_manifest_hash,
+    )
+    loaded: list[tuple[Path, str]] = []
+
+    def load_core(root, loaded_plan, loaded_core_run_id):
+        assert loaded_plan is plan
+        loaded.append((root, loaded_core_run_id))
+        return frozen
+
+    monkeypatch.setattr("spec2lean.translation.shared_core.load_core", load_core)
+    builds: list[tuple[Path, list[tuple[str, Path]] | None]] = []
+
+    def build_runner(path, *, dependency_modules=None):
+        builds.append((path, dependency_modules))
+        return _passing_build(path)
+
+    results = run_group_checks(
+        plan,
+        evidence_root=evidence_root,
+        semantics_root=semantics_root,
+        translations_root=translations_root,
+        checks_root=checks_root,
+        database=html_database,
+        group="InstructionSemantics",
+        build_runner=build_runner,
+    )
+    _, result = results[unit_id]
+    assert result["status"] == "PASS", result["traceability"]["brokenMappings"]
+    assert loaded == [(translations_root, core_run_id)]
+    assert builds == [(
+        translation_directory / "InstructionSemantics.lean",
+        [(core_module, frozen_source)],
+    )]
+    assert result["inputHashes"]["sharedCoreSource"] == core_source_hash
+    assert result["inputHashes"]["sharedCoreManifest"] == core_manifest_hash
 
 
 def test_run_preserves_simultaneous_failures_and_writes_deterministic_artifacts(tmp_path, html_database):

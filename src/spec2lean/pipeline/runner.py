@@ -27,8 +27,15 @@ from ..semantics.runner import build_semantics
 from ..semantics.store import load_semantics, unit_directory as semantics_unit_directory
 from ..semantics.validation import validate_artifact
 from ..translation.groups import grouped_units
-from ..translation.models import TranslationGroupScope
+from ..translation.models import TRANSLATION_SCHEMA_VERSION, TranslationGroupScope
 from ..translation.runner import build_group_translation
+from ..translation.shared_core import (
+    FrozenSharedCore,
+    ensure_shared_core,
+    load_core,
+    load_current_core,
+    validate_core_artifact,
+)
 from ..translation.store import (
     group_directory as translation_group_directory,
     legacy_unit_directory as legacy_translation_unit_directory,
@@ -43,6 +50,7 @@ from ..validation import validate_database
 
 
 PHASES = ("index", "plan", "evidence", "semantics", "translate", "check", "troubleshoot")
+PIPELINE_SCHEMA_VERSION = 2
 
 
 def utc_now() -> str:
@@ -102,6 +110,7 @@ class PipelineServices:
     translation_builder: Callable[..., Path] = build_group_translation
     checker: Callable[..., dict[str, tuple[Path, dict[str, Any]]]] = run_group_checks
     resolver: Callable[..., tuple[Path, dict[str, Any]]] = resolve_check_failure
+    core_builder: Callable[..., FrozenSharedCore] = ensure_shared_core
 
 
 def _run_root(runs_root: Path, language: str, version: str, run_id: str) -> Path:
@@ -319,12 +328,17 @@ def _semantics_reusable(options: PipelineOptions, plan: dict[str, Any], unit_id:
         return False
 
 
-def _translation_reusable(options: PipelineOptions, plan: dict[str, Any], group: str) -> bool:
+def _translation_reusable(
+    options: PipelineOptions,
+    plan: dict[str, Any],
+    group: str,
+    shared_core: FrozenSharedCore | None = None,
+) -> bool:
     try:
         directory, _, manifest, metadata = load_group_translation(
             options.translations_root, plan, group
         )
-        if manifest.get("schemaVersion") != 2:
+        if manifest.get("schemaVersion") != TRANSLATION_SCHEMA_VERSION:
             return False
         semantics_by_unit = {
             str(unit["unitId"]): load_semantics(
@@ -333,12 +347,22 @@ def _translation_reusable(options: PipelineOptions, plan: dict[str, Any], group:
             for unit in grouped_units(plan).get(group, [])
         }
         scope = TranslationGroupScope.from_inputs(
-            plan, group, semantics_by_unit, created_at=str(manifest.get("createdAt", ""))
+            plan,
+            group,
+            semantics_by_unit,
+            created_at=str(manifest.get("createdAt", "")),
+            shared_core=shared_core,
         )
+        core_manifest = shared_core.manifest if shared_core is not None else None
         return (
             metadata.get("outcome") == "SUCCESS"
             and manifest.get("translationRunId") == scope.translation_run_id
-            and not validate_published(plan, semantics_by_unit, directory)
+            and metadata.get("sharedCore") == (
+                shared_core.reference() if shared_core is not None else None
+            )
+            and not validate_published(
+                plan, semantics_by_unit, directory, core_manifest=core_manifest
+            )
         )
     except (FileNotFoundError, KeyError, RuntimeError, ValueError, json.JSONDecodeError):
         return False
@@ -356,6 +380,24 @@ def _check_reusable(options: PipelineOptions, plan: dict[str, Any], unit_id: str
         "leanSource": _hash_text(source),
         "translationManifest": _hash_text(canonical_json(translation_manifest)),
     }
+    core_reference = translation_manifest.get("sharedCore")
+    if core_reference is not None:
+        if not isinstance(core_reference, dict) or not isinstance(
+            core_reference.get("coreRunId"), str
+        ):
+            return False, None
+        try:
+            core = load_core(
+                options.translations_root, plan, str(core_reference["coreRunId"])
+            )
+        except (FileNotFoundError, KeyError, RuntimeError, ValueError, json.JSONDecodeError):
+            return False, None
+        if core.reference() != core_reference:
+            return False, None
+        expected.update({
+            "sharedCoreSource": _hash_text(core.source),
+            "sharedCoreManifest": _hash_text(canonical_json(core.manifest)),
+        })
     valid = (
         check.get("phase") == "CHECK"
         and check.get("translationRunId") == translation_manifest.get("translationRunId")
@@ -369,7 +411,7 @@ def _new_manifest(request: PlanningRequest, options: PipelineOptions) -> tuple[P
     run_id = stable_id("pipeline-run", request.language.casefold(), request.version, request.to_dict(), created)
     directory = _run_root(options.runs_root, request.language, request.version, run_id)
     manifest = {
-        "schemaVersion": 1,
+        "schemaVersion": PIPELINE_SCHEMA_VERSION,
         "phase": "PIPELINE",
         "pipelineRunId": run_id,
         "request": request.to_dict(),
@@ -383,6 +425,7 @@ def _new_manifest(request: PlanningRequest, options: PipelineOptions) -> tuple[P
         "phase1": None,
         "planRunId": None,
         "planDirectory": None,
+        "sharedCore": None,
         "units": {},
         "error": None,
     }
@@ -424,6 +467,8 @@ def run_pipeline(
         directory, manifest = load_pipeline_run(options.runs_root, resume_id)
         if manifest.get("request") != request.to_dict():
             raise ValueError("--resume request does not match the stored pipeline request")
+        manifest["schemaVersion"] = PIPELINE_SCHEMA_VERSION
+        manifest.setdefault("sharedCore", None)
         manifest["status"] = "RUNNING"
         manifest["fromPhase"] = options.from_phase
         manifest["untilPhase"] = options.until_phase
@@ -462,10 +507,10 @@ def run_pipeline(
             if plan_pair[1].get("schemaVersion") != PLAN_SCHEMA_VERSION:
                 if not _phase_selected(options, "plan"):
                     raise RuntimeError(
-                        "resumed Phase-2 plan predates specification-derived translation groups; "
+                        "resumed Phase-2 plan predates the current planning contract; "
                         "rerun with --from plan"
                     )
-                report("phase 2/7 plan: legacy grouping plan cannot be reused; replanning")
+                report("phase 2/7 plan: legacy plan cannot be reused; replanning")
                 plan_pair = None
         if plan_pair is None:
             plan_pair = _matching_plan(options.plans_root, request, digest)
@@ -564,11 +609,89 @@ def run_pipeline(
                 _persist(directory, manifest, options)
 
         groups = grouped_units(plan)
+        shared_core: FrozenSharedCore | None = None
+        core_required = bool(plan.get("sharedPrerequisites"))
+        if PHASES.index(options.until_phase) >= PHASES.index("translate"):
+            if not core_required:
+                manifest["sharedCore"] = {"disposition": "NOT_REQUIRED"}
+            else:
+                semantics_by_unit: dict[str, dict[str, Any]] = {}
+                semantic_inputs_ready = True
+                for unit in units:
+                    unit_id = str(unit["unitId"])
+                    try:
+                        semantics_by_unit[unit_id] = load_semantics(
+                            options.semantics_root, plan, unit_id
+                        )[1]
+                    except (FileNotFoundError, KeyError, RuntimeError, ValueError, json.JSONDecodeError):
+                        semantic_inputs_ready = False
+                        break
+
+                current: FrozenSharedCore | None = None
+                core_diagnostics: list[dict[str, Any]] = []
+                if semantic_inputs_ready:
+                    try:
+                        current = load_current_core(options.translations_root, plan)
+                        if current is not None:
+                            core_diagnostics = validate_core_artifact(
+                                plan, semantics_by_unit, current
+                            )
+                            if core_diagnostics:
+                                current = None
+                    except (FileNotFoundError, KeyError, RuntimeError, ValueError, json.JSONDecodeError):
+                        current = None
+                if current is not None:
+                    shared_core = current
+                    disposition = "REUSED"
+                elif not _phase_selected(options, "translate"):
+                    raise FileNotFoundError(
+                        "no fresh shared Phase-5 core exists and Phase 5 is before --from"
+                    )
+                elif options.dry_run or not semantic_inputs_ready:
+                    disposition = "WOULD_BUILD"
+                else:
+                    report("phase 5/7 shared core: materializing one frozen representation registry")
+                    shared_core = services.core_builder(
+                        plan,
+                        semantics_by_unit,
+                        options.translations_root,
+                        timeout_seconds=options.timeout_seconds,
+                    )
+                    disposition = "REUSED" if shared_core.reused else "BUILT"
+                manifest["sharedCore"] = {
+                    "disposition": disposition,
+                    **(shared_core.reference() if shared_core is not None else {}),
+                }
+                if core_diagnostics and shared_core is None:
+                    manifest["sharedCore"]["staleReasons"] = [
+                        str(item.get("code", "INVALID_CORE")) for item in core_diagnostics
+                    ]
+                report(
+                    "phase 5/7 shared core: "
+                    + disposition.lower().replace("_", " ")
+                    + (
+                        f" {shared_core.core_run_id}"
+                        if shared_core is not None else ""
+                    )
+                )
+                _persist(directory, manifest, options)
+
         translation_fresh_by_group: dict[str, bool] = {}
         if PHASES.index(options.until_phase) >= PHASES.index("translate"):
             for group, group_units in groups.items():
                 group_label = f"group {group} ({len(group_units)} instruction(s))"
-                reusable = _translation_reusable(options, plan, group)
+                group_unit_ids = {str(unit["unitId"]) for unit in group_units}
+                group_requires_core = any(
+                    isinstance(item, dict)
+                    and bool(set(item.get("requiredBy", [])) & group_unit_ids)
+                    for item in plan.get("sharedPrerequisites", [])
+                )
+                group_core = shared_core if group_requires_core else None
+                reusable = (
+                    False
+                    if group_requires_core and group_core is None
+                    else _translation_reusable(options, plan, group, group_core)
+                )
                 disposition = "REUSED" if reusable else "WOULD_BUILD"
                 if not reusable and not _phase_selected(options, "translate"):
                     raise FileNotFoundError(f"no fresh Phase-5 translation exists for group {group}")
@@ -595,6 +718,7 @@ def run_pipeline(
                     services.translation_builder(
                         plan, options.semantics_root, options.translations_root,
                         group=group, timeout_seconds=options.timeout_seconds,
+                        shared_core=group_core,
                     )
                     reusable, disposition = True, "BUILT"
                 for unit in group_units:

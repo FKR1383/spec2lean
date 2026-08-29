@@ -31,6 +31,17 @@ def render_markdown(plan: dict[str, Any]) -> str:
             f"- **{group['name']}** ({group['origin']}): {members}. "
             f"{group['reason']} ({support})"
         )
+    lines.extend(["", "## Shared prerequisites", ""])
+    if plan.get("sharedPrerequisites"):
+        for item in plan["sharedPrerequisites"]:
+            sources = ", ".join(f"`{node}`" for node in item["sourceNodeIds"])
+            consumers = ", ".join(names[unit_id] for unit_id in item["requiredBy"])
+            lines.append(
+                f"- **{item['name']}** (`{item['dependencyId']}`, {item['kind']}): "
+                f"{item['reason']} Required by: {consumers}. ({sources})"
+            )
+    else:
+        lines.append("None.")
     lines.extend(["", "## External prerequisites", ""])
     if plan["externalPrerequisites"]:
         for item in plan["externalPrerequisites"]:

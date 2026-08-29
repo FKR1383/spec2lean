@@ -31,6 +31,7 @@ class EvidenceScope:
     source_database_digest: str
     unit: dict[str, Any]
     prerequisites: tuple[dict[str, Any], ...]
+    shared_prerequisites: tuple[dict[str, Any], ...]
     dependencies: tuple[dict[str, Any], ...]
     seed_nodes: tuple[tuple[str, str], ...]
 
@@ -58,11 +59,19 @@ class EvidenceScope:
             item for item in plan.get("externalPrerequisites", [])
             if item.get("prerequisiteId") in prerequisite_ids
         )
+        shared_prerequisites = tuple(
+            item for item in plan.get("sharedPrerequisites", [])
+            if unit_id in item.get("requiredBy", [])
+        )
         seeds: list[tuple[str, str]] = []
         for node_id in unit.get("sourceNodeIds", []):
             seeds.append((node_id, "UNIT_SOURCE"))
         for item in prerequisites:
             basis = f"PREREQUISITE:{item['prerequisiteId']}"
+            for node_id in item.get("sourceNodeIds", []):
+                seeds.append((node_id, basis))
+        for item in shared_prerequisites:
+            basis = f"SHARED_PREREQUISITE:{item['dependencyId']}"
             for node_id in item.get("sourceNodeIds", []):
                 seeds.append((node_id, basis))
         for index, edge in enumerate(dependencies):
@@ -75,6 +84,7 @@ class EvidenceScope:
             source_database_digest=str(plan["sourceDatabaseDigest"]),
             unit=dict(unit),
             prerequisites=tuple(dict(item) for item in prerequisites),
+            shared_prerequisites=tuple(dict(item) for item in shared_prerequisites),
             dependencies=tuple(dict(item) for item in dependencies),
             seed_nodes=tuple(dict.fromkeys(seeds)),
         )
@@ -88,6 +98,9 @@ class EvidenceScope:
             "sourceDatabaseDigest": self.source_database_digest,
             "unit": dict(self.unit),
             "relevantExternalPrerequisites": [dict(item) for item in self.prerequisites],
+            "relevantSharedPrerequisites": [
+                dict(item) for item in self.shared_prerequisites
+            ],
             "relatedDependencies": [dict(item) for item in self.dependencies],
             "seedNodes": [{"nodeId": node, "basis": basis} for node, basis in self.seed_nodes],
         }
@@ -101,6 +114,7 @@ class EvidenceScope:
             source_database_digest=value["sourceDatabaseDigest"],
             unit=dict(value["unit"]),
             prerequisites=tuple(value.get("relevantExternalPrerequisites", ())),
+            shared_prerequisites=tuple(value.get("relevantSharedPrerequisites", ())),
             dependencies=tuple(value.get("relatedDependencies", ())),
             seed_nodes=tuple((item["nodeId"], item["basis"]) for item in value.get("seedNodes", ())),
         )

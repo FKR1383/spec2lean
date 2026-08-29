@@ -4,9 +4,9 @@
   "title": "Spec2Lean Phase-5 Group Translation Manifest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "phase", "planRunId", "language", "version", "group", "translationRunId", "semanticsArtifacts", "translator", "target", "leanFile", "createdAt", "declarations"],
+  "required": ["schemaVersion", "phase", "planRunId", "language", "version", "group", "translationRunId", "semanticsArtifacts", "translator", "target", "leanFile", "createdAt", "declarations", "sharedCore", "sharedUses"],
   "properties": {
-    "schemaVersion": {"const": 2},
+    "schemaVersion": {"const": 3},
     "phase": {"const": "LLM_GROUP_TRANSLATOR"},
     "planRunId": {"type": "string", "pattern": "^plan:"},
     "language": {"type": "string", "minLength": 1},
@@ -45,6 +45,40 @@
     "target": {"type": "object", "additionalProperties": false, "required": ["language", "version"], "properties": {"language": {"const": "Lean"}, "version": {"const": "4"}}},
     "leanFile": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]*\\.lean$"},
     "createdAt": {"type": "string", "minLength": 1},
+    "sharedCore": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["coreRunId", "manifestHash", "sourceHash", "leanModule"],
+          "properties": {
+            "coreRunId": {"type": "string", "pattern": "^shared-core-run:[0-9a-f]{24}$"},
+            "manifestHash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            "sourceHash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            "leanModule": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]*(\\.[A-Za-z][A-Za-z0-9]*)+$"}
+          }
+        }
+      ]
+    },
+    "sharedUses": {
+      "type": "array", "uniqueItems": true,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["dependencyId", "leanDeclarations", "claimRefs"],
+        "properties": {
+          "dependencyId": {"type": "string", "pattern": "^shared:"},
+          "leanDeclarations": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_']*(\\.[A-Za-z_][A-Za-z0-9_']*)*$"}},
+          "claimRefs": {
+            "type": "array", "minItems": 1, "uniqueItems": true,
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["unitId", "claimId"],
+              "properties": {"unitId": {"type": "string", "pattern": "^unit:"}, "claimId": {"type": "string", "pattern": "^claim:"}}
+            }
+          }
+        }
+      }
+    },
     "declarations": {
       "type": "array", "minItems": 1,
       "items": {

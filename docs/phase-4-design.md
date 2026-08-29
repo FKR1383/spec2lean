@@ -14,7 +14,8 @@ mappings, and the same Phase-3 evidence boundary.
 ## Session and input boundary
 
 Each extraction attempt receives exactly one bounded OpenCode session. Its prompt
-contains deterministic unit metadata, while the exact unit `evidence.json` is
+contains deterministic unit metadata and the Phase-2 shared prerequisites relevant
+to that unit, while the exact unit `evidence.json` is
 projected by the bounded `get_evidence` tool into the fields Phase 4 needs:
 evidence IDs, roles, tiers, source types, exact text, sections, rationales, and
 compact source locations. Verbose HTML/PDF span and bounding-box provenance
@@ -99,7 +100,8 @@ Successful submissions use typed optional components:
 - state effects separate from the pure operation;
 - optional predication behavior;
 - version, target, type, operand, or other restrictions;
-- shared semantic dependencies;
+- shared semantic dependencies, optionally bound to exact Phase-2 `shared:*`
+  IDs and local semantic claims;
 - structured semantic claims.
 
 The claim vocabulary is deliberately closed: `SOURCE_FACT`,
@@ -123,6 +125,22 @@ need rather than a source fact. Every `SOURCE_FACT` and
 `DERIVED_INTERPRETATION` requires evidence. Design dependencies and assumptions
 may be source-independent.
 
+Phase 4 reuses the existing `dependencies` component rather than creating a
+second shared-semantics collection. For every Phase-2 shared prerequisite whose
+`requiredBy` contains the current unit, the successful artifact must include
+exactly one dependency with the same `dependencyId` and concept name. Its
+`semanticClaimIds` identify one or more claims in this artifact that describe
+what the concept requires. Claim IDs remain unit-local; downstream manifests
+qualify them with the unit ID. Deterministic validation rejects missing,
+unknown, duplicate, or misnamed shared dependencies and missing or unknown
+claim links.
+
+An extractor may still report a genuine modeling dependency that the Planner
+did not identify. Such a dependency remains explicitly unbound by omitting
+`dependencyId`; this does not claim that a shared implementation already
+exists. Phase 4 describes meaning only and never chooses the Lean
+representation.
+
 If the Phase-3 bundle contains both official HTML and PDF evidence, every
 `SOURCE_FACT` and `DERIVED_INTERPRETATION` must cite supporting evidence from
 both renditions. This is checked per claim, so a PDF item elsewhere in the
@@ -145,6 +163,8 @@ Submission and stored-artifact validation rejects:
 - a non-normative resolution used by a semantic component but not mapped to an
   `ASSUMPTION` claim;
 - duplicate claim IDs or duplicate classified claim statements;
+- missing, unknown, duplicate, or incorrectly named Phase-2 shared dependencies;
+- missing, malformed, duplicate, or unknown dependency-to-claim links;
 - unresolved branch, edge-case, state-effect, restriction, or predication evidence;
 - wrong instruction identity;
 - missing instruction inputs, result, or core operation;

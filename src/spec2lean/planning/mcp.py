@@ -34,6 +34,30 @@ def tool_definitions() -> list[dict[str, Any]]:
         },
         ["key", "name", "reason", "sourceNodeIds"],
     )
+    shared_prerequisite = _schema_object(
+        {
+            "key": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Stable conceptual key; never a Lean declaration or representation.",
+            },
+            "name": {"type": "string", "minLength": 1},
+            "kind": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Open, specification-derived concept label; not a closed language-specific enum.",
+            },
+            "reason": {"type": "string", "minLength": 1},
+            "sourceNodeIds": {"type": "array", "items": NODE_ID, "minItems": 1},
+            "requiredBy": {
+                "type": "array",
+                "items": {"type": "string", "pattern": "^unit:"},
+                "minItems": 1,
+                "uniqueItems": True,
+            },
+        },
+        ["key", "name", "kind", "reason", "sourceNodeIds", "requiredBy"],
+    )
     dependency = _schema_object(
         {
             "from": {"type": "string", "minLength": 1},
@@ -124,9 +148,13 @@ def tool_definitions() -> list[dict[str, Any]]:
                     },
                     "translationGroups": {"type": "array", "items": translation_group, "minItems": 1},
                     "externalPrerequisites": {"type": "array", "items": prerequisite},
+                    "sharedPrerequisites": {"type": "array", "items": shared_prerequisite},
                     "dependencies": {"type": "array", "items": dependency},
                 },
-                ["requestedUnitIds", "translationGroups", "externalPrerequisites", "dependencies"],
+                [
+                    "requestedUnitIds", "translationGroups", "externalPrerequisites",
+                    "sharedPrerequisites", "dependencies",
+                ],
             ),
         },
     ]

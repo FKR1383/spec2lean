@@ -43,8 +43,11 @@ Rules:
   derived from cited evidence. DESIGN_DEPENDENCY is a later modeling need. ASSUMPTION is a genuine
   assumption not established by the evidence. Do not disguise modeling choices as source facts.
 - Use short stable claim IDs beginning claim:, unique within this artifact.
-- Do not claim that a shared semantic artifact exists unless the evidence establishes it; use an
-  unbound dependency description instead.
+- For every `relevantSharedPrerequisites` entry in the deterministic scope, include exactly one
+  dependency with its exact dependencyId and concept name. Describe WHAT the shared concept must
+  mean, and link it to one or more local claims through semanticClaimIds.
+- A genuinely discovered modeling dependency that is not in relevantSharedPrerequisites may remain
+  unbound by omitting dependencyId. Do not claim that a shared semantic artifact already exists.
 - Do not include Lean-specific representation choices.
 - If a required semantic aspect cannot safely be determined, submit INSUFFICIENT_EVIDENCE with
   concrete missingAspects and an explanation. Do not guess to obtain SUCCESS.

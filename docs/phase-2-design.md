@@ -64,16 +64,44 @@ submission, the run fails.
 ## Plan and validation
 
 The model submits requested candidate IDs, specification-derived translation
-groups, external prerequisite concepts, and dependency edges. Every requested
+groups, external prerequisite concepts, shared prerequisites, and dependency edges. Every requested
 unit belongs to exactly one translation group. Group names are concise
 UpperCamelCase identifiers derived from indexed headings, ancestors,
 terminology, and semantic cohesion; each group records a reason, `EXPLICIT` or
 `INFERRED` origin, and Phase 1 source nodes supporting every member. There is no
 language- or mnemonic-specific category table in later phases.
 
+A shared prerequisite identifies one source-level semantic concept that must
+have a canonical formalization across its consumers. It remains distinct from a
+requested unit: it is not independently scheduled and does not expand the
+request. The model-owned form is deliberately small:
+
+```json
+{
+  "key": "stable-concept-key",
+  "name": "Specification concept name",
+  "kind": "open-concept-label",
+  "reason": "Why the bounded requested subset needs it",
+  "sourceNodeIds": ["node:..."],
+  "requiredBy": ["unit:...", "unit:..."]
+}
+```
+
+`kind` is open text rather than a language-specific enum. Deterministic code
+replaces the model key with a `shared:*` `dependencyId` scoped by language and
+version. Identity includes the stable conceptual key, name, kind, and source
+anchors, but excludes `requiredBy` and `reason`, so changing request membership
+or rationale wording does not change the concept's identity. `requiredBy` may
+contain only unique units selected by this request.
+
+Phase 2 identifies only what is shared. It never chooses a Lean type,
+declaration, namespace, library, data representation, or implementation
+strategy. The Planner must not inventory possible concepts for the entire
+specification; shared prerequisites remain bounded to the current request.
+
 Deterministic code supplies language/version, run identity,
 source database digest, timestamps, validated source identity, external
-prerequisite IDs, processing layers, and cycle reporting.
+prerequisite IDs, shared dependency IDs, processing layers, and cycle reporting.
 
 An edge is directed from prerequisite to dependent. Its origin is exactly
 `EXPLICIT` or `INFERRED`, and it must have a reason and existing Phase 1 source
@@ -83,7 +111,9 @@ Validation rejects out-of-scope units, missing exact units, incomplete or
 overlapping group partitions, invalid group/file identifiers, group support
 outside a member's indexed source ancestry, invented nodes,
 unknown endpoints, self edges, duplicate edges, missing reasons/support, and
-invalid origins. Layers are derived from requested-unit edges, so independent
+invalid origins. It also rejects unknown planning fields, malformed or duplicate
+shared prerequisites, empty or out-of-scope `requiredBy` lists, and unsupported
+source nodes. Layers are derived from requested-unit edges, so independent
 units share a layer. Strongly connected components are emitted in `cycles` and
 the graph is marked `CYCLIC`; their edges are not removed and cyclic units are
 not assigned a false processing layer. Requested units downstream of a cycle
@@ -109,4 +139,5 @@ runner test substitutes a local fake process that writes through the same
 submission boundary. Fixtures cover independent units, dependencies and
 layers, external prerequisites, unresolved exact instructions, scope
 expansion, invented nodes, duplicate/self edges, cycles, locked model metadata,
-and capability isolation.
+capability isolation, stable shared dependency identity, bounded consumers,
+open concept kinds, and rejection of representation fields.

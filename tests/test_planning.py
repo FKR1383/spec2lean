@@ -9,6 +9,7 @@ import pytest
 from spec2lean.database import connect
 from spec2lean.planning.models import PlanningRequest, ScopeMode
 from spec2lean.planning.mcp import PlannerMcpServer, tool_definitions
+from spec2lean.planning.prompt import build_planner_prompt
 from spec2lean.planning.runner import PLANNER_MODEL, PLANNER_REASONING, build_plan, opencode_config
 from spec2lean.planning.scope import Phase1Query, ScopeResolver
 from spec2lean.planning.validation import build_validated_plan, validate_submission
@@ -20,7 +21,9 @@ def _resolved(planner_database: Path, names: list[str]):
     return connection, ScopeResolver(connection).resolve(request)
 
 
-def _submission(scope, *, selected=None, prerequisites=None, dependencies=None):
+def _submission(
+    scope, *, selected=None, prerequisites=None, shared_prerequisites=None, dependencies=None
+):
     unit_ids = selected or [item["unitId"] for item in scope.candidate_units]
     selected_units = [item for item in scope.candidate_units if item["unitId"] in unit_ids]
     return {
@@ -35,6 +38,7 @@ def _submission(scope, *, selected=None, prerequisites=None, dependencies=None):
             "origin": "INFERRED",
         }],
         "externalPrerequisites": prerequisites or [],
+        "sharedPrerequisites": shared_prerequisites or [],
         "dependencies": dependencies or [],
     }
 
@@ -117,7 +121,7 @@ def test_two_independent_instructions_share_layer_zero(planner_database):
             "unitIds": sorted(item["unitId"] for item in scope.candidate_units),
         }]
         assert plan["graphStatus"] == "ACYCLIC"
-        assert plan["schemaVersion"] == 2
+        assert plan["schemaVersion"] == 3
         assert plan["translationGroups"][0]["unitIds"] == [
             item["unitId"] for item in scope.candidate_units
         ]
@@ -166,6 +170,113 @@ def test_external_prerequisite_is_recorded_but_not_scheduled(planner_database):
         assert len(plan["externalPrerequisites"]) == 1
         assert plan["processingLayers"] == [{"layer": 0, "unitIds": [unit]}]
         assert plan["dependencies"][0]["from"].startswith("prerequisite:")
+    finally:
+        connection.close()
+
+
+def test_shared_prerequisite_has_stable_scoped_identity_and_is_not_scheduled(planner_database):
+    connection, scope = _resolved(planner_database, ["alpha.u32", "beta.u32"])
+    try:
+        rules = connection.execute(
+            "SELECT node_id FROM nodes WHERE html_anchor = 'integer-operand-rules'"
+        ).fetchone()[0]
+        unit_ids = [item["unitId"] for item in scope.candidate_units]
+        shared = {
+            "key": "integer-value-domain",
+            "name": "Integer value domain",
+            "kind": "value-domain",
+            "reason": "Both requested units consume the same source-level integer domain.",
+            "sourceNodeIds": [rules],
+            "requiredBy": list(reversed(unit_ids)),
+        }
+        first = build_validated_plan(
+            Phase1Query(connection), scope,
+            _submission(scope, shared_prerequisites=[shared]),
+            language="synthetic", version="1.0", plan_run_id="plan:shared-one",
+            source_database_digest="e" * 64,
+        )
+        item = first["sharedPrerequisites"][0]
+        assert item["dependencyId"].startswith("shared:")
+        assert item["kind"] == "value-domain"
+        assert item["requiredBy"] == sorted(unit_ids)
+        assert all(
+            item["dependencyId"] not in layer["unitIds"]
+            for layer in first["processingLayers"]
+        )
+
+        changed_scope_only = dict(shared)
+        changed_scope_only["reason"] = "Different planning rationale wording."
+        changed_scope_only["requiredBy"] = unit_ids
+        second = build_validated_plan(
+            Phase1Query(connection), scope,
+            _submission(scope, shared_prerequisites=[changed_scope_only]),
+            language="synthetic", version="1.0", plan_run_id="plan:shared-two",
+            source_database_digest="e" * 64,
+        )
+        assert second["sharedPrerequisites"][0]["dependencyId"] == item["dependencyId"]
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize(
+    ("required_by", "expected"),
+    [
+        ([], "MISSING_SHARED_PREREQUISITE_CONSUMER"),
+        (["unit:invented"], "UNKNOWN_SHARED_PREREQUISITE_CONSUMER"),
+        (None, "DUPLICATE_SHARED_PREREQUISITE_CONSUMER"),
+    ],
+)
+def test_shared_prerequisite_consumers_are_nonempty_selected_and_unique(
+    planner_database, required_by, expected
+):
+    connection, scope = _resolved(planner_database, ["alpha.u32", "beta.u32"])
+    try:
+        rules = connection.execute(
+            "SELECT node_id FROM nodes WHERE html_anchor = 'integer-operand-rules'"
+        ).fetchone()[0]
+        unit_id = scope.candidate_units[0]["unitId"]
+        consumers = [unit_id, unit_id] if required_by is None else required_by
+        shared = {
+            "key": "integer-domain", "name": "Integer domain", "kind": "value-domain",
+            "reason": "Requested units use it.", "sourceNodeIds": [rules],
+            "requiredBy": consumers,
+        }
+        _, diagnostics = validate_submission(
+            Phase1Query(connection), scope,
+            _submission(scope, shared_prerequisites=[shared]),
+        )
+        assert expected in {item["code"] for item in diagnostics}
+    finally:
+        connection.close()
+
+
+def test_planner_rejects_representation_fields_and_keeps_shared_kind_extensible(
+    planner_database
+):
+    connection, scope = _resolved(planner_database, ["alpha.u32", "beta.u32"])
+    try:
+        rules = connection.execute(
+            "SELECT node_id FROM nodes WHERE html_anchor = 'integer-operand-rules'"
+        ).fetchone()[0]
+        shared = {
+            "key": "integer-domain", "name": "Integer domain",
+            "kind": "arbitrary-specification-concept", "reason": "Shared by the request.",
+            "sourceNodeIds": [rules],
+            "requiredBy": [item["unitId"] for item in scope.candidate_units],
+            "leanType": "BitVec",
+        }
+        submission = _submission(scope, shared_prerequisites=[shared])
+        submission["representation"] = "Nat"
+        _, diagnostics = validate_submission(Phase1Query(connection), scope, submission)
+        assert {item["code"] for item in diagnostics} == {"UNEXPECTED_FIELD"}
+        schema = next(item for item in tool_definitions() if item["name"] == "submit_plan")[
+            "inputSchema"
+        ]
+        kind_schema = schema["properties"]["sharedPrerequisites"]["items"]["properties"]["kind"]
+        assert "enum" not in kind_schema
+        prompt = build_planner_prompt(Phase1Query(connection), scope)
+        assert "Never choose or mention a Lean type" in prompt
+        assert "do not add speculative concepts for the rest of the specification" in prompt
     finally:
         connection.close()
 
@@ -253,6 +364,7 @@ def test_one_session_runner_owns_metadata_and_does_not_call_real_opencode(planne
                 "origin": "INFERRED",
             }],
             "externalPrerequisites": [],
+            "sharedPrerequisites": [],
             "dependencies": [],
         }))
         return subprocess.CompletedProcess(command, 0, '{"sessionID":"session-test"}\n', "")
@@ -339,6 +451,7 @@ def test_submit_tool_can_diagnose_then_accept_in_the_same_server_session(planner
             "requestedUnitIds": ["unit:invented"],
             "translationGroups": [],
             "externalPrerequisites": [],
+            "sharedPrerequisites": [],
             "dependencies": [],
         })["content"][0]["text"])
         assert invalid["accepted"] is False

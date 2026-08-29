@@ -43,16 +43,29 @@ def submission_schema() -> dict[str, Any]:
             },
         },
     }, ["declaration", "role", "claimRefs"])
+    shared_use = _object({
+        "dependencyId": {"type": "string", "pattern": "^shared:"},
+        "leanDeclarations": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": True,
+            "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_']*(\\.[A-Za-z_][A-Za-z0-9_']*)*$",
+            },
+        },
+    }, ["dependencyId", "leanDeclarations"])
     return _object({
         "leanSource": {"type": "string", "minLength": 1},
         "declarations": {"type": "array", "items": mapping, "minItems": 1},
-    }, ["leanSource", "declarations"])
+        "sharedUses": {"type": "array", "items": shared_use},
+    }, ["leanSource", "declarations", "sharedUses"])
 
 
 def tool_definitions() -> list[dict[str, Any]]:
     return [{
         "name": "submit_translation",
-        "description": "Submit one complete group Lean 4 source and its unit-scoped declaration-to-claim mappings for deterministic validation.",
+        "description": "Submit one complete group Lean 4 source, local declaration mappings, and frozen shared-core uses for deterministic validation.",
         "inputSchema": submission_schema(),
     }]
 

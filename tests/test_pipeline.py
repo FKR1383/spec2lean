@@ -15,6 +15,7 @@ from spec2lean.planning.models import PlanningRequest
 from spec2lean.planning.runner import source_database_digest
 from spec2lean.semantics.models import evidence_bundle_hash
 from spec2lean.translation.models import TranslationGroupScope
+from spec2lean.translation.shared_core import FrozenSharedCore
 from spec2lean.util import canonical_json
 
 
@@ -55,7 +56,7 @@ def _services(options: PipelineOptions, database: Path, calls: list[str], *, fai
         ).fetchone()
     unit = {"unitId": "unit:pipeline", "name": "alpha.u32", "sourceNodeIds": [row["node_id"]]}
     plan = {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "planRunId": "plan:pipeline",
         "language": "synthetic",
         "version": "1.0",
@@ -68,6 +69,7 @@ def _services(options: PipelineOptions, database: Path, calls: list[str], *, fai
             "supportingNodeIds": [row["node_id"]],
             "origin": "INFERRED",
         }],
+        "sharedPrerequisites": [],
         "graphStatus": "ACYCLIC",
         "processingLayers": [{"layer": 0, "unitIds": [unit["unitId"]]}],
     }
@@ -112,7 +114,7 @@ def _services(options: PipelineOptions, database: Path, calls: list[str], *, fai
         calls.append("semantics")
         bundle = json.loads((evidence_root / "synthetic" / "1.0" / current_plan["planRunId"] / slug / "evidence.json").read_text())
         artifact = {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "phase": "SEMANTIC_EXTRACTOR",
             "planRunId": current_plan["planRunId"],
             "language": "synthetic",
@@ -121,7 +123,10 @@ def _services(options: PipelineOptions, database: Path, calls: list[str], *, fai
             "evidenceBundleHash": evidence_bundle_hash(bundle),
             "runId": "semantic-run:pipeline",
             "outcome": "SUCCESS",
-            "semantics": {"claims": [{"claimId": "claim:pipeline"}]},
+            "semantics": {
+                "dependencies": [],
+                "claims": [{"claimId": "claim:pipeline"}],
+            },
         }
         directory = root / "synthetic" / "1.0" / current_plan["planRunId"] / slug
         _json(directory / "semantics.json", artifact)
@@ -184,7 +189,9 @@ def test_pipeline_composes_all_phases_and_resume_reuses_fresh_artifacts(
     services = _services(options, options.index_root / "synthetic" / "1.0" / "specification.sqlite", calls)
     monkeypatch.setattr("spec2lean.pipeline.runner.validate_bundle", lambda *_args: [])
     monkeypatch.setattr("spec2lean.pipeline.runner.validate_artifact", lambda *_args: [])
-    monkeypatch.setattr("spec2lean.pipeline.runner.validate_published", lambda *_args: [])
+    monkeypatch.setattr(
+        "spec2lean.pipeline.runner.validate_published", lambda *_args, **_kwargs: []
+    )
     request = PlanningRequest.exact("synthetic", "1.0", ["alpha.u32"])
     progress: list[str] = []
 
@@ -266,7 +273,9 @@ def test_resume_rejects_legacy_grouping_plan_after_plan_phase(
         calls,
     )
     monkeypatch.setattr("spec2lean.pipeline.runner.validate_artifact", lambda *_args: [])
-    monkeypatch.setattr("spec2lean.pipeline.runner.validate_published", lambda *_args: [])
+    monkeypatch.setattr(
+        "spec2lean.pipeline.runner.validate_published", lambda *_args, **_kwargs: []
+    )
     request = PlanningRequest.exact("synthetic", "1.0", ["alpha.u32"])
     _, manifest = run_pipeline(request, options, services=services)
     plan_path = options.plans_root / "synthetic" / "1.0" / manifest["planRunId"] / "plan.json"
@@ -293,7 +302,9 @@ def test_pipeline_routes_a_failed_check_through_phase_7(planner_database, tmp_pa
     database = options.index_root / "synthetic" / "1.0" / "specification.sqlite"
     services = _services(options, database, calls, fail_check=True)
     monkeypatch.setattr("spec2lean.pipeline.runner.validate_artifact", lambda *_args: [])
-    monkeypatch.setattr("spec2lean.pipeline.runner.validate_published", lambda *_args: [])
+    monkeypatch.setattr(
+        "spec2lean.pipeline.runner.validate_published", lambda *_args, **_kwargs: []
+    )
 
     _, manifest = run_pipeline(
         PlanningRequest.exact("synthetic", "1.0", ["alpha.u32"]), options, services=services
@@ -317,7 +328,9 @@ def test_dry_run_never_reuses_checks_when_group_translation_would_change(
     services = _services(options, database, calls)
     monkeypatch.setattr("spec2lean.pipeline.runner.validate_bundle", lambda *_args: [])
     monkeypatch.setattr("spec2lean.pipeline.runner.validate_artifact", lambda *_args: [])
-    monkeypatch.setattr("spec2lean.pipeline.runner.validate_published", lambda *_args: [])
+    monkeypatch.setattr(
+        "spec2lean.pipeline.runner.validate_published", lambda *_args, **_kwargs: []
+    )
     request = PlanningRequest.exact("synthetic", "1.0", ["alpha.u32"])
     _, first = run_pipeline(request, options, services=services)
 
@@ -430,3 +443,143 @@ def test_pipeline_builds_phase_1_from_a_hash_pinned_source_manifest(tmp_path):
     index_directory = options.index_root / "synthetic" / "1.0"
     assert (index_directory / "specification.sqlite").is_file()
     assert json.loads((index_directory / "index-manifest.json").read_text())["sources"][0]["sha256"]
+
+
+def test_pipeline_materializes_one_core_for_all_groups_and_reuses_it_without_external_work(
+    planner_database, tmp_path, monkeypatch
+):
+    options = _options(tmp_path, planner_database, until_phase="translate")
+    request = PlanningRequest.exact("synthetic", "1.0", ["alpha", "beta"])
+    units = [
+        {"unitId": "unit:alpha", "name": "alpha", "sourceNodeIds": ["node:alpha"]},
+        {"unitId": "unit:beta", "name": "beta", "sourceNodeIds": ["node:beta"]},
+    ]
+    plan = {
+        "schemaVersion": 3,
+        "planRunId": "plan:pipeline-shared-core",
+        "language": "synthetic",
+        "version": "1.0",
+        "sourceDatabaseDigest": "digest:shared-pipeline",
+        "requestedUnits": units,
+        "translationGroups": [
+            {
+                "name": "AlphaGroup", "unitIds": ["unit:alpha"],
+                "reason": "Synthetic group alpha.", "supportingNodeIds": ["node:alpha"],
+                "origin": "INFERRED",
+            },
+            {
+                "name": "BetaGroup", "unitIds": ["unit:beta"],
+                "reason": "Synthetic group beta.", "supportingNodeIds": ["node:beta"],
+                "origin": "INFERRED",
+            },
+        ],
+        "sharedPrerequisites": [{
+            "dependencyId": "shared:value",
+            "name": "Shared value",
+            "kind": "synthetic-value-domain",
+            "reason": "Both units consume one value domain.",
+            "sourceNodeIds": ["node:alpha", "node:beta"],
+            "requiredBy": ["unit:alpha", "unit:beta"],
+        }],
+        "graphStatus": "ACYCLIC",
+        "processingLayers": [{"layer": 0, "unitIds": ["unit:alpha", "unit:beta"]}],
+    }
+    plan_directory = options.plans_root / "synthetic" / "1.0" / plan["planRunId"]
+    _json(plan_directory / "plan.json", plan)
+    for unit in units:
+        artifact = {
+            "schemaVersion": 2,
+            "phase": "SEMANTIC_EXTRACTOR",
+            "planRunId": plan["planRunId"],
+            "language": "synthetic",
+            "version": "1.0",
+            "unit": unit,
+            "runId": f"semantic-run:{unit['name']}",
+            "outcome": "SUCCESS",
+            "semantics": {
+                "claims": [{"claimId": "claim:value"}],
+                "dependencies": [{
+                    "dependencyId": "shared:value",
+                    "concept": "Shared value",
+                    "description": "One shared value domain.",
+                    "semanticClaimIds": ["claim:value"],
+                    "evidenceIds": [],
+                }],
+            },
+        }
+        semantic_directory = (
+            options.semantics_root / "synthetic" / "1.0" / plan["planRunId"]
+            / unit_directory_name(unit)
+        )
+        _json(semantic_directory / "semantics.json", artifact)
+
+    frozen = FrozenSharedCore(
+        directory=tmp_path / "frozen",
+        source_path=tmp_path / "frozen" / "Core.lean",
+        manifest_path=tmp_path / "frozen" / "core-manifest.json",
+        run_path=tmp_path / "frozen" / "core-run.json",
+        source="namespace Shared\nend Shared\n",
+        manifest={
+            "coreRunId": "shared-core-run:" + "1" * 24,
+            "sourceHash": "sha256:" + "2" * 64,
+            "leanModule": "Spec2LeanShared.Synthetic.V10.C123.Core",
+        },
+        core_run_id="shared-core-run:" + "1" * 24,
+        lean_module="Spec2LeanShared.Synthetic.V10.C123.Core",
+        source_hash="sha256:" + "2" * 64,
+        manifest_hash="sha256:" + "3" * 64,
+        reused=False,
+    )
+    core_calls: list[dict[str, dict]] = []
+    translated: list[tuple[str, FrozenSharedCore]] = []
+
+    def core_builder(current_plan, semantics_by_unit, _root, **_kwargs):
+        assert current_plan is plan
+        core_calls.append(semantics_by_unit)
+        return frozen
+
+    def translation_builder(_plan, _semantics_root, _root, *, group, shared_core, **_kwargs):
+        translated.append((group, shared_core))
+        return tmp_path / group
+
+    services = PipelineServices(
+        translation_builder=translation_builder,
+        core_builder=core_builder,
+    )
+    monkeypatch.setattr(
+        "spec2lean.pipeline.runner._ensure_phase1",
+        lambda *_args: {
+            "ok": True, "reason": "FRESH", "disposition": "REUSED",
+            "sourceDatabaseDigest": plan["sourceDatabaseDigest"],
+        },
+    )
+    monkeypatch.setattr(
+        "spec2lean.pipeline.runner._matching_plan",
+        lambda *_args: (plan_directory, plan),
+    )
+    monkeypatch.setattr("spec2lean.pipeline.runner._evidence_reusable", lambda *_args: True)
+    monkeypatch.setattr("spec2lean.pipeline.runner._semantics_reusable", lambda *_args: True)
+    monkeypatch.setattr("spec2lean.pipeline.runner.load_current_core", lambda *_args: None)
+    monkeypatch.setattr("spec2lean.pipeline.runner._translation_reusable", lambda *_args: False)
+
+    _, first = run_pipeline(request, options, services=services)
+    assert len(core_calls) == 1
+    assert {group for group, _core in translated} == {"AlphaGroup", "BetaGroup"}
+    assert all(core is frozen for _group, core in translated)
+    assert first["sharedCore"] == {"disposition": "BUILT", **frozen.reference()}
+
+    translated.clear()
+    resumed_options = _options(
+        tmp_path,
+        planner_database,
+        until_phase="translate",
+        resume=first["pipelineRunId"],
+    )
+    monkeypatch.setattr("spec2lean.pipeline.runner.load_current_core", lambda *_args: frozen)
+    monkeypatch.setattr("spec2lean.pipeline.runner.validate_core_artifact", lambda *_args: [])
+    monkeypatch.setattr("spec2lean.pipeline.runner._translation_reusable", lambda *_args: True)
+
+    _, resumed = run_pipeline(request, resumed_options, services=services)
+    assert len(core_calls) == 1
+    assert translated == []
+    assert resumed["sharedCore"] == {"disposition": "REUSED", **frozen.reference()}

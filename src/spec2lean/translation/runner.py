@@ -13,7 +13,13 @@ from typing import Any, Callable
 from ..planning.runner import installed_openai_models
 from ..semantics.store import load_semantics
 from .groups import group_for_unit, grouped_units
-from .models import TRANSLATOR_AGENT, TRANSLATOR_MODEL, TRANSLATOR_REASONING, TranslationGroupScope
+from .models import (
+    TRANSLATION_SCHEMA_VERSION,
+    TRANSLATOR_AGENT,
+    TRANSLATOR_MODEL,
+    TRANSLATOR_REASONING,
+    TranslationGroupScope,
+)
 from .prompt import build_translator_prompt
 from .store import group_directory
 from .validation import validate_published
@@ -89,6 +95,7 @@ def build_group_translation(
     plan: dict[str, Any], semantics_root: Path, translations_root: Path, *, group: str,
     timeout_seconds: int = 1800,
     run_command: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+    shared_core: Any | None = None,
 ) -> Path:
     units = grouped_units(plan).get(group, [])
     if not units:
@@ -100,9 +107,27 @@ def build_group_translation(
         semantic_directory, semantics = load_semantics(semantics_root, plan, unit_id)
         semantic_directories[unit_id] = semantic_directory
         semantics_by_unit[unit_id] = semantics
+    if any(
+        isinstance(item, dict)
+        and set(item.get("requiredBy", [])) & {str(unit["unitId"]) for unit in units}
+        for item in plan.get("sharedPrerequisites", [])
+    ) and shared_core is None:
+        from .shared_core import load_current_core, validate_core_artifact
+
+        candidate = load_current_core(translations_root, plan)
+        if candidate is not None:
+            all_semantics = dict(semantics_by_unit)
+            for planned_unit in plan.get("requestedUnits", []):
+                planned_unit_id = str(planned_unit["unitId"])
+                if planned_unit_id not in all_semantics:
+                    all_semantics[planned_unit_id] = load_semantics(
+                        semantics_root, plan, planned_unit_id
+                    )[1]
+            if not validate_core_artifact(plan, all_semantics, candidate):
+                shared_core = candidate
     started_at = utc_now()
     scope = TranslationGroupScope.from_inputs(
-        plan, group, semantics_by_unit, created_at=started_at
+        plan, group, semantics_by_unit, created_at=started_at, shared_core=shared_core
     )
     output = group_directory(translations_root, plan, group)
     if output.exists():
@@ -112,7 +137,14 @@ def build_group_translation(
         raise RuntimeError("OpenCode executable is not installed or not on PATH")
     require_translator_model(executable)
     output.mkdir(parents=True, exist_ok=False)
-    prompt = build_translator_prompt(scope, semantics_by_unit)
+    core_source: str | None = None
+    if shared_core is not None:
+        core_source = getattr(shared_core, "source", None)
+        if core_source is None:
+            source_path = getattr(shared_core, "source_path", None)
+            if isinstance(source_path, Path):
+                core_source = source_path.read_text(encoding="utf-8")
+    prompt = build_translator_prompt(scope, semantics_by_unit, core_source)
     with tempfile.TemporaryDirectory(prefix="spec2lean-translation-") as temporary_name:
         temporary = Path(temporary_name)
         scope_path = temporary / "translation-scope.json"
@@ -167,7 +199,7 @@ def build_group_translation(
                 encoding="utf-8",
             )
         metadata = {
-            "schemaVersion": 2,
+            "schemaVersion": TRANSLATION_SCHEMA_VERSION,
             "phase": "LLM_GROUP_TRANSLATOR",
             "planRunId": scope.plan_run_id,
             "group": {"name": scope.group, "unitIds": list(scope.unit_ids)},
@@ -186,7 +218,18 @@ def build_group_translation(
                 {"unitId": unit_id, "runId": dict(scope.semantics_run_ids)[unit_id], "artifactHash": artifact_hash}
                 for unit_id, artifact_hash in scope.semantics_artifact_hashes
             ],
-            "inputBoundary": "PHASE_4_SEMANTIC_ARTIFACTS_ONLY",
+            "inputBoundary": (
+                "PHASE_4_AND_FROZEN_SHARED_CORE"
+                if scope.shared_core is not None
+                else "PHASE_4_SEMANTIC_ARTIFACTS_ONLY"
+            ),
+            "sharedCore": (
+                {
+                    key: scope.shared_core[key]
+                    for key in ("coreRunId", "manifestHash", "sourceHash", "leanModule")
+                }
+                if scope.shared_core is not None else None
+            ),
             "targetLanguage": "Lean",
             "targetVersion": "4",
             "command": command[:-1] + ["<lean-translator-prompt>"],
@@ -200,7 +243,11 @@ def build_group_translation(
         run_path = output / "translator-run.json"
         run_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         if error is None:
-            diagnostics = validate_published(plan, semantics_by_unit, output)
+            core_manifest = getattr(shared_core, "manifest", shared_core)
+            diagnostics = validate_published(
+                plan, semantics_by_unit, output,
+                core_manifest=core_manifest if isinstance(core_manifest, dict) else None,
+            )
             if diagnostics:
                 error = "stored translation failed deterministic validation: " + "; ".join(item["message"] for item in diagnostics)
                 metadata["outcome"] = "FAILED"
@@ -215,10 +262,11 @@ def build_translation(
     plan: dict[str, Any], semantics_root: Path, translations_root: Path, *, unit_id: str,
     timeout_seconds: int = 1800,
     run_command: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+    shared_core: Any | None = None,
 ) -> Path:
     """Compatibility command: translate the complete group containing ``unit_id``."""
     return build_group_translation(
         plan, semantics_root, translations_root,
         group=group_for_unit(plan, unit_id), timeout_seconds=timeout_seconds,
-        run_command=run_command,
+        run_command=run_command, shared_core=shared_core,
     )

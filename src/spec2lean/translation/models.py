@@ -8,7 +8,7 @@ from typing import Any
 from ..util import canonical_json, stable_id
 
 
-TRANSLATION_SCHEMA_VERSION = 2
+TRANSLATION_SCHEMA_VERSION = 3
 TRANSLATOR_MODEL = "openai/gpt-5.6-sol"
 TRANSLATOR_REASONING = "medium"
 TRANSLATOR_AGENT = "spec2lean-lean-translator"
@@ -55,11 +55,12 @@ class TranslationGroupScope:
     semantic_claim_ids: tuple[tuple[str, str], ...]
     translation_run_id: str
     created_at: str
+    shared_core: dict[str, Any] | None = None
 
     @classmethod
     def from_inputs(
         cls, plan: dict[str, Any], group: str, semantics_by_unit: dict[str, dict[str, Any]],
-        *, created_at: str
+        *, created_at: str, shared_core: Any | None = None,
     ) -> TranslationGroupScope:
         from .groups import grouped_units
 
@@ -97,8 +98,106 @@ class TranslationGroupScope:
             hashes.append((unit_id, semantics_artifact_hash(semantics)))
             run_ids.append((unit_id, run_id))
             claim_refs.extend((unit_id, claim_id) for claim_id in ids)
+        relevant_shared = sorted(
+            (
+                dict(item)
+                for item in plan.get("sharedPrerequisites", [])
+                if isinstance(item, dict)
+                and set(item.get("requiredBy", [])) & set(unit_ids)
+            ),
+            key=lambda item: str(item.get("dependencyId", "")),
+        )
+        core_view: dict[str, Any] | None = None
+        if relevant_shared:
+            from .shared_core import MissingSharedAbstraction
+
+            manifest = getattr(shared_core, "manifest", shared_core)
+            if not isinstance(manifest, dict):
+                item = relevant_shared[0]
+                raise MissingSharedAbstraction(
+                    dependency_id=str(item.get("dependencyId", "")),
+                    semantic_requirement={
+                        "name": str(item.get("name", "shared semantic dependency")),
+                        "kind": str(item.get("kind", "")),
+                        "requiredBy": [str(value) for value in item.get("requiredBy", [])],
+                        "reason": str(item.get("reason", "")),
+                    },
+                    claim_refs=_shared_claim_refs(item, semantics_by_unit),
+                    detail="the frozen shared core was not supplied",
+                )
+            concepts = {
+                str(item.get("dependencyId")): item
+                for item in manifest.get("concepts", [])
+                if isinstance(item, dict) and isinstance(item.get("dependencyId"), str)
+            }
+            required_ids = [str(item["dependencyId"]) for item in relevant_shared]
+            for item in relevant_shared:
+                dependency_id = str(item["dependencyId"])
+                if dependency_id not in concepts:
+                    raise MissingSharedAbstraction(
+                        dependency_id=dependency_id,
+                        semantic_requirement={
+                            "name": str(item.get("name", "shared semantic dependency")),
+                            "kind": str(item.get("kind", "")),
+                            "requiredBy": [str(value) for value in item.get("requiredBy", [])],
+                            "reason": str(item.get("reason", "")),
+                        },
+                        claim_refs=_shared_claim_refs(item, semantics_by_unit),
+                        detail="the frozen shared core has no registered representation",
+                    )
+            declarations = [
+                dict(item) for item in manifest.get("declarations", [])
+                if isinstance(item, dict)
+            ]
+            required_declarations = {
+                declaration
+                for dependency_id in required_ids
+                for declaration in concepts[dependency_id].get("leanDeclarations", [])
+                if isinstance(declaration, str)
+            }
+            # Include helper mappings reachable from registered declarations so validation can
+            # resolve the frozen registry without exposing unrelated semantic inputs.
+            needed = set(required_declarations)
+            changed = True
+            while changed:
+                changed = False
+                for mapping in declarations:
+                    name = mapping.get("declaration")
+                    supports = {
+                        value for value in mapping.get("supportsDeclarations", [])
+                        if isinstance(value, str)
+                    }
+                    if isinstance(name, str) and (name in needed or supports & needed):
+                        before = len(needed)
+                        needed.add(name)
+                        needed.update(supports)
+                        changed = changed or len(needed) != before
+            core_view = {
+                "coreRunId": manifest.get("coreRunId"),
+                "manifestHash": (
+                    getattr(shared_core, "manifest_hash", None)
+                    or manifest.get("manifestHash")
+                    or "sha256:" + hashlib.sha256(canonical_json(manifest).encode("utf-8")).hexdigest()
+                ),
+                "sourceHash": manifest.get("sourceHash"),
+                "leanModule": manifest.get("leanModule"),
+                "concepts": [dict(concepts[item]) for item in required_ids],
+                "declarations": [
+                    mapping for mapping in declarations
+                    if mapping.get("declaration") in needed
+                ],
+            }
+            if not all(
+                isinstance(core_view.get(field), str) and core_view[field]
+                for field in ("coreRunId", "manifestHash", "sourceHash", "leanModule")
+            ):
+                raise ValueError("shared-core identity and integrity hashes are incomplete")
+        elif shared_core is not None:
+            raise ValueError("a shared core was supplied but this translation group has no shared prerequisites")
+
         translation_run_id = stable_id(
-            "translation-group-run", plan["planRunId"], group, canonical_json(hashes)
+            "translation-group-run", plan["planRunId"], group, canonical_json(hashes),
+            canonical_json(_core_reference(core_view)),
         )
         return cls(
             plan_run_id=str(plan["planRunId"]),
@@ -111,6 +210,7 @@ class TranslationGroupScope:
             semantic_claim_ids=tuple(claim_refs),
             translation_run_id=translation_run_id,
             created_at=created_at,
+            shared_core=core_view,
         )
 
     @property
@@ -126,7 +226,7 @@ class TranslationGroupScope:
         return f"{_lean_component(self.group)}.lean"
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             "schemaVersion": TRANSLATION_SCHEMA_VERSION,
             "planRunId": self.plan_run_id,
             "language": self.language,
@@ -145,6 +245,13 @@ class TranslationGroupScope:
             "createdAt": self.created_at,
             "suggestedNamespace": self.suggested_namespace,
         }
+        if self.shared_core is not None:
+            result["sharedCore"] = {
+                **_core_reference(self.shared_core),
+                "concepts": [dict(item) for item in self.shared_core.get("concepts", [])],
+                "declarations": [dict(item) for item in self.shared_core.get("declarations", [])],
+            }
+        return result
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> TranslationGroupScope:
@@ -156,10 +263,22 @@ class TranslationGroupScope:
             semantics_run_ids=tuple((item["unitId"], item["runId"]) for item in artifacts),
             semantic_claim_ids=tuple((item["unitId"], item["claimId"]) for item in value["semanticClaimRefs"]),
             translation_run_id=value["translationRunId"], created_at=value["createdAt"],
+            shared_core=dict(value["sharedCore"]) if isinstance(value.get("sharedCore"), dict) else None,
         )
 
-    def manifest(self, declarations: list[dict[str, Any]]) -> dict[str, Any]:
-        return {
+    @property
+    def shared_dependency_ids(self) -> tuple[str, ...]:
+        if self.shared_core is None:
+            return ()
+        return tuple(
+            str(item["dependencyId"])
+            for item in self.shared_core.get("concepts", [])
+        )
+
+    def manifest(
+        self, declarations: list[dict[str, Any]], shared_uses: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
+        result = {
             "schemaVersion": TRANSLATION_SCHEMA_VERSION,
             "phase": "LLM_GROUP_TRANSLATOR",
             "planRunId": self.plan_run_id,
@@ -180,8 +299,37 @@ class TranslationGroupScope:
             "leanFile": self.lean_file,
             "createdAt": self.created_at,
             "declarations": declarations,
+            "sharedCore": _core_reference(self.shared_core),
+            "sharedUses": list(shared_uses or []),
         }
+        return result
 
 
-# Import compatibility for extensions while the schema-v2 type is group-scoped.
+def _core_reference(core: dict[str, Any] | None) -> dict[str, str] | None:
+    if core is None:
+        return None
+    return {
+        key: str(core[key])
+        for key in ("coreRunId", "manifestHash", "sourceHash", "leanModule")
+    }
+
+
+def _shared_claim_refs(
+    prerequisite: dict[str, Any], semantics_by_unit: dict[str, dict[str, Any]]
+) -> list[dict[str, str]]:
+    dependency_id = prerequisite.get("dependencyId")
+    refs: list[dict[str, str]] = []
+    for unit_id in prerequisite.get("requiredBy", []):
+        semantics = semantics_by_unit.get(str(unit_id), {})
+        for dependency in (semantics.get("semantics") or {}).get("dependencies", []):
+            if isinstance(dependency, dict) and dependency.get("dependencyId") == dependency_id:
+                refs.extend(
+                    {"unitId": str(unit_id), "claimId": str(claim_id)}
+                    for claim_id in dependency.get("semanticClaimIds", [])
+                    if isinstance(claim_id, str)
+                )
+    return refs
+
+
+# Import compatibility for extensions while the type remains group-scoped.
 TranslationScope = TranslationGroupScope

@@ -15,8 +15,9 @@ from .models import (
 )
 
 
-SUBMISSION_FIELDS = {"leanSource", "declarations"}
+SUBMISSION_FIELDS = {"leanSource", "declarations", "sharedUses"}
 MAPPING_FIELDS = {"declaration", "role", "claimRefs", "supportsDeclarations"}
+SHARED_USE_FIELDS = {"dependencyId", "leanDeclarations"}
 LEAN_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_']*(?:\.[A-Za-z_][A-Za-z0-9_']*)*$")
 DECLARATION = re.compile(
     r"^\s*(?:(?:private|protected|noncomputable|partial)\s+)*"
@@ -34,6 +35,48 @@ FORBIDDEN = (
     ("FORBIDDEN_UNSAFE", re.compile(r"\bunsafe\b"), "Lean source contains forbidden unsafe code"),
     ("FORBIDDEN_PARTIAL", re.compile(r"\bpartial\b"), "Lean source contains a forbidden partial definition"),
 )
+
+
+def _shared_claims_by_dependency(
+    scope: TranslationGroupScope, semantics_by_unit: dict[str, dict[str, Any]]
+) -> dict[str, set[tuple[str, str]]]:
+    required = set(scope.shared_dependency_ids)
+    result: dict[str, set[tuple[str, str]]] = {dependency_id: set() for dependency_id in required}
+    for unit_id, artifact in semantics_by_unit.items():
+        claims = {
+            item.get("claimId")
+            for item in (artifact.get("semantics") or {}).get("claims", [])
+            if isinstance(item, dict) and isinstance(item.get("claimId"), str)
+        }
+        for dependency in (artifact.get("semantics") or {}).get("dependencies", []):
+            if not isinstance(dependency, dict):
+                continue
+            dependency_id = dependency.get("dependencyId")
+            if dependency_id not in required:
+                continue
+            for claim_id in dependency.get("semanticClaimIds", []):
+                if isinstance(claim_id, str) and claim_id in claims:
+                    result[str(dependency_id)].add((unit_id, claim_id))
+    return result
+
+
+def _core_concepts(scope: TranslationGroupScope) -> dict[str, dict[str, Any]]:
+    if scope.shared_core is None:
+        return {}
+    return {
+        str(item.get("dependencyId")): item
+        for item in scope.shared_core.get("concepts", [])
+        if isinstance(item, dict) and isinstance(item.get("dependencyId"), str)
+    }
+
+
+def _core_reference(core: dict[str, Any] | None) -> dict[str, str] | None:
+    if core is None:
+        return None
+    return {
+        key: str(core[key])
+        for key in ("coreRunId", "manifestHash", "sourceHash", "leanModule")
+    }
 
 
 def _diagnostic(code: str, message: str, path: str = "$") -> dict[str, str]:
@@ -150,6 +193,125 @@ def validate_submission(
     if source and not declared:
         diagnostics.append(_diagnostic("NO_LEAN_DECLARATIONS", "Lean source must contain at least one named declaration", "$.leanSource"))
 
+    core_concepts = _core_concepts(scope)
+    core_declarations = {
+        declaration
+        for concept in core_concepts.values()
+        for declaration in concept.get("leanDeclarations", [])
+        if isinstance(declaration, str)
+    }
+    shared_claims = _shared_claims_by_dependency(scope, semantics_by_unit)
+    shared_claim_refs = {
+        ref for refs in shared_claims.values() for ref in refs
+    }
+    if scope.shared_core is not None:
+        module = str(scope.shared_core["leanModule"])
+        imports = {
+            value
+            for line in _without_comments_and_strings(source).splitlines()
+            if (match := re.match(r"^\s*import\s+([^\s]+)\s*$", line))
+            for value in (match.group(1),)
+        }
+        if module not in imports:
+            diagnostics.append(_diagnostic(
+                "MISSING_SHARED_CORE_IMPORT",
+                f"Lean source must import the frozen shared core module exactly: {module}",
+                "$.leanSource",
+            ))
+    for name in sorted(set(declared) & core_declarations):
+        diagnostics.append(_diagnostic(
+            "SHARED_DECLARATION_REDEFINED",
+            f"unit source redeclares a Lean declaration owned by the shared core: {name}",
+            "$.leanSource",
+        ))
+
+    raw_shared_uses = submission.get("sharedUses", [])
+    if not isinstance(raw_shared_uses, list):
+        diagnostics.append(_diagnostic("EXPECTED_ARRAY", "sharedUses must be an array", "$.sharedUses"))
+        raw_shared_uses = []
+    shared_uses: list[dict[str, Any]] = []
+    seen_shared: set[str] = set()
+    clean_source = _without_comments_and_strings(source)
+    for index, raw in enumerate(raw_shared_uses):
+        path = f"$.sharedUses[{index}]"
+        if not isinstance(raw, dict):
+            diagnostics.append(_diagnostic("EXPECTED_OBJECT", "shared use must be an object", path))
+            continue
+        for field in sorted(set(raw) - SHARED_USE_FIELDS):
+            diagnostics.append(_diagnostic("UNEXPECTED_FIELD", f"unsupported shared-use field: {field}", f"{path}.{field}"))
+        dependency_id = raw.get("dependencyId")
+        if not isinstance(dependency_id, str) or dependency_id not in core_concepts:
+            diagnostics.append(_diagnostic(
+                "MISSING_SHARED_ABSTRACTION",
+                f"shared use does not resolve through the frozen core: {dependency_id!r}",
+                f"{path}.dependencyId",
+            ))
+            continue
+        if dependency_id in seen_shared:
+            diagnostics.append(_diagnostic(
+                "DUPLICATE_SHARED_USE", f"shared dependency is listed twice: {dependency_id}", path
+            ))
+        seen_shared.add(dependency_id)
+        raw_names = raw.get("leanDeclarations")
+        if not isinstance(raw_names, list) or not raw_names:
+            diagnostics.append(_diagnostic(
+                "MISSING_SHARED_DECLARATION_USE",
+                "shared use must name at least one registered Lean declaration",
+                f"{path}.leanDeclarations",
+            ))
+            raw_names = []
+        registered = {
+            item for item in core_concepts[dependency_id].get("leanDeclarations", [])
+            if isinstance(item, str)
+        }
+        names: list[str] = []
+        for item_index, name in enumerate(raw_names):
+            item_path = f"{path}.leanDeclarations[{item_index}]"
+            if not isinstance(name, str) or name not in registered:
+                diagnostics.append(_diagnostic(
+                    "UNREGISTERED_SHARED_DECLARATION",
+                    f"declaration is not registered for {dependency_id}: {name!r}",
+                    item_path,
+                ))
+            elif name in names:
+                diagnostics.append(_diagnostic(
+                    "DUPLICATE_SHARED_DECLARATION_USE", f"duplicate shared declaration: {name}", item_path
+                ))
+            else:
+                names.append(name)
+        if names and not any(re.search(rf"(?<![A-Za-z0-9_']){re.escape(name)}(?![A-Za-z0-9_'])", clean_source) for name in names):
+            diagnostics.append(_diagnostic(
+                "UNUSED_SHARED_ABSTRACTION",
+                f"unit source does not reference a registered declaration for {dependency_id}",
+                f"{path}.leanDeclarations",
+            ))
+        refs = [
+            {"unitId": unit_id, "claimId": claim_id}
+            for unit_id, claim_id in sorted(shared_claims.get(dependency_id, set()))
+        ]
+        if not refs:
+            diagnostics.append(_diagnostic(
+                "MISSING_SHARED_SEMANTIC_MAPPING",
+                f"shared dependency has no Phase-4 semantic claim linkage: {dependency_id}",
+                path,
+            ))
+        shared_uses.append({
+            "dependencyId": dependency_id,
+            "leanDeclarations": names,
+            "claimRefs": refs,
+        })
+    missing_shared = sorted(set(core_concepts) - seen_shared)
+    if missing_shared:
+        diagnostics.append(_diagnostic(
+            "MISSING_SHARED_USE",
+            f"every group-required shared dependency must be reused; missing={missing_shared}",
+            "$.sharedUses",
+        ))
+    if scope.shared_core is None and raw_shared_uses:
+        diagnostics.append(_diagnostic(
+            "UNEXPECTED_SHARED_USE", "sharedUses requires a frozen shared core", "$.sharedUses"
+        ))
+
     raw_mappings = submission.get("declarations")
     if not isinstance(raw_mappings, list):
         diagnostics.append(_diagnostic("EXPECTED_ARRAY", "declarations must be an array", "$.declarations"))
@@ -173,6 +335,12 @@ def validate_submission(
         if name in mapped_names:
             diagnostics.append(_diagnostic("DUPLICATE_DECLARATION_MAPPING", f"duplicate declaration mapping: {name}", f"{path}.declaration"))
         mapped_names.add(name)
+        if name in core_declarations:
+            diagnostics.append(_diagnostic(
+                "SHARED_DECLARATION_REDEFINED",
+                f"unit mapping attempts to own a declaration registered by the shared core: {name}",
+                f"{path}.declaration",
+            ))
         if name not in declared:
             diagnostics.append(_diagnostic("MISSING_LEAN_DECLARATION", f"mapped declaration is not present in Lean source: {name}", f"{path}.declaration"))
         if role not in DECLARATION_ROLES:
@@ -202,6 +370,13 @@ def validate_submission(
             seen_refs.add(key)
             if key not in known_claims:
                 diagnostics.append(_diagnostic("UNKNOWN_SEMANTIC_CLAIM", f"semantic claim is not in the matching Phase-4 artifact: {unit_id}/{claim_id}", ref_path))
+            if key in shared_claim_refs:
+                diagnostics.append(_diagnostic(
+                    "SHARED_DEPENDENCY_REDEFINED",
+                    "shared semantic claims must be covered through the frozen core, not a local declaration: "
+                    f"{unit_id}/{claim_id}",
+                    ref_path,
+                ))
             claim_refs.append({"unitId": unit_id, "claimId": claim_id})
         if not isinstance(supports, list) or not all(isinstance(item, str) and LEAN_NAME.fullmatch(item) for item in supports):
             diagnostics.append(_diagnostic("INVALID_SUPPORT_MAPPING", "supportsDeclarations must be an array of qualified ASCII Lean identifiers", f"{path}.supportsDeclarations"))
@@ -256,24 +431,43 @@ def validate_submission(
         needs_execution = instruction and bool(semantic_payload.get("stateEffects") or semantic_payload.get("predication"))
         if needs_execution and "EXECUTION" not in roles_by_unit[unit_id]:
             diagnostics.append(_diagnostic("MISSING_EXECUTION_MAPPING", f"stateful or predicated instruction {unit_id} requires a mapped EXECUTION declaration", "$.declarations"))
-    return ({"leanSource": source, "manifest": scope.manifest(mappings)}, []) if not diagnostics else (None, diagnostics)
+    return (
+        {"leanSource": source, "manifest": scope.manifest(mappings, shared_uses)}, []
+    ) if not diagnostics else (None, diagnostics)
 
 
 def validate_manifest(
-    plan: dict[str, Any], semantics_by_unit: dict[str, dict[str, Any]], source: str, manifest: Any
+    plan: dict[str, Any], semantics_by_unit: dict[str, dict[str, Any]], source: str, manifest: Any,
+    core_manifest: dict[str, Any] | None = None,
 ) -> list[dict[str, str]]:
     if not isinstance(manifest, dict):
         return [_diagnostic("EXPECTED_OBJECT", "translation manifest must be an object")]
     try:
+        recorded_core = manifest.get("sharedCore")
+        if recorded_core is not None and core_manifest is None:
+            return [_diagnostic(
+                "MISSING_SHARED_CORE",
+                "translation manifest references a shared core that was not supplied for validation",
+                "$.sharedCore",
+            )]
         scope = TranslationGroupScope.from_inputs(
             plan, manifest.get("group", {}).get("name", ""), semantics_by_unit,
             created_at=manifest.get("createdAt", ""),
+            shared_core=core_manifest,
         )
     except (KeyError, ValueError, AttributeError) as exc:
         return [_diagnostic("INPUT_BOUNDARY", str(exc))]
     candidate, diagnostics = validate_submission(scope, semantics_by_unit, {
         "leanSource": source,
         "declarations": manifest.get("declarations"),
+        "sharedUses": [
+            {
+                "dependencyId": item.get("dependencyId"),
+                "leanDeclarations": item.get("leanDeclarations"),
+            }
+            for item in manifest.get("sharedUses", [])
+            if isinstance(item, dict)
+        ],
     })
     translator = manifest.get("translator")
     supported_translator = (
@@ -312,12 +506,17 @@ def validate_run_metadata(scope: TranslationGroupScope, metadata: Any) -> list[d
             {"unitId": unit_id, "runId": dict(scope.semantics_run_ids)[unit_id], "artifactHash": artifact_hash}
             for unit_id, artifact_hash in scope.semantics_artifact_hashes
         ],
-        "inputBoundary": "PHASE_4_SEMANTIC_ARTIFACTS_ONLY",
         "targetLanguage": LEAN_LANGUAGE,
         "targetVersion": LEAN_VERSION,
         "exitCode": 0,
         "outcome": "SUCCESS",
         "error": None,
+        "sharedCore": _core_reference(scope.shared_core),
+        "inputBoundary": (
+            "PHASE_4_AND_FROZEN_SHARED_CORE"
+            if scope.shared_core is not None
+            else "PHASE_4_SEMANTIC_ARTIFACTS_ONLY"
+        ),
     }
     diagnostics = []
     configuration = (metadata.get("model"), metadata.get("reasoning"))
@@ -351,7 +550,8 @@ def validate_run_metadata(scope: TranslationGroupScope, metadata: Any) -> list[d
 
 
 def validate_published(
-    plan: dict[str, Any], semantics_by_unit: dict[str, dict[str, Any]], directory: Path
+    plan: dict[str, Any], semantics_by_unit: dict[str, dict[str, Any]], directory: Path,
+    core_manifest: dict[str, Any] | None = None,
 ) -> list[dict[str, str]]:
     diagnostics: list[dict[str, str]] = []
     manifest_path = directory / "translation-manifest.json"
@@ -372,7 +572,9 @@ def validate_published(
     if not source.strip():
         diagnostics.append(_diagnostic("EMPTY_LEAN_FILE", f"{lean_path.name} is empty", "$.leanFile"))
     if manifest is not None:
-        diagnostics.extend(validate_manifest(plan, semantics_by_unit, source, manifest))
+        diagnostics.extend(validate_manifest(
+            plan, semantics_by_unit, source, manifest, core_manifest=core_manifest
+        ))
     try:
         metadata = json.loads(run_path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -386,6 +588,7 @@ def validate_published(
             scope = TranslationGroupScope.from_inputs(
                 plan, (manifest or {}).get("group", {}).get("name", ""), semantics_by_unit,
                 created_at=(manifest or {}).get("createdAt", ""),
+                shared_core=core_manifest,
             )
             diagnostics.extend(validate_run_metadata(scope, metadata))
         except (KeyError, ValueError, AttributeError) as exc:

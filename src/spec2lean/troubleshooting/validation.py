@@ -60,6 +60,14 @@ def validate_repair_submission(
         {
             "leanSource": submission.get("leanSource"),
             "declarations": submission.get("declarations"),
+            "sharedUses": [
+                {
+                    "dependencyId": item.get("dependencyId"),
+                    "leanDeclarations": item.get("leanDeclarations"),
+                }
+                for item in original_manifest.get("sharedUses", [])
+                if isinstance(item, dict)
+            ],
         },
     )
     diagnostics.extend(translation_diagnostics)
@@ -111,6 +119,12 @@ def validate_repair_submission(
         })
 
     if candidate is not None:
+        if candidate["manifest"].get("sharedCore") != original_manifest.get("sharedCore") or candidate["manifest"].get("sharedUses") != original_manifest.get("sharedUses"):
+            diagnostics.append({
+                "code": "SHARED_CORE_CHANGED",
+                "message": "compiler repair must preserve the frozen shared-core binding and uses",
+                "path": "$.sharedUses",
+            })
         if (
             candidate["leanSource"] == original_source
             and candidate["manifest"] == original_manifest

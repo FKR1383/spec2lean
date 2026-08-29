@@ -142,7 +142,10 @@ class ArtifactRepository:
         return {
             **next(item for item in self.list_runs() if item["runId"] == run_id),
             "phase1": run.get("phase1"),
-            "plan": {key: plan.get(key) for key in ("graphStatus", "dependencies", "externalPrerequisites", "blockedUnitIds")}
+            "plan": {key: plan.get(key) for key in (
+                "graphStatus", "dependencies", "externalPrerequisites",
+                "sharedPrerequisites", "blockedUnitIds",
+            )}
             if plan else None,
             "layers": self._layers(plan, units),
             "units": units,
@@ -233,8 +236,9 @@ class ArtifactRepository:
             if not manifest:
                 continue
             schema = manifest.get("schemaVersion")
-            relevant = schema == 2 and unit_id in (manifest.get("group") or {}).get("unitIds", [])
-            relevant = relevant or schema != 2 and (manifest.get("unit") or {}).get("unitId") == unit_id
+            grouped = schema in {2, 3}
+            relevant = grouped and unit_id in (manifest.get("group") or {}).get("unitIds", [])
+            relevant = relevant or not grouped and (manifest.get("unit") or {}).get("unitId") == unit_id
             if not relevant:
                 continue
             lean_path = manifest_path.parent / str(manifest.get("leanFile") or "Unit.lean")
@@ -244,7 +248,7 @@ class ArtifactRepository:
                 source = ""
             mappings = []
             for item in manifest.get("declarations", []):
-                if schema == 2:
+                if grouped:
                     refs = [ref for ref in item.get("claimRefs", []) if ref.get("unitId") == unit_id]
                     if not refs:
                         continue

@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,7 @@ from spec2lean.translation.models import (
 from spec2lean.translation.prompt import build_translator_prompt
 from spec2lean.translation.runner import build_translation, opencode_config
 from spec2lean.translation.revision import revise_translation
+from spec2lean.translation.shared_core import MissingSharedAbstraction
 from spec2lean.translation.store import unit_directory
 from spec2lean.translation.validation import (
     forbidden_constructs,
@@ -34,7 +36,7 @@ GROUP = "InstructionSemantics"
 
 def _inputs() -> tuple[dict, dict]:
     plan = {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "planRunId": "plan:translation-test",
         "language": "synthetic",
         "version": "1.0",
@@ -48,6 +50,7 @@ def _inputs() -> tuple[dict, dict]:
             "supportingNodeIds": ["node:alpha"],
             "origin": "INFERRED",
         }],
+        "sharedPrerequisites": [],
     }
     semantics = {
         "schemaVersion": 1,
@@ -124,11 +127,56 @@ def _submission() -> dict:
             {"declaration": f"{prefix}.result", "role": "OPERATION", "claimRefs": _refs("claim:op")},
             {"declaration": f"{prefix}.exec", "role": "EXECUTION", "claimRefs": _refs("claim:state", "claim:op")},
         ],
+        "sharedUses": [],
     }
 
 
 def _codes(diagnostics: list[dict]) -> set[str]:
     return {item["code"] for item in diagnostics}
+
+
+def _shared_inputs() -> tuple[dict, dict, dict]:
+    plan, semantics = _inputs()
+    dependency_id = "shared:value"
+    plan["sharedPrerequisites"] = [{
+        "dependencyId": dependency_id,
+        "name": "Shared bounded value",
+        "kind": "synthetic-value-domain",
+        "reason": "The requested units consume the same bounded value domain.",
+        "sourceNodeIds": ["node:alpha"],
+        "requiredBy": [UNIT["unitId"]],
+    }]
+    semantics["schemaVersion"] = 2
+    semantics["semantics"]["dependencies"] = [{
+        "dependencyId": dependency_id,
+        "concept": "Shared bounded value",
+        "description": "The unit consumes the specification's shared bounded value domain.",
+        "semanticClaimIds": ["claim:type"],
+        "evidenceIds": [],
+    }]
+    declaration = "Spec2Lean.Synthetic.Shared.Value"
+    core_manifest = {
+        "coreRunId": "shared-core-run:" + "1" * 24,
+        "sourceHash": "sha256:" + "2" * 64,
+        "leanModule": "Spec2LeanShared.Synthetic.V10.C123.Core",
+        "concepts": [{
+            "dependencyId": dependency_id,
+            "name": "Shared bounded value",
+            "kind": "synthetic-value-domain",
+            "sourceNodeIds": ["node:alpha"],
+            "requiredBy": [UNIT["unitId"]],
+            "semanticInputHash": "sha256:" + "3" * 64,
+            "leanDeclarations": [declaration],
+            "claimRefs": _refs("claim:type"),
+        }],
+        "declarations": [{
+            "declaration": declaration,
+            "role": "PRIMARY_TYPE",
+            "dependencyIds": [dependency_id],
+            "claimRefs": _refs("claim:type"),
+        }],
+    }
+    return plan, semantics, core_manifest
 
 
 def test_valid_translation_artifact_and_deterministic_metadata():
@@ -149,7 +197,7 @@ def test_valid_translation_artifact_and_deterministic_metadata():
     assert validate_manifest(plan, semantics_by_unit, candidate["leanSource"], manifest) == []
 
     metadata = {
-        "schemaVersion": 2, "phase": "LLM_GROUP_TRANSLATOR", "planRunId": scope.plan_run_id,
+        "schemaVersion": 3, "phase": "LLM_GROUP_TRANSLATOR", "planRunId": scope.plan_run_id,
         "group": {"name": GROUP, "unitIds": [UNIT["unitId"]]},
         "translationRunId": scope.translation_run_id,
         "translator": "opencode", "model": TRANSLATOR_MODEL, "reasoning": TRANSLATOR_REASONING,
@@ -185,6 +233,182 @@ def test_stale_semantic_hash_is_rejected():
     assert "DETERMINISTIC_MISMATCH" in _codes(
         validate_manifest(plan, semantics_by_unit, candidate["leanSource"], candidate["manifest"])
     )
+
+
+def test_group_reuses_frozen_core_and_rejects_local_shared_representations():
+    plan, semantics, core_manifest = _shared_inputs()
+    semantics_by_unit = {UNIT["unitId"]: semantics}
+    scope = TranslationGroupScope.from_inputs(
+        plan,
+        GROUP,
+        semantics_by_unit,
+        created_at="2026-01-02T03:04:05.000000Z",
+        shared_core=core_manifest,
+    )
+    shared_name = "Spec2Lean.Synthetic.Shared.Value"
+    source = f"""import {core_manifest['leanModule']}
+
+namespace Spec2Lean.Synthetic.AlphaU32
+
+structure MachineState where
+  destination : {shared_name}
+
+def result (a b : {shared_name}) : {shared_name} := a
+
+def exec (state : MachineState) (guard : Bool) (a b : {shared_name}) : MachineState :=
+  if guard then {{ destination := result a b }} else state
+
+end Spec2Lean.Synthetic.AlphaU32
+"""
+    prefix = "Spec2Lean.Synthetic.AlphaU32"
+    submission = {
+        "leanSource": source,
+        "sharedUses": [{
+            "dependencyId": "shared:value",
+            "leanDeclarations": [shared_name],
+        }],
+        "declarations": [
+            {
+                "declaration": f"{prefix}.MachineState",
+                "role": "PRIMARY_TYPE",
+                "claimRefs": _refs("claim:state"),
+            },
+            {
+                "declaration": f"{prefix}.result",
+                "role": "OPERATION",
+                "claimRefs": _refs("claim:op"),
+            },
+            {
+                "declaration": f"{prefix}.exec",
+                "role": "EXECUTION",
+                "claimRefs": _refs("claim:state", "claim:op"),
+            },
+        ],
+    }
+    candidate, diagnostics = validate_submission(scope, semantics_by_unit, submission)
+    assert diagnostics == [] and candidate is not None
+    assert candidate["manifest"]["sharedCore"] == {
+        "coreRunId": core_manifest["coreRunId"],
+        "manifestHash": scope.shared_core["manifestHash"],
+        "sourceHash": core_manifest["sourceHash"],
+        "leanModule": core_manifest["leanModule"],
+    }
+    assert candidate["manifest"]["sharedUses"] == [{
+        "dependencyId": "shared:value",
+        "leanDeclarations": [shared_name],
+        "claimRefs": _refs("claim:type"),
+    }]
+
+    incompatible = copy.deepcopy(submission)
+    incompatible["leanSource"] = incompatible["leanSource"].replace(
+        "structure MachineState", "structure LocalValue where\n  payload : Nat\n\nstructure MachineState"
+    )
+    incompatible["declarations"].insert(0, {
+        "declaration": f"{prefix}.LocalValue",
+        "role": "PRIMARY_TYPE",
+        "claimRefs": _refs("claim:type"),
+    })
+    _, diagnostics = validate_submission(scope, semantics_by_unit, incompatible)
+    assert "SHARED_DEPENDENCY_REDEFINED" in _codes(diagnostics)
+
+    exact_redefinition = copy.deepcopy(submission)
+    exact_redefinition["leanSource"] = exact_redefinition["leanSource"].replace(
+        f"namespace {prefix}",
+        "namespace Spec2Lean.Synthetic.Shared\nstructure Value where\n  payload : Nat\nend Spec2Lean.Synthetic.Shared\n\n"
+        f"namespace {prefix}",
+        1,
+    )
+    exact_redefinition["declarations"].insert(0, {
+        "declaration": shared_name,
+        "role": "PRIMARY_TYPE",
+        "claimRefs": _refs("claim:type"),
+    })
+    _, diagnostics = validate_submission(scope, semantics_by_unit, exact_redefinition)
+    assert "SHARED_DECLARATION_REDEFINED" in _codes(diagnostics)
+
+
+def test_missing_frozen_shared_abstraction_is_structured_and_stops_translation():
+    plan, semantics, core_manifest = _shared_inputs()
+    semantics_by_unit = {UNIT["unitId"]: semantics}
+    with pytest.raises(MissingSharedAbstraction) as raised:
+        TranslationGroupScope.from_inputs(
+            plan, GROUP, semantics_by_unit, created_at="now", shared_core=None
+        )
+    assert raised.value.to_dict() == {
+        "code": "MISSING_SHARED_ABSTRACTION",
+        "dependencyId": "shared:value",
+        "semanticRequirement": {
+            "name": "Shared bounded value",
+            "kind": "synthetic-value-domain",
+            "requiredBy": [UNIT["unitId"]],
+            "reason": "The requested units consume the same bounded value domain.",
+        },
+        "claimRefs": _refs("claim:type"),
+        "detail": "the frozen shared core was not supplied",
+    }
+
+    absent = copy.deepcopy(core_manifest)
+    absent["concepts"] = []
+    absent["declarations"] = []
+    with pytest.raises(MissingSharedAbstraction) as raised:
+        TranslationGroupScope.from_inputs(
+            plan, GROUP, semantics_by_unit, created_at="now", shared_core=absent
+        )
+    assert raised.value.dependency_id == "shared:value"
+    assert raised.value.claim_refs == _refs("claim:type")
+
+
+def test_concurrent_group_scopes_bind_the_same_frozen_core_snapshot():
+    plan, alpha_semantics, core_manifest = _shared_inputs()
+    beta = {
+        "unitId": "unit:beta", "name": "beta.u32", "sourceNodeIds": ["node:beta"]
+    }
+    beta_group = "SecondInstructionSemantics"
+    plan["requestedUnits"].append(beta)
+    plan["translationGroups"].append({
+        "name": beta_group,
+        "unitIds": [beta["unitId"]],
+        "reason": "A second independent synthetic group.",
+        "supportingNodeIds": ["node:beta"],
+        "origin": "INFERRED",
+    })
+    plan["sharedPrerequisites"][0]["requiredBy"].append(beta["unitId"])
+    beta_semantics = copy.deepcopy(alpha_semantics)
+    beta_semantics["unit"] = copy.deepcopy(beta)
+    beta_semantics["runId"] = "semantic-run:beta"
+    beta_semantics["semantics"]["identity"]["name"] = beta["name"]
+    core_manifest["concepts"][0]["requiredBy"].append(beta["unitId"])
+    core_manifest["concepts"][0]["claimRefs"].append({
+        "unitId": beta["unitId"], "claimId": "claim:type"
+    })
+    core_manifest["declarations"][0]["claimRefs"].append({
+        "unitId": beta["unitId"], "claimId": "claim:type"
+    })
+
+    calls = (
+        (GROUP, {UNIT["unitId"]: alpha_semantics}),
+        (beta_group, {beta["unitId"]: beta_semantics}),
+    )
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        scopes = list(executor.map(
+            lambda item: TranslationGroupScope.from_inputs(
+                plan, item[0], item[1], created_at="now", shared_core=core_manifest
+            ),
+            calls,
+        ))
+
+    references = {
+        tuple(scope.shared_core[key] for key in (
+            "coreRunId", "manifestHash", "sourceHash", "leanModule"
+        ))
+        for scope in scopes
+        if scope.shared_core is not None
+    }
+    assert len(references) == 1
+    assert {
+        scope.shared_core["concepts"][0]["leanDeclarations"][0]
+        for scope in scopes if scope.shared_core is not None
+    } == {"Spec2Lean.Synthetic.Shared.Value"}
 
 
 def test_unknown_claim_and_operation_without_mapping_are_rejected():
@@ -303,7 +527,9 @@ def test_structured_translator_submission_tool(tmp_path):
     stored = json.loads(path.read_text())
     assert stored["manifest"]["translationRunId"] == scope.translation_run_id
     assert [item["name"] for item in tool_definitions()] == ["submit_translation"]
-    assert tool_definitions()[0]["inputSchema"]["required"] == ["leanSource", "declarations"]
+    assert tool_definitions()[0]["inputSchema"]["required"] == [
+        "leanSource", "declarations", "sharedUses"
+    ]
 
 
 def test_implementation_helper_may_trace_through_supported_semantic_declaration():

@@ -14,6 +14,7 @@ from ..semantics.store import load_semantics
 from ..util import canonical_json, sha256_file, stable_id
 from .groups import group_for_unit, grouped_units
 from .models import (
+    TRANSLATION_SCHEMA_VERSION,
     TRANSLATOR_AGENT,
     TRANSLATOR_MODEL,
     TRANSLATOR_REASONING,
@@ -70,6 +71,7 @@ def run_translation_revision_session(
         context["diagnostics"],
         context["reason"],
         context["triggeringUnitId"],
+        context.get("sharedCoreSource"),
     )
     with tempfile.TemporaryDirectory(prefix="spec2lean-translation-revision-") as temporary_name:
         temporary = Path(temporary_name)
@@ -148,6 +150,13 @@ def revise_translation(
         semantic_directories[member_id] = semantic_directory
         semantics_by_unit[member_id] = semantics
     directory, source, manifest, _ = load_group_translation(translations_root, plan, group)
+    shared_core = None
+    if isinstance(manifest.get("sharedCore"), dict):
+        from .shared_core import load_core
+
+        shared_core = load_core(
+            translations_root, plan, str(manifest["sharedCore"]["coreRunId"])
+        )
     if source_check_hash is not None:
         for path in directory.glob("revisions/*/translation-revision.json"):
             recorded = json.loads(path.read_text(encoding="utf-8"))
@@ -156,7 +165,7 @@ def revise_translation(
 
     started_at = now()
     scope = TranslationGroupScope.from_inputs(
-        plan, group, semantics_by_unit, created_at=started_at
+        plan, group, semantics_by_unit, created_at=started_at, shared_core=shared_core
     )
     lean_name = str(manifest.get("leanFile", scope.lean_file))
     lean_path = directory / lean_name
@@ -184,6 +193,13 @@ def revise_translation(
         "reason": reason,
         "triggeringUnitId": unit_id,
         "translationDirectory": str(directory),
+        "sharedCoreSource": (
+            getattr(shared_core, "source", None)
+            or (
+                shared_core.source_path.read_text(encoding="utf-8")
+                if shared_core is not None and hasattr(shared_core, "source_path") else None
+            )
+        ),
     }
     result = session_runner(context, timeout_seconds=timeout_seconds)
     if result.get("error"):
@@ -193,7 +209,11 @@ def revise_translation(
         raise ValueError("translation revision did not submit a candidate")
     candidate_source = candidate.get("leanSource")
     candidate_manifest = candidate.get("manifest")
-    validation = validate_manifest(plan, semantics_by_unit, candidate_source, candidate_manifest)
+    core_manifest = getattr(shared_core, "manifest", None)
+    validation = validate_manifest(
+        plan, semantics_by_unit, candidate_source, candidate_manifest,
+        core_manifest=core_manifest,
+    )
     if validation:
         raise ValueError(
             "translation revision failed deterministic validation: "
@@ -209,7 +229,7 @@ def revise_translation(
     new_manifest = json.dumps(candidate_manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     session = result.get("session") or {}
     run_metadata = {
-        "schemaVersion": 2,
+        "schemaVersion": TRANSLATION_SCHEMA_VERSION,
         "phase": "LLM_GROUP_TRANSLATOR",
         "planRunId": scope.plan_run_id,
         "group": {"name": group, "unitIds": list(scope.unit_ids)},
@@ -228,7 +248,12 @@ def revise_translation(
             {"unitId": member_id, "runId": dict(scope.semantics_run_ids)[member_id], "artifactHash": artifact_hash}
             for member_id, artifact_hash in scope.semantics_artifact_hashes
         ],
-        "inputBoundary": "PHASE_4_SEMANTIC_ARTIFACTS_ONLY",
+        "inputBoundary": (
+            "PHASE_4_AND_FROZEN_SHARED_CORE"
+            if scope.shared_core is not None
+            else "PHASE_4_SEMANTIC_ARTIFACTS_ONLY"
+        ),
+        "sharedCore": manifest.get("sharedCore"),
         "targetLanguage": "Lean",
         "targetVersion": "4",
         "command": session.get("command", []),
@@ -255,7 +280,9 @@ def revise_translation(
         _write_atomic(lean_path, new_source)
         _write_atomic(manifest_path, new_manifest)
         _write_atomic(run_path, json.dumps(run_metadata, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
-        published = validate_published(plan, semantics_by_unit, directory)
+        published = validate_published(
+            plan, semantics_by_unit, directory, core_manifest=core_manifest
+        )
         if published:
             raise ValueError(
                 "stored translation revision failed validation: "

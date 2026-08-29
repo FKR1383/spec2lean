@@ -36,6 +36,15 @@ Rules:
 - For an exact, source-subtree, or full-spec request, submit every required exact unit ID and no others.
 - For a conceptual family request, select only genuine members from candidateUnits.
 - External prerequisites stay external and are not scheduled requested units.
+- Identify shared prerequisites needed by the bounded requested subset. A shared prerequisite is a
+  source-level semantic concept reused by multiple requested units, or clearly specification-wide
+  infrastructure genuinely needed by a requested unit. Keep it distinct from requested units and
+  external prerequisites, and list exactly the selected unit IDs that require it in `requiredBy`.
+- Give every shared prerequisite a short stable conceptual `key`, a specification-derived `name`,
+  an open text `kind`, a planning reason, and source-node support. Do not use a built-in catalog of
+  concepts, and do not add speculative concepts for the rest of the specification.
+- Phase 2 is Lean-independent. Never choose or mention a Lean type, declaration, namespace, library,
+  data representation, or implementation strategy in a shared prerequisite.
 - Add an edge only for a real planning dependency. Independent units belong in the same layer.
 - Edge direction is prerequisite -> dependent.
 - Every edge needs a non-empty reason, source-node support, and origin EXPLICIT or INFERRED.

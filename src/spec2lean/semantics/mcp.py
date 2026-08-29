@@ -72,7 +72,17 @@ def submission_schema() -> dict[str, Any]:
     edge = _component({"condition": TEXT, "behavior": TEXT}, ["condition", "behavior"])
     state = _component({"target": TEXT, "effect": TEXT}, ["target", "effect"])
     restriction = _component({"kind": {"type": "string", "enum": list(RESTRICTION_KINDS)}, "description": TEXT}, ["kind", "description"])
-    dependency = _component({"concept": TEXT, "description": TEXT, "artifactId": TEXT}, ["concept", "description"])
+    dependency = _component({
+        "dependencyId": {"type": "string", "pattern": "^shared:"},
+        "concept": TEXT,
+        "description": TEXT,
+        "artifactId": TEXT,
+        "semanticClaimIds": {
+            "type": "array",
+            "items": {"type": "string", "pattern": "^claim:"},
+            "uniqueItems": True,
+        },
+    }, ["concept", "description"])
     claim = _component({
         "claimId": {"type": "string", "pattern": "^claim:"},
         "kind": {"type": "string", "enum": list(CLAIM_KINDS)}, "statement": TEXT,

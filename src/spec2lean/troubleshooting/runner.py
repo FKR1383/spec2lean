@@ -172,6 +172,13 @@ def run_troubleshooter(
     translation_directory, source, manifest, _ = load_translation(
         translations_root, plan, unit_id
     )
+    shared_core = None
+    if isinstance(manifest.get("sharedCore"), dict):
+        from ..translation.shared_core import load_core
+
+        shared_core = load_core(
+            translations_root, plan, str(manifest["sharedCore"]["coreRunId"])
+        )
     group = group_for_unit(plan, unit_id)
     semantics_by_unit = {
         str(member["unitId"]): load_semantics(
@@ -181,14 +188,18 @@ def run_troubleshooter(
     }
     if manifest.get("translationRunId") != check.get("translationRunId"):
         raise ValueError("Phase-6 check does not refer to the current Phase-5 translation")
-    manifest_diagnostics = validate_manifest(plan, semantics_by_unit, source, manifest)
+    manifest_diagnostics = validate_manifest(
+        plan, semantics_by_unit, source, manifest,
+        core_manifest=getattr(shared_core, "manifest", None),
+    )
     if manifest_diagnostics:
         raise ValueError(
             "build repair requires a valid Phase-5 translation manifest: "
             + "; ".join(item["message"] for item in manifest_diagnostics)
         )
     scope = TranslationGroupScope.from_inputs(
-        plan, group, semantics_by_unit, created_at=str(manifest.get("createdAt", ""))
+        plan, group, semantics_by_unit, created_at=str(manifest.get("createdAt", "")),
+        shared_core=shared_core,
     )
     lean_name = str(manifest.get("leanFile", scope.lean_file))
     lean_path = translation_directory / lean_name
@@ -211,6 +222,17 @@ def run_troubleshooter(
         "translationScope": scope.to_dict(),
         "leanSource": source,
         "translationManifest": manifest,
+        "sharedCore": (
+            {
+                "manifest": shared_core.manifest,
+                "leanSource": (
+                    getattr(shared_core, "source", None)
+                    or shared_core.source_path.read_text(encoding="utf-8")
+                ),
+                "readOnly": True,
+            }
+            if shared_core is not None else None
+        ),
         "leanVersion": check["build"].get("leanVersion"),
         "compilerDiagnostics": list(check["build"].get("diagnostics", [])),
         "priorRepairAttempts": list(prior_repair_attempts or []),

@@ -85,9 +85,200 @@ def _mapping_claim_refs(
     return refs
 
 
+def _claim_refs(values: Any) -> set[tuple[str, str]]:
+    if not isinstance(values, list):
+        return set()
+    return {
+        (str(item["unitId"]), str(item["claimId"]))
+        for item in values
+        if isinstance(item, dict)
+        and isinstance(item.get("unitId"), str)
+        and isinstance(item.get("claimId"), str)
+    }
+
+
+def _semantic_shared_claims(semantics: dict[str, Any]) -> dict[str, set[str]]:
+    result: dict[str, set[str]] = defaultdict(set)
+    for dependency in (semantics.get("semantics") or {}).get("dependencies", []):
+        if not isinstance(dependency, dict) or not isinstance(dependency.get("dependencyId"), str):
+            continue
+        result[str(dependency["dependencyId"])].update(
+            str(claim_id)
+            for claim_id in dependency.get("semanticClaimIds", [])
+            if isinstance(claim_id, str)
+        )
+    return dict(result)
+
+
+def _items_by_string_key(values: Any, key: str) -> dict[str, dict[str, Any]]:
+    if not isinstance(values, list):
+        return {}
+    return {
+        str(item[key]): item
+        for item in values
+        if isinstance(item, dict) and isinstance(item.get(key), str)
+    }
+
+
+def _string_items(value: Any) -> set[str]:
+    if not isinstance(value, list):
+        return set()
+    return {str(item) for item in value if isinstance(item, str)}
+
+
+def _core_claim_mappings(
+    unit_ids: set[str],
+    semantics_by_unit: dict[str, dict[str, Any]],
+    group_manifest: dict[str, Any],
+    core_source: str,
+    core_manifest: dict[str, Any],
+) -> tuple[set[str], dict[str, dict[str, Any]], list[dict[str, str]]]:
+    """Resolve relevant frozen-core declarations to current Phase-4 claims.
+
+    The semantic artifacts remain authoritative: ``sharedUses`` selects the
+    required dependency and declarations, while the core registry proves that
+    the declarations are owned by that dependency. Claim references used by
+    checking are derived from each unit's semantic dependency rather than from
+    the representation registry alone.
+    """
+
+    broken: list[dict[str, str]] = []
+    uses = _items_by_string_key(group_manifest.get("sharedUses"), "dependencyId")
+    concepts = _items_by_string_key(core_manifest.get("concepts"), "dependencyId")
+    flat_declarations = _items_by_string_key(core_manifest.get("declarations"), "declaration")
+    core_declared = set(lean_declarations(core_source))
+
+    expected_by_dependency: dict[str, set[tuple[str, str]]] = defaultdict(set)
+    for unit_id, semantics in semantics_by_unit.items():
+        if unit_id not in unit_ids:
+            continue
+        for dependency_id, claim_ids in _semantic_shared_claims(semantics).items():
+            expected_by_dependency[dependency_id].update(
+                (unit_id, claim_id) for claim_id in claim_ids
+            )
+
+    for dependency_id in sorted(expected_by_dependency):
+        if dependency_id not in uses:
+            broken.append(_broken(
+                "MISSING_SHARED_USE",
+                f"semantic dependency is not bound to the frozen shared core: {dependency_id}",
+            ))
+    for dependency_id in sorted(set(uses) - set(expected_by_dependency)):
+        broken.append(_broken(
+            "UNKNOWN_SHARED_USE",
+            f"group manifest binds an unused shared dependency: {dependency_id}",
+        ))
+
+    relevant_names: set[str] = set()
+    declaration_dependencies: dict[str, set[str]] = defaultdict(set)
+    for dependency_id, use in sorted(uses.items()):
+        concept = concepts.get(dependency_id)
+        if concept is None:
+            broken.append(_broken(
+                "MISSING_SHARED_CONCEPT",
+                f"frozen core manifest has no concept for dependency: {dependency_id}",
+            ))
+            continue
+        used_names = _string_items(use.get("leanDeclarations"))
+        registered_names = _string_items(concept.get("leanDeclarations"))
+        if not used_names or not used_names.issubset(registered_names):
+            broken.append(_broken(
+                "SHARED_USE_DECLARATION_MISMATCH",
+                f"group shared declarations are not a nonempty subset of the frozen core registry: {dependency_id}",
+            ))
+        expected_refs = expected_by_dependency.get(dependency_id, set())
+        use_refs = {item for item in _claim_refs(use.get("claimRefs")) if item[0] in unit_ids}
+        if use_refs != expected_refs:
+            broken.append(_broken(
+                "SHARED_USE_CLAIM_MISMATCH",
+                f"group shared claim references differ from Phase-4 semantics: {dependency_id}",
+            ))
+        concept_refs = _claim_refs(concept.get("claimRefs"))
+        if not expected_refs.issubset(concept_refs):
+            broken.append(_broken(
+                "SHARED_CONCEPT_CLAIM_MISMATCH",
+                f"frozen core concept does not trace every required Phase-4 claim: {dependency_id}",
+            ))
+        if dependency_id in expected_by_dependency:
+            for name in used_names & registered_names:
+                relevant_names.add(name)
+                declaration_dependencies[name].add(dependency_id)
+
+    # Keep the shared trace bounded to declarations this group actually names,
+    # while retaining the support graph needed to resolve implementation
+    # helpers.  A concept may register more declarations than one group uses.
+    changed = True
+    while changed:
+        changed = False
+        for name, mapping in flat_declarations.items():
+            supports = _string_items(mapping.get("supportsDeclarations"))
+            if name not in relevant_names and not (supports & relevant_names):
+                continue
+            before = len(relevant_names)
+            relevant_names.add(name)
+            relevant_names.update(supports)
+            selected = _string_items(mapping.get("dependencyIds")) & set(uses)
+            declaration_dependencies[name].update(selected)
+            changed = changed or len(relevant_names) != before
+
+    for name in relevant_names:
+        mapping = flat_declarations.get(name)
+        if mapping is not None:
+            declaration_dependencies[name].update(
+                _string_items(mapping.get("dependencyIds")) & set(uses)
+            )
+
+    mappings: dict[str, dict[str, Any]] = {}
+    for name in sorted(relevant_names):
+        if name not in core_declared:
+            broken.append(_broken(
+                "MISSING_LEAN_DECLARATION",
+                f"registered shared declaration is absent from the frozen core source: {name}",
+                declaration=name,
+            ))
+            continue
+        raw_mapping = flat_declarations.get(name)
+        if raw_mapping is None:
+            broken.append(_broken(
+                "MISSING_CLAIM_MAPPING",
+                f"shared Lean declaration has no core declaration mapping: {name}",
+                declaration=name,
+            ))
+            continue
+        mapping = dict(raw_mapping)
+        if mapping.get("role") != "IMPLEMENTATION_HELPER":
+            refs = {
+                ref
+                for dependency_id in declaration_dependencies[name]
+                for ref in expected_by_dependency.get(dependency_id, set())
+            }
+            refs.update(ref for ref in _claim_refs(mapping.get("claimRefs")) if ref[0] in unit_ids)
+            mapping["claimRefs"] = [
+                {"unitId": unit_id, "claimId": claim_id}
+                for unit_id, claim_id in sorted(refs)
+            ]
+        else:
+            mapping["claimRefs"] = [
+                {"unitId": unit_id, "claimId": claim_id}
+                for unit_id, claim_id in sorted(
+                    ref for ref in _claim_refs(mapping.get("claimRefs")) if ref[0] in unit_ids
+                )
+            ]
+        mappings[name] = mapping
+    return core_declared & relevant_names, mappings, broken
+
+
 def group_coverage_test(
-    unit_id: str, semantics: dict[str, Any], source: str, manifest: dict[str, Any]
+    unit_id: str,
+    semantics: dict[str, Any],
+    source: str,
+    manifest: dict[str, Any],
+    *,
+    core_source: str | None = None,
+    core_manifest: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if (core_source is None) != (core_manifest is None):
+        raise ValueError("core_source and core_manifest must be supplied together")
     claims = {
         item.get("claimId"): item
         for item in (semantics.get("semantics") or {}).get("claims", [])
@@ -99,6 +290,12 @@ def group_coverage_test(
         for item in manifest.get("declarations", [])
         if isinstance(item, dict) and isinstance(item.get("declaration"), str)
     }
+    if core_source is not None and core_manifest is not None:
+        core_declared, core_mappings, _ = _core_claim_mappings(
+            {unit_id}, {unit_id: semantics}, manifest, core_source, core_manifest
+        )
+        declared.update(core_declared)
+        mappings.update(core_mappings)
     claim_declarations: dict[str, set[str]] = defaultdict(set)
     ignored: list[dict[str, str]] = []
     for name in sorted(declared & set(mappings)):
@@ -128,15 +325,34 @@ def group_coverage_test(
 def group_traceability_test(
     plan: dict[str, Any], bundles_by_unit: dict[str, dict[str, Any]],
     semantics_by_unit: dict[str, dict[str, Any]], source: str,
-    manifest: dict[str, Any], database: Path,
+    manifest: dict[str, Any], database: Path, *,
+    core_source: str | None = None,
+    core_manifest: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if (core_source is None) != (core_manifest is None):
+        raise ValueError("core_source and core_manifest must be supplied together")
     broken: list[dict[str, str]] = []
     declared = set(lean_declarations(source))
-    mappings = {
+    mappings: dict[str, dict[str, Any]] = {
         item.get("declaration"): item
         for item in manifest.get("declarations", [])
         if isinstance(item, dict) and isinstance(item.get("declaration"), str)
     }
+    if core_source is not None and core_manifest is not None:
+        core_declared, core_mappings, core_broken = _core_claim_mappings(
+            set(semantics_by_unit), semantics_by_unit, manifest, core_source, core_manifest
+        )
+        broken.extend(core_broken)
+        for name in sorted(declared & core_declared):
+            broken.append(_broken(
+                "SHARED_DECLARATION_REDEFINED",
+                f"group source redefines a declaration owned by the frozen shared core: {name}",
+                declaration=name,
+            ))
+        declared.update(core_declared)
+        for name, mapping in core_mappings.items():
+            if name not in mappings:
+                mappings[name] = mapping
     for name in sorted(declared - set(mappings)):
         broken.append(_broken("MISSING_CLAIM_MAPPING", f"Lean declaration has no semantic/claim mapping: {name}", declaration=name))
     for name in sorted(set(mappings) - declared):

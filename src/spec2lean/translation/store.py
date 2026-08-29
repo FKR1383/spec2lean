@@ -74,7 +74,9 @@ def load_translation(
 
 def find_declaration(root: Path, declaration: str) -> tuple[Path, dict[str, Any], dict[str, Any]]:
     matches: list[tuple[Path, dict[str, Any], dict[str, Any]]] = []
-    for path in root.resolve().glob("*/*/*/*/translation-manifest.json"):
+    paths = list(root.resolve().glob("*/*/*/*/translation-manifest.json"))
+    paths.extend(root.resolve().glob("*/*/shared/versions/*/core-manifest.json"))
+    for path in paths:
         manifest = json.loads(path.read_text(encoding="utf-8"))
         for mapping in manifest.get("declarations", []):
             if mapping.get("declaration") == declaration:

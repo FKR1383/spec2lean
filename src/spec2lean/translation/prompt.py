@@ -9,7 +9,30 @@ from .models import DECLARATION_ROLES, TranslationGroupScope
 def build_translator_prompt(
     scope: TranslationGroupScope,
     semantics_by_unit: dict[str, dict[str, Any]],
+    shared_core_source: str | None = None,
 ) -> str:
+    if scope.shared_core is None:
+        core_rules = """- This group has no planned shared prerequisites. Submit `sharedUses: []`.
+- Keep genuinely unit-specific declarations in this group; do not invent a speculative global core.
+"""
+        core_context = "No shared core is required by this group."
+    else:
+        module = scope.shared_core["leanModule"]
+        core_rules = f"""- Import the frozen module `{module}` exactly and reuse its registered declarations.
+- Submit one `sharedUses` entry for every dependency in `sharedCore.concepts`; name the exact
+  registered declarations actually referenced by this group.
+- Do not redeclare, alias around, locally substitute for, or modify a shared-core concept. A local
+  declaration may not claim a semantic claim owned by a shared dependency.
+- If a required concept is absent, do not invent a local representation; report the deterministic
+  `MISSING_SHARED_ABSTRACTION` condition instead of submitting a translation.
+"""
+        core_context = f"""Frozen shared-core registry:
+{json.dumps(scope.shared_core, ensure_ascii=False, indent=2, sort_keys=True)}
+
+Frozen shared-core Lean source (read-only):
+```lean
+{shared_core_source or ''}
+```"""
     return f"""You are the Spec2Lean Phase-5 Lean Translator for exactly one instruction group.
 
 Translate all supplied accepted Phase-4 semantic artifacts into one clear Lean 4 semantic
@@ -22,9 +45,7 @@ Translation rules:
 - Submit one complete {scope.lean_file} source string. No per-instruction Unit.lean files or hidden
   fragments exist.
 - Put the complete group under namespace {scope.suggested_namespace}.
-- Define canonical value, carry, predicate, and machine-state types once and reuse them for every
-  instruction in this group. Never create incompatible per-instruction State, U32, register, carry,
-  or predicate representations.
+{core_rules.rstrip()}
 - Implement each exact instruction spelling as a distinct operation and, when required, execution
   function. Do not let an unmodified instruction expose behavior belonging to a modifier variant.
 - Where applicable, separate a pure result function from execution/state update semantics so later
@@ -42,7 +63,7 @@ Translation rules:
 - Map every named top-level declaration in the submitted source. Use one of these roles:
   {', '.join(DECLARATION_ROLES)}.
 - Every semantic declaration mapping must cite one or more existing claimRefs, each containing the
-  exact unitId and claimId. A shared declaration may cite claims from several units. A pure
+  exact unitId and claimId. A pure
   IMPLEMENTATION_HELPER may instead use supportsDeclarations. Never invent IDs or reproduce evidence
   hashes, source anchors, quotations, or deterministic metadata.
 - Every INSTRUCTION needs its own OPERATION mapping. If its semantics has state effects or predication,
@@ -55,4 +76,6 @@ Deterministic group/run context (do not reproduce this metadata in the tool call
 
 Accepted Phase-4 semantic artifacts keyed by unit ID (the complete specification input):
 {json.dumps(semantics_by_unit, ensure_ascii=False, indent=2, sort_keys=True)}
+
+{core_context}
 """

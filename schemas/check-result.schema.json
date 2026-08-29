@@ -58,10 +58,16 @@
     "inputHashes": {
       "type": "object", "additionalProperties": false,
       "required": ["semantics", "leanSource", "translationManifest"],
+      "dependentRequired": {
+        "sharedCoreSource": ["sharedCoreManifest"],
+        "sharedCoreManifest": ["sharedCoreSource"]
+      },
       "properties": {
         "semantics": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
         "leanSource": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-        "translationManifest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        "translationManifest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "sharedCoreSource": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "sharedCoreManifest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
       }
     }
   },

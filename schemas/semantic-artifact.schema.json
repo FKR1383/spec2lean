@@ -9,7 +9,7 @@
     "evidenceBundleHash", "extractor", "runId", "createdAt", "outcome"
   ],
   "properties": {
-    "schemaVersion": {"const": 1},
+    "schemaVersion": {"const": 2},
     "phase": {"const": "SEMANTIC_EXTRACTOR"},
     "planRunId": {"type": "string", "pattern": "^plan:"},
     "language": {"type": "string", "minLength": 1},
@@ -95,7 +95,18 @@
     },
     "dependency": {
       "type": "object", "additionalProperties": false, "required": ["concept", "description", "evidenceIds"],
-      "properties": {"concept": {"type": "string"}, "description": {"type": "string"}, "artifactId": {"type": "string"}, "evidenceIds": {"$ref": "#/$defs/evidenceIds"}}
+      "properties": {
+        "dependencyId": {"type": "string", "pattern": "^shared:"},
+        "concept": {"type": "string"},
+        "description": {"type": "string"},
+        "artifactId": {"type": "string"},
+        "semanticClaimIds": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^claim:"},
+          "uniqueItems": true
+        },
+        "evidenceIds": {"$ref": "#/$defs/evidenceIds"}
+      }
     },
     "claim": {
       "type": "object", "additionalProperties": false, "required": ["claimId", "kind", "statement", "evidenceIds"],

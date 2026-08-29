@@ -7,7 +7,7 @@ from typing import Any
 from ..util import canonical_json, stable_id
 
 
-SEMANTICS_SCHEMA_VERSION = 1
+SEMANTICS_SCHEMA_VERSION = 2
 EXTRACTOR_MODEL = "openai/gpt-5.6-sol"
 EXTRACTOR_REASONING = "medium"
 EXTRACTOR_AGENT = "spec2lean-semantic-extractor"
@@ -37,6 +37,7 @@ class SemanticScope:
     language: str
     version: str
     unit: dict[str, Any]
+    shared_prerequisites: tuple[dict[str, Any], ...]
     evidence_bundle_hash: str
     evidence_ids: tuple[str, ...]
     run_id: str
@@ -50,6 +51,26 @@ class SemanticScope:
         if len(units) != 1:
             raise KeyError(f"unit is not uniquely present in Phase-2 plan: {unit_id}")
         unit = dict(units[0])
+        raw_shared = plan.get("sharedPrerequisites", [])
+        if not isinstance(raw_shared, list):
+            raise ValueError("Phase-2 sharedPrerequisites must be an array")
+        shared_prerequisites: list[dict[str, Any]] = []
+        seen_dependency_ids: set[str] = set()
+        for item in raw_shared:
+            if not isinstance(item, dict):
+                raise ValueError("Phase-2 shared prerequisite must be an object")
+            required_by = item.get("requiredBy")
+            if not isinstance(required_by, list):
+                raise ValueError("Phase-2 shared prerequisite requiredBy must be an array")
+            if unit_id not in required_by:
+                continue
+            dependency_id = item.get("dependencyId")
+            if not isinstance(dependency_id, str) or not dependency_id.startswith("shared:"):
+                raise ValueError("Phase-2 shared prerequisite has a malformed dependency ID")
+            if dependency_id in seen_dependency_ids:
+                raise ValueError(f"Phase-2 shared prerequisite is duplicated: {dependency_id}")
+            seen_dependency_ids.add(dependency_id)
+            shared_prerequisites.append(dict(item))
         if bundle.get("unit") != unit:
             raise ValueError("Phase-3 evidence unit does not match the Phase-2 planned unit")
         if bundle.get("planRunId") != plan.get("planRunId"):
@@ -86,6 +107,9 @@ class SemanticScope:
             language=str(plan["language"]),
             version=str(plan["version"]),
             unit=unit,
+            shared_prerequisites=tuple(sorted(
+                shared_prerequisites, key=lambda item: str(item["dependencyId"])
+            )),
             evidence_bundle_hash=bundle_hash,
             evidence_ids=(*ids, *resolution_ids),
             run_id=stable_id("semantic-run", plan["planRunId"], unit_id, bundle_hash),
@@ -103,6 +127,9 @@ class SemanticScope:
             "language": self.language,
             "version": self.version,
             "unit": dict(self.unit),
+            "relevantSharedPrerequisites": [
+                dict(item) for item in self.shared_prerequisites
+            ],
             "evidenceBundleHash": self.evidence_bundle_hash,
             "evidenceIds": list(self.evidence_ids),
             "runId": self.run_id,
@@ -113,7 +140,9 @@ class SemanticScope:
     def from_dict(cls, value: dict[str, Any]) -> SemanticScope:
         return cls(
             plan_run_id=value["planRunId"], language=value["language"], version=value["version"],
-            unit=dict(value["unit"]), evidence_bundle_hash=value["evidenceBundleHash"],
+            unit=dict(value["unit"]),
+            shared_prerequisites=tuple(value.get("relevantSharedPrerequisites", ())),
+            evidence_bundle_hash=value["evidenceBundleHash"],
             evidence_ids=tuple(value["evidenceIds"]), run_id=value["runId"], created_at=value["createdAt"],
         )
 

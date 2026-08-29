@@ -20,10 +20,12 @@ handoff contains the exact `uncovered` array.
 
 A build-only failure starts one restricted OpenCode session using the exact
 installed model `openai/gpt-5.6-sol` with `medium` reasoning. No model is
-substituted if it is unavailable. The session receives the complete group Lean source,
-compiler diagnostics, all group Phase-4 semantic artifacts, Phase-5 manifest, and Phase-6
-traceability result. All ordinary file, shell, browsing, task, and editing tools
-are denied. Its only capability is a local `submit_repair` tool.
+substituted if it is unavailable. The session receives the complete group Lean
+source, compiler diagnostics, all group Phase-4 semantic artifacts, Phase-5
+manifest, Phase-6 traceability result, and—when referenced—the exact frozen
+shared-core manifest and source marked read-only. All ordinary file, shell,
+browsing, task, and editing tools are denied. Its only capability is a local
+`submit_repair` tool.
 
 The submitted candidate is deterministically checked using the Phase-5
 translation validator. Every named declaration must remain mapped to existing
@@ -37,10 +39,44 @@ responsibility changed. If the submit tool rejects a candidate, the model may
 correct the returned validation diagnostics and resubmit within the same
 session; this does not start an automatic retry session.
 
+For a core-backed group, validation reconstructs the candidate with the exact
+snapshot loaded by `sharedCore.coreRunId`. The candidate must continue to import
+and use registered declarations, may not redefine a core-owned name or claim,
+and must preserve both the four-field `sharedCore` reference and the complete
+`sharedUses` array exactly under structural JSON equality. A repair may correct a
+misspelled import, namespace, argument, or other use of the existing interface;
+it cannot choose a different core version or local substitute.
+
 After validation, Phase 7 atomically updates only the complete group Lean file and, when its
 declaration mappings actually changed, `translation-manifest.json`. It does not
-modify Phase 1, 2, 3, or 4. Phase 7 does not run the compiler in a loop and does
-not start a second session.
+modify Phase 1, 2, 3, 4, any shared-core version, or `current.json`. Phase 7 does
+not run the compiler in a loop and does not start a second session.
+
+## Frozen shared-core boundary
+
+Phase 7 never owns shared representation selection or extension. The group
+manifest names an immutable snapshot with:
+
+```json
+{
+  "coreRunId": "shared-core-run:...",
+  "manifestHash": "sha256:...",
+  "sourceHash": "sha256:...",
+  "leanModule": "Spec2LeanShared....Core"
+}
+```
+
+Build repair and Translator revision load that exact snapshot, not whichever
+version `current.json` names later. The core registry remains authoritative for
+shared declaration ownership, while Phase-4 claims remain authoritative for
+meaning and evidence. A unit/group cannot repair a failure by duplicating the
+same dependency under a new local representation.
+
+If an upstream semantic revision changes a relevant shared dependency or linked
+claim, the next Phase-5 freshness pass invalidates the old core through its
+`semanticInputHash` and materializes a fresh lineage. A pure newly missing
+concept may instead use the append-only parent-extension path. The bounded
+Phase-7 resolver does not edit or republish the core itself.
 
 ## Repair artifact and recheck
 
@@ -63,6 +99,13 @@ Build, Coverage, and Traceability. `troubleshoot run` remains route/repair-only;
 dispatch it reruns Phase 6, and only that fresh result may authorize the next
 dispatch. It stops on all-pass, repeated actionable state (no progress), or the
 explicit dispatch cap (eight by default).
+
+For a core-backed group, the recheck reloads and verifies the exact snapshot,
+stages its Lean source in a temporary module tree, and reruns Build, Coverage,
+and Traceability through the shared registry. Its `inputHashes` include
+`sharedCoreSource` and `sharedCoreManifest`; non-core checks retain the legacy
+three-key hash object. The actionable-state hash includes these inputs, so a
+changed core binding is distinguishable from a no-progress retry.
 
 Build diagnostics preserve Lean's multiline actual-type/expected-type context.
 Each build-repair session also receives the exact Lean version and a compact
@@ -91,11 +134,14 @@ BUILD FAIL
   -> one Phase-6 recheck
 ```
 
-Translator revisions always receive and resubmit the complete group. Each revision stores before-state artifacts, hashes, its source Phase-6 check
-hash, model/session metadata, and zero automatic retries. A Phase-6 check can be
-consumed only once by a given revision phase. Phase 6 now records semantic,
-Lean-source, and manifest input hashes so a genuine recheck is distinguishable
-from reuse of stale diagnostics.
+Translator revisions always receive and resubmit the complete group. When the
+group is core-backed, the revision scope includes the exact referenced core
+source and registry, and deterministic validation preserves its binding and
+shared uses. Each revision stores before-state artifacts, hashes, its source
+Phase-6 check hash, model/session metadata, and zero automatic retries. A
+Phase-6 check can be consumed only once by a given revision phase. Phase 6
+records semantic, Lean-source, manifest, and conditional core input hashes so a
+genuine recheck is distinguishable from reuse of stale diagnostics.
 
 ## CLI
 
@@ -127,4 +173,6 @@ The individual bounded commands remain available for inspection/manual control:
 ./spec2lean check recheck --plan-run PLAN_RUN_ID --unit UNIT_ID
 ```
 
-Normal tests inject a mocked repair submission and never invoke OpenCode.
+Normal tests inject a mocked repair submission and never invoke OpenCode; the
+same deterministic Phase-5 validation boundary is exercised without allowing
+the mock to edit artifacts directly.

@@ -43,25 +43,21 @@ def _plan(planner_database: Path, names: list[str], *, shared_prerequisite: bool
                 "origin": "INFERRED",
             }],
             "externalPrerequisites": [],
+            "sharedPrerequisites": [],
             "dependencies": [],
         }
         if shared_prerequisite:
             rules = connection.execute(
                 "SELECT node_id FROM nodes WHERE html_anchor = 'integer-operand-rules'"
             ).fetchone()[0]
-            submission["externalPrerequisites"] = [{
+            submission["sharedPrerequisites"] = [{
                 "key": "integer-rules",
                 "name": "Integer operand rules",
+                "kind": "operand-domain",
                 "reason": "The requested units use integer operands.",
                 "sourceNodeIds": [rules],
+                "requiredBy": [item["unitId"] for item in scope.candidate_units],
             }]
-            submission["dependencies"] = [{
-                "from": "integer-rules",
-                "to": unit["unitId"],
-                "reason": "Integer rules are shared supporting context.",
-                "supportingNodeIds": [rules],
-                "origin": "EXPLICIT",
-            } for unit in scope.candidate_units]
         return build_validated_plan(
             Phase1Query(connection), scope, submission,
             language="synthetic", version="1.0", plan_run_id="plan:evidence-test",
@@ -219,7 +215,16 @@ def test_shared_supporting_source_has_stable_cross_bundle_evidence_id(planner_da
         for unit in plan["requestedUnits"]:
             scope = EvidenceScope.from_plan(plan, unit["unitId"])
             session = SessionQuery(query, scope)
-            prerequisite_node = scope.prerequisites[0]["sourceNodeIds"][0]
+            assert scope.prerequisites == ()
+            assert len(scope.shared_prerequisites) == 1
+            prerequisite_node = scope.shared_prerequisites[0]["sourceNodeIds"][0]
+            assert any(
+                seed == (
+                    prerequisite_node,
+                    f"SHARED_PREREQUISITE:{scope.shared_prerequisites[0]['dependencyId']}",
+                )
+                for seed in scope.seed_nodes
+            )
             bundle, diagnostics = validate_submission(query, scope, session.ledger, {
                 "unitId": unit["unitId"],
                 "selections": [
@@ -346,7 +351,7 @@ def test_pdf_page_and_bbox_provenance_are_deterministic(tmp_path):
             "planRunId": "plan:pdf", "language": "pdf", "version": "1",
             "sourceDatabaseDigest": digest,
             "requestedUnits": [{"unitId": "unit:add", "name": "add.u32", "sourceNodeIds": [root]}],
-            "externalPrerequisites": [], "dependencies": [],
+            "externalPrerequisites": [], "sharedPrerequisites": [], "dependencies": [],
         }
         scope = EvidenceScope.from_plan(plan, "unit:add")
         session = SessionQuery(query, scope)
