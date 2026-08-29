@@ -11,6 +11,7 @@ import pytest
 
 from spec2lean.gui.repository import ArtifactRepository
 from spec2lean.gui.server import GuiHandler
+from spec2lean.translation.shared_core.models import json_hash, text_hash
 
 
 def put(path: Path, value: dict) -> None:
@@ -37,7 +38,8 @@ def gui_repository(tmp_path: Path) -> ArtifactRepository:
         "units": {"unit:broken": {"name": "broken.op", "status": "FAILED", "stages": {"evidence": "NOT_STARTED"}}},
     })
     plan = {
-        "schemaVersion": 1, "language": language, "version": version, "planRunId": plan_id, "graphStatus": "ACYCLIC",
+        "schemaVersion": 3, "language": language, "version": version, "planRunId": plan_id, "graphStatus": "ACYCLIC",
+        "sourceDatabaseDigest": "sha256:" + "d" * 64,
         "requestedUnits": [{"unitId": unit_id, "name": "shl.b32", "sourceNodeIds": ["node:html", "node:pdf"]}],
         "processingLayers": [{"layer": 0, "unitIds": [unit_id]}], "dependencies": [],
     }
@@ -68,25 +70,112 @@ def gui_repository(tmp_path: Path) -> ArtifactRepository:
         {"claimId": "claim:broken", "kind": "ASSUMPTION", "statement": "A deliberately broken reference.", "evidenceIds": ["evidence:missing"]},
     ]
     put(tmp_path / "semantics" / language / version / plan_id / artifact_dir / "semantics.json", {
-        "unit": {"unitId": unit_id, "name": "shl.b32"}, "semantics": {"claims": claims, "operation": {"description": "Shift left", "evidenceIds": ["evidence:html"]}, "edgeCases": [{"behavior": "Clamp", "evidenceIds": ["evidence:pdf"]}]},
+        "unit": {"unitId": unit_id, "name": "shl.b32"}, "semantics": {
+            "claims": claims,
+            "operation": {"description": "Shift left", "evidenceIds": ["evidence:html"]},
+            "edgeCases": [{"behavior": "Clamp", "evidenceIds": ["evidence:pdf"]}],
+            "dependencies": [{
+                "dependencyId": "shared:value", "concept": "Shared shift operation",
+                "semanticClaimIds": ["claim:op"], "evidenceIds": ["evidence:html"],
+            }],
+        },
     })
     put(tmp_path / "semantics" / language / version / plan_id / artifact_dir / "extractor-run.json", {"unitId": unit_id, "outcome": "SUCCESS"})
     translation = tmp_path / "translations" / language / version / plan_id / artifact_dir
     translation.mkdir(parents=True)
-    (translation / "Unit.lean").write_text("namespace Spec2Lean.Ptx.ShlB32\n\ndef shlResult (a b : UInt32) := a <<< b.toNat\n\ndef execute (a b : UInt32) := shlResult a b\n\nend Spec2Lean.Ptx.ShlB32\n", encoding="utf-8")
+    unit_source = """namespace Spec2Lean.Ptx.ShlB32
+
+/-- Exact operation documentation. -/
+def shlResult (a b : UInt32) := a <<< b.toNat
+
+def execute (a b : UInt32) := shlResult a b
+
+def _unmappedIdentifier : Nat := 0
+
+end Spec2Lean.Ptx.ShlB32
+"""
+    (translation / "Unit.lean").write_text(unit_source, encoding="utf-8")
+
+    core_run_id = "shared-core-run:" + "a" * 24
+    core_module = "Spec2LeanShared.Ptx.V93.Cfixture.Core"
+    core_source = """namespace Spec2LeanShared.Ptx.V93.Cfixture
+
+/-- Shared operation documentation. -/
+def sharedShift (a b : UInt32) := a <<< b.toNat
+
+def _sharedAdapter (a b : UInt32) := sharedShift a b
+
+def unusedCore : Nat := 0
+
+end Spec2LeanShared.Ptx.V93.Cfixture
+"""
+    core_manifest = {
+        "schemaVersion": 1, "phase": "SHARED_CORE", "language": language,
+        "version": version, "sourceDatabaseDigest": plan["sourceDatabaseDigest"],
+        "coreRunId": core_run_id,
+        "leanFile": "modules/Spec2LeanShared/Ptx/V93/Cfixture/Core.lean",
+        "leanModule": core_module, "sourceHash": text_hash(core_source),
+        "concepts": [{
+            "dependencyId": "shared:value",
+            "leanDeclarations": [
+                "Spec2LeanShared.Ptx.V93.Cfixture.sharedShift",
+                "Spec2LeanShared.Ptx.V93.Cfixture._sharedAdapter",
+            ],
+            "claimRefs": [{"unitId": unit_id, "claimId": "claim:op"}],
+        }],
+        "declarations": [
+            {
+                "declaration": "Spec2LeanShared.Ptx.V93.Cfixture.sharedShift",
+                "role": "OPERATION", "dependencyIds": ["shared:value"],
+                "claimRefs": [{"unitId": unit_id, "claimId": "claim:op"}],
+            },
+            {
+                "declaration": "Spec2LeanShared.Ptx.V93.Cfixture._sharedAdapter",
+                "role": "IMPLEMENTATION_HELPER", "dependencyIds": ["shared:value"],
+                "claimRefs": [],
+                "supportsDeclarations": ["Spec2LeanShared.Ptx.V93.Cfixture.sharedShift"],
+            },
+            {
+                "declaration": "Spec2LeanShared.Ptx.V93.Cfixture.unusedCore",
+                "role": "SEMANTIC_HELPER", "dependencyIds": ["shared:value"],
+                "claimRefs": [{"unitId": "unit:other", "claimId": "claim:other"}],
+            },
+        ],
+    }
+    core_reference = {
+        "coreRunId": core_run_id, "manifestHash": json_hash(core_manifest),
+        "sourceHash": text_hash(core_source), "leanModule": core_module,
+    }
+    core_directory = tmp_path / "translations" / language / version / "shared" / "versions" / core_run_id
+    (core_directory / "modules" / "Spec2LeanShared" / "Ptx" / "V93" / "Cfixture").mkdir(parents=True)
+    (core_directory / "modules" / "Spec2LeanShared" / "Ptx" / "V93" / "Cfixture" / "Core.lean").write_text(core_source, encoding="utf-8")
+    put(core_directory / "core-manifest.json", core_manifest)
+    put(core_directory / "core-run.json", {"outcome": "SUCCESS"})
+
     put(translation / "translation-manifest.json", {
-        "schemaVersion": 1, "language": language, "version": version, "planRunId": plan_id, "leanFile": "Unit.lean",
-        "unit": {"unitId": unit_id, "name": "shl.b32"}, "declarations": [
-            {"declaration": "Spec2Lean.Ptx.ShlB32.shlResult", "role": "OPERATION", "semanticClaimIds": ["claim:op", "claim:broken"]},
-            {"declaration": "Spec2Lean.Ptx.ShlB32.execute", "role": "EXECUTION", "semanticClaimIds": ["claim:op"]},
-            {"declaration": "Spec2Lean.Ptx.ShlB32.notInSource", "role": "SEMANTIC_HELPER", "semanticClaimIds": ["claim:op"]},
+        "schemaVersion": 3, "language": language, "version": version,
+        "planRunId": plan_id, "leanFile": "Unit.lean",
+        "group": {"name": "ShiftInstructions", "unitIds": [unit_id]},
+        "sharedCore": core_reference,
+        "sharedUses": [{
+            "dependencyId": "shared:value",
+            "leanDeclarations": [
+                "Spec2LeanShared.Ptx.V93.Cfixture.sharedShift",
+                "Spec2LeanShared.Ptx.V93.Cfixture._sharedAdapter",
+            ],
+            "claimRefs": [{"unitId": unit_id, "claimId": "claim:op"}],
+        }],
+        "declarations": [
+            {"declaration": "Spec2Lean.Ptx.ShlB32.shlResult", "role": "OPERATION", "claimRefs": [{"unitId": unit_id, "claimId": "claim:op"}, {"unitId": unit_id, "claimId": "claim:broken"}]},
+            {"declaration": "Spec2Lean.Ptx.ShlB32.execute", "role": "EXECUTION", "claimRefs": [{"unitId": unit_id, "claimId": "claim:op"}]},
+            {"declaration": "Spec2Lean.Ptx.ShlB32.notInSource", "role": "SEMANTIC_HELPER", "claimRefs": [{"unitId": unit_id, "claimId": "claim:op"}]},
         ],
     })
     check = {
         "unit": {"unitId": unit_id}, "status": "PASS",
         "build": {"status": "PASS", "durationMs": 42, "diagnostics": [{"severity": "INFO", "message": "clean"}]},
-        "coverage": {"status": "PASS", "covered": [{"itemId": "claim:op", "declarations": ["Spec2Lean.Ptx.ShlB32.shlResult"]}], "uncovered": []},
-        "traceability": {"status": "PASS", "validMappings": [{"declaration": "Spec2Lean.Ptx.ShlB32.shlResult", "semanticClaimIds": ["claim:op"]}], "brokenMappings": []},
+        "coverage": {"status": "PASS", "covered": [{"itemType": "SEMANTIC_CLAIM", "itemId": "claim:op", "declarations": ["Spec2Lean.Ptx.ShlB32.shlResult"]}], "uncovered": []},
+        "traceability": {"status": "FAIL", "validMappings": [{"declaration": "Spec2Lean.Ptx.ShlB32.shlResult", "semanticClaimIds": ["claim:op"]}], "brokenMappings": [{"code": "MISSING_CLAIM_MAPPING", "declaration": "Spec2Lean.Ptx.ShlB32._unmappedIdentifier", "semanticClaimId": "claim:op", "evidenceId": "evidence:html"}]},
     }
     put(tmp_path / "checks" / language / version / plan_id / artifact_dir / "check.json", check)
     put(tmp_path / "troubleshooting" / language / version / plan_id / artifact_dir / "troubleshoot.json", {
@@ -132,8 +221,10 @@ def test_lists_complete_and_partial_runs_and_preserves_layer_order(gui_repositor
 def test_code_claim_evidence_and_reverse_traceability(gui_repository: ArtifactRepository) -> None:
     unit = gui_repository.get_unit("pipeline-run:complete", "unit:shl")
     operation = next(item for item in unit["lean"]["declarations"] if item["role"] == "OPERATION")
-    assert operation["startLine"] == 3
+    assert operation["startLine"] == 4
     assert operation["claims"] == ["claim:op", "claim:broken"]
+    execute = next(item for item in unit["lean"]["declarations"] if item.get("role") == "EXECUTION")
+    assert execute["claims"] == ["claim:op"]
     claim = next(item for item in unit["claims"] if item["claimId"] == "claim:op")
     assert claim["evidenceIds"] == ["evidence:html", "evidence:pdf"]
     html = next(item for item in unit["evidence"] if item["evidenceId"] == "evidence:html")
@@ -145,10 +236,69 @@ def test_code_claim_evidence_and_reverse_traceability(gui_repository: ArtifactRe
     assert next(item for item in unit["lean"]["declarations"] if item["declaration"].endswith("notInSource"))["broken"]
 
 
+def test_shared_core_and_reverse_relationships_are_exact_and_inspectable(
+    gui_repository: ArtifactRepository,
+) -> None:
+    unit = gui_repository.get_unit("pipeline-run:complete", "unit:shl")
+    documents = {item["documentId"]: item for item in unit["lean"]["documents"]}
+    assert documents["shared-core"]["origin"] == "SHARED_CORE_DECLARATION"
+    assert documents["shared-core"]["reference"] == unit["lean"]["sharedCore"]
+    shared = next(
+        item for item in unit["lean"]["declarations"]
+        if item["declaration"].endswith(".sharedShift")
+    )
+    assert shared["origin"] == "SHARED_CORE_DECLARATION"
+    assert shared["claims"] == ["claim:op"]
+    helper = next(
+        item for item in unit["lean"]["declarations"]
+        if item["declaration"].endswith("._sharedAdapter")
+    )
+    assert helper["claims"] == ["claim:op"]
+    assert helper["supportsDeclarations"] == [shared["declaration"]]
+    unused = next(
+        item for item in unit["lean"]["declarations"]
+        if item["declaration"].endswith(".unusedCore")
+    )
+    assert unused["mapped"] is False and unused["claims"] == []
+    trace = gui_repository.get_trace(
+        "pipeline-run:complete", "unit:shl", helper["declaration"]
+    )
+    assert [item["claimId"] for item in trace["claims"]] == ["claim:op"]
+
+    claim = next(item for item in unit["claims"] if item["claimId"] == "claim:op")
+    assert shared["declaration"] in claim["declarations"]
+    assert helper["declaration"] in claim["declarations"]
+    html = next(item for item in unit["evidence"] if item["evidenceId"] == "evidence:html")
+    assert html["usedByClaims"] == ["claim:op"]
+    assert shared["declaration"] in html["implementedByDeclarations"]
+    assert helper["declaration"] in html["implementedByDeclarations"]
+
+
+def test_unmapped_code_and_check_diagnostic_navigation_use_only_recorded_ids(
+    gui_repository: ArtifactRepository,
+) -> None:
+    unit = gui_repository.get_unit("pipeline-run:complete", "unit:shl")
+    unmapped = next(
+        item for item in unit["lean"]["declarations"]
+        if item["declaration"].endswith("._unmappedIdentifier")
+    )
+    assert unmapped["mappingRecorded"] is False
+    assert unmapped["mapped"] is False
+    assert unmapped["claims"] == []
+    diagnostic = unit["checks"]["traceability"]["brokenMappings"][0]
+    assert diagnostic["navigation"] == {
+        "declarations": [unmapped["declaration"]],
+        "claims": ["claim:op"],
+        "evidence": ["evidence:html"],
+    }
+
+
 def test_html_and_pdf_phase1_provenance_and_preview(gui_repository: ArtifactRepository) -> None:
     html = gui_repository.get_evidence_source("pipeline-run:complete", "unit:shl", "evidence:html")
     assert html["preview"] == {"type": "html", "anchor": "logic-shl", "domPath": "/html/body/section", "sourceLineStart": 12, "sourceLineEnd": 12, "exactText": "Shift a left by b."}
     assert html["sourceNodes"][0]["raw_text"] == "Shift a left by b."
+    assert html["sourceNodes"][0]["document_id"] == "doc:html"
+    assert html["sourceNodes"][0]["sourceSpans"][0]["span_id"] == "span:html"
     pdf = gui_repository.get_evidence_source("pipeline-run:complete", "unit:shl", "evidence:pdf")
     assert pdf["preview"]["page"] == 1
     assert pdf["preview"]["bbox"] == [70, 85, 340, 110]
@@ -161,7 +311,7 @@ def test_checks_repairs_search_and_read_only_http_api(gui_repository: ArtifactRe
     unit = gui_repository.get_unit("pipeline-run:complete", "unit:shl")
     assert unit["checks"]["build"]["diagnostics"][0]["message"] == "clean"
     assert unit["checks"]["coverage"]["uncovered"] == []
-    assert unit["checks"]["traceability"]["brokenMappings"] == []
+    assert unit["checks"]["traceability"]["brokenMappings"][0]["code"] == "MISSING_CLAIM_MAPPING"
     assert unit["repairs"][0]["hashes"]["after"]["Unit.lean"] == "new"
     assert {item["type"] for item in gui_repository.search("pipeline-run:complete", "shift")} >= {"claim", "evidence"}
 
@@ -180,6 +330,33 @@ def test_frontend_contains_primary_traceability_interactions() -> None:
     static = Path(__file__).parents[1] / "src/spec2lean/gui/static"
     script = (static / "app.js").read_text(encoding="utf-8")
     stylesheet = (static / "styles.css").read_text(encoding="utf-8")
-    for interaction in ("selectDeclaration", "selectClaim", "selectEvidence", "implementedByDeclarations", "global-search"):
+    for interaction in (
+        "selectDeclaration", "selectClaim", "selectEvidence",
+        "implementedByDeclarations", "global-search", "copyLeanSource",
+        "SHARED_CORE_DECLARATION", "No semantic claim mapping recorded.",
+        "data-check-declaration", "data-nav-claim",
+    ):
         assert interaction in script
     assert ".trace-grid" in stylesheet and ".pdf-preview" in stylesheet
+    assert ".claim-gutter" in stylesheet and "user-select:none" in stylesheet
+    assert "navigator.clipboard.writeText(source)" in script
+
+
+def test_copy_source_buffer_preserves_exact_lean_without_gui_annotations(
+    gui_repository: ArtifactRepository,
+) -> None:
+    lean = gui_repository.get_lean("pipeline-run:complete", "unit:shl")
+    assert "/-- Exact operation documentation. -/" in lean["source"]
+    assert "def _unmappedIdentifier : Nat := 0" in lean["source"]
+    assert "3 claims" not in lean["source"]
+    assert "1 claim" not in lean["source"]
+    assert lean["source"] == next(
+        item["source"] for item in lean["documents"] if item["documentId"] == "unit"
+    )
+    shared = next(
+        item["source"] for item in lean["documents"]
+        if item["documentId"] == "shared-core"
+    )
+    assert "/-- Shared operation documentation. -/" in shared
+    assert "def _sharedAdapter" in shared
+    assert "3 claims" not in shared and "1 claim" not in shared

@@ -1,18 +1,13 @@
 from __future__ import annotations
 
 import json
-import re
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-
-DECLARATION_RE = re.compile(
-    r"^(?P<indent>[ \t]*)(?:@[\w.]+[ \t]+)*(?P<kind>def|abbrev|theorem|lemma|structure|class|inductive|enum|instance)"
-    r"(?:\s+\([^\n]*\))?\s+(?P<name>[A-Za-z_][\w'.]*)",
-    re.MULTILINE,
-)
+from ..translation.shared_core.store import load_core
+from ..translation.validation import declaration_source_ranges, lean_declarations
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:
@@ -23,16 +18,13 @@ def _read_json(path: Path) -> dict[str, Any] | None:
         return None
 
 
+def _list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
 def _duration_ms(value: dict[str, Any] | None) -> int | None:
     if not value:
         return None
-
-
-def _unit_failed(value: Any) -> bool:
-    if not isinstance(value, dict):
-        return False
-    check = (value.get("stages") or {}).get("check") if isinstance(value.get("stages"), dict) else None
-    return value.get("status") in {"FAIL", "FAILED"} or (isinstance(check, dict) and check.get("status") == "FAIL")
     direct = value.get("durationMs")
     if isinstance(direct, (int, float)):
         return int(direct)
@@ -44,6 +36,13 @@ def _unit_failed(value: Any) -> bool:
         return max(0, int((finish - start).total_seconds() * 1000))
     except (KeyError, TypeError, ValueError):
         return None
+
+
+def _unit_failed(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    check = (value.get("stages") or {}).get("check") if isinstance(value.get("stages"), dict) else None
+    return value.get("status") in {"FAIL", "FAILED"} or (isinstance(check, dict) and check.get("status") == "FAIL")
 
 
 @dataclass(frozen=True)
@@ -229,6 +228,47 @@ class ArtifactRepository:
                 return path, value
         return None, None
 
+    @staticmethod
+    def _claim_refs_for_mapping(
+        mapping: dict[str, Any], mappings_by_name: dict[str, dict[str, Any]],
+        *, default_unit_id: str | None = None, seen: tuple[str, ...] = (),
+    ) -> list[tuple[str, str]]:
+        """Resolve only claim relationships explicitly recorded by a manifest.
+
+        ``supportsDeclarations`` is itself a persisted relationship, so following
+        it is safe for implementation helpers. Names and source text are never
+        used to manufacture a semantic association.
+        """
+        name = str(mapping.get("declaration", ""))
+        if name in seen:
+            return []
+        result: list[tuple[str, str]] = []
+        for ref in _list(mapping.get("claimRefs")):
+            if not isinstance(ref, dict):
+                continue
+            unit_id, claim_id = ref.get("unitId"), ref.get("claimId")
+            if isinstance(unit_id, str) and isinstance(claim_id, str):
+                pair = (unit_id, claim_id)
+                if pair not in result:
+                    result.append(pair)
+        if default_unit_id is not None:
+            for claim_id in _list(mapping.get("semanticClaimIds")):
+                if isinstance(claim_id, str):
+                    pair = (default_unit_id, claim_id)
+                    if pair not in result:
+                        result.append(pair)
+        for supported in _list(mapping.get("supportsDeclarations")):
+            target = mappings_by_name.get(str(supported))
+            if target is None:
+                continue
+            for pair in ArtifactRepository._claim_refs_for_mapping(
+                target, mappings_by_name, default_unit_id=default_unit_id,
+                seen=(*seen, name),
+            ):
+                if pair not in result:
+                    result.append(pair)
+        return result
+
     def _translation(self, plan: dict[str, Any], unit_id: str) -> tuple[Path | None, str, dict[str, Any] | None, list[dict[str, Any]]]:
         base = self.roots.translations / str(plan["language"]).casefold() / str(plan["version"]) / str(plan["planRunId"])
         for manifest_path in base.glob("*/translation-manifest.json"):
@@ -246,42 +286,284 @@ class ArtifactRepository:
                 source = lean_path.read_text(encoding="utf-8")
             except OSError:
                 source = ""
+            raw_mappings = [
+                dict(item) for item in _list(manifest.get("declarations"))
+                if isinstance(item, dict)
+            ]
+            by_name = {
+                str(item["declaration"]): item for item in raw_mappings
+                if isinstance(item.get("declaration"), str)
+            }
             mappings = []
-            for item in manifest.get("declarations", []):
-                if grouped:
-                    refs = [ref for ref in item.get("claimRefs", []) if ref.get("unitId") == unit_id]
-                    if not refs:
-                        continue
-                    item = {**item, "semanticClaimIds": [ref.get("claimId") for ref in refs]}
-                mappings.append(dict(item))
+            default_unit_id = None if grouped else unit_id
+            for item in raw_mappings:
+                refs = self._claim_refs_for_mapping(
+                    item, by_name, default_unit_id=default_unit_id
+                )
+                mappings.append({
+                    **item,
+                    "semanticClaimIds": [
+                        claim_id for ref_unit, claim_id in refs
+                        if ref_unit == unit_id
+                    ],
+                    "origin": "UNIT_DECLARATION",
+                    "sourceDocumentId": "unit",
+                })
             return lean_path, source, manifest, mappings
         return None, "", None, []
 
+    def _shared_translation(
+        self, plan: dict[str, Any], unit_id: str,
+        group_manifest: dict[str, Any] | None,
+    ) -> tuple[dict[str, Any] | None, list[dict[str, str]]]:
+        """Load the exact frozen core referenced by this group, if used by the unit."""
+        if not isinstance(group_manifest, dict):
+            return None, []
+        reference = group_manifest.get("sharedCore")
+        if not isinstance(reference, dict):
+            return None, []
+        relevant_uses = []
+        for use in _list(group_manifest.get("sharedUses")):
+            if not isinstance(use, dict):
+                continue
+            refs = _list(use.get("claimRefs"))
+            if any(isinstance(ref, dict) and ref.get("unitId") == unit_id for ref in refs):
+                relevant_uses.append(use)
+        if not relevant_uses:
+            return None, []
+        warning_target = str(reference.get("coreRunId", "shared core"))
+        try:
+            core = load_core(
+                self.roots.translations, plan, str(reference.get("coreRunId", ""))
+            )
+            expected = {
+                key: reference.get(key)
+                for key in ("coreRunId", "manifestHash", "sourceHash", "leanModule")
+            }
+            if core.reference() != expected:
+                raise ValueError("translation binding does not match the immutable shared-core snapshot")
+        except (FileNotFoundError, KeyError, OSError, TypeError, ValueError) as exc:
+            return None, [{
+                "type": "BROKEN_SHARED_CORE_REFERENCE",
+                "source": warning_target,
+                "target": str(exc),
+            }]
+
+        raw_mappings = [
+            dict(item) for item in _list(core.manifest.get("declarations"))
+            if isinstance(item, dict)
+        ]
+        by_name = {
+            str(item["declaration"]): item for item in raw_mappings
+            if isinstance(item.get("declaration"), str)
+        }
+        used_names = {
+            str(name)
+            for use in relevant_uses
+            for name in _list(use.get("leanDeclarations"))
+            if isinstance(name, str)
+        }
+        # A helper may explicitly support another registered declaration. Keep
+        # that target inspectable, but never expand by name or source similarity.
+        changed = True
+        while changed:
+            before = len(used_names)
+            used_names.update(
+                str(name)
+                for declaration in tuple(used_names)
+                for name in _list(by_name.get(declaration, {}).get("supportsDeclarations"))
+                if isinstance(name, str)
+            )
+            used_names.update(
+                name for name, mapping in by_name.items()
+                if any(
+                    isinstance(supported, str) and supported in used_names
+                    for supported in _list(mapping.get("supportsDeclarations"))
+                )
+            )
+            changed = len(used_names) != before
+        mappings = []
+        for item in raw_mappings:
+            name = str(item.get("declaration", ""))
+            refs = self._claim_refs_for_mapping(item, by_name)
+            mappings.append({
+                **item,
+                "semanticClaimIds": [
+                    claim_id for ref_unit, claim_id in refs
+                    if ref_unit == unit_id and name in used_names
+                ],
+                "usedBySelectedUnit": name in used_names,
+                "origin": "SHARED_CORE_DECLARATION",
+                "sourceDocumentId": "shared-core",
+            })
+        return {
+            "reference": core.reference(),
+            "source": core.source,
+            "filename": str(core.source_path.relative_to(core.directory)),
+            "leanModule": core.lean_module,
+            "manifest": core.manifest,
+            "mappings": mappings,
+        }, []
+
     @staticmethod
-    def _declaration_ranges(source: str, mappings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _declaration_ranges(
+        source: str, mappings: list[dict[str, Any]], *, filename: str | None,
+        origin: str, source_document_id: str,
+    ) -> list[dict[str, Any]]:
         lines = source.splitlines()
-        namespace = ""
-        for line in lines:
-            if line.strip().startswith("namespace "):
-                namespace = line.strip().split(maxsplit=1)[1]
-                break
-        found = []
-        for match in DECLARATION_RE.finditer(source):
-            start = source.count("\n", 0, match.start()) + 1
-            local = match.group("name")
-            qualified = local if "." in local else f"{namespace}.{local}" if namespace else local
-            found.append({"declaration": qualified, "localName": local, "kind": match.group("kind"), "startLine": start})
-        for index, item in enumerate(found):
-            item["endLine"] = (found[index + 1]["startLine"] - 1) if index + 1 < len(found) else len(lines)
+        computed = declaration_source_ranges(source, filename or "Unit.lean")
+        kinds = lean_declarations(source)
+        found = [{
+            "declaration": name,
+            "localName": name.rsplit(".", 1)[-1],
+            "kind": kinds.get(name),
+            "startLine": value["startLine"],
+            "endLine": value["endLine"],
+        } for name, value in computed.items()]
         by_name = {item["declaration"]: item for item in found}
+        mappings_by_name = {
+            str(item["declaration"]): item for item in mappings
+            if isinstance(item.get("declaration"), str)
+        }
         result = []
-        for mapping in mappings:
-            name = str(mapping.get("declaration", ""))
-            location = by_name.get(name)
-            if not location:
-                local = name.rsplit(".", 1)[-1]
-                location = next((item for item in found if item["localName"] == local), None)
-            result.append({**mapping, **(location or {"startLine": None, "endLine": None, "kind": None, "localName": name.rsplit(".", 1)[-1]}), "broken": location is None})
+        for location in found:
+            name = location["declaration"]
+            mapping = mappings_by_name.get(name)
+            recorded = (mapping or {}).get("sourceRange")
+            if (
+                isinstance(recorded, dict)
+                and isinstance(recorded.get("startLine"), int)
+                and isinstance(recorded.get("endLine"), int)
+                and 1 <= recorded["startLine"] <= recorded["endLine"] <= len(lines)
+                and (
+                    not filename
+                    or recorded.get("file") in {filename, Path(filename).name}
+                    or Path(str(recorded.get("file", ""))).name == Path(filename).name
+                )
+            ):
+                location = {
+                    **location,
+                    "startLine": recorded["startLine"],
+                    "endLine": recorded["endLine"],
+                }
+            result.append({
+                **(mapping or {}), **location,
+                "origin": origin,
+                "sourceDocumentId": source_document_id,
+                "mappingRecorded": mapping is not None,
+                "sourceRange": {
+                    "file": filename,
+                    "startLine": location["startLine"],
+                    "endLine": location["endLine"],
+                },
+                "broken": False,
+            })
+        for name, mapping in mappings_by_name.items():
+            if name in by_name:
+                continue
+            recorded = mapping.get("sourceRange")
+            location = None
+            if (
+                isinstance(recorded, dict)
+                and isinstance(recorded.get("startLine"), int)
+                and isinstance(recorded.get("endLine"), int)
+                and 1 <= recorded["startLine"] <= recorded["endLine"] <= len(lines)
+                and (
+                    not filename
+                    or recorded.get("file") in {filename, Path(filename).name}
+                    or Path(str(recorded.get("file", ""))).name == Path(filename).name
+                )
+            ):
+                location = {
+                    "declaration": name,
+                    "localName": name.rsplit(".", 1)[-1],
+                    "kind": None,
+                    "startLine": recorded["startLine"],
+                    "endLine": recorded["endLine"],
+                }
+            result.append({
+                **mapping,
+                **(location or {
+                    "declaration": name,
+                    "localName": name.rsplit(".", 1)[-1],
+                    "kind": None,
+                    "startLine": None,
+                    "endLine": None,
+                }),
+                "origin": origin,
+                "sourceDocumentId": source_document_id,
+                "mappingRecorded": True,
+                "sourceRange": ({
+                    "file": filename,
+                    "startLine": location["startLine"],
+                    "endLine": location["endLine"],
+                } if location else None),
+                "broken": location is None,
+            })
+        return sorted(
+            result,
+            key=lambda item: (
+                item.get("startLine") is None,
+                item.get("startLine") or 0,
+                str(item.get("declaration", "")),
+            ),
+        )
+
+    @staticmethod
+    def _check_navigation(
+        item: dict[str, Any], declarations: set[str], claims: set[str],
+        evidence: set[str],
+    ) -> dict[str, list[str]]:
+        """Extract navigable artifact IDs from structured diagnostic fields only."""
+        declaration_ids: list[str] = []
+        claim_ids: list[str] = []
+        evidence_ids: list[str] = []
+
+        def add(target: list[str], value: Any, known: set[str]) -> None:
+            if isinstance(value, str) and value in known and value not in target:
+                target.append(value)
+
+        add(declaration_ids, item.get("declaration"), declarations)
+        for value in item.get("declarations", []) if isinstance(item.get("declarations"), list) else []:
+            add(declaration_ids, value, declarations)
+        add(claim_ids, item.get("claimId"), claims)
+        add(claim_ids, item.get("semanticClaimId"), claims)
+        for value in item.get("semanticClaimIds", []) if isinstance(item.get("semanticClaimIds"), list) else []:
+            add(claim_ids, value, claims)
+        for ref in item.get("claimRefs", []) if isinstance(item.get("claimRefs"), list) else []:
+            if isinstance(ref, dict):
+                add(claim_ids, ref.get("claimId"), claims)
+        add(evidence_ids, item.get("evidenceId"), evidence)
+        for value in item.get("evidenceIds", []) if isinstance(item.get("evidenceIds"), list) else []:
+            add(evidence_ids, value, evidence)
+        item_id = item.get("itemId")
+        add(claim_ids, item_id, claims)
+        add(evidence_ids, item_id, evidence)
+        return {
+            "declarations": declaration_ids,
+            "claims": claim_ids,
+            "evidence": evidence_ids,
+        }
+
+    @classmethod
+    def _checks_with_navigation(
+        cls, value: Any, declarations: set[str], claims: set[str],
+        evidence: set[str],
+    ) -> Any:
+        if isinstance(value, list):
+            return [
+                cls._checks_with_navigation(item, declarations, claims, evidence)
+                for item in value
+            ]
+        if not isinstance(value, dict):
+            return value
+        result = {
+            key: cls._checks_with_navigation(item, declarations, claims, evidence)
+            for key, item in value.items()
+        }
+        navigation = cls._check_navigation(value, declarations, claims, evidence)
+        if any(navigation.values()):
+            result["navigation"] = navigation
         return result
 
     def get_unit(self, run_id: str, unit_id: str) -> dict[str, Any]:
@@ -290,12 +572,22 @@ class ArtifactRepository:
         semantics_path, semantic_artifact = self._artifact_for_unit(self.roots.semantics, plan, unit_id, "semantics.json")
         check_path, check = self._artifact_for_unit(self.roots.checks, plan, unit_id, "check.json")
         lean_path, source, manifest, mappings = self._translation(plan, unit_id)
-        declarations = self._declaration_ranges(source, mappings)
+        unit_filename = lean_path.name if lean_path else None
+        unit_declarations = self._declaration_ranges(
+            source, mappings, filename=unit_filename,
+            origin="UNIT_DECLARATION", source_document_id="unit",
+        )
+        shared, shared_warnings = self._shared_translation(plan, unit_id, manifest)
+        shared_declarations = self._declaration_ranges(
+            shared["source"], shared["mappings"], filename=shared["filename"],
+            origin="SHARED_CORE_DECLARATION", source_document_id="shared-core",
+        ) if shared else []
+        declarations = [*unit_declarations, *shared_declarations]
         claims = list(((semantic_artifact or {}).get("semantics") or {}).get("claims") or [])
         evidence = list((evidence_artifact or {}).get("evidence") or [])
         claim_by_id = {item.get("claimId"): item for item in claims}
         evidence_by_id = {item.get("evidenceId"): item for item in evidence}
-        warnings: list[dict[str, str]] = []
+        warnings: list[dict[str, str]] = list(shared_warnings)
         for declaration in declarations:
             declaration["claims"] = []
             for claim_id in declaration.get("semanticClaimIds", []):
@@ -304,15 +596,36 @@ class ArtifactRepository:
                     declaration["claims"].append(claim_id)
                 else:
                     warnings.append({"type": "BROKEN_CLAIM_REFERENCE", "source": declaration.get("declaration", ""), "target": str(claim_id)})
-        declaration_by_claim: dict[str, list[str]] = {}
+            declaration["mapped"] = bool(declaration["claims"])
+            if declaration.get("broken"):
+                warnings.append({
+                    "type": "MISSING_LEAN_DECLARATION",
+                    "source": str(declaration.get("declaration", "")),
+                    "target": str(declaration.get("sourceRange") or declaration.get("sourceDocumentId", "")),
+                })
+        declaration_by_claim: dict[str, list[dict[str, str]]] = {}
         for declaration in declarations:
+            if declaration.get("broken"):
+                continue
             for claim_id in declaration.get("claims", []):
-                declaration_by_claim.setdefault(claim_id, []).append(declaration["declaration"])
+                item = {
+                    "declaration": declaration["declaration"],
+                    "origin": declaration["origin"],
+                    "sourceDocumentId": declaration["sourceDocumentId"],
+                }
+                if item not in declaration_by_claim.setdefault(claim_id, []):
+                    declaration_by_claim[claim_id].append(item)
         normalized_claims = []
         for claim in claims:
             missing = [item for item in claim.get("evidenceIds", []) if item not in evidence_by_id]
             warnings.extend({"type": "BROKEN_EVIDENCE_REFERENCE", "source": claim.get("claimId", ""), "target": str(item)} for item in missing)
-            normalized_claims.append({**claim, "declarations": declaration_by_claim.get(claim.get("claimId"), []), "missingEvidenceIds": missing})
+            implementation = declaration_by_claim.get(claim.get("claimId"), [])
+            normalized_claims.append({
+                **claim,
+                "declarations": [item["declaration"] for item in implementation],
+                "declarationMappings": implementation,
+                "missingEvidenceIds": missing,
+            })
         claims_by_evidence: dict[str, list[str]] = {}
         for claim in claims:
             for evidence_id in claim.get("evidenceIds", []):
@@ -320,19 +633,67 @@ class ArtifactRepository:
         normalized_evidence = []
         for item in evidence:
             used_claims = claims_by_evidence.get(item.get("evidenceId"), [])
-            used_declarations = sorted({name for claim_id in used_claims for name in declaration_by_claim.get(claim_id, [])})
-            normalized_evidence.append({**item, "usedByClaims": used_claims, "implementedByDeclarations": used_declarations})
+            implementation = []
+            for claim_id in used_claims:
+                for mapping in declaration_by_claim.get(claim_id, []):
+                    if mapping not in implementation:
+                        implementation.append(mapping)
+            normalized_evidence.append({
+                **item,
+                "usedByClaims": used_claims,
+                "implementedByDeclarations": [
+                    mapping["declaration"] for mapping in implementation
+                ],
+                "implementationMappings": implementation,
+            })
+        documents = [{
+            "documentId": "unit",
+            "label": "Unit",
+            "origin": "UNIT_DECLARATION",
+            "source": source,
+            "filename": unit_filename,
+            "available": bool(source),
+            "declarations": unit_declarations,
+        }]
+        if shared:
+            documents.append({
+                "documentId": "shared-core",
+                "label": "Shared core",
+                "origin": "SHARED_CORE_DECLARATION",
+                "source": shared["source"],
+                "filename": shared["filename"],
+                "available": bool(shared["source"]),
+                "leanModule": shared["leanModule"],
+                "reference": shared["reference"],
+                "declarations": shared_declarations,
+            })
+        normalized_check = self._checks_with_navigation(
+            check,
+            {
+                str(item["declaration"])
+                for item in declarations
+                if item.get("startLine") is not None
+            },
+            set(claim_by_id), set(evidence_by_id),
+        ) if check else None
         return {
             "runId": run_id,
             "planRunId": plan.get("planRunId"),
             "language": plan.get("language"),
             "version": plan.get("version"),
             "unit": unit,
-            "lean": {"source": source, "filename": lean_path.name if lean_path else None, "available": bool(source), "declarations": declarations},
+            "lean": {
+                "source": source,
+                "filename": unit_filename,
+                "available": bool(source),
+                "declarations": declarations,
+                "documents": documents,
+                "sharedCore": shared["reference"] if shared else None,
+            },
             "claims": normalized_claims,
             "evidence": normalized_evidence,
             "semantics": (semantic_artifact or {}).get("semantics"),
-            "checks": check,
+            "checks": normalized_check,
             "repairs": self._repairs(plan, unit_id),
             "timeline": self._timeline(run, plan, unit_id, check),
             "warnings": warnings,
@@ -342,7 +703,12 @@ class ArtifactRepository:
                 "translation": manifest is not None,
                 "check": check_path is not None,
             },
-            "raw": {"semantics": semantic_artifact, "translationManifest": manifest, "check": check},
+            "raw": {
+                "semantics": semantic_artifact,
+                "translationManifest": manifest,
+                "sharedCoreManifest": shared["manifest"] if shared else None,
+                "check": check,
+            },
         }
 
     def get_lean(self, run_id: str, unit_id: str) -> dict[str, Any]:
@@ -414,7 +780,7 @@ class ArtifactRepository:
                     if not node_id:
                         continue
                     row = connection.execute(
-                        """SELECT n.node_id,n.node_type,n.title,n.section_number,n.raw_text,n.page_start,n.page_end,n.html_anchor,
+                        """SELECT n.node_id,n.document_id,n.node_type,n.title,n.section_number,n.raw_text,n.page_start,n.page_end,n.html_anchor,
                                   d.source_type,d.title AS document_title,d.local_path,d.official_url
                            FROM nodes n JOIN documents d USING(document_id) WHERE n.node_id=?""", (node_id,),
                     ).fetchone()
@@ -490,7 +856,12 @@ class ArtifactRepository:
                 continue
             for declaration in data["lean"]["declarations"]:
                 if needle in str(declaration.get("declaration", "")).casefold():
-                    results.append({"type": "declaration", "unitId": unit["unitId"], "id": declaration.get("declaration"), "label": declaration.get("localName"), "detail": declaration.get("role")})
+                    results.append({
+                        "type": "declaration", "unitId": unit["unitId"],
+                        "id": declaration.get("declaration"),
+                        "label": declaration.get("localName"),
+                        "detail": declaration.get("origin"),
+                    })
             for claim in data["claims"]:
                 if needle in (str(claim.get("claimId", "")) + " " + str(claim.get("statement", ""))).casefold():
                     results.append({"type": "claim", "unitId": unit["unitId"], "id": claim.get("claimId"), "label": claim.get("statement"), "detail": claim.get("kind")})
