@@ -286,7 +286,7 @@ It has only the structured `submit_translation` tool. It must import the exact
 `leanModule`, reuse registered declarations, keep unit behavior local, and
 submit one complete group file.
 
-The schema-v3 group manifest records `sharedCore` as either `null` or:
+The schema-v4 group manifest records `sharedCore` as either `null` or:
 
 ```json
 {
@@ -321,6 +321,17 @@ manifest is loaded. Historical schema-v3 manifests without ranges remain
 readable.
 
 For instruction-like units, the pure `OPERATION` is the primary declaration.
+For an inherently effectful instruction it may instead be a compact primary
+transition/relation; Phase 5 must not manufacture a shallow pure facade. A
+modifier mentioned inside one requested unit is represented as a parameter,
+condition, or branch rather than a duplicate operation unless the modified
+spelling is itself a requested unit.
+When the frozen core already owns the operation semantics, the group still
+provides its instruction-named `OPERATION` entry point. That local declaration
+uses empty direct `claimRefs` and `supportsDeclarations` pointing to the exact
+registered core declaration listed in `sharedUses`. The resolved support edge
+supplies traceability without transferring or duplicating shared-claim
+ownership.
 An `EXECUTION` mapping is accepted only when it adds Phase-4-supported state,
 side-effect, or guard behavior. A value-level destination assignment does not
 force a wrapper, and a definition that only applies the mapped operation is
@@ -333,8 +344,10 @@ Deterministic translation validation additionally requires:
 - every required shared dependency to have a valid, actually referenced use;
 - no local redefinition, alias-around substitute, or local claim ownership for
   a core-owned shared dependency;
-- every local declaration to be mapped to current `(unitId, claimId)` pairs or
-  a resolvable implementation-helper support chain;
+- every local declaration to be mapped to current `(unitId, claimId)` pairs, a
+  resolvable implementation-helper support chain, or an `OPERATION` delegation
+  to an explicitly used frozen-core declaration;
+- duplicate operation bodies for the same requested unit are rejected;
 - all required per-unit operation and predication responsibilities;
 - no forbidden Lean construct or unmapped named declaration.
 
@@ -348,12 +361,13 @@ Phase 6 loads the exact referenced snapshot and verifies all four reference
 fields. For Build it copies the dependency source to an isolated temporary
 module tree, compiles it there, and then compiles the group; no `.olean` is
 written into the immutable snapshot. Coverage and Traceability resolve imported
-claims through Phase-4 dependencies, `sharedUses`, core concepts, and core
-declaration mappings. Core source and manifest hashes are added to check input
+claims through Phase-4 dependencies, `sharedUses`, core concepts, and the exact
+declaration-level core mappings. It never inflates one declaration to every
+claim owned by its shared dependency. Core source and manifest hashes are added to check input
 hashes only for core-backed groups.
 
-The checker still accepts historical schema-v2 group manifests as well as the
-current schema-v3 manifest. A non-core/legacy build follows the original
+The checker still accepts historical schema-v2 and schema-v3 group manifests as
+well as the current schema-v4 manifest. A non-core/legacy build follows the original
 single-file command and retains exactly the original three input-hash keys;
 pipeline freshness, however, requires the current Phase-5 schema.
 

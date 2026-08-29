@@ -83,8 +83,12 @@ it as a source fact or derived interpretation.
 
 The default recovery bound is two rounds. Set it with
 `--max-question-rounds N`; `0` restores immediate failure on insufficient
-evidence. A partially resolved or unresolved handler submission blocks the
-pipeline rather than silently generating semantics.
+evidence. Partial resolutions with validated evidence additions remain
+tentative, automatically restart extraction, and carry the reduced question
+set into the next round. A handler session failure or a no-progress unresolved
+submission also consumes the remaining automatic rounds. Only exhaustion of
+the configured bound is terminal; unresolved questions are never silently
+converted into semantics.
 
 ## Submission and artifact schema
 

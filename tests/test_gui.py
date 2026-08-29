@@ -88,9 +88,14 @@ def gui_repository(tmp_path: Path) -> ArtifactRepository:
 /-- Exact operation documentation. -/
 def shlResult (a b : UInt32) := a <<< b.toNat
 
+def delegatedResult (a b : UInt32) :=
+  Spec2LeanShared.Ptx.V93.Cfixture.sharedShift a b
+
 def execute (a b : UInt32) := shlResult a b
 
 def _unmappedIdentifier : Nat := 0
+
+def otherUnitOperation : Nat := 1
 
 end Spec2Lean.Ptx.ShlB32
 """
@@ -155,7 +160,7 @@ end Spec2LeanShared.Ptx.V93.Cfixture
     put(translation / "translation-manifest.json", {
         "schemaVersion": 3, "language": language, "version": version,
         "planRunId": plan_id, "leanFile": "Unit.lean",
-        "group": {"name": "ShiftInstructions", "unitIds": [unit_id]},
+        "group": {"name": "ShiftInstructions", "unitIds": [unit_id, "unit:other"]},
         "sharedCore": core_reference,
         "sharedUses": [{
             "dependencyId": "shared:value",
@@ -167,8 +172,15 @@ end Spec2LeanShared.Ptx.V93.Cfixture
         }],
         "declarations": [
             {"declaration": "Spec2Lean.Ptx.ShlB32.shlResult", "role": "OPERATION", "claimRefs": [{"unitId": unit_id, "claimId": "claim:op"}, {"unitId": unit_id, "claimId": "claim:broken"}]},
+            {
+                "declaration": "Spec2Lean.Ptx.ShlB32.delegatedResult",
+                "role": "OPERATION",
+                "claimRefs": [],
+                "supportsDeclarations": ["Spec2LeanShared.Ptx.V93.Cfixture.sharedShift"],
+            },
             {"declaration": "Spec2Lean.Ptx.ShlB32.execute", "role": "EXECUTION", "claimRefs": [{"unitId": unit_id, "claimId": "claim:op"}]},
             {"declaration": "Spec2Lean.Ptx.ShlB32.notInSource", "role": "SEMANTIC_HELPER", "claimRefs": [{"unitId": unit_id, "claimId": "claim:op"}]},
+            {"declaration": "Spec2Lean.Ptx.ShlB32.otherUnitOperation", "role": "OPERATION", "claimRefs": [{"unitId": "unit:other", "claimId": "claim:other"}]},
         ],
     })
     check = {
@@ -225,6 +237,12 @@ def test_code_claim_evidence_and_reverse_traceability(gui_repository: ArtifactRe
     assert operation["claims"] == ["claim:op", "claim:broken"]
     execute = next(item for item in unit["lean"]["declarations"] if item.get("role") == "EXECUTION")
     assert execute["claims"] == ["claim:op"]
+    delegated = next(
+        item for item in unit["lean"]["declarations"]
+        if item.get("declaration", "").endswith(".delegatedResult")
+    )
+    assert delegated["claims"] == ["claim:op"]
+    assert delegated["usedBySelectedUnit"] is True
     claim = next(item for item in unit["claims"] if item["claimId"] == "claim:op")
     assert claim["evidenceIds"] == ["evidence:html", "evidence:pdf"]
     html = next(item for item in unit["evidence"] if item["evidenceId"] == "evidence:html")
@@ -242,6 +260,7 @@ def test_shared_core_and_reverse_relationships_are_exact_and_inspectable(
     unit = gui_repository.get_unit("pipeline-run:complete", "unit:shl")
     documents = {item["documentId"]: item for item in unit["lean"]["documents"]}
     assert documents["shared-core"]["origin"] == "SHARED_CORE_DECLARATION"
+    assert documents["shared-core"]["projection"] == "SELECTED_UNIT_DECLARATIONS"
     assert documents["shared-core"]["reference"] == unit["lean"]["sharedCore"]
     shared = next(
         item for item in unit["lean"]["declarations"]
@@ -255,11 +274,14 @@ def test_shared_core_and_reverse_relationships_are_exact_and_inspectable(
     )
     assert helper["claims"] == ["claim:op"]
     assert helper["supportsDeclarations"] == [shared["declaration"]]
-    unused = next(
-        item for item in unit["lean"]["declarations"]
-        if item["declaration"].endswith(".unusedCore")
+    visible_names = {item["declaration"] for item in unit["lean"]["declarations"]}
+    assert not any(name.endswith(".unusedCore") for name in visible_names)
+    assert not any(name.endswith(".otherUnitOperation") for name in visible_names)
+    assert all(
+        item["mapped"]
+        for item in unit["lean"]["declarations"]
+        if item["origin"] == "SHARED_CORE_DECLARATION"
     )
-    assert unused["mapped"] is False and unused["claims"] == []
     trace = gui_repository.get_trace(
         "pipeline-run:complete", "unit:shl", helper["declaration"]
     )
@@ -334,6 +356,7 @@ def test_frontend_contains_primary_traceability_interactions() -> None:
         "selectDeclaration", "selectClaim", "selectEvidence",
         "implementedByDeclarations", "global-search", "copyLeanSource",
         "SHARED_CORE_DECLARATION", "No semantic claim mapping recorded.",
+        "Unrelated shared-core declarations omitted",
         "data-check-declaration", "data-nav-claim",
     ):
         assert interaction in script

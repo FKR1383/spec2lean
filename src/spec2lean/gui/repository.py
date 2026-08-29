@@ -276,7 +276,7 @@ class ArtifactRepository:
             if not manifest:
                 continue
             schema = manifest.get("schemaVersion")
-            grouped = schema in {2, 3}
+            grouped = schema in {2, 3, 4}
             relevant = grouped and unit_id in (manifest.get("group") or {}).get("unitIds", [])
             relevant = relevant or not grouped and (manifest.get("unit") or {}).get("unitId") == unit_id
             if not relevant:
@@ -300,12 +300,16 @@ class ArtifactRepository:
                 refs = self._claim_refs_for_mapping(
                     item, by_name, default_unit_id=default_unit_id
                 )
+                selected_refs = [
+                    (ref_unit, claim_id) for ref_unit, claim_id in refs
+                    if ref_unit == unit_id
+                ]
                 mappings.append({
                     **item,
                     "semanticClaimIds": [
-                        claim_id for ref_unit, claim_id in refs
-                        if ref_unit == unit_id
+                        claim_id for _, claim_id in selected_refs
                     ],
+                    "usedBySelectedUnit": bool(selected_refs),
                     "origin": "UNIT_DECLARATION",
                     "sourceDocumentId": "unit",
                 })
@@ -368,31 +372,33 @@ class ArtifactRepository:
         changed = True
         while changed:
             before = len(used_names)
-            used_names.update(
-                str(name)
-                for declaration in tuple(used_names)
-                for name in _list(by_name.get(declaration, {}).get("supportsDeclarations"))
-                if isinstance(name, str)
-            )
-            used_names.update(
-                name for name, mapping in by_name.items()
-                if any(
-                    isinstance(supported, str) and supported in used_names
+            for name, mapping in by_name.items():
+                supports = {
+                    str(supported)
                     for supported in _list(mapping.get("supportsDeclarations"))
-                )
-            )
+                    if isinstance(supported, str)
+                }
+                if name not in used_names and not supports.intersection(used_names):
+                    continue
+                used_names.add(name)
+                used_names.update(supports)
             changed = len(used_names) != before
+
         mappings = []
-        for item in raw_mappings:
-            name = str(item.get("declaration", ""))
+        for name in sorted(used_names):
+            item = by_name.get(name)
+            if item is None:
+                continue
             refs = self._claim_refs_for_mapping(item, by_name)
+            selected_claims = [
+                claim_id for ref_unit, claim_id in refs if ref_unit == unit_id
+            ]
+            if not selected_claims:
+                continue
             mappings.append({
                 **item,
-                "semanticClaimIds": [
-                    claim_id for ref_unit, claim_id in refs
-                    if ref_unit == unit_id and name in used_names
-                ],
-                "usedBySelectedUnit": name in used_names,
+                "semanticClaimIds": selected_claims,
+                "usedBySelectedUnit": True,
                 "origin": "SHARED_CORE_DECLARATION",
                 "sourceDocumentId": "shared-core",
             })
@@ -403,12 +409,17 @@ class ArtifactRepository:
             "leanModule": core.lean_module,
             "manifest": core.manifest,
             "mappings": mappings,
+            "usedNames": sorted(
+                str(item["declaration"]) for item in mappings
+                if isinstance(item.get("declaration"), str)
+            ),
         }, []
 
     @staticmethod
     def _declaration_ranges(
         source: str, mappings: list[dict[str, Any]], *, filename: str | None,
         origin: str, source_document_id: str,
+        include_names: set[str] | None = None,
     ) -> list[dict[str, Any]]:
         lines = source.splitlines()
         computed = declaration_source_ranges(source, filename or "Unit.lean")
@@ -419,11 +430,12 @@ class ArtifactRepository:
             "kind": kinds.get(name),
             "startLine": value["startLine"],
             "endLine": value["endLine"],
-        } for name, value in computed.items()]
+        } for name, value in computed.items() if include_names is None or name in include_names]
         by_name = {item["declaration"]: item for item in found}
         mappings_by_name = {
             str(item["declaration"]): item for item in mappings
             if isinstance(item.get("declaration"), str)
+            and (include_names is None or str(item["declaration"]) in include_names)
         }
         result = []
         for location in found:
@@ -572,15 +584,54 @@ class ArtifactRepository:
         semantics_path, semantic_artifact = self._artifact_for_unit(self.roots.semantics, plan, unit_id, "semantics.json")
         check_path, check = self._artifact_for_unit(self.roots.checks, plan, unit_id, "check.json")
         lean_path, source, manifest, mappings = self._translation(plan, unit_id)
+        shared, shared_warnings = self._shared_translation(plan, unit_id, manifest)
+        if shared:
+            resolution_mappings = {
+                str(item["declaration"]): item
+                for item in [
+                    *_list((manifest or {}).get("declarations")),
+                    *_list(shared["manifest"].get("declarations")),
+                ]
+                if isinstance(item, dict) and isinstance(item.get("declaration"), str)
+            }
+            resolved_mappings = []
+            for mapping in mappings:
+                refs = self._claim_refs_for_mapping(mapping, resolution_mappings)
+                selected_claims = [
+                    claim_id for ref_unit, claim_id in refs if ref_unit == unit_id
+                ]
+                resolved_mappings.append({
+                    **mapping,
+                    "semanticClaimIds": selected_claims,
+                    "usedBySelectedUnit": bool(selected_claims),
+                })
+            mappings = resolved_mappings
         unit_filename = lean_path.name if lean_path else None
+        broken_declaration_names = {
+            str(diagnostic["declaration"])
+            for diagnostic in _list(((check or {}).get("traceability") or {}).get("brokenMappings"))
+            if isinstance(diagnostic, dict)
+            and isinstance(diagnostic.get("declaration"), str)
+        }
+        grouped_units = _list(((manifest or {}).get("group") or {}).get("unitIds"))
+        unit_include_names: set[str] | None = None
+        if len(grouped_units) > 1:
+            unit_include_names = {
+                str(item["declaration"])
+                for item in mappings
+                if item.get("usedBySelectedUnit")
+                and isinstance(item.get("declaration"), str)
+            }
+            unit_include_names.update(broken_declaration_names)
         unit_declarations = self._declaration_ranges(
             source, mappings, filename=unit_filename,
             origin="UNIT_DECLARATION", source_document_id="unit",
+            include_names=unit_include_names,
         )
-        shared, shared_warnings = self._shared_translation(plan, unit_id, manifest)
         shared_declarations = self._declaration_ranges(
             shared["source"], shared["mappings"], filename=shared["filename"],
             origin="SHARED_CORE_DECLARATION", source_document_id="shared-core",
+            include_names=set(shared["usedNames"]) | broken_declaration_names,
         ) if shared else []
         declarations = [*unit_declarations, *shared_declarations]
         claims = list(((semantic_artifact or {}).get("semantics") or {}).get("claims") or [])
@@ -658,11 +709,12 @@ class ArtifactRepository:
         if shared:
             documents.append({
                 "documentId": "shared-core",
-                "label": "Shared core",
+                "label": "Shared core · selected unit",
                 "origin": "SHARED_CORE_DECLARATION",
                 "source": shared["source"],
                 "filename": shared["filename"],
                 "available": bool(shared["source"]),
+                "projection": "SELECTED_UNIT_DECLARATIONS",
                 "leanModule": shared["leanModule"],
                 "reference": shared["reference"],
                 "declarations": shared_declarations,

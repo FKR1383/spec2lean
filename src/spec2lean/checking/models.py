@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 
-CHECK_SCHEMA_VERSION = 1
+CHECK_SCHEMA_VERSION = 2
 CHECK_STATUSES = ("PASS", "FAIL")
 ROUTING_TARGETS = ("COMPLETE", "TROUBLESHOOTER", "TRANSLATOR", "SEMANTIC_EXTRACTOR")
 

@@ -335,6 +335,8 @@ def test_group_coverage_and_traceability_resolve_imported_shared_core(html_datab
     }]
     group_source = """namespace Spec2Lean.Synthetic.Unit
 
+def operation (a b : Nat) : Nat := Spec2Lean.Synthetic.Shared.operation a b
+
 def execute (a b : Nat) : Nat := a + b
 
 end Spec2Lean.Synthetic.Unit
@@ -353,6 +355,11 @@ end Spec2Lean.Synthetic.Unit
             "artifactHash": semantics_artifact_hash(semantics),
         }],
         "declarations": [{
+            "declaration": "Spec2Lean.Synthetic.Unit.operation",
+            "role": "OPERATION",
+            "claimRefs": [],
+            "supportsDeclarations": ["Spec2Lean.Synthetic.Shared.operation"],
+        }, {
             "declaration": "Spec2Lean.Synthetic.Unit.execute",
             "role": "EXECUTION",
             "claimRefs": [{"unitId": unit_id, "claimId": "claim:execution"}],
@@ -414,8 +421,18 @@ end Spec2Lean.Synthetic.Shared
     assert traceability["status"] == "PASS", traceability["brokenMappings"]
     assert {item["declaration"] for item in traceability["validMappings"]} == {
         "Spec2Lean.Synthetic.Shared.operation",
+        "Spec2Lean.Synthetic.Unit.operation",
         "Spec2Lean.Synthetic.Unit.execute",
     }
+    delegated = next(
+        item for item in traceability["validMappings"]
+        if item["declaration"] == "Spec2Lean.Synthetic.Unit.operation"
+    )
+    assert delegated["claimRefs"] == [{
+        "unitId": unit_id,
+        "claimId": "claim:operation",
+        "evidenceIds": ["evidence:source"],
+    }]
     shared = next(
         item for item in traceability["validMappings"]
         if item["declaration"] == "Spec2Lean.Synthetic.Shared.operation"
@@ -425,6 +442,63 @@ end Spec2Lean.Synthetic.Shared
         "claimId": "claim:operation",
         "evidenceIds": ["evidence:source"],
     }]
+
+    precise_semantics = copy.deepcopy(semantics)
+    precise_semantics["semantics"]["dependencies"][0]["semanticClaimIds"] = [
+        "claim:operation", "claim:execution",
+    ]
+    precise_group = copy.deepcopy(group_manifest)
+    precise_group["semanticsArtifacts"][0]["artifactHash"] = semantics_artifact_hash(
+        precise_semantics
+    )
+    precise_group["sharedUses"][0]["leanDeclarations"] = [
+        "Spec2Lean.Synthetic.Shared.operation",
+        "Spec2Lean.Synthetic.Shared.executionRelation",
+    ]
+    precise_group["sharedUses"][0]["claimRefs"] = [
+        {"unitId": unit_id, "claimId": "claim:operation"},
+        {"unitId": unit_id, "claimId": "claim:execution"},
+    ]
+    precise_core = copy.deepcopy(core_manifest)
+    precise_core["concepts"][0]["leanDeclarations"].append(
+        "Spec2Lean.Synthetic.Shared.executionRelation"
+    )
+    precise_core["concepts"][0]["claimRefs"].append(
+        {"unitId": unit_id, "claimId": "claim:execution"}
+    )
+    precise_core["declarations"].append({
+        "declaration": "Spec2Lean.Synthetic.Shared.executionRelation",
+        "role": "EXECUTION",
+        "dependencyIds": ["shared:operation"],
+        "claimRefs": [{"unitId": unit_id, "claimId": "claim:execution"}],
+    })
+    precise_source = core_source.replace(
+        "end Spec2Lean.Synthetic.Shared",
+        "def executionRelation (result : Nat) : Prop := result > 0\n\n"
+        "end Spec2Lean.Synthetic.Shared",
+    )
+    precise_trace = group_traceability_test(
+        plan,
+        {unit_id: bundle},
+        {unit_id: precise_semantics},
+        group_source,
+        precise_group,
+        html_database,
+        core_source=precise_source,
+        core_manifest=precise_core,
+    )
+    assert precise_trace["status"] == "PASS", precise_trace["brokenMappings"]
+    precise_refs = {
+        item["declaration"]: {
+            (ref["unitId"], ref["claimId"]) for ref in item["claimRefs"]
+        }
+        for item in precise_trace["validMappings"]
+        if item["declaration"].startswith("Spec2Lean.Synthetic.Shared.")
+    }
+    assert precise_refs == {
+        "Spec2Lean.Synthetic.Shared.operation": {(unit_id, "claim:operation")},
+        "Spec2Lean.Synthetic.Shared.executionRelation": {(unit_id, "claim:execution")},
+    }
 
     broken_manifest = copy.deepcopy(core_manifest)
     broken_manifest["concepts"][0]["claimRefs"] = []
@@ -469,6 +543,49 @@ end Spec2Lean.Synthetic.Shared
     assert subset["status"] == "PASS", subset["brokenMappings"]
     assert "Spec2Lean.Synthetic.Shared.unused" not in {
         item["declaration"] for item in subset["validMappings"]
+    }
+
+    # A reused frozen representation may be globally traceable through an
+    # earlier unit without owning a claim in the current group.  It must not be
+    # misreported as an unmapped current declaration; current claim coverage
+    # remains independently mandatory.
+    reused_group = copy.deepcopy(group_manifest)
+    reused_group["sharedUses"][0]["leanDeclarations"].append(
+        "Spec2Lean.Synthetic.Shared.historicalRepresentation"
+    )
+    reused_core = copy.deepcopy(core_manifest)
+    reused_core["concepts"][0]["leanDeclarations"].append(
+        "Spec2Lean.Synthetic.Shared.historicalRepresentation"
+    )
+    reused_core["concepts"][0]["claimRefs"].append({
+        "unitId": "unit:historical", "claimId": "claim:historical",
+    })
+    reused_core["declarations"].append({
+        "declaration": "Spec2Lean.Synthetic.Shared.historicalRepresentation",
+        "role": "PRIMARY_TYPE",
+        "dependencyIds": ["shared:operation"],
+        "claimRefs": [{
+            "unitId": "unit:historical", "claimId": "claim:historical",
+        }],
+    })
+    reused_source = core_source.replace(
+        "end Spec2Lean.Synthetic.Shared",
+        "abbrev historicalRepresentation := Nat\n\n"
+        "end Spec2Lean.Synthetic.Shared",
+    )
+    reused_trace = group_traceability_test(
+        plan,
+        {unit_id: bundle},
+        {unit_id: semantics},
+        group_source,
+        reused_group,
+        html_database,
+        core_source=reused_source,
+        core_manifest=reused_core,
+    )
+    assert reused_trace["status"] == "PASS", reused_trace["brokenMappings"]
+    assert "Spec2Lean.Synthetic.Shared.historicalRepresentation" not in {
+        item["declaration"] for item in reused_trace["validMappings"]
     }
 
 

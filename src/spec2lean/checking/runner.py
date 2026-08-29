@@ -90,7 +90,7 @@ def run_checks(
         _, _, manifest, _ = load_translation(translations_root, plan, unit_id)
     except FileNotFoundError:
         raise
-    if manifest.get("schemaVersion") in {2, 3}:
+    if manifest.get("schemaVersion") in {2, 3, 4}:
         results = run_group_checks(
             plan,
             evidence_root=evidence_root,
@@ -166,9 +166,9 @@ def run_group_checks(
     translation_directory, source, manifest, _ = load_group_translation(
         translations_root, plan, group
     )
-    if manifest.get("schemaVersion") not in {2, 3}:
+    if manifest.get("schemaVersion") not in {2, 3, 4}:
         raise ValueError(
-            f"group checking requires a schema-v2 or schema-v3 translation manifest: {group}"
+            f"group checking requires a schema-v2, schema-v3, or schema-v4 translation manifest: {group}"
         )
     lean_file = translation_directory / str(manifest.get("leanFile", f"{group}.lean"))
     if not lean_file.is_file():

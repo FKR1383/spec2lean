@@ -240,6 +240,23 @@ def _is_direct_operation_wrapper(
     return False
 
 
+def _normalized_definition_body(source: str, declaration: str) -> str | None:
+    """Return a conservative normalized body for duplicate-operation checks."""
+    source_range = declaration_source_ranges(source, "<source>").get(declaration)
+    if source_range is None:
+        return None
+    lines = source.splitlines()
+    fragment = "\n".join(
+        lines[int(source_range["startLine"]) - 1:int(source_range["endLine"])]
+    )
+    clean = " ".join(_without_comments_and_strings(fragment).split())
+    if ":=" not in clean:
+        return None
+    body = clean.split(":=", 1)[1].strip()
+    body = re.sub(r"\s+end(?:\s+[A-Za-z_][A-Za-z0-9_'.]*)?\s*$", "", body)
+    return body or None
+
+
 def forbidden_constructs(source: str) -> list[dict[str, str]]:
     clean = _without_comments_and_strings(source)
     return [
@@ -459,12 +476,27 @@ def validate_submission(
             supports = []
         elif len(supports) != len(set(supports)):
             diagnostics.append(_diagnostic("DUPLICATE_SUPPORT_MAPPING", "supportsDeclarations contains a duplicate", f"{path}.supportsDeclarations"))
-        if supports and role != "IMPLEMENTATION_HELPER":
-            diagnostics.append(_diagnostic("INVALID_SUPPORT_ROLE", "only IMPLEMENTATION_HELPER may use supportsDeclarations", f"{path}.supportsDeclarations"))
-        if role != "IMPLEMENTATION_HELPER" and not claim_refs:
-            diagnostics.append(_diagnostic("MISSING_SEMANTIC_MAPPING", "semantic declarations require at least one claim reference", f"{path}.claimRefs"))
-        if role == "IMPLEMENTATION_HELPER" and not claim_refs and not supports:
-            diagnostics.append(_diagnostic("MISSING_SEMANTIC_MAPPING", "implementation helpers require semantic claims or a supported semantic declaration", path))
+        support_roles = {"IMPLEMENTATION_HELPER", "OPERATION"}
+        if supports and role not in support_roles:
+            diagnostics.append(_diagnostic(
+                "INVALID_SUPPORT_ROLE",
+                "only IMPLEMENTATION_HELPER or OPERATION may use supportsDeclarations",
+                f"{path}.supportsDeclarations",
+            ))
+        if role in support_roles:
+            if not claim_refs and not supports:
+                subject = "operations" if role == "OPERATION" else "implementation helpers"
+                diagnostics.append(_diagnostic(
+                    "MISSING_SEMANTIC_MAPPING",
+                    f"{subject} require semantic claims or a supported semantic declaration",
+                    path,
+                ))
+        elif not claim_refs:
+            diagnostics.append(_diagnostic(
+                "MISSING_SEMANTIC_MAPPING",
+                "semantic declarations require at least one claim reference",
+                f"{path}.claimRefs",
+            ))
         mapping = {"declaration": name, "role": role, "claimRefs": claim_refs}
         if supports:
             mapping["supportsDeclarations"] = list(supports)
@@ -472,17 +504,41 @@ def validate_submission(
         mapping_source_indices.append(index)
 
     mappings_by_name = {item["declaration"]: item for item in mappings}
-    for index, mapping in enumerate(mappings):
+    core_mappings_by_name = {
+        str(item["declaration"]): item
+        for item in (scope.shared_core or {}).get("declarations", [])
+        if isinstance(item, dict) and isinstance(item.get("declaration"), str)
+    }
+    used_core_declarations = {
+        name
+        for use in shared_uses
+        for name in use.get("leanDeclarations", [])
+        if isinstance(name, str)
+    }
+    resolvable_mappings = {**core_mappings_by_name, **mappings_by_name}
+    for source_index, mapping in zip(mapping_source_indices, mappings):
         for supported in mapping.get("supportsDeclarations", []):
             if supported == mapping["declaration"]:
-                diagnostics.append(_diagnostic("SELF_SUPPORT_MAPPING", "a declaration cannot support itself", f"$.declarations[{index}].supportsDeclarations"))
-            elif supported not in mappings_by_name:
-                diagnostics.append(_diagnostic("UNKNOWN_SUPPORT_DECLARATION", f"supported declaration has no mapping: {supported}", f"$.declarations[{index}].supportsDeclarations"))
+                diagnostics.append(_diagnostic("SELF_SUPPORT_MAPPING", "a declaration cannot support itself", f"$.declarations[{source_index}].supportsDeclarations"))
+            elif supported not in resolvable_mappings:
+                diagnostics.append(_diagnostic("UNKNOWN_SUPPORT_DECLARATION", f"supported declaration has no local or frozen-core mapping: {supported}", f"$.declarations[{source_index}].supportsDeclarations"))
+            elif supported in core_mappings_by_name and supported not in used_core_declarations:
+                diagnostics.append(_diagnostic(
+                    "UNBOUND_SHARED_SUPPORT",
+                    f"supported frozen-core declaration must be listed in sharedUses: {supported}",
+                    f"$.declarations[{source_index}].supportsDeclarations",
+                ))
+            elif mapping["role"] == "OPERATION" and supported not in core_mappings_by_name:
+                diagnostics.append(_diagnostic(
+                    "INVALID_OPERATION_SUPPORT",
+                    "an OPERATION may delegate only to a declaration in the frozen shared core",
+                    f"$.declarations[{source_index}].supportsDeclarations",
+                ))
 
     def resolved_claims(name: str, seen: set[str]) -> set[tuple[str, str]]:
-        if name in seen or name not in mappings_by_name:
+        if name in seen or name not in resolvable_mappings:
             return set()
-        mapping = mappings_by_name[name]
+        mapping = resolvable_mappings[name]
         claims = {(item["unitId"], item["claimId"]) for item in mapping["claimRefs"]}
         for supported in mapping.get("supportsDeclarations", []):
             claims.update(resolved_claims(supported, {*seen, name}))
@@ -501,6 +557,29 @@ def validate_submission(
     operation_declarations = {
         item["declaration"] for item in mappings if item["role"] == "OPERATION"
     }
+    operation_bodies_by_unit: dict[str, dict[str, set[str]]] = {
+        unit_id: {} for unit_id in scope.unit_ids
+    }
+    for mapping in mappings:
+        if mapping["role"] != "OPERATION":
+            continue
+        body = _normalized_definition_body(source, mapping["declaration"])
+        if body is None:
+            continue
+        for unit_id, _claim_id in resolved_claims(mapping["declaration"], set()):
+            if unit_id in operation_bodies_by_unit:
+                operation_bodies_by_unit[unit_id].setdefault(body, set()).add(
+                    mapping["declaration"]
+                )
+    for unit_id, bodies in operation_bodies_by_unit.items():
+        for names in bodies.values():
+            if len(names) > 1:
+                diagnostics.append(_diagnostic(
+                    "DUPLICATE_OPERATION_IMPLEMENTATION",
+                    f"instruction {unit_id} has duplicate OPERATION bodies: {sorted(names)}; "
+                    "represent modifier conditions as parameters/branches unless they are separate requested units",
+                    "$.declarations",
+                ))
     for source_index, mapping in zip(mapping_source_indices, mappings):
         if mapping["role"] != "EXECUTION":
             continue

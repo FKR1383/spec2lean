@@ -88,6 +88,21 @@ def _text(response: dict) -> dict:
     return json.loads(response["content"][0]["text"])
 
 
+def _write_evidence_artifact(tmp_path: Path, plan: dict, bundle: dict) -> tuple[Path, Path]:
+    evidence_root = tmp_path / "evidence"
+    evidence_dir = (
+        evidence_root / plan["language"] / plan["version"] / plan["planRunId"]
+        / unit_directory_name(bundle["unit"])
+    )
+    evidence_dir.mkdir(parents=True)
+    (evidence_dir / "evidence.json").write_text(json.dumps(bundle), encoding="utf-8")
+    (evidence_dir / "evidence.md").write_text("initial\n", encoding="utf-8")
+    (evidence_dir / "retriever-run.json").write_text(json.dumps({
+        "unitId": bundle["unit"]["unitId"], "outcome": "VALID",
+    }), encoding="utf-8")
+    return evidence_root, evidence_dir
+
+
 def test_database_resolution_augments_canonical_evidence(planner_database, tmp_path):
     plan, bundle, failure = _inputs(planner_database)
     scope = OpenQuestionScope.from_inputs(
@@ -394,3 +409,165 @@ def test_semantic_runner_resolves_questions_then_reextracts(
     assert len(augmented["evidence"]) == 2
     metadata = json.loads((evidence_dir / "retriever-run.json").read_text())
     assert metadata["openQuestionAugmentations"][0]["outcome"] == "RESOLVED"
+
+
+def test_semantic_runner_carries_partial_progress_into_the_next_automatic_round(
+    planner_database, tmp_path, monkeypatch
+):
+    plan, bundle, _ = _inputs(planner_database)
+    evidence_root, evidence_dir = _write_evidence_artifact(tmp_path, plan, bundle)
+    monkeypatch.setattr("spec2lean.semantics.runner.shutil.which", lambda _: "/usr/bin/opencode")
+    monkeypatch.setattr("spec2lean.semantics.runner.require_extractor_model", lambda _: None)
+
+    extractor_attempt = 0
+
+    def fake_run_unit(_plan, current_bundle, output, _executable, **_kwargs):
+        nonlocal extractor_attempt
+        extractor_attempt += 1
+        output.mkdir(parents=True, exist_ok=True)
+        if extractor_attempt == 1:
+            artifact = {
+                "outcome": "INSUFFICIENT_EVIDENCE",
+                "failure": {"missingAspects": ["first missing aspect", "second missing aspect"]},
+            }
+        elif extractor_attempt == 2:
+            assert [item["resolutionId"] for item in current_bundle["resolutions"]] == [
+                "resolution:first"
+            ]
+            artifact = {
+                "outcome": "INSUFFICIENT_EVIDENCE",
+                "failure": {"missingAspects": ["second missing aspect"]},
+            }
+        else:
+            assert [item["resolutionId"] for item in current_bundle["resolutions"]] == [
+                "resolution:first", "resolution:second"
+            ]
+            artifact = {"outcome": "SUCCESS"}
+        (output / "semantics.json").write_text(json.dumps(artifact), encoding="utf-8")
+        (output / "semantics.md").write_text("attempt\n", encoding="utf-8")
+        (output / "extractor-run.json").write_text(json.dumps({
+            "outcome": artifact["outcome"]
+        }), encoding="utf-8")
+        return output
+
+    monkeypatch.setattr("spec2lean.semantics.runner._run_unit", fake_run_unit)
+    handler_round = 0
+
+    def resolution(resolution_id: str, question_id: str) -> dict:
+        return {
+            "resolutionId": resolution_id,
+            "unitId": bundle["unit"]["unitId"],
+            "questionId": question_id,
+            "sourceKind": "LLM_REASONING",
+            "role": "OPERATION",
+            "statement": f"Resolution for {question_id}.",
+            "rationale": "Bounded automatic recovery test.",
+            "nonNormative": True,
+            "provenance": {"model": "test", "reasoning": "test"},
+        }
+
+    def fake_handler(_database, _plan, current_bundle, _failure, output, **_kwargs):
+        nonlocal handler_round
+        handler_round += 1
+        output.mkdir(parents=True)
+        augmented = dict(current_bundle)
+        if handler_round == 1:
+            augmented["resolutions"] = [resolution("resolution:first", "question:first")]
+            return {
+                "runId": "question-run:first",
+                "outcome": "PARTIALLY_RESOLVED",
+                "questions": [
+                    {"questionId": "question:first", "status": "RESOLVED"},
+                    {"questionId": "question:second", "status": "OPEN"},
+                ],
+                "databaseEvidenceAdded": [],
+                "supplementalResolutionsAdded": ["resolution:first"],
+            }, augmented
+        augmented["resolutions"] = [
+            *current_bundle.get("resolutions", []),
+            resolution("resolution:second", "question:second"),
+        ]
+        return {
+            "runId": "question-run:second",
+            "outcome": "RESOLVED",
+            "questions": [{"questionId": "question:second", "status": "RESOLVED"}],
+            "databaseEvidenceAdded": [],
+            "supplementalResolutionsAdded": ["resolution:second"],
+        }, augmented
+
+    monkeypatch.setattr(
+        "spec2lean.semantics.question_runner.handle_open_questions", fake_handler
+    )
+    messages: list[str] = []
+    build_semantics(
+        plan,
+        evidence_root,
+        tmp_path / "semantics",
+        database=planner_database,
+        max_question_rounds=2,
+        progress=messages.append,
+    )
+
+    assert extractor_attempt == 3 and handler_round == 2
+    persisted = json.loads((evidence_dir / "evidence.json").read_text())
+    assert [item["resolutionId"] for item in persisted["resolutions"]] == [
+        "resolution:first", "resolution:second"
+    ]
+    metadata = json.loads((evidence_dir / "retriever-run.json").read_text())
+    assert [
+        item["outcome"] for item in metadata["openQuestionAugmentations"]
+    ] == ["PARTIALLY_RESOLVED", "RESOLVED"]
+    assert any("applied partial evidence progress" in message for message in messages)
+
+
+def test_semantic_runner_exhausts_automatic_rounds_before_no_progress_failure(
+    planner_database, tmp_path, monkeypatch
+):
+    plan, bundle, _ = _inputs(planner_database)
+    evidence_root, evidence_dir = _write_evidence_artifact(tmp_path, plan, bundle)
+    monkeypatch.setattr("spec2lean.semantics.runner.shutil.which", lambda _: "/usr/bin/opencode")
+    monkeypatch.setattr("spec2lean.semantics.runner.require_extractor_model", lambda _: None)
+
+    def fake_run_unit(_plan, _bundle, output, _executable, **_kwargs):
+        output.mkdir(parents=True, exist_ok=True)
+        artifact = {
+            "outcome": "INSUFFICIENT_EVIDENCE",
+            "failure": {"missingAspects": ["still unresolved"]},
+        }
+        (output / "semantics.json").write_text(json.dumps(artifact), encoding="utf-8")
+        (output / "semantics.md").write_text("attempt\n", encoding="utf-8")
+        (output / "extractor-run.json").write_text("{}", encoding="utf-8")
+        return output
+
+    monkeypatch.setattr("spec2lean.semantics.runner._run_unit", fake_run_unit)
+    handler_round = 0
+
+    def unresolved_handler(_database, _plan, current_bundle, _failure, output, **_kwargs):
+        nonlocal handler_round
+        handler_round += 1
+        output.mkdir(parents=True)
+        return {
+            "runId": f"question-run:{handler_round}",
+            "outcome": "UNRESOLVED",
+            "questions": [{"questionId": "question:open", "status": "OPEN"}],
+            "databaseEvidenceAdded": [],
+            "supplementalResolutionsAdded": [],
+        }, current_bundle
+
+    monkeypatch.setattr(
+        "spec2lean.semantics.question_runner.handle_open_questions", unresolved_handler
+    )
+    messages: list[str] = []
+    with pytest.raises(RuntimeError, match="automatic round limit reached \\(2\\)"):
+        build_semantics(
+            plan,
+            evidence_root,
+            tmp_path / "semantics",
+            database=planner_database,
+            max_question_rounds=2,
+            progress=messages.append,
+        )
+
+    assert handler_round == 2
+    assert any("automatically retrying unresolved questions" in message for message in messages)
+    assert "resolutions" not in json.loads((evidence_dir / "evidence.json").read_text())

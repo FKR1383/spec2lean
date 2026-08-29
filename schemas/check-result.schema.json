@@ -9,7 +9,7 @@
     "translationRunId", "status", "build", "coverage", "traceability", "routing"
   ],
   "properties": {
-    "schemaVersion": {"const": 1},
+    "schemaVersion": {"const": 2},
     "phase": {"const": "CHECK"},
     "planRunId": {"type": "string", "pattern": "^plan:"},
     "language": {"type": "string", "minLength": 1},

@@ -8,7 +8,7 @@ from typing import Any
 from ..util import canonical_json, stable_id
 
 
-TRANSLATION_SCHEMA_VERSION = 3
+TRANSLATION_SCHEMA_VERSION = 4
 TRANSLATOR_MODEL = "openai/gpt-5.6-sol"
 TRANSLATOR_REASONING = "medium"
 TRANSLATOR_AGENT = "spec2lean-lean-translator"

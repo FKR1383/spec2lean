@@ -49,6 +49,13 @@ Translation rules:
 - Implement each exact instruction spelling as a distinct pure operation. Make this OPERATION the
   small, readable primary semantic declaration; do not let an unmodified instruction expose behavior
   belonging to a modifier variant.
+- The requested unit name defines the declaration boundary. A modifier form mentioned inside that
+  unit's semantics is a parameter, condition, or branch of the same model unless the planner requested
+  that modified spelling as its own exact unit. Do not create duplicate top-level operations such as an
+  unmodified operation and an identical modifier-specific operation for one unit.
+- For an inherently effectful instruction with no meaningful value-level result, the primary OPERATION
+  may be a compact transition/relation that directly states the effect. Do not manufacture a shallow
+  pure facade merely to place the real semantics in a second declaration.
 - Generate an EXECUTION declaration only when it implements genuine behavior beyond the pure result
   and that behavior is supported by the unit's accepted Phase-4 stateEffects or predication. A
   destination-shaped syntax operand, result, or value-level destination assignment alone never
@@ -61,6 +68,9 @@ Translation rules:
 - Preserve explicit operational and implementation-oriented algorithms as independently meaningful
   definitions only when the semantic artifact distinguishes them. Never manufacture duplicate
   functions or trivial theorem padding.
+- Keep parameters coherent and minimal. Derive flags from the values they describe instead of accepting
+  independent values that can contradict one another, and introduce a small context/state structure
+  when it materially simplifies several related execution parameters.
 - Represent operands, branches, edge cases, destination update, predication, restrictions, and state
   effects to the extent required by the semantic artifact. Do not weaken or omit semantics merely to
   simplify Lean.
@@ -70,10 +80,14 @@ Translation rules:
   generate large theorem families. Small definitions needed by the semantics are appropriate.
 - Map every named top-level declaration in the submitted source. Use one of these roles:
   {', '.join(DECLARATION_ROLES)}.
-- Every semantic declaration mapping must cite one or more existing claimRefs, each containing the
-  exact unitId and claimId. A pure
-  IMPLEMENTATION_HELPER may instead use supportsDeclarations. Never invent IDs or reproduce evidence
-  hashes, source anchors, quotations, or deterministic metadata.
+- Every semantic declaration mapping must cite only the existing claimRefs that the declaration itself
+  implements, each containing the exact unitId and claimId. Never assign all claims of a unit or shared
+  dependency to a declaration merely to satisfy coverage. A pure IMPLEMENTATION_HELPER may instead use
+  supportsDeclarations. A local OPERATION that is a thin instruction entry point around an authoritative
+  frozen-core operation must use empty claimRefs plus supportsDeclarations naming that exact registered
+  core declaration; also list that declaration in sharedUses. This records delegation without taking
+  ownership of the shared claims. Never invent IDs or reproduce evidence hashes, source anchors,
+  quotations, or deterministic metadata.
 - Every INSTRUCTION needs its own OPERATION mapping. Predicated semantics also need an EXECUTION
   mapping; other execution/state wrappers are optional and valid only when they implement genuine
   source-supported behavior. Introduced structures/inductives/classes use PRIMARY_TYPE.

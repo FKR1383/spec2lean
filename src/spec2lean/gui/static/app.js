@@ -148,8 +148,15 @@ async function copyLeanSource(){
 }
 function renderCode() {
   const document=activeCodeDocument(); const declarations=document.declarations||[];
+  let omitting=false;
   return document.source.split('\n').map((line,index)=>{
     const n=index+1; const declaration=declarations.find(d=>n>=d.startLine&&n<=d.endLine); const start=declaration?.startLine===n;
+    if(document.projection==='SELECTED_UNIT_DECLARATIONS'&&!declaration){
+      if(omitting)return '';
+      omitting=true;
+      return '<div class="code-gap" aria-label="Unrelated shared-core declarations omitted">⋯ unrelated shared-core declarations omitted ⋯</div>';
+    }
+    omitting=false;
     const hit=state.codeQuery && line.toLowerCase().includes(state.codeQuery.toLowerCase());
     const mappingClass=declaration?(declaration.mapped?'mapped':'unmapped'):'';
     const marker=declaration?.mapped?`${declaration.claims.length} claim${declaration.claims.length===1?'':'s'}`:'unmapped';

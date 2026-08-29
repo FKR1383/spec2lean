@@ -291,29 +291,50 @@ def build_semantics(
             progress(f"starting Open Question Handler round {question_round}/{max_question_rounds}")
             from .question_runner import handle_open_questions
 
-            question_artifact, augmented = handle_open_questions(
-                database,
-                plan,
-                bundle,
-                artifact,
-                attempt / "handler",
-                timeout_seconds=timeout_seconds,
-                runtime_command=runtime_probe_command,
-                run_command=run_command,
-            )
+            try:
+                question_artifact, augmented = handle_open_questions(
+                    database,
+                    plan,
+                    bundle,
+                    artifact,
+                    attempt / "handler",
+                    timeout_seconds=timeout_seconds,
+                    runtime_command=runtime_probe_command,
+                    run_command=run_command,
+                )
+            except RuntimeError:
+                if question_round < max_question_rounds:
+                    progress(
+                        "Open Question Handler session failed; automatically retrying "
+                        f"with round {question_round + 1}/{max_question_rounds}"
+                    )
+                    continue
+                raise
             progress(
                 f"Open Question Handler {question_artifact['outcome'].lower().replace('_', ' ')}; "
                 f"database additions={len(question_artifact['databaseEvidenceAdded'])}, "
                 f"supplemental resolutions={len(question_artifact['supplementalResolutionsAdded'])}"
             )
-            if question_artifact["outcome"] != "RESOLVED":
-                open_ids = [
-                    item["questionId"] for item in question_artifact["questions"]
-                    if item["status"] == "OPEN"
-                ]
+            open_ids = [
+                item["questionId"] for item in question_artifact["questions"]
+                if item["status"] == "OPEN"
+            ]
+            additions = [
+                *question_artifact["databaseEvidenceAdded"],
+                *question_artifact["supplementalResolutionsAdded"],
+            ]
+            if question_artifact["outcome"] != "RESOLVED" and not additions:
+                if question_round < max_question_rounds:
+                    progress(
+                        "Open Question Handler made no evidence progress; automatically "
+                        f"retrying unresolved questions in round "
+                        f"{question_round + 1}/{max_question_rounds}"
+                    )
+                    continue
                 raise RuntimeError(
                     "OPEN_QUESTIONS_UNRESOLVED: " + ", ".join(open_ids) +
-                    f"; handler artifact: {attempt / 'handler'}"
+                    f"; automatic round limit reached ({max_question_rounds}); "
+                    f"handler artifact: {attempt / 'handler'}"
                 )
 
             pending_augmentations.append({
@@ -323,7 +344,13 @@ def build_semantics(
                 "supplementalResolutionsAdded": question_artifact["supplementalResolutionsAdded"],
                 "resultingEvidenceBundleHash": evidence_bundle_hash(augmented),
             })
-            progress("augmented Phase-3 evidence and restarting the Semantic Extractor")
+            if open_ids:
+                progress(
+                    "applied partial evidence progress and restarting the Semantic Extractor "
+                    f"before the next automatic round; remaining questions={len(open_ids)}"
+                )
+            else:
+                progress("augmented Phase-3 evidence and restarting the Semantic Extractor")
 
             extractor_archive = attempt / "extractor"
             extractor_archive.mkdir(parents=True)

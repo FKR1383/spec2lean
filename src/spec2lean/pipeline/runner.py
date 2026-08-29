@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from ..checking.models import CHECK_SCHEMA_VERSION
 from ..checking.runner import run_group_checks
 from ..checking.store import load_check
 from ..constants import INDEX_SCHEMA_VERSION, PARSER_VERSION
@@ -399,7 +400,8 @@ def _check_reusable(options: PipelineOptions, plan: dict[str, Any], unit_id: str
             "sharedCoreManifest": _hash_text(canonical_json(core.manifest)),
         })
     valid = (
-        check.get("phase") == "CHECK"
+        check.get("schemaVersion") == CHECK_SCHEMA_VERSION
+        and check.get("phase") == "CHECK"
         and check.get("translationRunId") == translation_manifest.get("translationRunId")
         and check.get("inputHashes") == expected
     )

@@ -39,14 +39,21 @@ Rules:
 - Record every concept by its supplied dependencyId and the exact public/supporting Lean declarations
   that implement it. Do not invent dependency IDs or semantic claim IDs.
 - Map every named Lean declaration using one of these roles: {declaration_roles}. Semantic
-  declarations cite the supplied claimRefs. A purely Lean IMPLEMENTATION_HELPER may instead support
-  a mapped semantic declaration through supportsDeclarations.
+  declarations cite only the supplied claimRefs that the declaration itself implements. Never copy
+  every claim of a shared concept onto every declaration merely to satisfy coverage. A purely Lean
+  IMPLEMENTATION_HELPER may instead support a mapped semantic declaration through
+  supportsDeclarations, preserving the exact helper-to-declaration-to-claim chain.
 - If a parent exists, return source beginning with the complete parent source byte-for-byte and append
   only new definitions. Preserve every existing concept/declaration mapping exactly; add each missing
   abstraction once. Put every appended declaration below the exact leanNamespace supplied in the
   context. New root cores are placed in their isolated namespace deterministically after submission.
 - Prefer interfaces that permit consistent pure unit semantics and shared evaluation/execution
   infrastructure when the supplied semantics support that boundary. Do not force it otherwise.
+- Keep representations compact and internally coherent. Derive classifications and boundary flags from
+  their authoritative values instead of accepting contradictory parallel parameters. When several
+  operations share execution context, prefer one small typed context over long unrelated parameter lists.
+- Do not turn source statements into unconstrained Prop parameters and then merely conjoin them unless
+  the accepted semantics genuinely expose those propositions as inputs to a relational model.
 - Use readable Lean 4 with no sorry, admit, axioms, constants, unsafe, or partial declarations.
 - Use only the two shared_core tools. If submission diagnostics reject the candidate, correct it in
   this same bounded session.

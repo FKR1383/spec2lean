@@ -2,6 +2,27 @@
 
 All notable changes to Spec2Lean are documented here.
 
+## Unreleased
+
+### Changed
+
+- Phase-4 open-question recovery now carries partial evidence progress into a fresh extractor and
+  automatically uses remaining bounded handler rounds; transient or no-progress handler outcomes no
+  longer require a manual pipeline resume after the first attempt.
+- Local instruction `OPERATION` declarations may delegate traceability to an explicitly used frozen
+  shared-core declaration without duplicating ownership of its semantic claims.
+- Duplicate-operation validation now deduplicates declaration names before comparing operation bodies,
+  so one operation mapped to several claims is not mistaken for several implementations.
+- Phase-6 shared-core traceability now preserves exact declaration claim references instead of
+  assigning every dependency claim to every declaration.
+- Phase-5 translation manifests use schema version 4, check results use schema version 2, and the
+  shared-core generator policy uses version 3 so artifacts produced under the stricter rules are
+  regenerated automatically.
+- Translation rejects duplicate operation bodies for one requested unit and instructs generators
+  to model modifiers as conditions and inherently effectful operations as compact transitions.
+- The GUI shows a selected-unit shared-core projection and omits unrelated historical and sibling
+  declarations from the normal traceability view while retaining the immutable full source.
+
 ## 1.1.0 - 2026-08-29
 
 ### Added

@@ -221,9 +221,9 @@ def revise_translation(
         )
     if (
         str(candidate_source).rstrip() == source.rstrip()
-        and candidate_manifest.get("declarations") == manifest.get("declarations")
+        and candidate_manifest == manifest
     ):
-        raise ValueError("translation revision made no source or declaration-mapping change")
+        raise ValueError("translation revision made no artifact change")
 
     new_source = str(candidate_source).rstrip() + "\n"
     new_manifest = json.dumps(candidate_manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n"

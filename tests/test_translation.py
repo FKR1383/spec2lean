@@ -203,7 +203,7 @@ def test_valid_translation_artifact_and_deterministic_metadata():
     assert validate_manifest(plan, semantics_by_unit, candidate["leanSource"], manifest) == []
 
     metadata = {
-        "schemaVersion": 3, "phase": "LLM_GROUP_TRANSLATOR", "planRunId": scope.plan_run_id,
+        "schemaVersion": 4, "phase": "LLM_GROUP_TRANSLATOR", "planRunId": scope.plan_run_id,
         "group": {"name": GROUP, "unitIds": [UNIT["unitId"]]},
         "translationRunId": scope.translation_run_id,
         "translator": "opencode", "model": TRANSLATOR_MODEL, "reasoning": TRANSLATOR_REASONING,
@@ -388,6 +388,82 @@ end Spec2Lean.Synthetic.AlphaU32
     assert "SHARED_DECLARATION_REDEFINED" in _codes(diagnostics)
 
 
+def test_operation_may_delegate_to_an_explicitly_used_frozen_core_declaration():
+    plan, semantics, core_manifest = _shared_inputs()
+    dependency = semantics["semantics"]["dependencies"][0]
+    dependency["semanticClaimIds"].append("claim:op")
+    shared_operation = "Spec2Lean.Synthetic.Shared.operation"
+    core_manifest["concepts"][0]["leanDeclarations"].append(shared_operation)
+    core_manifest["concepts"][0]["claimRefs"].extend(_refs("claim:op"))
+    core_manifest["declarations"].append({
+        "declaration": shared_operation,
+        "role": "OPERATION",
+        "dependencyIds": ["shared:value"],
+        "claimRefs": _refs("claim:op"),
+    })
+    semantics_by_unit = {UNIT["unitId"]: semantics}
+    scope = TranslationGroupScope.from_inputs(
+        plan,
+        GROUP,
+        semantics_by_unit,
+        created_at="2026-01-02T03:04:05.000000Z",
+        shared_core=core_manifest,
+    )
+    shared_value = "Spec2Lean.Synthetic.Shared.Value"
+    prefix = "Spec2Lean.Synthetic.AlphaU32"
+    source = f"""import {core_manifest['leanModule']}
+
+namespace {prefix}
+
+structure MachineState where
+  destination : {shared_value}
+
+def result (a b : {shared_value}) : {shared_value} :=
+  {shared_operation} a b
+
+def exec (state : MachineState) (guard : Bool) (a b : {shared_value}) : MachineState :=
+  if guard then {{ destination := result a b }} else state
+
+end {prefix}
+"""
+    submission = {
+        "leanSource": source,
+        "sharedUses": [{
+            "dependencyId": "shared:value",
+            "leanDeclarations": [shared_value, shared_operation],
+        }],
+        "declarations": [
+            {
+                "declaration": f"{prefix}.MachineState",
+                "role": "PRIMARY_TYPE",
+                "claimRefs": _refs("claim:state"),
+            },
+            {
+                "declaration": f"{prefix}.result",
+                "role": "OPERATION",
+                "claimRefs": [],
+                "supportsDeclarations": [shared_operation],
+            },
+            {
+                "declaration": f"{prefix}.exec",
+                "role": "EXECUTION",
+                "claimRefs": _refs("claim:state"),
+            },
+        ],
+    }
+
+    candidate, diagnostics = validate_submission(scope, semantics_by_unit, submission)
+    assert diagnostics == [] and candidate is not None
+    operation = candidate["manifest"]["declarations"][1]
+    assert operation["claimRefs"] == []
+    assert operation["supportsDeclarations"] == [shared_operation]
+
+    unbound = copy.deepcopy(submission)
+    unbound["sharedUses"][0]["leanDeclarations"] = [shared_value]
+    _, diagnostics = validate_submission(scope, semantics_by_unit, unbound)
+    assert "UNBOUND_SHARED_SUPPORT" in _codes(diagnostics)
+
+
 def test_missing_frozen_shared_abstraction_is_structured_and_stops_translation():
     plan, semantics, core_manifest = _shared_inputs()
     semantics_by_unit = {UNIT["unitId"]: semantics}
@@ -483,6 +559,35 @@ def test_unknown_claim_and_operation_without_mapping_are_rejected():
     del missing_operation["declarations"][1]
     _, diagnostics = validate_submission(_scope(plan, semantics), semantics_by_unit, missing_operation)
     assert _codes(diagnostics) >= {"MISSING_OPERATION_MAPPING", "UNMAPPED_LEAN_DECLARATION"}
+
+
+def test_duplicate_operations_for_one_unit_are_rejected():
+    plan, semantics = _inputs()
+    duplicate = _submission()
+    duplicate["leanSource"] = duplicate["leanSource"].replace(
+        "def exec",
+        "def modifierResult (a b : BitVec 32) : BitVec 32 := a + b\n\ndef exec",
+    )
+    duplicate["declarations"].insert(2, {
+        "declaration": "Spec2Lean.Synthetic.AlphaU32.modifierResult",
+        "role": "OPERATION",
+        "claimRefs": _refs("claim:op"),
+    })
+    _, diagnostics = validate_submission(
+        _scope(plan, semantics), {UNIT["unitId"]: semantics}, duplicate
+    )
+    assert "DUPLICATE_OPERATION_IMPLEMENTATION" in _codes(diagnostics)
+
+
+def test_one_operation_with_multiple_claims_is_not_a_duplicate_implementation():
+    plan, semantics = _inputs()
+    submission = _submission()
+    submission["declarations"][1]["claimRefs"] = _refs("claim:op", "claim:state")
+    candidate, diagnostics = validate_submission(
+        _scope(plan, semantics), {UNIT["unitId"]: semantics}, submission
+    )
+    assert "DUPLICATE_OPERATION_IMPLEMENTATION" not in _codes(diagnostics)
+    assert diagnostics == [] and candidate is not None
 
 
 def test_group_scope_supports_multiple_units_and_unit_scoped_claim_ids():
@@ -780,3 +885,69 @@ def test_bounded_translation_revision_updates_existing_artifact_and_keeps_build_
             source_check_hash="sha256:" + "1" * 64,
         )
     assert len(calls) == 1
+
+
+def test_translation_revision_accepts_manifest_only_semantics_refresh(tmp_path):
+    plan, semantics, _, semantics_root, _ = _write_inputs(tmp_path)
+    original, diagnostics = validate_submission(
+        _scope(plan, semantics), {UNIT["unitId"]: semantics}, _submission()
+    )
+    assert diagnostics == [] and original is not None
+    translations_root = tmp_path / "translations"
+    directory = unit_directory(translations_root, plan, UNIT)
+    directory.mkdir(parents=True)
+    (directory / f"{GROUP}.lean").write_text(
+        original["leanSource"], encoding="utf-8"
+    )
+    (directory / "translation-manifest.json").write_text(
+        json.dumps(original["manifest"]), encoding="utf-8"
+    )
+    (directory / "translator-run.json").write_text("{}", encoding="utf-8")
+
+    revised_semantics = copy.deepcopy(semantics)
+    revised_semantics["semantics"]["claims"][1]["statement"] = (
+        "The result is bounded addition with refreshed wording."
+    )
+    semantics_path = next(semantics_root.rglob("semantics.json"))
+    semantics_path.write_text(json.dumps(revised_semantics), encoding="utf-8")
+
+    def fake_session(context, *, timeout_seconds):
+        candidate, inner = validate_submission(
+            TranslationGroupScope.from_dict(context["scope"]),
+            context["semanticsByUnit"],
+            _submission(),
+        )
+        assert inner == [] and candidate is not None
+        return {
+            "candidate": candidate,
+            "error": None,
+            "session": {"sessionId": "manifest-refresh"},
+        }
+
+    revise_translation(
+        plan,
+        semantics_root=semantics_root,
+        translations_root=translations_root,
+        unit_id=UNIT["unitId"],
+        diagnostics=[{
+            "code": "SEMANTICS_ARTIFACT_HASH_MISMATCH",
+            "message": "refresh the Phase-4 artifact binding",
+        }],
+        reason="SEMANTICS_REVISED",
+        session_runner=fake_session,
+        source_check_hash="sha256:" + "2" * 64,
+        now=lambda: "2026-08-27T00:00:00Z",
+    )
+    refreshed_source = (directory / f"{GROUP}.lean").read_text(encoding="utf-8")
+    refreshed_manifest = json.loads(
+        (directory / "translation-manifest.json").read_text(encoding="utf-8")
+    )
+    assert refreshed_source == original["leanSource"]
+    assert refreshed_manifest["declarations"] == original["manifest"]["declarations"]
+    assert refreshed_manifest["semanticsArtifacts"] != original["manifest"]["semanticsArtifacts"]
+    assert validate_manifest(
+        plan,
+        {UNIT["unitId"]: revised_semantics},
+        refreshed_source,
+        refreshed_manifest,
+    ) == []

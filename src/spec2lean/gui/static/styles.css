@@ -130,6 +130,7 @@ h1 { font-size: clamp(34px, 5vw, 60px); letter-spacing: -.055em; line-height: 1.
 .code-line.selected { background: #1c363b; border-left-color: var(--cyan); }
 .code-line.unmapped.selected { background:#2b2921; border-left-color:var(--gold); }
 .code-line.search-hit { background: #614e1a77; }
+.code-gap { color:#718597; padding:7px 14px 7px 49px; font:italic 11px var(--sans); border-block:1px dashed #263746; }
 .line-no { color: #526474; text-align: right; padding-right: 13px; user-select: none; }
 .line-code { white-space: pre; color: #d7dee6; }
 .kw { color: var(--purple); }.type { color: var(--blue);}.str { color: var(--gold);}.comment { color: #718597; font-style: italic; }

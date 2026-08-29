@@ -223,6 +223,17 @@ def test_pipeline_composes_all_phases_and_resume_reuses_fresh_artifacts(
     assert resumed["plan"]["disposition"] == "REUSED"
     assert {resumed["units"][key]["stages"]["evidence"] for key in resumed["units"]} == {"REUSED"}
 
+    check_path = next(options.checks_root.glob("synthetic/1.0/*/*/check.json"))
+    stale_check = json.loads(check_path.read_text())
+    stale_check["schemaVersion"] = 1
+    _json(check_path, stale_check)
+    calls.clear()
+    _, rechecked = run_pipeline(request, resumed_options, services=services)
+    assert calls == ["check"]
+    assert next(iter(rechecked["units"].values()))["stages"]["check"] == {
+        "disposition": "RAN", "status": "PASS",
+    }
+
 
 def test_resume_rebuilds_evidence_rejected_by_current_validation(
     planner_database, tmp_path, monkeypatch

@@ -170,7 +170,6 @@ def _core_claim_mappings(
         ))
 
     relevant_names: set[str] = set()
-    declaration_dependencies: dict[str, set[str]] = defaultdict(set)
     for dependency_id, use in sorted(uses.items()):
         concept = concepts.get(dependency_id)
         if concept is None:
@@ -202,7 +201,6 @@ def _core_claim_mappings(
         if dependency_id in expected_by_dependency:
             for name in used_names & registered_names:
                 relevant_names.add(name)
-                declaration_dependencies[name].add(dependency_id)
 
     # Keep the shared trace bounded to declarations this group actually names,
     # while retaining the support graph needed to resolve implementation
@@ -217,16 +215,7 @@ def _core_claim_mappings(
             before = len(relevant_names)
             relevant_names.add(name)
             relevant_names.update(supports)
-            selected = _string_items(mapping.get("dependencyIds")) & set(uses)
-            declaration_dependencies[name].update(selected)
             changed = changed or len(relevant_names) != before
-
-    for name in relevant_names:
-        mapping = flat_declarations.get(name)
-        if mapping is not None:
-            declaration_dependencies[name].update(
-                _string_items(mapping.get("dependencyIds")) & set(uses)
-            )
 
     mappings: dict[str, dict[str, Any]] = {}
     for name in sorted(relevant_names):
@@ -246,24 +235,18 @@ def _core_claim_mappings(
             ))
             continue
         mapping = dict(raw_mapping)
-        if mapping.get("role") != "IMPLEMENTATION_HELPER":
-            refs = {
-                ref
-                for dependency_id in declaration_dependencies[name]
-                for ref in expected_by_dependency.get(dependency_id, set())
-            }
-            refs.update(ref for ref in _claim_refs(mapping.get("claimRefs")) if ref[0] in unit_ids)
-            mapping["claimRefs"] = [
-                {"unitId": unit_id, "claimId": claim_id}
-                for unit_id, claim_id in sorted(refs)
-            ]
-        else:
-            mapping["claimRefs"] = [
-                {"unitId": unit_id, "claimId": claim_id}
-                for unit_id, claim_id in sorted(
-                    ref for ref in _claim_refs(mapping.get("claimRefs")) if ref[0] in unit_ids
-                )
-            ]
+        # Declaration-level core mappings are authoritative.  Do not inflate a
+        # declaration to every claim owned by its dependency: that makes a
+        # registry look complete while destroying the exact code-to-claim
+        # relationship.  IMPLEMENTATION_HELPER support chains are resolved by
+        # the normal mapping traversal below.
+        mapping["claimRefs"] = [
+            {"unitId": unit_id, "claimId": claim_id}
+            for unit_id, claim_id in sorted(
+                ref for ref in _claim_refs(mapping.get("claimRefs"))
+                if ref[0] in unit_ids
+            )
+        ]
         mappings[name] = mapping
     return core_declared & relevant_names, mappings, broken
 
@@ -333,6 +316,7 @@ def group_traceability_test(
         raise ValueError("core_source and core_manifest must be supplied together")
     broken: list[dict[str, str]] = []
     declared = set(lean_declarations(source))
+    frozen_core_declarations: set[str] = set()
     mappings: dict[str, dict[str, Any]] = {
         item.get("declaration"): item
         for item in manifest.get("declarations", [])
@@ -342,6 +326,7 @@ def group_traceability_test(
         core_declared, core_mappings, core_broken = _core_claim_mappings(
             set(semantics_by_unit), semantics_by_unit, manifest, core_source, core_manifest
         )
+        frozen_core_declarations = set(core_declared)
         broken.extend(core_broken)
         for name in sorted(declared & core_declared):
             broken.append(_broken(
@@ -381,7 +366,13 @@ def group_traceability_test(
         refs = _mapping_claim_refs(name, mappings, local)
         broken.extend(local)
         valid_refs: list[dict[str, Any]] = []
-        if not refs:
+        # A frozen-core declaration can be a representation dependency whose
+        # authoritative claim mapping belongs to an earlier unit recorded by
+        # the immutable core.  Its mapping is deliberately filtered to this
+        # group's units above, so an empty local result is not an unmapped
+        # declaration.  Current-unit coverage is still checked independently,
+        # while genuinely unmapped group-local declarations remain failures.
+        if not refs and name not in frozen_core_declarations:
             broken.append(_broken("MISSING_CLAIM_MAPPING", f"Lean declaration does not resolve to a semantic claim: {name}", declaration=name))
         for unit_id, claim_id in sorted(refs):
             claim = claims_by_unit.get(unit_id, {}).get(claim_id)
