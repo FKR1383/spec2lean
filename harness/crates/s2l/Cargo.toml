@@ -15,5 +15,7 @@ harness = { workspace = true }
 spec2lean-specdb = { workspace = true }
 spec2lean-evidence = { workspace = true }
 spec2lean-semantics = { workspace = true }
+spec2lean-translation = { workspace = true }
+spec2lean-lean = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

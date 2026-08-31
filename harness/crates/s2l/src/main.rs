@@ -14,6 +14,7 @@ use harness::{Effort, Provider, Session};
 use serde_json::{Value, json};
 use spec2lean_evidence::{EvidenceScope, EvidenceTools, prompt};
 use spec2lean_semantics::{SemanticScope, SemanticTools};
+use spec2lean_translation::{TranslationScope, TranslationTools};
 use spec2lean_specdb::{SpecDb, UnitId};
 
 const USAGE: &str = "\
@@ -30,6 +31,13 @@ USAGE:
     s2l semantics replay --plan <PATH> --bundle <PATH> --unit <unit:ID> --calls <PATH> [--out <DIR>]
     s2l semantics run    --plan <PATH> --bundle <PATH> --unit <unit:ID> --out <DIR>
                          [PROVIDER OPTIONS]
+
+    s2l translate prompt --plan <PATH> --semantics <DIR> --group <NAME>
+    s2l translate replay --plan <PATH> --semantics <DIR> --group <NAME> --calls <PATH> [--out <DIR>]
+    s2l translate run    --plan <PATH> --semantics <DIR> --group <NAME> --out <DIR>
+                         [PROVIDER OPTIONS] [--lean <EXECUTABLE>]
+
+    s2l lean check       --file <PATH> [--lean <EXECUTABLE>]
 
 PROVIDER OPTIONS:
     [--provider anthropic|openai] [--model <ID>]
@@ -70,6 +78,20 @@ fn run() -> Result<(), String> {
                 "replay" => evidence_replay(&flags),
                 "run" => evidence_run(&flags),
                 other => Err(format!("unknown evidence command: {other}\n\n{USAGE}")),
+            }
+        }
+        ["lean", "check", rest @ ..] => {
+            let flags = Flags::parse(rest)?;
+            lean_check(&flags)
+        }
+        ["translate", command, rest @ ..] => {
+            let flags = Flags::parse(rest)?;
+            match *command {
+                "prompt" => translate_prompt(&flags),
+                "scope" => translate_scope(&flags),
+                "replay" => translate_replay(&flags),
+                "run" => translate_run(&flags),
+                other => Err(format!("unknown translate command: {other}\n\n{USAGE}")),
             }
         }
         ["semantics", command, rest @ ..] => {
@@ -372,6 +394,193 @@ fn write_semantic_artifacts(
         write_json(&out.join("transcript.json"), &value)?;
     }
     Ok(())
+}
+
+/// Load every Phase-4 artifact under a directory, keyed by unit ID.
+///
+/// Accepts the layout `s2l semantics run` writes: one directory per unit, each
+/// containing `semantic-artifact.json`.
+fn load_semantics(root: &Path) -> Result<BTreeMap<String, Value>, String> {
+    let mut found = BTreeMap::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(directory) = stack.pop() {
+        let entries = std::fs::read_dir(&directory)
+            .map_err(|error| format!("could not read {}: {error}", directory.display()))?;
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            let Ok(value) = read_json(&path) else { continue };
+            if value.get("phase").and_then(Value::as_str) != Some("SEMANTIC_EXTRACTOR") {
+                continue;
+            }
+            let Some(unit_id) = value
+                .get("unit")
+                .and_then(|unit| unit.get("unitId"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+            else {
+                continue;
+            };
+            // Two different artifacts for one unit would make the group's
+            // identity ambiguous; identical duplicates are harmless.
+            if let Some(existing) = found.insert(unit_id.clone(), value.clone())
+                && existing != value
+            {
+                return Err(format!(
+                    "{} contains conflicting semantic artifacts for {unit_id}",
+                    root.display()
+                ));
+            }
+        }
+    }
+    if found.is_empty() {
+        return Err(format!(
+            "no Phase-4 semantic artifacts found under {}",
+            root.display()
+        ));
+    }
+    Ok(found)
+}
+
+fn translation_context(flags: &Flags) -> Result<(TranslationScope, BTreeMap<String, Value>), String> {
+    let plan: Value = read_json(&flags.path("plan")?)?;
+    let semantics = load_semantics(&flags.path("semantics")?)?;
+    let created_at = flags
+        .optional("created-at")
+        .map(str::to_string)
+        .unwrap_or_else(harness::clock::utc_now_iso);
+    let scope = TranslationScope::from_inputs(&plan, flags.get("group")?, &semantics, &created_at)
+        .map_err(|error| error.to_string())?;
+    Ok((scope, semantics))
+}
+
+fn translate_scope(flags: &Flags) -> Result<(), String> {
+    let (scope, _) = translation_context(flags)?;
+    println!("{}", pretty(&scope.to_json()));
+    Ok(())
+}
+
+fn translate_prompt(flags: &Flags) -> Result<(), String> {
+    use spec2lean_translation::prompt as translation_prompt;
+    let (scope, semantics) = translation_context(flags)?;
+    println!(
+        "=== system ===\n{}\n\n=== user ===\n{}",
+        translation_prompt::system_prompt(),
+        translation_prompt::user_prompt(&scope, &semantics)
+    );
+    Ok(())
+}
+
+fn translate_replay(flags: &Flags) -> Result<(), String> {
+    use harness::ToolSet;
+
+    let (scope, _) = translation_context(flags)?;
+    let calls: Value = read_json(&flags.path("calls")?)?;
+    let calls = calls
+        .as_array()
+        .ok_or("the calls file must contain a JSON array")?;
+    let out = flags
+        .optional("out")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    let mut tools = TranslationTools::new(
+        scope,
+        out.join("lean"),
+        flags.optional("lean").unwrap_or("lean"),
+        json!({"provider": "replay", "model": "none"}),
+    );
+
+    for (index, call) in calls.iter().enumerate() {
+        let name = call
+            .get("tool")
+            .and_then(Value::as_str)
+            .unwrap_or("submit_translation");
+        let input = call.get("input").cloned().unwrap_or_else(|| json!({}));
+        let mut text = tools.call(name, &input).to_text();
+        // The harness's own deterministic step, exactly as the loop runs it.
+        if let Some(extra) = tools.after_tools() {
+            text.push('\n');
+            text.push_str(&extra);
+        }
+        println!("--- {index}: {name} ---\n{text}");
+    }
+
+    write_translation_artifacts(&out, &tools, None)?;
+    if tools.finished() {
+        println!("\ntranslation accepted after {} build(s)", tools.build_count());
+        Ok(())
+    } else {
+        Err("the scripted calls did not produce an accepted translation".into())
+    }
+}
+
+fn translate_run(flags: &Flags) -> Result<(), String> {
+    use spec2lean_translation::prompt as translation_prompt;
+
+    let (scope, semantics) = translation_context(flags)?;
+    let out = flags.path("out")?;
+    let provider = provider(flags)?;
+    let user = translation_prompt::user_prompt(&scope, &semantics);
+    let mut tools = TranslationTools::new(
+        scope,
+        out.join("lean"),
+        flags.optional("lean").unwrap_or("lean"),
+        extractor(provider.as_ref()),
+    );
+
+    let session = Session::new(provider.as_ref(), translation_prompt::system_prompt(), user)
+        .with_max_steps(max_steps(flags)?);
+    let (outcome, transcript) = session.run(&mut tools);
+
+    write_translation_artifacts(&out, &tools, Some(&transcript))?;
+    match outcome {
+        Ok(()) => {
+            println!(
+                "translation accepted in {} steps after {} build(s) ({} cached input tokens)",
+                transcript.steps,
+                tools.build_count(),
+                transcript.usage.cache_read_input_tokens
+            );
+            Ok(())
+        }
+        Err(error) => Err(format!("{error} (artifacts written to {})", out.display())),
+    }
+}
+
+fn write_translation_artifacts(
+    out: &Path,
+    tools: &TranslationTools,
+    transcript: Option<&harness::Transcript>,
+) -> Result<(), String> {
+    std::fs::create_dir_all(out).map_err(|error| format!("{}: {error}", out.display()))?;
+    write_json(&out.join("translation-scope.json"), &tools.scope().to_json())?;
+    if let Some(manifest) = tools.manifest() {
+        write_json(&out.join("translation-manifest.json"), manifest)?;
+    }
+    if let Some(transcript) = transcript {
+        let value = serde_json::to_value(transcript).map_err(|error| error.to_string())?;
+        write_json(&out.join("transcript.json"), &value)?;
+    }
+    Ok(())
+}
+
+/// Compile one Lean file and report structured diagnostics. Useful on its own,
+/// and it exercises exactly the code path the translation loop uses.
+fn lean_check(flags: &Flags) -> Result<(), String> {
+    let file = flags.path("file")?;
+    let result = spec2lean_lean::run_build(&file, &[], flags.optional("lean").unwrap_or("lean"));
+    println!("{}", pretty(&serde_json::to_value(&result).map_err(|e| e.to_string())?));
+    if result.passed() {
+        Ok(())
+    } else {
+        Err(result.summary(12))
+    }
 }
 
 fn write_artifacts(

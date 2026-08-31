@@ -1,0 +1,15 @@
+[package]
+name = "spec2lean-translation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Phase 5: group translation to Lean 4, with the compiler in the loop."
+
+[dependencies]
+harness = { workspace = true }
+spec2lean-lean = { workspace = true }
+spec2lean-specdb = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }

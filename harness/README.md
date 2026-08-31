@@ -16,19 +16,21 @@ capability to disable — a tool call is a function call in this process.
 | `spec2lean-specdb` | Read-only typed access to the Phase-1 SQLite index; typed IDs; text normalisation and stable IDs. |
 | `spec2lean-evidence` | Phase 3: the nine retrieval tools, the exposure ledger, the deterministic validator, bundle reconstruction. |
 | `spec2lean-semantics` | Phase 4: evidence-bounded extraction, the claim taxonomy, deterministic artifact validation. |
+| `spec2lean-lean` | Invokes the Lean toolchain and parses its diagnostics. No phase knowledge. |
+| `spec2lean-translation` | Phase 5: group translation to Lean 4, with the compiler in the loop. |
 | `s2l` | Command line entry point. |
 
 ## Build and test
 
 ```bash
 cargo build
-cargo test          # 52 tests, no network and no API key required
+cargo test          # 78 tests, no network and no API key required
 cargo clippy --all-targets
 ```
 
 The test suite builds its own synthetic Phase-1 index in-process
 (`spec2lean-specdb`'s `fixture` feature), so it needs neither Python nor a
-checked-in database.
+checked-in database. Tests that need `lean` skip themselves when it is absent.
 
 ## Running a phase
 
@@ -43,6 +45,10 @@ s2l evidence  run --database indexes/spec.sqlite \
 s2l semantics run --plan plans/plan.json \
                   --bundle runs/add/evidence-bundle.json \
                   --unit unit:add --out runs/add
+
+# Phase 5: translate a group of semantic artifacts into Lean 4.
+s2l translate run --plan plans/plan.json --semantics runs \
+                  --group add --out runs/group-add
 ```
 
 Artifacts land in `--out`: `evidence-scope.json`, `exposure-trace.json`,
@@ -55,8 +61,8 @@ Offline, with no provider at all:
 ```bash
 s2l evidence  replay --database ... --plan ... --unit ... --calls calls.json
 s2l semantics replay --plan ... --bundle ... --unit ... --calls calls.json
-s2l evidence  prompt --database ... --plan ... --unit ...
-s2l semantics prompt --plan ... --bundle ... --unit ...
+s2l translate replay --plan ... --semantics ... --group ... --calls calls.json
+s2l lean check --file Add.lean
 ```
 
 `replay` runs a scripted list of `{"tool": ..., "input": {...}}` calls through
@@ -137,12 +143,23 @@ for every unit kind, as before.
 
 ## Status
 
-Ported: Phase 3 (evidence retrieval), Phase 4 (semantic extraction).
-Not yet ported: Phases 2, 5, 6, 7 — they still run through OpenCode in the
-Python tree. Phase 1 (parse + index) is intentionally staying in Python.
+Ported: Phase 3 (evidence retrieval), Phase 4 (semantic extraction), Phase 5
+(group translation, including the build loop that absorbs Phases 6 and 7 for the
+build-failure case).
 
-Phase 4's open-question handler (the `resolutions` producer) is not ported; the
-validator handles resolutions that are already present in a bundle.
+Not yet ported:
+
+- **Phase 2 (planner).** Plans must be supplied as JSON.
+- **The frozen shared core.** A group with shared prerequisites is refused with
+  an explicit error rather than translated against an unagreed representation.
+- **Phase 6's logical checking** (`checking/logical.py`, ~900 lines): reverse
+  traceability and group-wide coverage beyond what Phase 5 validates per group.
+- **Phase 7's semantic routing.** The build-failure path is now an inner loop;
+  routing a *semantic* failure back upstream is not ported.
+- **Phase 4's open-question handler.** The validator handles `resolutions`
+  already present in a bundle, but nothing produces them yet.
+
+Phase 1 (parse + index) is intentionally staying in Python.
 
 The Anthropic and OpenAI adapters are covered by unit tests over their request
 bodies and response parsing, but have not been exercised against the live
