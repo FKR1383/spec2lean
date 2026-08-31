@@ -602,6 +602,7 @@ dependencies = [
  "serde",
  "serde_json",
  "spec2lean-evidence",
+ "spec2lean-semantics",
  "spec2lean-specdb",
 ]
 
@@ -684,6 +685,17 @@ dependencies = [
  "harness",
  "serde",
  "serde_json",
+ "spec2lean-specdb",
+]
+
+[[package]]
+name = "spec2lean-semantics"
+version = "0.1.0"
+dependencies = [
+ "harness",
+ "serde",
+ "serde_json",
+ "sha2",
  "spec2lean-specdb",
 ]
 

@@ -15,13 +15,14 @@ capability to disable — a tool call is a function call in this process.
 | `harness` | Provider trait, Anthropic + OpenAI-compatible adapters, HTTP with retry, the agent loop, transcripts. Provider-agnostic and spec2lean-agnostic. |
 | `spec2lean-specdb` | Read-only typed access to the Phase-1 SQLite index; typed IDs; text normalisation and stable IDs. |
 | `spec2lean-evidence` | Phase 3: the nine retrieval tools, the exposure ledger, the deterministic validator, bundle reconstruction. |
+| `spec2lean-semantics` | Phase 4: evidence-bounded extraction, the claim taxonomy, deterministic artifact validation. |
 | `s2l` | Command line entry point. |
 
 ## Build and test
 
 ```bash
 cargo build
-cargo test          # 33 tests, no network and no API key required
+cargo test          # 52 tests, no network and no API key required
 cargo clippy --all-targets
 ```
 
@@ -33,32 +34,45 @@ checked-in database.
 
 ```bash
 export ANTHROPIC_API_KEY=...
-s2l evidence run --database indexes/spec.sqlite \
-                 --plan plans/plan.json --unit unit:add --out runs/add
+
+# Phase 3: retrieve evidence for one planned unit.
+s2l evidence  run --database indexes/spec.sqlite \
+                  --plan plans/plan.json --unit unit:add --out runs/add
+
+# Phase 4: extract semantics from that unit's evidence bundle.
+s2l semantics run --plan plans/plan.json \
+                  --bundle runs/add/evidence-bundle.json \
+                  --unit unit:add --out runs/add
 ```
 
 Artifacts land in `--out`: `evidence-scope.json`, `exposure-trace.json`,
-`evidence-bundle.json`, and `transcript.json`. The transcript is written whether
-or not the session succeeded.
+`evidence-bundle.json`, `semantic-scope.json`, `semantic-artifact.json`, and
+`transcript.json`. The transcript is written whether or not the session
+succeeded.
 
 Offline, with no provider at all:
 
 ```bash
-s2l evidence replay --database ... --plan ... --unit ... --calls calls.json
-s2l evidence prompt --database ... --plan ... --unit ...
+s2l evidence  replay --database ... --plan ... --unit ... --calls calls.json
+s2l semantics replay --plan ... --bundle ... --unit ... --calls calls.json
+s2l evidence  prompt --database ... --plan ... --unit ...
+s2l semantics prompt --plan ... --bundle ... --unit ...
 ```
 
 `replay` runs a scripted list of `{"tool": ..., "input": {...}}` calls through
-the real tool set, ledger, and validator. It is how the phase is debugged
-without spending a token.
+the real tool set and validator. It is how a phase is debugged without spending
+a token.
 
 ## Parity with the Python implementation
 
-`scripts/crosscheck.py` runs the same tool sequence through both
-implementations and diffs the resulting bundles. They must be identical,
-including every `evidenceId` — those are SHA-256 digests over canonical JSON, so
-a match proves that text normalisation, canonical JSON, stable-ID construction,
-provenance reconstruction, and record layout all agree across the two languages.
+`scripts/crosscheck.py` runs the same tool sequences through both
+implementations and diffs the resulting artifacts.
+
+Phase 3 bundles must be byte-identical, including every `evidenceId` — those are
+SHA-256 digests over canonical JSON, so a match proves that text normalisation,
+canonical JSON, stable-ID construction, provenance reconstruction, and record
+layout all agree across the two languages. Phase 4 artifacts must match except
+for the `extractor` block (see below).
 
 ```bash
 .venv/bin/python harness/scripts/crosscheck.py
@@ -94,11 +108,41 @@ trip through a fresh process.
 artifact rather than a live protocol, so reading it from Rust introduces no
 process boundary of the kind this rewrite exists to remove.
 
+**Four cache breakpoints, deliberately placed.** End of system; end of the
+opening prompt; end of the first exchange's tool results; and a rolling one at
+the previous exchange. The third matters for Phase 4, which hands the model its
+whole evidence bundle through `get_evidence` rather than the prompt — without a
+breakpoint there, that bundle is re-sent uncached on every step of the session.
+
+## Deliberate divergences from the Python implementation
+
+**`extractor` provenance.** Python hardcoded `provider: "opencode"` and
+validated against a fixed model list. Rust records the provider and model that
+actually ran. The crosscheck normalises this block away before diffing.
+
+**`result` is optional for non-instruction units.** Python validated `result`
+unconditionally:
+
+```python
+result = _component(value.get("result"), "result", "$.result", ...)
+```
+
+so an absent `result` produced `EXPECTED_OBJECT` for *every* unit, including
+`LANGUAGE_CONSTRUCT` and `SHARED_CONCEPT` units that have no result. Two
+consequences: extractors were pushed into inventing a result for concepts that
+do not have one, and the instruction-specific `MISSING_RESULT` diagnostic — which
+explains the actual problem — became unreachable. Rust requires `result` only
+where the code always meant to: for instructions. `identity` remains mandatory
+for every unit kind, as before.
+
 ## Status
 
-Ported: Phase 3 (evidence retrieval).
-Not yet ported: Phases 2, 4, 5, 6, 7 — they still run through OpenCode in the
+Ported: Phase 3 (evidence retrieval), Phase 4 (semantic extraction).
+Not yet ported: Phases 2, 5, 6, 7 — they still run through OpenCode in the
 Python tree. Phase 1 (parse + index) is intentionally staying in Python.
+
+Phase 4's open-question handler (the `resolutions` producer) is not ported; the
+validator handles resolutions that are already present in a bundle.
 
 The Anthropic and OpenAI adapters are covered by unit tests over their request
 bodies and response parsing, but have not been exercised against the live

@@ -62,25 +62,41 @@ impl AnthropicProvider {
     /// Build the request body.
     ///
     /// Cache placement matters more here than anywhere else in the pipeline.
-    /// Render order is tools → system → messages, so the stable prefix of a
-    /// unit session is [tools, system, the opening prompt] — and that opening
-    /// prompt carries the seed nodes' exact specification text, which is the
-    /// bulk of the tokens and is byte-identical across every step of the
-    /// session. Two breakpoints (end of system, end of the opening prompt)
-    /// therefore cover the whole expensive prefix; the tool results that grow
-    /// turn by turn all land after them.
+    /// Render order is tools → system → messages, and the API allows four
+    /// breakpoints. They are spent as follows:
+    ///
+    /// 1. End of the system prompt — identical for every unit of every run.
+    /// 2. End of the opening prompt — the per-unit boundary and, in Phase 3,
+    ///    the seed nodes' exact specification text. Byte-identical across every
+    ///    step of the session.
+    /// 3. End of the first exchange's tool results. Phases that hand the model
+    ///    a large immutable payload through a tool rather than the prompt (Phase
+    ///    4 reads its whole evidence bundle through `get_evidence`) would
+    ///    otherwise re-send it uncached on every subsequent step. It is stable
+    ///    for the rest of the session, so it caches perfectly.
+    /// 4. A rolling breakpoint at the previous exchange, so history accumulated
+    ///    since is written once and read back on every later step.
+    fn cache_control() -> Value {
+        json!({"type": "ephemeral"})
+    }
+
     pub(crate) fn body(&self, request: &Request<'_>) -> Value {
         let mut messages = vec![json!({
             "role": "user",
             "content": [{
                 "type": "text",
                 "text": request.prompt,
-                "cache_control": {"type": "ephemeral"},
+                "cache_control": Self::cache_control(),
             }],
         })];
-        for exchange in request.exchanges {
+
+        let count = request.exchanges.len();
+        // The rolling breakpoint trails by one exchange so it never lands on
+        // content that is still being appended to this turn.
+        let rolling = count.checked_sub(2);
+        for (index, exchange) in request.exchanges.iter().enumerate() {
             messages.push(json!({"role": "assistant", "content": exchange.assistant}));
-            let results: Vec<Value> = exchange
+            let mut results: Vec<Value> = exchange
                 .tool_results
                 .iter()
                 .map(|record| {
@@ -92,6 +108,10 @@ impl AnthropicProvider {
                     })
                 })
                 .collect();
+            let breakpoint = index == 0 || Some(index) == rolling;
+            if breakpoint && let Some(last) = results.last_mut() {
+                last["cache_control"] = Self::cache_control();
+            }
             messages.push(json!({"role": "user", "content": results}));
         }
 
@@ -117,7 +137,7 @@ impl AnthropicProvider {
             "system": [{
                 "type": "text",
                 "text": request.system,
-                "cache_control": {"type": "ephemeral"},
+                "cache_control": Self::cache_control(),
             }],
             "messages": messages,
             "tools": tools,
@@ -271,8 +291,15 @@ mod tests {
         }
     }
 
+    fn breakpoints(body: &Value) -> usize {
+        serde_json::to_string(body)
+            .unwrap()
+            .matches("cache_control")
+            .count()
+    }
+
     #[test]
-    fn caches_the_stable_prefix_at_exactly_two_breakpoints() {
+    fn caches_the_stable_prefix() {
         let tools = [ToolSpec::new("spec_show", "show", json!({"type": "object"}))];
         let exchanges = [exchange()];
         let body = provider().body(&Request {
@@ -282,21 +309,54 @@ mod tests {
             tools: &tools,
         });
 
-        // End of system, and end of the opening prompt — the whole expensive,
-        // unchanging prefix. Everything that grows turn by turn sits after them.
-        assert_eq!(
-            body["system"][0]["cache_control"],
-            json!({"type": "ephemeral"})
-        );
+        // End of system and end of the opening prompt: the whole per-session
+        // prefix, unchanged from the first step to the last.
+        assert_eq!(body["system"][0]["cache_control"], json!({"type": "ephemeral"}));
         assert_eq!(
             body["messages"][0]["content"][0]["cache_control"],
             json!({"type": "ephemeral"})
         );
-        let breakpoints = serde_json::to_string(&body)
-            .unwrap()
-            .matches("cache_control")
-            .count();
-        assert_eq!(breakpoints, 2, "at most four are allowed; two is what we need");
+        // Plus the first exchange's tool results, which is where a phase that
+        // ships a large immutable payload through a tool puts it.
+        assert_eq!(
+            body["messages"][2]["content"][0]["cache_control"],
+            json!({"type": "ephemeral"})
+        );
+        assert_eq!(breakpoints(&body), 3);
+    }
+
+    #[test]
+    fn the_rolling_breakpoint_trails_by_one_and_stays_within_the_limit() {
+        let exchanges: Vec<Exchange> = (0..6).map(|_| exchange()).collect();
+        for count in 0..=exchanges.len() {
+            let body = provider().body(&Request {
+                system: "S",
+                prompt: "P",
+                exchanges: &exchanges[..count],
+                tools: &[],
+            });
+            assert!(
+                breakpoints(&body) <= 4,
+                "{count} exchanges produced {} breakpoints; the API allows four",
+                breakpoints(&body)
+            );
+        }
+
+        // With six exchanges: system, prompt, exchange 0, and exchange 4 —
+        // never the exchange being appended to this turn.
+        let body = provider().body(&Request {
+            system: "S",
+            prompt: "P",
+            exchanges: &exchanges,
+            tools: &[],
+        });
+        assert_eq!(breakpoints(&body), 4);
+        let marked: Vec<usize> = (0..exchanges.len())
+            .filter(|index| {
+                !body["messages"][2 + index * 2]["content"][0]["cache_control"].is_null()
+            })
+            .collect();
+        assert_eq!(marked, vec![0, 4]);
     }
 
     #[test]
@@ -312,15 +372,11 @@ mod tests {
         // continuation, and impossible if we rebuilt content from parsed parts.
         assert_eq!(body["messages"][1]["role"], json!("assistant"));
         assert_eq!(body["messages"][1]["content"], exchanges[0].assistant);
-        assert_eq!(
-            body["messages"][2]["content"][0],
-            json!({
-                "type": "tool_result",
-                "tool_use_id": "toolu_1",
-                "content": "{\"ok\":true}",
-                "is_error": false,
-            })
-        );
+        let result = &body["messages"][2]["content"][0];
+        assert_eq!(result["type"], json!("tool_result"));
+        assert_eq!(result["tool_use_id"], json!("toolu_1"));
+        assert_eq!(result["content"], json!("{\"ok\":true}"));
+        assert_eq!(result["is_error"], json!(false));
     }
 
     #[test]

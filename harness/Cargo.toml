@@ -4,6 +4,7 @@ members = [
     "crates/harness",
     "crates/specdb",
     "crates/evidence",
+    "crates/semantics",
     "crates/s2l",
 ]
 
@@ -17,6 +18,7 @@ license = "UNLICENSED"
 harness = { path = "crates/harness" }
 spec2lean-specdb = { path = "crates/specdb" }
 spec2lean-evidence = { path = "crates/evidence" }
+spec2lean-semantics = { path = "crates/semantics" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -27,3 +29,10 @@ unicode-normalization = "0.1"
 
 [profile.release]
 debug = 1
+
+# The machine this is developed on runs its root filesystem near capacity, and
+# full debug info costs several hundred megabytes of target/. Panic messages
+# still carry file and line via #[track_caller]; only backtrace symbolisation
+# is lost. Raise this locally if you need to attach a debugger.
+[profile.dev]
+debug = 0
