@@ -64,3 +64,6 @@ pipeline-time*.txt
 
 # Locally cached official specifications
 documents/sources/nvidia/ptx/9.3/raw/
+
+# Rust harness
+harness/target/

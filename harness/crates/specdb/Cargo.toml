@@ -1,0 +1,18 @@
+[package]
+name = "spec2lean-specdb"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Read-only typed access to the Phase-1 specification index."
+
+[features]
+# Builds a synthetic Phase-1 index in-process; enabled by dev-dependencies only.
+fixture = []
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+rusqlite = { workspace = true }
+sha2 = { workspace = true }
+unicode-normalization = { workspace = true }

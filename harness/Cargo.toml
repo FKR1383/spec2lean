@@ -1,0 +1,29 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/harness",
+    "crates/specdb",
+    "crates/evidence",
+    "crates/s2l",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "UNLICENSED"
+
+[workspace.dependencies]
+harness = { path = "crates/harness" }
+spec2lean-specdb = { path = "crates/specdb" }
+spec2lean-evidence = { path = "crates/evidence" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.38", features = ["bundled"] }
+ureq = { version = "3", features = ["json"] }
+sha2 = "0.11"
+unicode-normalization = "0.1"
+
+[profile.release]
+debug = 1
