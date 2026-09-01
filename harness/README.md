@@ -27,7 +27,7 @@ capability to disable — a tool call is a function call in this process.
 
 ```bash
 cargo build
-cargo test          # 179 tests, no network and no API key required
+cargo test          # 191 tests, no network and no API key required
 cargo clippy --all-targets
 ```
 
@@ -58,9 +58,29 @@ export ANTHROPIC_AUTH_TOKEN=$(python3 -c \
   "import json,pathlib;print(json.loads(pathlib.Path.home().joinpath('.claude/.credentials.json').read_text())['claudeAiOauth']['accessToken'])")
 ```
 
-That token carries the `user:inference` scope and is subject to the account's
-Claude Code rate limit, so a long run competes with the session that produced
-it.
+That token carries the `user:inference` scope, but the Messages API accepts it
+only for Claude Code itself: another client is refused with a 429 whose body
+carries no rate-limit headers. Dressing this harness up as Claude Code to get
+past that is not worth an account, so the supported answer for a machine
+without an API key is `--provider codex`.
+
+### `--provider codex`
+
+Codex is an agent, not an endpoint, so the adapter uses only the part of it
+that is one: `codex exec` for a single turn whose reply a JSON schema
+constrains. Codex's own loop, tools and sandbox stay unused, because the
+harness must keep its loop — the exposure ledger, the submission gates and the
+deterministic step after each tool call are the pipeline, not decoration.
+
+```bash
+s2l plan run --database indexes/pcie-transport-1.0d-fixed.sqlite \
+             --language PCIe --version 1.0d \
+             --subtree node:479046a24ddb9b29573b62dd \
+             --out runs/resets/plan --provider codex
+```
+
+The cost is the conversation re-sent every turn and a process start per turn;
+the benefit is that no phase behaves differently than it does over HTTP.
 
 It plans, then retrieves and extracts per unit, freezes a shared core if the
 plan needs one, translates each group whose units all completed, and checks the

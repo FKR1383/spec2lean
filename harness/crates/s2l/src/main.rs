@@ -13,6 +13,7 @@ use std::process::ExitCode;
 
 use harness::provider::anthropic::{AnthropicConfig, AnthropicProvider};
 use harness::provider::openai::{OpenAiConfig, OpenAiProvider};
+use harness::provider::codex::{CodexConfig, CodexProvider};
 use harness::{Effort, Provider, Session};
 use serde_json::{Value, json};
 use spec2lean_checking::{CheckInputs, check};
@@ -71,7 +72,7 @@ SELECTOR (exactly one; --full is the default):
     --instructions <a,b,c> | --family <NAME> | --subtree <node:ID> | --full
 
 PROVIDER OPTIONS:
-    [--provider anthropic|openai] [--model <ID>]
+    [--provider anthropic|openai|codex] [--model <ID>] [--timeout <S>]
     [--effort low|medium|high|xhigh|max] [--max-steps <N>]
 
 ENVIRONMENT:
@@ -332,6 +333,18 @@ fn provider(flags: &Flags) -> Result<Box<dyn Provider>, String> {
         "openai" => Box::new(OpenAiProvider::new(
             OpenAiConfig::from_env(model).map_err(|e| e.to_string())?,
         )),
+        "codex" => {
+            let mut config = CodexConfig {
+                model,
+                ..CodexConfig::default()
+            };
+            if let Some(value) = flags.optional("timeout") {
+                config.timeout_seconds = value
+                    .parse()
+                    .map_err(|_| format!("--timeout must be whole seconds, found {value:?}"))?;
+            }
+            Box::new(CodexProvider::new(config))
+        }
         other => return Err(format!("unknown provider: {other}")),
     })
 }
