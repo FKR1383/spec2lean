@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 harness = { workspace = true }
 spec2lean-specdb = { workspace = true }
+spec2lean-checking = { workspace = true }
 spec2lean-evidence = { workspace = true }
 spec2lean-planning = { workspace = true }
 spec2lean-semantics = { workspace = true }

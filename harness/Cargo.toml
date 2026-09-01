@@ -5,6 +5,7 @@ members = [
     "crates/lean",
     "crates/planning",
     "crates/specdb",
+    "crates/checking",
     "crates/evidence",
     "crates/semantics",
     "crates/shared-core",
@@ -23,6 +24,7 @@ harness = { path = "crates/harness" }
 spec2lean-lean = { path = "crates/lean" }
 spec2lean-planning = { path = "crates/planning" }
 spec2lean-specdb = { path = "crates/specdb" }
+spec2lean-checking = { path = "crates/checking" }
 spec2lean-evidence = { path = "crates/evidence" }
 spec2lean-semantics = { path = "crates/semantics" }
 spec2lean-shared-core = { path = "crates/shared-core" }

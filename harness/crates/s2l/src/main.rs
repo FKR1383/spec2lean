@@ -12,6 +12,7 @@ use harness::provider::anthropic::{AnthropicConfig, AnthropicProvider};
 use harness::provider::openai::{OpenAiConfig, OpenAiProvider};
 use harness::{Effort, Provider, Session};
 use serde_json::{Value, json};
+use spec2lean_checking::{CheckInputs, check};
 use spec2lean_evidence::{EvidenceScope, EvidenceTools, prompt};
 use spec2lean_planning::{PlanningRequest, PlanningTools, ScopeResolver, Selector};
 use spec2lean_semantics::{SemanticScope, SemanticTools};
@@ -50,6 +51,9 @@ USAGE:
     s2l translate replay --plan <PATH> --semantics <DIR> --group <NAME> --calls <PATH> [--out <DIR>]
     s2l translate run    --plan <PATH> --semantics <DIR> --group <NAME> --out <DIR>
                          [PROVIDER OPTIONS] [--lean <EXECUTABLE>] [--core <DIR>]
+
+    s2l check            --database <PATH> --group-dir <DIR> --units <DIR>
+                         [--core <DIR>]
 
     s2l lean check       --file <PATH> [--lean <EXECUTABLE>]
 
@@ -106,6 +110,10 @@ fn run() -> Result<(), String> {
                 "run" => plan_run(&flags),
                 other => Err(format!("unknown plan command: {other}\n\n{USAGE}")),
             }
+        }
+        ["check", rest @ ..] => {
+            let flags = Flags::parse(rest)?;
+            logical_check(&flags)
         }
         ["lean", "check", rest @ ..] => {
             let flags = Flags::parse(rest)?;
@@ -719,6 +727,86 @@ fn write_plan_artifacts(
         write_json(&out.join("transcript.json"), &value)?;
     }
     Ok(())
+}
+
+/// Load every Phase-3 bundle under a directory, keyed by unit.
+fn load_bundles(root: &Path) -> Result<BTreeMap<String, Value>, String> {
+    let mut found = BTreeMap::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(directory) = stack.pop() {
+        let entries = std::fs::read_dir(&directory)
+            .map_err(|error| format!("could not read {}: {error}", directory.display()))?;
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if path.file_name().and_then(|value| value.to_str()) != Some("evidence-bundle.json") {
+                continue;
+            }
+            let value = read_json(&path)?;
+            if let Some(unit_id) = value
+                .get("unit")
+                .and_then(|unit| unit.get("unitId"))
+                .and_then(Value::as_str)
+            {
+                found.insert(unit_id.to_string(), value);
+            }
+        }
+    }
+    if found.is_empty() {
+        return Err(format!("no Phase-3 bundles found under {}", root.display()));
+    }
+    Ok(found)
+}
+
+/// Phase 6: check a finished group against its inputs and against the index.
+fn logical_check(flags: &Flags) -> Result<(), String> {
+    let group_dir = flags.path("group-dir")?;
+    let units = flags.path("units")?;
+    let manifest = read_json(&group_dir.join("translation-manifest.json"))?;
+    let lean_file = manifest
+        .get("leanFile")
+        .and_then(Value::as_str)
+        .ok_or("the translation manifest has no leanFile")?;
+    let source = std::fs::read_to_string(group_dir.join("lean").join(lean_file))
+        .map_err(|error| format!("could not read the group's Lean: {error}"))?;
+
+    let core = load_core(flags)?;
+    let core_source = match &core {
+        None => None,
+        Some((manifest, path)) => {
+            let _ = manifest;
+            Some(
+                std::fs::read_to_string(path)
+                    .map_err(|error| format!("could not read the core's Lean: {error}"))?,
+            )
+        }
+    };
+
+    let report = check(
+        &CheckInputs {
+            bundles: &load_bundles(&units)?,
+            semantics: &load_semantics(&units)?,
+            manifest: &manifest,
+            core_manifest: core.as_ref().map(|(manifest, _)| manifest),
+            source: &source,
+            core_source: core_source.as_deref(),
+        },
+        &flags.path("database")?,
+    )?;
+
+    write_json(
+        &group_dir.join("check-result.json"),
+        &serde_json::to_value(&report).map_err(|error| error.to_string())?,
+    )?;
+    println!("{}", report.summary());
+    if report.passed() {
+        Ok(())
+    } else {
+        Err("logical checks failed".into())
+    }
 }
 
 /// Load every Phase-4 artifact under a directory, keyed by unit ID.

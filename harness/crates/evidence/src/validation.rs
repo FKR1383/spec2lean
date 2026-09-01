@@ -178,8 +178,9 @@ fn bbox(spans: &[SpanRow]) -> Option<[f64; 4]> {
 }
 
 /// Join selected spans, inserting a newline at node boundaries and at line
-/// breaks within a node.
-fn span_text(spans: &[SpanRow]) -> String {
+/// breaks within a node. Public so Phase 6 can re-derive an evidence record's
+/// exact text from the index and compare.
+pub fn span_text(spans: &[SpanRow]) -> String {
     let mut pieces = String::new();
     let mut previous: Option<&SpanRow> = None;
     for row in spans {

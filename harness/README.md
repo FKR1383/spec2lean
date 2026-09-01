@@ -18,6 +18,7 @@ capability to disable — a tool call is a function call in this process.
 | `spec2lean-evidence` | Phase 3: the nine retrieval tools, the exposure ledger, the deterministic validator, bundle reconstruction. |
 | `spec2lean-semantics` | Phase 4: evidence-bounded extraction, the claim taxonomy, deterministic artifact validation. |
 | `spec2lean-lean` | Invokes the Lean toolchain, parses diagnostics, and audits axiom dependencies. No phase knowledge. |
+| `spec2lean-checking` | Phase 6: coverage forward, and traceability backward to the index. |
 | `spec2lean-shared-core` | The frozen shared core: one agreed representation for concepts several units depend on. |
 | `spec2lean-translation` | Phase 5: group translation to Lean 4, with the compiler in the loop. |
 | `s2l` | Command line entry point. |
@@ -26,7 +27,7 @@ capability to disable — a tool call is a function call in this process.
 
 ```bash
 cargo build
-cargo test          # 125 tests, no network and no API key required
+cargo test          # 133 tests, no network and no API key required
 cargo clippy --all-targets
 ```
 
@@ -74,6 +75,10 @@ s2l semantics replay --plan ... --bundle ... --unit ... --calls calls.json
 s2l core      replay --plan ... --semantics ... --calls calls.json --out ...
 s2l translate replay --plan ... --semantics ... --group ... --calls calls.json
 s2l lean check --file Add.lean
+
+# Phase 6: check a finished group against its inputs and the index.
+s2l check --database indexes/spec.sqlite --group-dir runs/group-add \
+          --units runs --core runs/core
 ```
 
 `replay` runs a scripted list of `{"tool": ..., "input": {...}}` calls through
@@ -149,6 +154,15 @@ once, then frozen; groups import it and must bind to the declarations it
 registered. A group with shared concepts and no core is refused rather than
 translated against a representation nothing agreed on.
 
+**Traceability is verified, not assumed.** Phase 6 walks backward from every
+Lean declaration through its claims to its evidence, and re-derives that
+evidence's exact text from the index to compare byte for byte. Artifacts are
+written at different times and an index can be rebuilt underneath them; this is
+what catches a passage that has since changed, a document that was reindexed,
+and a bundle edited by hand. Forward, it checks that every claim *and* every
+piece of evidence those claims rest on reaches at least one declaration —
+including declarations that live in the frozen core.
+
 **Phase 1 stays in Python for now.** It emits a SQLite database, which is a file
 artifact rather than a live protocol, so reading it from Rust introduces no
 process boundary of the kind this rewrite exists to remove.
@@ -183,8 +197,9 @@ for every unit kind, as before.
 ## Status
 
 Ported: Phase 2 (planning), Phase 3 (evidence retrieval), Phase 4 (semantic
-extraction), the shared core, and Phase 5 (group translation, including the
-build loop that absorbs Phases 6 and 7 for the build-failure case).
+extraction), the shared core, Phase 5 (group translation, including the build
+loop that absorbs Phase 7 for the build-failure case), and Phase 6 (coverage and
+reverse traceability).
 
 Exercised end to end on a real specification: the NVM Express PCIe Transport
 Specification 1.0d, indexed from the published PDF, planned, retrieved,
@@ -197,8 +212,6 @@ counterpart in the Python tree.
 
 Not yet ported:
 
-- **Phase 6's logical checking** (`checking/logical.py`, ~900 lines): reverse
-  traceability and group-wide coverage beyond what Phase 5 validates per group.
 - **Phase 7's semantic routing.** The build-failure path is now an inner loop;
   routing a *semantic* failure back upstream is not ported.
 - **Phase 4's open-question handler.** The validator handles `resolutions`
