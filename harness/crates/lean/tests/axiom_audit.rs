@@ -210,3 +210,32 @@ fn a_module_that_redefines_print_axioms_cannot_fake_a_pass() {
         report.summary()
     );
 }
+
+/// `opaque` stays allowed, and this records why.
+///
+/// It declares something without giving its value, which looks like an escape
+/// hatch and is not one: Lean demands an `Inhabited` or `Nonempty` instance, so
+/// `opaque bad : False` does not elaborate. What it does allow is an abstract
+/// type — `opaque Register : Type` — which is a legitimate way to formalize a
+/// specification that names a thing without defining its representation.
+#[test]
+fn opaque_declares_an_abstraction_and_cannot_assert_a_falsehood() {
+    if !lean_available() {
+        return;
+    }
+    let work = Work::new("opaque");
+    let file = work.write(
+        "Abstract.lean",
+        "opaque Register : Type\n\
+         opaque width : Register -> Nat\n\
+         theorem widthIsWidth (r : Register) : width r = width r := rfl\n",
+    );
+    let report = audit(&file, &[], &["widthIsWidth".to_string()], "lean");
+    assert!(report.passed(), "{}", report.summary());
+    assert!(report.declarations[0].axioms.is_empty());
+
+    // And the same keyword cannot be turned on a proposition.
+    let file = work.write("Bad.lean", "opaque bad : False\n");
+    let report = audit(&file, &[], &["bad".to_string()], "lean");
+    assert!(!report.passed(), "{}", report.summary());
+}
