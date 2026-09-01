@@ -225,9 +225,17 @@ reverse traceability).
 
 Exercised end to end on a real specification: the NVM Express PCIe Transport
 Specification 1.0d, indexed from the published PDF, planned, retrieved,
-extracted, cored and translated into Lean that compiles and passes the axiom
-audit — with every declaration traceable back through its claim to the exact
-page of the source.
+extracted, cored, translated into Lean that compiles and passes the axiom audit,
+and checked — with every declaration traceable back through its claim to the
+exact page of the source. Two runs:
+
+- **Reset semantics** (section 3.3, prose). Controller Level Reset frozen as one
+  shared representation; the group formalizes the register-space rule and its
+  single exception.
+- **Doorbell registers** (section 3.1.2, bit-field tables). Two units — the
+  submission-queue tail and completion-queue head doorbells — sharing one
+  register layout, each traced back to the `Bits / Type / Reset / Description`
+  table on page 10.
 
 Ported: the frozen shared core, and a kernel-level axiom audit that has no
 counterpart in the Python tree.

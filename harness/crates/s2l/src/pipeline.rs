@@ -10,6 +10,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use harness::Usage;
 use serde::Serialize;
 use serde_json::Value;
 
@@ -24,6 +25,11 @@ pub struct PhaseRecord {
     pub detail: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub steps: Option<u32>,
+    /// What this phase cost. Recorded per phase because that is where an
+    /// expensive run is diagnosed: one unit looping against a validator is
+    /// invisible in a single total.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<Usage>,
 }
 
 impl PhaseRecord {
@@ -34,6 +40,7 @@ impl PhaseRecord {
             status: "PASS",
             detail: None,
             steps: None,
+            usage: None,
         }
     }
 
@@ -44,6 +51,7 @@ impl PhaseRecord {
             status: "FAIL",
             detail: Some(detail.into()),
             steps: None,
+            usage: None,
         }
     }
 
@@ -54,7 +62,15 @@ impl PhaseRecord {
             status: "SKIPPED",
             detail: Some(detail.into()),
             steps: None,
+            usage: None,
         }
+    }
+
+    /// Attach what a session cost to the record for the phase that ran it.
+    pub fn with_transcript(mut self, transcript: &harness::Transcript) -> Self {
+        self.steps = Some(transcript.steps);
+        self.usage = Some(transcript.usage);
+        self
     }
 }
 
@@ -67,6 +83,7 @@ pub struct RunManifest {
     pub status: &'static str,
     pub root: String,
     pub phases: Vec<PhaseRecord>,
+    pub usage: Usage,
 }
 
 impl RunManifest {
@@ -85,6 +102,16 @@ impl RunManifest {
                 .unwrap_or_default();
             lines.push(format!("  [{mark}] {:<10} {}{detail}", record.phase, record.target));
         }
+        let usage = &self.usage;
+        let input = usage.input_tokens + usage.cache_read_input_tokens
+            + usage.cache_creation_input_tokens;
+        let cached = (usage.cache_read_input_tokens * 100)
+            .checked_div(input)
+            .unwrap_or(0);
+        lines.push(format!(
+            "tokens: {} in ({cached}% served from cache), {} out",
+            input, usage.output_tokens
+        ));
         lines.push(format!("artifacts: {}", self.root));
         lines.join("\n")
     }
@@ -208,6 +235,17 @@ pub fn ready_groups(
     (ready, blocked)
 }
 
+/// Total what every phase spent.
+pub fn total_usage(phases: &[PhaseRecord]) -> Usage {
+    let mut total = Usage::default();
+    for record in phases {
+        if let Some(usage) = &record.usage {
+            total.accumulate(usage);
+        }
+    }
+    total
+}
+
 pub fn write_manifest(layout: &Layout, manifest: &RunManifest) -> Result<(), String> {
     std::fs::create_dir_all(&layout.root).map_err(|error| error.to_string())?;
     let value = serde_json::to_value(manifest).map_err(|error| error.to_string())?;
@@ -227,6 +265,7 @@ pub fn empty_manifest(root: &Path, started_at: String) -> RunManifest {
         status: "PASS",
         root: root.display().to_string(),
         phases: Vec::new(),
+        usage: Usage::default(),
     }
 }
 
@@ -234,6 +273,49 @@ pub fn empty_manifest(root: &Path, started_at: String) -> RunManifest {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn usage_totals_across_phases() {
+        let usage = |input: u64, output: u64, cached: u64| Usage {
+            input_tokens: input,
+            output_tokens: output,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: cached,
+        };
+        let phases = vec![
+            PhaseRecord {
+                usage: Some(usage(100, 10, 900)),
+                ..PhaseRecord::ok("plan", "request")
+            },
+            // A skipped phase costs nothing and must not be counted.
+            PhaseRecord::skipped("evidence", "unit:a", "blocked"),
+            PhaseRecord {
+                usage: Some(usage(50, 5, 450)),
+                ..PhaseRecord::ok("evidence", "unit:b")
+            },
+        ];
+        let total = total_usage(&phases);
+        assert_eq!(total.input_tokens, 150);
+        assert_eq!(total.output_tokens, 15);
+        assert_eq!(total.cache_read_input_tokens, 1350);
+    }
+
+    #[test]
+    fn the_summary_reports_what_a_run_cost() {
+        let mut manifest = empty_manifest(Path::new("/tmp/run"), "t".into());
+        manifest.phases.push(PhaseRecord {
+            usage: Some(Usage {
+                input_tokens: 100,
+                output_tokens: 25,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 900,
+            }),
+            ..PhaseRecord::ok("plan", "request")
+        });
+        manifest.usage = total_usage(&manifest.phases);
+        let summary = manifest.summary();
+        assert!(summary.contains("1000 in (90% served from cache), 25 out"), "{summary}");
+    }
 
     #[test]
     fn slugs_stay_recognisable_and_filesystem_safe() {

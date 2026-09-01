@@ -206,6 +206,28 @@ def _body_font_size(blocks: list[PdfBlock]) -> float:
     return weighted.most_common(1)[0][0] if weighted else 10.0
 
 
+def _canonical_number(number: str) -> str:
+    """A section number with trailing `.0` components removed.
+
+    Chapter 6 and chapter "6.0" are the same chapter, so they must collide when
+    checking that a number is only claimed once.
+    """
+    parts = number.split(".")
+    while len(parts) > 1 and parts[-1] == "0":
+        parts.pop()
+    return ".".join(parts)
+
+
+def _heading_level(number: str) -> int:
+    """Depth implied by a section number.
+
+    A trailing `.0` names a chapter, not a subsection: specifications that
+    number their chapters "1.0", "6.0" would otherwise have every chapter read
+    as one level too deep, leaving the document with no chapters at all.
+    """
+    return len(_canonical_number(number).split("."))
+
+
 def _heading(
     block: PdfBlock, body_size: float, page_height: float
 ) -> tuple[int, str | None, str] | None:
@@ -225,7 +247,7 @@ def _heading(
         return 1, chapter.group(1), chapter.group(2).strip()
     number, title = split_section_title(clean)
     if number and title:
-        level = number.count(".") + 1
+        level = _heading_level(number)
         heading_style = block.max_size >= body_size * 1.15 or block.bold_ratio >= 0.45
         if level <= 7 and len(clean) <= 160 and heading_style:
             return level, number, title
@@ -373,6 +395,11 @@ def parse_pdf(path: str | Path, official_url: str | None = None, *, detect_table
         page_end=len(pdf) or None,
     )
     heading_stack: dict[int, Node] = {}
+    # A specification numbers each of its sections once. A later block claiming
+    # a number already used is prose that happens to start with a numeral —
+    # compliance-test steps such as "6. Verify: ..." are the common case, and
+    # each one used to open a new chapter.
+    claimed_numbers: set[str] = set()
     previous_label = ""
     page_heights = {page["page_number"]: page["height"] for page in pages}
 
@@ -432,6 +459,12 @@ def parse_pdf(path: str | Path, official_url: str | None = None, *, detect_table
             if not normalize_text(block.raw_text):
                 continue
             heading = _heading(block, body_size, page_heights[page_number])
+            if heading and heading[1]:
+                canonical = _canonical_number(heading[1])
+                if canonical in claimed_numbers:
+                    heading = None
+                else:
+                    claimed_numbers.add(canonical)
             # A cover page repeats the document title in large bold type, which
             # is indistinguishable from a chapter heading by style alone. When
             # the document numbers its real headings, an unnumbered one on page

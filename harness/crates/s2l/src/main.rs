@@ -779,7 +779,9 @@ fn pipeline_run(flags: &Flags) -> Result<(), String> {
         return Err("planning failed".into());
     }
     let plan = planner.plan().expect("accepted").clone();
-    manifest.phases.push(PhaseRecord::ok("plan", "request"));
+    manifest
+        .phases
+        .push(PhaseRecord::ok("plan", "request").with_transcript(&transcript));
 
     let (ordered, excluded) = processable_units(&plan);
     for unit_id in &excluded {
@@ -837,7 +839,9 @@ fn pipeline_run(flags: &Flags) -> Result<(), String> {
             continue;
         };
         let bundle = tools.bundle().expect("accepted").clone();
-        manifest.phases.push(PhaseRecord::ok("evidence", unit_id));
+        manifest
+            .phases
+            .push(PhaseRecord::ok("evidence", unit_id).with_transcript(&transcript));
 
         let semantic_scope = match SemanticScope::from_inputs(
             &plan,
@@ -871,7 +875,9 @@ fn pipeline_run(flags: &Flags) -> Result<(), String> {
                 // outcome, but nothing downstream can translate it.
                 if artifact["outcome"] == json!("SUCCESS") {
                     semantics.insert(unit_id.clone(), artifact);
-                    manifest.phases.push(PhaseRecord::ok("semantics", unit_id));
+                    manifest
+                        .phases
+                        .push(PhaseRecord::ok("semantics", unit_id).with_transcript(&transcript));
                 } else {
                     manifest.phases.push(PhaseRecord::failed(
                         "semantics",
@@ -916,9 +922,10 @@ fn pipeline_run(flags: &Flags) -> Result<(), String> {
                     .join(frozen.lean_module.split('.').collect::<PathBuf>())
                     .with_extension("lean");
                 core = Some((frozen.manifest.clone(), source));
-                manifest
-                    .phases
-                    .push(PhaseRecord::ok("core", format!("{count} shared concept(s)")));
+                manifest.phases.push(
+                    PhaseRecord::ok("core", format!("{count} shared concept(s)"))
+                        .with_transcript(&transcript),
+                );
             }
             Err(error) => {
                 manifest.phases.push(PhaseRecord::failed("core", "shared concepts", error.to_string()));
@@ -1010,7 +1017,9 @@ fn pipeline_run(flags: &Flags) -> Result<(), String> {
             manifest.status = "FAIL";
             continue;
         }
-        manifest.phases.push(PhaseRecord::ok("translate", &group));
+        manifest
+            .phases
+            .push(PhaseRecord::ok("translate", &group).with_transcript(&transcript));
 
         let group_manifest = tools.manifest().expect("accepted").clone();
         let lean_file = group_manifest["leanFile"].as_str().unwrap_or_default();
@@ -1046,6 +1055,7 @@ fn pipeline_run(flags: &Flags) -> Result<(), String> {
     if manifest.phases.iter().any(|record| record.status == "FAIL") {
         manifest.status = "FAIL";
     }
+    manifest.usage = pipeline::total_usage(&manifest.phases);
     manifest.finished_at = harness::clock::utc_now_iso();
     write_manifest(&layout, &manifest)?;
     println!("{}", manifest.summary());

@@ -312,3 +312,53 @@ def test_a_table_of_only_empty_cells_does_not_crash():
 
     rows, _ = _compact_table([[None, None], ["", ""]])
     assert all(not any(cell.strip() for cell in row) for row in rows)
+
+
+def test_chapters_numbered_with_a_trailing_zero_are_chapters():
+    """Some specifications number their chapters "1.0", "6.0".
+
+    Reading the dot as depth makes every chapter a section, and leaves the
+    document with no chapters at all — which is what happened to CXL 2.0, whose
+    fourteen chapters were entirely invisible to planning.
+    """
+    from spec2lean.parsers.pdf import _canonical_number, _heading_level
+
+    assert _heading_level("1") == 1
+    assert _heading_level("1.0") == 1
+    assert _heading_level("14.0") == 1
+    assert _heading_level("1.1") == 2
+    assert _heading_level("9.7.1.1") == 4
+    # A trailing zero deeper in the number collapses the same way.
+    assert _heading_level("3.2.0") == 2
+
+    # Chapter 6 and chapter 6.0 are the same chapter.
+    assert _canonical_number("6.0") == "6"
+    assert _canonical_number("6") == "6"
+    assert _canonical_number("1.4.1") == "1.4.1"
+
+
+def test_a_section_number_opens_at_most_one_heading(tmp_path):
+    """Compliance-test prose such as "6. Verify: ..." reads as a numbered
+    heading. In CXL 2.0 nine such steps each opened a new chapter 6."""
+    source = tmp_path / "repeated.pdf"
+    document = fitz.open()
+    page = document.new_page(width=612, height=792)
+    page.insert_text((72, 100), "6.0 Flex Bus Physical Layer", fontsize=18, fontname="hebo")
+    page.insert_textbox((72, 140, 540, 190), "The real chapter body.", fontsize=10)
+    later = document.new_page(width=612, height=792)
+    later.insert_text((72, 100), "6. Verify: Variable Value Condition ID = 0", fontsize=12, fontname="hebo")
+    later.insert_textbox((72, 140, 540, 190), "A compliance step.", fontsize=10)
+    document.save(source)
+
+    parsed = parse_pdf(source)
+    headings = [
+        (node.section_number, node.title)
+        for node, _, _, _ in walk_nodes(parsed.root)
+        if node.node_type in {"chapter", "section", "subsection"}
+    ]
+    assert headings == [("6.0", "Flex Bus Physical Layer")], headings
+    # The compliance step is still indexed, just not as hierarchy.
+    assert any(
+        "Verify: Variable Value Condition" in node.raw_text
+        for node, _, _, _ in walk_nodes(parsed.root)
+    )
