@@ -76,6 +76,9 @@ impl Checker {
         path: &str,
     ) -> Result<Vec<String>, SpecDbError> {
         let mut result: Vec<String> = Vec::new();
+        // Membership by set, not by rescanning the accumulated list: a
+        // submission naming thousands of nodes should cost linear time.
+        let mut seen: BTreeSet<String> = BTreeSet::new();
         for (index, value) in values.iter().enumerate() {
             let item_path = format!("{path}[{index}]");
             let raw = value.as_str().unwrap_or_default();
@@ -90,12 +93,15 @@ impl Checker {
                     format!("source node does not exist: {node_id}"),
                     item_path,
                 ),
-                Ok(node_id) if result.contains(&node_id.to_string()) => self.push(
+                Ok(node_id) if seen.contains(&node_id.to_string()) => self.push(
                     "DUPLICATE_SOURCE_NODE",
                     format!("duplicate source node: {node_id}"),
                     item_path,
                 ),
-                Ok(node_id) => result.push(node_id.to_string()),
+                Ok(node_id) => {
+                    seen.insert(node_id.to_string());
+                    result.push(node_id.to_string());
+                }
             }
         }
         result.sort();

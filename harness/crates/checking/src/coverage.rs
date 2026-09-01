@@ -3,6 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::Serialize;
 use serde_json::Value;
 
+use spec2lean_translation::source::declarations;
+
 use crate::CheckInputs;
 
 #[derive(Debug, Clone, Serialize)]
@@ -38,8 +40,13 @@ impl CoverageReport {
         }
         let mut lines = vec![format!("coverage: FAIL ({} uncovered)", self.uncovered.len())];
         for item in self.uncovered.iter().take(20) {
+            let reason = if item.item_type == "NO_CLAIMS" {
+                "states nothing to cover"
+            } else {
+                "reaches no declaration the Lean defines"
+            };
             lines.push(format!(
-                "  {} {} ({}) reaches no declaration",
+                "  {} {} ({}) {reason}",
                 item.item_type, item.item_id, item.unit_id
             ));
         }
@@ -93,7 +100,22 @@ pub(crate) fn claim_declarations(inputs: &CheckInputs<'_>) -> BTreeMap<(String, 
 /// Forward coverage: every claim, and every evidence item those claims rest on,
 /// must reach Lean.
 pub fn coverage(inputs: &CheckInputs<'_>) -> CoverageReport {
-    let index = claim_declarations(inputs);
+    // Only declarations the Lean actually defines count as reaching it. A
+    // manifest naming something that does not exist is caught by traceability,
+    // but coverage must not report the claim as covered in the meantime.
+    let mut defined: BTreeSet<String> = declarations(inputs.source).into_keys().collect();
+    if let Some(core_source) = inputs.core_source {
+        defined.extend(declarations(core_source).into_keys());
+    }
+    let index: BTreeMap<(String, String), BTreeSet<String>> = claim_declarations(inputs)
+        .into_iter()
+        .map(|(key, names)| {
+            (
+                key,
+                names.into_iter().filter(|name| defined.contains(name)).collect(),
+            )
+        })
+        .collect();
     let mut covered = Vec::new();
     let mut uncovered = Vec::new();
 
@@ -106,8 +128,8 @@ pub fn coverage(inputs: &CheckInputs<'_>) -> CoverageReport {
             .and_then(Value::as_array)
         else {
             uncovered.push(CoverageItem {
-                item_type: "SEMANTIC_CLAIM",
-                item_id: "<no claims>".to_string(),
+                item_type: "NO_CLAIMS",
+                item_id: "<no claim array>".to_string(),
                 unit_id: unit_id.clone(),
                 declarations: Vec::new(),
                 semantic_claim_ids: Vec::new(),
@@ -115,6 +137,19 @@ pub fn coverage(inputs: &CheckInputs<'_>) -> CoverageReport {
             continue;
         };
         let claims = claims.as_slice();
+        // An artifact with an empty claim list states nothing about the
+        // specification, so there is nothing for Lean to cover. Reporting that
+        // as full coverage would make the emptiest artifact the best one.
+        if claims.is_empty() {
+            uncovered.push(CoverageItem {
+                item_type: "NO_CLAIMS",
+                item_id: "<empty claim array>".to_string(),
+                unit_id: unit_id.clone(),
+                declarations: Vec::new(),
+                semantic_claim_ids: Vec::new(),
+            });
+            continue;
+        }
 
         // evidence id -> the claims that cite it, and the declarations reached.
         let mut evidence_claims: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();

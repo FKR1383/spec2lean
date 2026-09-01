@@ -210,21 +210,27 @@ pub fn validate_submission(
             )),
         }
 
-        for (support_index, support) in mapping
-            .get("supportsDeclarations")
-            .and_then(Value::as_array)
-            .map(Vec::as_slice)
-            .unwrap_or_default()
-            .iter()
-            .enumerate()
-        {
-            if !support.as_str().is_some_and(is_lean_name) {
-                diagnostics.push(Diagnostic::new(
-                    "INVALID_DECLARATION_NAME",
-                    "supportsDeclarations entries must be dotted Lean identifiers",
-                    format!("{path}.supportsDeclarations[{support_index}]"),
-                ));
+        // A malformed optional array is a mistake, not an absence: treating
+        // `"supportsDeclarations": 42` as an empty list accepts a submission
+        // whose author meant something.
+        match mapping.get("supportsDeclarations") {
+            None => {}
+            Some(Value::Array(supports)) => {
+                for (support_index, support) in supports.iter().enumerate() {
+                    if !support.as_str().is_some_and(is_lean_name) {
+                        diagnostics.push(Diagnostic::new(
+                            "INVALID_DECLARATION_NAME",
+                            "supportsDeclarations entries must be dotted Lean identifiers",
+                            format!("{path}.supportsDeclarations[{support_index}]"),
+                        ));
+                    }
+                }
             }
+            Some(_) => diagnostics.push(Diagnostic::new(
+                "EXPECTED_ARRAY",
+                "supportsDeclarations must be an array",
+                format!("{path}.supportsDeclarations"),
+            )),
         }
     }
 
@@ -317,11 +323,29 @@ pub fn validate_submission(
         }
         let registered: BTreeSet<&str> =
             scope.registered_declarations(dependency_id).into_iter().collect();
-        let used: Vec<&str> = use_object
-            .get("leanDeclarations")
-            .and_then(Value::as_array)
-            .map(|items| items.iter().filter_map(Value::as_str).collect())
-            .unwrap_or_default();
+        let raw_used = use_object.get("leanDeclarations");
+        if let Some(value) = raw_used
+            && !value.is_array()
+        {
+            diagnostics.push(Diagnostic::new(
+                "EXPECTED_ARRAY",
+                "leanDeclarations must be an array",
+                format!("{path}.leanDeclarations"),
+            ));
+            continue;
+        }
+        let entries = raw_used.and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
+        // A non-string entry is dropped by `filter_map`, which would let
+        // `["Registered.Name", 42]` pass as though it named one declaration.
+        if entries.iter().any(|item| !item.is_string()) {
+            diagnostics.push(Diagnostic::new(
+                "INVALID_DECLARATION_NAME",
+                "every leanDeclarations entry must be a dotted Lean identifier",
+                format!("{path}.leanDeclarations"),
+            ));
+            continue;
+        }
+        let used: Vec<&str> = entries.iter().filter_map(Value::as_str).collect();
         if used.is_empty() {
             diagnostics.push(Diagnostic::new(
                 "MISSING_SHARED_USE_DECLARATIONS",

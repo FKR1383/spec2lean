@@ -349,3 +349,75 @@ fn an_artifact_with_malformed_claims_does_not_pass_by_default() {
     let report = run(&bundles(), &semantics, &json!({"declarations": []}), "", &fixture);
     assert!(!report.passed(), "{}", report.summary());
 }
+
+// A fourth round of external review; each trigger is the reviewer's own.
+
+#[test]
+fn an_artifact_that_states_nothing_is_not_fully_covered() {
+    let fixture = Fixture::new("emptyclaims");
+    let semantics = BTreeMap::from([(
+        "unit:add".to_string(),
+        json!({"unit": {"unitId": "unit:add"}, "semantics": {"claims": []}}),
+    )]);
+    let report = run(&bundles(), &semantics, &json!({"declarations": []}), "", &fixture);
+    assert!(!report.passed(), "{}", report.summary());
+    assert_eq!(report.coverage.uncovered[0].item_type, "NO_CLAIMS");
+    assert!(report.summary().contains("states nothing to cover"));
+}
+
+#[test]
+fn a_claim_mapped_only_to_lean_that_does_not_exist_is_not_covered() {
+    let fixture = Fixture::new("ghost");
+    let mut manifest = manifest();
+    manifest["declarations"][0]["declaration"] = json!("Ghost.missing");
+    let report = run(&bundles(), &semantics(), &manifest, SOURCE, &fixture);
+    assert!(!report.passed(), "{}", report.summary());
+    // Coverage must notice on its own, not leave it to traceability.
+    let uncovered: Vec<&str> = report
+        .coverage
+        .uncovered
+        .iter()
+        .map(|item| item.item_id.as_str())
+        .collect();
+    assert!(uncovered.contains(&"claim:syntax"), "{uncovered:?}");
+}
+
+#[test]
+fn a_record_naming_nodes_from_two_documents_is_caught() {
+    let fixture = Fixture::new("twodocs");
+    let mut bundles = bundles();
+    // One HTML node and one PDF node, carrying the HTML document's hash.
+    bundles.get_mut("unit:add").unwrap()["evidence"][0]["sourceNodeIds"] =
+        json!(["node:html-syntax", "node:pdf-syntax"]);
+    bundles.get_mut("unit:add").unwrap()["evidence"][0]["exactText"] =
+        json!("add.type d, a, b;\nadd.type d, a, b;");
+    let report = run(&bundles, &semantics(), &manifest(), SOURCE, &fixture);
+    assert!(!report.passed(), "{}", report.summary());
+    assert!(
+        report.traceability.broken[0]
+            .message
+            .contains("more than one document"),
+        "{}",
+        report.traceability.broken[0].message
+    );
+}
+
+#[test]
+fn a_record_that_names_a_node_and_quotes_none_of_it_is_caught() {
+    let fixture = Fixture::new("uncoveredspan");
+    let mut bundles = bundles();
+    let record = &mut bundles.get_mut("unit:add").unwrap()["evidence"][0];
+    // Two nodes named, only one quoted.
+    record["sourceNodeIds"] = json!(["node:html-syntax", "node:html-def"]);
+    record["sourceSpanIds"] = json!(["span:html-syntax-0"]);
+    record["exactText"] = json!("add.type d, a, b;");
+    let report = run(&bundles, &semantics(), &manifest(), SOURCE, &fixture);
+    assert!(!report.passed(), "{}", report.summary());
+    assert!(
+        report.traceability.broken[0]
+            .message
+            .contains("selects no span from it"),
+        "{}",
+        report.traceability.broken[0].message
+    );
+}

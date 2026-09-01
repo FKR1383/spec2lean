@@ -232,12 +232,52 @@ fn an_instruction_without_inputs_result_or_operation_is_rejected() {
     let object = submission.as_object_mut().unwrap();
     object.remove("operation");
     object.remove("result");
-    object.insert("inputs".into(), json!([]));
+    // Omitted entirely, not empty: an artifact that never mentions inputs has
+    // not said the instruction has none.
+    object.remove("inputs");
+    object.remove("stateEffects");
     let response = read_and_submit(&mut tools, &submission);
     let found = codes(&response);
     for code in ["MISSING_OPERATION", "MISSING_RESULT", "MISSING_INPUTS"] {
         assert!(found.contains(&code.to_string()), "{found:?}");
     }
+}
+
+/// External review, confirmed against the PTX index: `trap` and `brkpt` take no
+/// operands and produce no value. Demanding a result and a non-empty input list
+/// made them unformalizable.
+#[test]
+fn an_operandless_instruction_is_formalizable_when_it_says_so() {
+    let bundle = bundle_with(vec![record("evidence:op", "OPERATION", "html")], vec![]);
+    let mut plan = plan();
+    plan["sharedPrerequisites"] = json!([]);
+    let scope = SemanticScope::from_inputs(
+        &plan, &bundle, &UnitId::parse("unit:add").unwrap(), "2026-01-01T00:00:00.000000Z",
+    )
+    .expect("scope");
+    let mut tools = SemanticTools::new(scope, bundle.clone(), extractor());
+
+    let response = read_and_submit(
+        &mut tools,
+        &json!({
+            "outcome": "SUCCESS", "unitKind": "INSTRUCTION",
+            "identity": {"name": "add", "evidenceIds": ["evidence:op"]},
+            "syntaxForms": [], "edgeCases": [], "restrictions": [], "dependencies": [],
+            // No operands and no result — said explicitly, not omitted.
+            "inputs": [],
+            "operation": {
+                "description": "aborts execution of the thread",
+                "inputs": [], "result": "none; execution does not continue",
+                "branches": [], "evidenceIds": ["evidence:op"],
+            },
+            "stateEffects": [{"target": "thread execution", "effect": "aborted",
+                              "evidenceIds": ["evidence:op"]}],
+            "claims": [{"claimId": "claim:1", "kind": "SOURCE_FACT",
+                        "statement": "the instruction aborts execution",
+                        "evidenceIds": ["evidence:op"]}],
+        }),
+    );
+    assert_eq!(response["accepted"], json!(true), "{response}");
 }
 
 #[test]
@@ -565,7 +605,7 @@ fn a_unit_the_plan_asked_for_by_instruction_cannot_relabel_its_way_out() {
             "outcome": "SUCCESS",
             "unitKind": "OTHER",
             "identity": {"name": "add", "evidenceIds": ["evidence:syntax"]},
-            "syntaxForms": [], "inputs": [], "edgeCases": [], "restrictions": [],
+            "syntaxForms": [], "edgeCases": [], "restrictions": [],
             "dependencies": [],
             "claims": [{"claimId": "claim:1", "kind": "SOURCE_FACT",
                         "statement": "add names a destination and two sources",
@@ -576,6 +616,23 @@ fn a_unit_the_plan_asked_for_by_instruction_cannot_relabel_its_way_out() {
     for code in ["MISSING_OPERATION", "MISSING_RESULT", "MISSING_INPUTS"] {
         assert!(found.contains(&code.to_string()), "{found:?}");
     }
+}
+
+/// A required citation must be required even when the field is absent, not only
+/// when it is present and empty.
+#[test]
+fn a_component_that_omits_its_citations_is_refused() {
+    let bundle = base_bundle();
+    let mut tools = make_tools(&bundle);
+    let mut submission = base_submission();
+    // `identity` with no evidenceIds at all.
+    submission["identity"] = json!({"name": "add"});
+    let response = read_and_submit(&mut tools, &submission);
+    assert!(
+        codes(&response).contains(&"MISSING_EVIDENCE".to_string()),
+        "{:?}",
+        codes(&response)
+    );
 }
 
 /// External review: unused functional evidence in the bundle forced the

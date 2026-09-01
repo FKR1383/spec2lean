@@ -295,7 +295,10 @@ pub fn declaration_entries(source: &str) -> Vec<DeclarationEntry> {
                     continue;
                 }
             }
-            "section" => {
+            // `mutual` is closed by `end` like a namespace but contributes no
+            // name, so treating its `end` as closing the namespace loses the
+            // qualification of everything after it.
+            "section" | "mutual" => {
                 contexts.push(Vec::new());
                 // An optional section name follows.
                 index += 1;
@@ -431,6 +434,15 @@ mod tests {
         let names: Vec<&str> = found.keys().map(String::as_str).collect();
         assert_eq!(names, ["Spec.Add.run", "Spec.top", "outside"]);
         assert_eq!(found["Spec.Add.run"], "def");
+    }
+
+    /// External review, confirmed against real `lean`: it declares `N.after`.
+    #[test]
+    fn a_mutual_block_does_not_close_its_namespace() {
+        let source = "namespace N\nmutual\n  def even : Nat := 0\n  def odd : Nat := 1\nend\ndef after := 0\nend N\n";
+        let found = declarations(source);
+        let names: Vec<&str> = found.keys().map(String::as_str).collect();
+        assert_eq!(names, ["N.after", "N.even", "N.odd"], "{found:?}");
     }
 
     #[test]

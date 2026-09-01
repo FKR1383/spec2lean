@@ -557,3 +557,59 @@ fn a_rendition_pair_must_actually_be_the_same_passage() {
     );
     assert!(!outcome.is_error(), "{outcome:?}");
 }
+
+/// External review: pairing accepted a role/tier group as long as *some* pair
+/// matched, so HTML A and B alongside PDF A left B unpaired.
+#[test]
+fn every_rendition_selection_needs_a_counterpart() {
+    let fixture = Fixture::new("halfpaired");
+    let db = fixture.db();
+    let mut tools = EvidenceTools::new(&db, scope(&both_renditions_plan())).unwrap();
+    tools.call("spec_subtree", &json!({"nodeId": "node:html-ch1", "maxDepth": 1}));
+    tools.call("spec_subtree", &json!({"nodeId": "node:pdf-ch1", "maxDepth": 1}));
+
+    // Two HTML selections, one PDF: the second HTML one is uncorroborated.
+    let outcome = tools.call(
+        "submit_evidence",
+        &json!({
+            "unitId": "unit:add",
+            "selections": [
+                {"sourceNodeIds": ["node:html-syntax"], "role": "SYNTAX", "tier": "CORE",
+                 "rationale": "html form"},
+                {"sourceNodeIds": ["node:html-note"], "role": "SYNTAX", "tier": "CORE",
+                 "rationale": "an unpaired extra"},
+                {"sourceNodeIds": ["node:pdf-syntax"], "role": "SYNTAX", "tier": "CORE",
+                 "rationale": "pdf form"},
+            ],
+        }),
+    );
+    assert_eq!(codes(&outcome), vec!["UNRELATED_SOURCE_RENDITION"]);
+}
+
+/// The other side of that rule: renditions the two parsers classified
+/// differently must still pair. PTX's HTML keeps the type alternatives inside
+/// the syntax block while its PDF splits them into code blocks.
+#[test]
+fn renditions_pair_on_their_text_when_the_parsers_disagree() {
+    let fixture = Fixture::new("classification");
+    let db = fixture.db();
+    let mut tools = EvidenceTools::new(&db, scope(&both_renditions_plan())).unwrap();
+    tools.call("spec_subtree", &json!({"nodeId": "node:html-ch1", "maxDepth": 1}));
+    tools.call("spec_subtree", &json!({"nodeId": "node:pdf-ch1", "maxDepth": 1}));
+
+    // html-syntax and pdf-syntax hold the same text; the fixture also
+    // correlates them, so this pairs either way.
+    let outcome = tools.call(
+        "submit_evidence",
+        &json!({
+            "unitId": "unit:add",
+            "selections": [
+                {"sourceNodeIds": ["node:html-syntax"], "role": "SYNTAX", "tier": "CORE",
+                 "rationale": "html form"},
+                {"sourceNodeIds": ["node:pdf-syntax"], "role": "SYNTAX", "tier": "CORE",
+                 "rationale": "pdf form"},
+            ],
+        }),
+    );
+    assert!(!outcome.is_error(), "{outcome:?}");
+}

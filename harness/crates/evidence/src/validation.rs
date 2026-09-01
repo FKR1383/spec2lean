@@ -349,14 +349,38 @@ pub fn build_evidence_record(
 
 /// Whether two evidence records plausibly describe the same passage.
 ///
+/// Called at most once per selection in the worst case, because the caller
+/// stops at the first counterpart it finds.
+///
 /// Phase 1 records HTML/PDF correlations; where it has none, an identical
 /// section number is the next best structural evidence. Without either, "the
 /// same passage in both renditions" is unverified, and the pairing rule would
 /// be satisfied by any two unrelated passages carrying the same labels.
 fn paired(db: &SpecDb, left: &Value, right: &Value) -> Result<bool, SpecDbError> {
-    // A shared section number alone is too weak — a whole chapter carries one —
-    // so the structural kind must match too: the same passage in two renditions
-    // is a syntax block in both, or a note in both.
+    // The strongest classification-free signal is the text itself: the same
+    // passage in two renditions says the same thing, even when the two parsers
+    // labelled it differently — PTX's HTML puts the type alternatives inside the
+    // syntax block while its PDF splits them into separate code blocks.
+    let text = |item: &Value| {
+        item["exactText"]
+            .as_str()
+            .map(normalize_text)
+            .unwrap_or_default()
+    };
+    let (left_text, right_text) = (text(left), text(right));
+    let (short, long) = if left_text.len() <= right_text.len() {
+        (&left_text, &right_text)
+    } else {
+        (&right_text, &left_text)
+    };
+    // A long enough shared passage; a handful of characters would match
+    // anything.
+    if short.chars().count() >= 12 && long.contains(short.as_str()) {
+        return Ok(true);
+    }
+
+    // Otherwise a shared section number, which a whole chapter also carries, is
+    // only enough alongside a matching structural kind.
     let section = |item: &Value| item["sectionNumber"].as_str().map(str::to_string);
     let kind = |item: &Value| item["provenance"][0]["nodeType"].as_str().map(str::to_string);
     if let (Some(left_section), Some(right_section)) = (section(left), section(right))
@@ -462,20 +486,36 @@ fn rendition_diagnostics(
             .iter()
             .filter(|item| item["sourceType"].as_str() == Some("pdf"))
             .collect();
-        let mut any_pair = false;
-        for left in &html {
-            for right in &pdf {
+        // Every selection must have a counterpart, not just one of them:
+        // otherwise HTML A and B alongside PDF A leaves B unpaired and
+        // uncorroborated.
+        let mut unpaired: Vec<String> = Vec::new();
+        for (left, others) in html.iter().map(|item| (*item, &pdf)).chain(pdf.iter().map(|item| (*item, &html)))
+        {
+            let mut found = false;
+            for right in others.iter() {
                 if paired(db, left, right)? {
-                    any_pair = true;
+                    found = true;
+                    break; // One counterpart is enough for this selection.
                 }
             }
+            if !found {
+                unpaired.push(
+                    left["evidenceId"]
+                        .as_str()
+                        .unwrap_or("<unknown>")
+                        .to_string(),
+                );
+            }
         }
-        if !any_pair {
+        if !unpaired.is_empty() {
             diagnostics.push(Diagnostic::new(
                 Code::UnrelatedSourceRendition,
                 format!(
-                    "no {tier} {role} HTML selection corresponds to a PDF one; the renditions must \
-                     be the same passage, related by section number or by an indexed correlation"
+                    "every {tier} {role} selection needs a corresponding selection in the other \
+                     rendition — the same passage, matched by its text, by an indexed correlation, \
+                     or by section number and structural kind. Unmatched: {}",
+                    unpaired.join(", ")
                 ),
                 path,
             ));
@@ -631,7 +671,7 @@ pub fn validate_submission(
         // get that from Phase 1".
         let mut node_ids = Vec::new();
         let mut invented = false;
-        for raw in &node_strings {
+        for (index, raw) in node_strings.iter().enumerate() {
             match NodeId::parse(raw) {
                 Ok(node_id) if db.node_exists(&node_id)? => node_ids.push(node_id),
                 _ => {
@@ -639,7 +679,7 @@ pub fn validate_submission(
                     diagnostics.push(Diagnostic::new(
                         Code::InventedSourceNode,
                         format!("source node does not exist: {raw}"),
-                        format!("{path}.sourceNodeIds"),
+                        format!("{path}.sourceNodeIds[{index}]"),
                     ));
                 }
             }
@@ -667,14 +707,14 @@ pub fn validate_submission(
             }
         }
         let mut span_ids = Vec::new();
-        for raw in &raw_spans {
+        for (index, raw) in raw_spans.iter().enumerate() {
             match SpanId::parse(raw) {
                 Ok(span_id) => {
                     if !ledger.is_span_exposed(&span_id) {
                         diagnostics.push(Diagnostic::new(
                             Code::SpanNotExposed,
                             format!("source span was not exposed in this session: {span_id}"),
-                            format!("{path}.sourceSpanIds"),
+                            format!("{path}.sourceSpanIds[{index}]"),
                         ));
                     }
                     span_ids.push(span_id);
@@ -682,7 +722,7 @@ pub fn validate_submission(
                 Err(_) => diagnostics.push(Diagnostic::new(
                     Code::InventedSourceSpan,
                     format!("source span does not exist: {raw}"),
-                    format!("{path}.sourceSpanIds"),
+                    format!("{path}.sourceSpanIds[{index}]"),
                 )),
             }
         }

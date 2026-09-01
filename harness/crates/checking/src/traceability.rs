@@ -102,6 +102,17 @@ fn verify_evidence(db: &SpecDb, record: &Value) -> Result<(), String> {
                 .map_err(|_| format!("source node is no longer in the index: {node_id}"))?,
         );
     }
+    // One record quotes one document. Without this, a record could name an HTML
+    // node and a PDF node, carry one of their hashes, and join their text.
+    if let Some(stray) = rows
+        .iter()
+        .find(|row| row.document_id != rows[0].document_id)
+    {
+        return Err(format!(
+            "the record names nodes from more than one document: {} and {}",
+            rows[0].document_id, stray.document_id
+        ));
+    }
 
     // The document identity the record claims must be present and must still be
     // the index's. Treating an absent hash as "nothing to check" would let a
@@ -151,6 +162,14 @@ fn verify_evidence(db: &SpecDb, record: &Value) -> Result<(), String> {
                 row.span_id.as_str().to_string(),
             )
         });
+        // Naming a node and then quoting none of it attributes the record to a
+        // source it does not actually draw on.
+        let covered: BTreeSet<&NodeId> = spans.iter().map(|row| &row.node_id).collect();
+        if let Some(missing) = node_ids.iter().find(|node_id| !covered.contains(node_id)) {
+            return Err(format!(
+                "the record names {missing} but selects no span from it"
+            ));
+        }
         span_text(&spans)
     };
 

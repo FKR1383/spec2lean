@@ -104,7 +104,18 @@ impl<'a> Checker<'a> {
     /// claim from being attached to evidence that was never retrieved.
     fn evidence_ids(&mut self, value: Option<&Value>, path: &str, required: bool) -> Vec<String> {
         let items = match value {
-            None => return Vec::new(),
+            None => {
+                // An absent array is not "nothing to check": where citations
+                // are required, absence is exactly the failure.
+                if required {
+                    self.push(
+                        Code::MissingEvidence,
+                        "at least one evidence ID is required",
+                        path,
+                    );
+                }
+                return Vec::new();
+            }
             Some(Value::Array(items)) if items.iter().all(Value::is_string) => items,
             Some(_) => {
                 self.push(
@@ -421,20 +432,22 @@ pub fn validate_submission(
                     .unwrap_or_default();
                 // A twelve-character floor: enough to reject "adds them".
                 check.text(operation.get("description"), "$.operation.description", 12);
+                // Present and well formed, but allowed to be empty: an
+                // operandless instruction has no inputs to name.
                 let names_ok = operation
                     .get("inputs")
                     .and_then(Value::as_array)
                     .is_some_and(|items| {
-                        !items.is_empty()
-                            && items.iter().all(|item| {
-                                item.as_str()
-                                    .is_some_and(|text| !normalize_text(text).is_empty())
-                            })
+                        items.iter().all(|item| {
+                            item.as_str()
+                                .is_some_and(|text| !normalize_text(text).is_empty())
+                        })
                     });
                 if !names_ok {
                     check.push(
                         Code::MissingOperationInputs,
-                        "operation.inputs must name at least one input",
+                        "operation.inputs must be an array of input names; give [] for an \
+                         operation that takes none",
                         "$.operation.inputs",
                     );
                 }
@@ -507,21 +520,30 @@ pub fn validate_submission(
                 "$.operation.evidenceIds",
             );
         }
-        if !result_present {
+        // An instruction must do something observable, but not every one
+        // produces a value: PTX's `trap` and `brkpt` take no operands and
+        // return nothing, and a faithful artifact for them has state effects
+        // instead. Requiring a result outright would make them unformalizable.
+        let has_state_effect = value
+            .get("stateEffects")
+            .and_then(Value::as_array)
+            .is_some_and(|items| !items.is_empty());
+        if !result_present && !has_state_effect {
             check.push(
                 Code::MissingResult,
-                "instruction semantics require a result",
+                "an instruction must produce a result or record a state effect; if it does \
+                 neither, say what it does",
                 "$.result",
             );
         }
-        let has_inputs = value
-            .get("inputs")
-            .and_then(Value::as_array)
-            .is_some_and(|items| !items.is_empty());
-        if !has_inputs {
+        // The field must be *present*, so that "this instruction takes no
+        // operands" is something the artifact says rather than something it
+        // omits.
+        if value.get("inputs").and_then(Value::as_array).is_none() {
             check.push(
                 Code::MissingInputs,
-                "instruction semantics require inputs",
+                "instruction semantics require an inputs array; give [] for an instruction that \
+                 takes no operands",
                 "$.inputs",
             );
         }
@@ -558,6 +580,7 @@ pub fn validate_submission(
         check.texts(&item, &["concept", "description"], &path);
 
         let mut semantic_claim_ids: Vec<String> = Vec::new();
+        let mut seen_claim_ids: BTreeSet<&str> = BTreeSet::new();
         match item.get("semanticClaimIds") {
             None => {}
             Some(Value::Array(items)) => {
@@ -565,13 +588,14 @@ pub fn validate_submission(
                     let claim_path = format!("{path}.semanticClaimIds[{claim_index}]");
                     match raw_claim.as_str() {
                         Some(claim_id) if claim_id.starts_with("claim:") => {
-                            if semantic_claim_ids.iter().any(|seen| seen == claim_id) {
+                            if seen_claim_ids.contains(claim_id) {
                                 check.push(
                                     Code::DuplicateSemanticClaimId,
                                     format!("dependency repeats semantic claim ID: {claim_id}"),
                                     claim_path,
                                 );
                             } else {
+                                seen_claim_ids.insert(claim_id);
                                 semantic_claim_ids.push(claim_id.to_string());
                             }
                         }
