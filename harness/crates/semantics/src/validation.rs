@@ -178,6 +178,26 @@ impl<'a> Checker<'a> {
     }
 }
 
+/// Every evidence ID the submission cites, anywhere in it.
+fn collect_cited_evidence<'a>(value: &'a Value, found: &mut BTreeSet<&'a str>) {
+    match value {
+        Value::Object(object) => {
+            if let Some(Value::Array(ids)) = object.get("evidenceIds") {
+                found.extend(ids.iter().filter_map(Value::as_str));
+            }
+            for item in object.values() {
+                collect_cited_evidence(item, found);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                collect_cited_evidence(item, found);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// Every `resolution:` ID referenced anywhere in the submission.
 ///
 /// Walks the whole tree, because a non-normative source cited in any component
@@ -456,8 +476,20 @@ pub fn validate_submission(
         }
     }
     let functional = |role: &str| matches!(role, "OPERATION" | "ALGORITHM");
+    // Only evidence the artifact actually cites can say what this unit is.
+    // Judging by everything in the bundle rejects a valid SHARED_CONCEPT
+    // artifact whose bundle merely contains unused functional evidence.
+    let mut cited: BTreeSet<&str> = BTreeSet::new();
+    collect_cited_evidence(submission, &mut cited);
     let is_instruction = unit_kind == Some(UnitKind::Instruction)
-        || evidence_roles.values().any(|role| functional(role));
+        // The plan's own request mode outranks whatever the extractor declares:
+        // a unit selected by instruction spelling is an instruction, and
+        // relabelling it must not skip the instruction requirements.
+        || scope.planned_as_instruction
+        || cited
+            .iter()
+            .filter_map(|id| evidence_roles.get(id))
+            .any(|role| functional(role));
     if is_instruction {
         if !operation_present {
             check.push(
@@ -607,6 +639,8 @@ pub fn validate_submission(
     // Claims.
     let mut claim_ids: BTreeSet<String> = BTreeSet::new();
     let mut claim_meanings: BTreeSet<(String, String)> = BTreeSet::new();
+    let mut statements_by_kind: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut statement_paths: BTreeMap<String, String> = BTreeMap::new();
     let mut assumption_resolutions: BTreeSet<String> = BTreeSet::new();
 
     let claims = check.list(value.get("claims"), "$.claims");
@@ -676,6 +710,13 @@ pub fn validate_submission(
         {
             check.push(Code::DuplicateClaim, "duplicate semantic claim", &path);
         }
+        if !statement.is_empty() {
+            statements_by_kind
+                .entry(statement.clone())
+                .or_default()
+                .insert(kind_label.clone());
+            statement_paths.entry(statement.clone()).or_insert(path.clone());
+        }
 
         let cited: Vec<&str> = item
             .get("evidenceIds")
@@ -731,6 +772,26 @@ pub fn validate_submission(
         }
         if kind == Some(ClaimKind::Assumption) {
             assumption_resolutions.extend(resolution_refs);
+        }
+    }
+
+    // The same statement asserted with two different authorities launders the
+    // weaker one: an ASSUMPTION resting on a non-normative resolution, restated
+    // as a SOURCE_FACT, reads as something the specification states.
+    for (statement, kinds) in &statements_by_kind {
+        if kinds.len() > 1 {
+            check.push(
+                Code::ConflictingClaimAuthority,
+                format!(
+                    "the same statement is asserted with more than one authority ({}); a claim \
+                     means one thing or the other",
+                    kinds.iter().cloned().collect::<Vec<_>>().join(", ")
+                ),
+                statement_paths
+                    .get(statement)
+                    .cloned()
+                    .unwrap_or_else(|| "$.claims".to_string()),
+            );
         }
     }
 

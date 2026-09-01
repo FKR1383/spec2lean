@@ -116,6 +116,7 @@ pub enum DiagnosticCode {
     DuplicateSourceSpan,
     InventedSourceNode,
     NodeNotExposed,
+    NodeTextTruncated,
     SpanNotExposed,
     InvalidRole,
     InvalidTier,
@@ -130,6 +131,7 @@ pub enum DiagnosticCode {
     MissingCoreEvidence,
     MissingSourceRendition,
     UnpairedSourceRendition,
+    UnrelatedSourceRendition,
     DuplicateEvidenceId,
 }
 

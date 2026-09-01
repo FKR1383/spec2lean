@@ -539,3 +539,107 @@ fn identity_is_required_but_a_result_is_only_required_for_instructions() {
     let response = read_and_submit(&mut tools, &anonymous);
     assert!(codes(&response).contains(&"EXPECTED_OBJECT".to_string()));
 }
+
+/// External review: `unitKind` was model-supplied, so a unit the plan selected
+/// by instruction spelling could declare OTHER and skip the requirement to have
+/// inputs, a result and an operation.
+#[test]
+fn a_unit_the_plan_asked_for_by_instruction_cannot_relabel_its_way_out() {
+    // Only SYNTAX evidence, so nothing in the bundle forces the instruction
+    // shape; the plan's request mode is the only thing that does.
+    let bundle = bundle_with(vec![record("evidence:syntax", "SYNTAX", "html")], vec![]);
+    let mut plan = plan();
+    plan["request"] = json!({"scope": {"mode": "EXACT_INSTRUCTIONS", "instructions": ["add"]}});
+    plan["sharedPrerequisites"] = json!([]);
+
+    let scope = SemanticScope::from_inputs(
+        &plan, &bundle, &UnitId::parse("unit:add").unwrap(), "2026-01-01T00:00:00.000000Z",
+    )
+    .expect("scope");
+    assert!(scope.planned_as_instruction);
+
+    let mut tools = SemanticTools::new(scope, bundle.clone(), extractor());
+    let response = read_and_submit(
+        &mut tools,
+        &json!({
+            "outcome": "SUCCESS",
+            "unitKind": "OTHER",
+            "identity": {"name": "add", "evidenceIds": ["evidence:syntax"]},
+            "syntaxForms": [], "inputs": [], "edgeCases": [], "restrictions": [],
+            "dependencies": [],
+            "claims": [{"claimId": "claim:1", "kind": "SOURCE_FACT",
+                        "statement": "add names a destination and two sources",
+                        "evidenceIds": ["evidence:syntax"]}],
+        }),
+    );
+    let found = codes(&response);
+    for code in ["MISSING_OPERATION", "MISSING_RESULT", "MISSING_INPUTS"] {
+        assert!(found.contains(&code.to_string()), "{found:?}");
+    }
+}
+
+/// External review: unused functional evidence in the bundle forced the
+/// instruction shape onto a unit that is not one.
+#[test]
+fn uncited_functional_evidence_does_not_make_a_concept_an_instruction() {
+    // The bundle contains OPERATION evidence, but the artifact never cites it.
+    let bundle = bundle_with(
+        vec![
+            record("evidence:syntax", "SYNTAX", "html"),
+            record("evidence:unused-op", "OPERATION", "html"),
+        ],
+        vec![],
+    );
+    let mut plan = plan();
+    plan["sharedPrerequisites"] = json!([]);
+    let scope = SemanticScope::from_inputs(
+        &plan, &bundle, &UnitId::parse("unit:add").unwrap(), "2026-01-01T00:00:00.000000Z",
+    )
+    .expect("scope");
+    let mut tools = SemanticTools::new(scope, bundle.clone(), extractor());
+    let response = read_and_submit(
+        &mut tools,
+        &json!({
+            "outcome": "SUCCESS",
+            "unitKind": "SHARED_CONCEPT",
+            "identity": {"name": "add", "evidenceIds": ["evidence:syntax"]},
+            "syntaxForms": [], "inputs": [], "edgeCases": [], "restrictions": [],
+            "dependencies": [],
+            "claims": [{"claimId": "claim:1", "kind": "SOURCE_FACT",
+                        "statement": "the concept is named add",
+                        "evidenceIds": ["evidence:syntax"]}],
+        }),
+    );
+    assert_eq!(response["accepted"], json!(true), "{response}");
+}
+
+/// External review: the same statement could be asserted as both an ASSUMPTION
+/// (resting on a non-normative resolution) and a SOURCE_FACT, laundering the
+/// assumption into something the specification says.
+#[test]
+fn the_same_statement_cannot_be_asserted_with_two_authorities() {
+    let bundle = bundle_with(
+        vec![record("evidence:op", "OPERATION", "html")],
+        vec![json!({
+            "resolutionId": "resolution:rounding", "unitId": "unit:add",
+            "nonNormative": true, "role": "OPERATION", "provenance": "INTERNET",
+        })],
+    );
+    let mut tools = make_tools(&bundle);
+    let mut submission = base_submission();
+    submission["claims"] = json!([
+        {"claimId": "claim:1", "kind": "ASSUMPTION",
+         "statement": "rounding follows the platform default",
+         "evidenceIds": ["resolution:rounding"]},
+        {"claimId": "claim:2", "kind": "SOURCE_FACT",
+         "statement": "Rounding  follows the platform default",
+         "evidenceIds": ["evidence:op"]},
+    ]);
+    submission["dependencies"][0]["semanticClaimIds"] = json!(["claim:1"]);
+    let response = read_and_submit(&mut tools, &submission);
+    assert!(
+        codes(&response).contains(&"CONFLICTING_CLAIM_AUTHORITY".to_string()),
+        "{:?}",
+        codes(&response)
+    );
+}

@@ -347,13 +347,54 @@ pub fn build_evidence_record(
     })))
 }
 
+/// Whether two evidence records plausibly describe the same passage.
+///
+/// Phase 1 records HTML/PDF correlations; where it has none, an identical
+/// section number is the next best structural evidence. Without either, "the
+/// same passage in both renditions" is unverified, and the pairing rule would
+/// be satisfied by any two unrelated passages carrying the same labels.
+fn paired(db: &SpecDb, left: &Value, right: &Value) -> Result<bool, SpecDbError> {
+    // A shared section number alone is too weak — a whole chapter carries one —
+    // so the structural kind must match too: the same passage in two renditions
+    // is a syntax block in both, or a note in both.
+    let section = |item: &Value| item["sectionNumber"].as_str().map(str::to_string);
+    let kind = |item: &Value| item["provenance"][0]["nodeType"].as_str().map(str::to_string);
+    if let (Some(left_section), Some(right_section)) = (section(left), section(right))
+        && left_section == right_section
+        && kind(left).is_some()
+        && kind(left) == kind(right)
+    {
+        return Ok(true);
+    }
+    let nodes = |item: &Value| -> Vec<NodeId> {
+        item["sourceNodeIds"]
+            .as_array()
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+            .iter()
+            .filter_map(Value::as_str)
+            .filter_map(|value| NodeId::parse(value).ok())
+            .collect()
+    };
+    let right_nodes: BTreeSet<String> = nodes(right).iter().map(NodeId::to_string).collect();
+    for node_id in nodes(left) {
+        for correlation in db.correlated(&node_id)? {
+            if right_nodes.contains(&correlation.other_node_id.to_string()) {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
 fn rendition_diagnostics(
+    db: &SpecDb,
     records: &[Value],
     required: &BTreeSet<SourceType>,
     path: &str,
-) -> Vec<Diagnostic> {
+) -> Result<Vec<Diagnostic>, SpecDbError> {
     if required.is_empty() {
-        return Vec::new();
+        return Ok(Vec::new());
     }
     let mut diagnostics = Vec::new();
     let present: BTreeSet<&str> = records
@@ -376,7 +417,7 @@ fn rendition_diagnostics(
         ));
     }
     // Keyed on the wire strings so ordering matches the Python `sorted()`.
-    let mut grouped: BTreeMap<(&str, &str), BTreeSet<&str>> = BTreeMap::new();
+    let mut grouped: BTreeMap<(&str, &str), Vec<&Value>> = BTreeMap::new();
     for item in records {
         let (Some(role), Some(tier), Some(source_type)) = (
             item["role"].as_str(),
@@ -386,13 +427,14 @@ fn rendition_diagnostics(
             continue;
         };
         if required.iter().any(|value| value.as_str() == source_type) {
-            grouped
-                .entry((role, tier))
-                .or_default()
-                .insert(source_type);
+            grouped.entry((role, tier)).or_default().push(item);
         }
     }
-    for ((role, tier), source_types) in grouped {
+    for ((role, tier), members) in grouped {
+        let source_types: BTreeSet<&str> = members
+            .iter()
+            .filter_map(|item| item["sourceType"].as_str())
+            .collect();
         let missing: Vec<&str> = required
             .iter()
             .map(|value| value.as_str())
@@ -407,9 +449,39 @@ fn rendition_diagnostics(
                 ),
                 path,
             ));
+            continue;
+        }
+        // Both renditions are present; they must actually correspond. The rule
+        // says to use the matching passages, not to add an unrelated citation
+        // to satisfy it.
+        let html: Vec<&&Value> = members
+            .iter()
+            .filter(|item| item["sourceType"].as_str() == Some("html"))
+            .collect();
+        let pdf: Vec<&&Value> = members
+            .iter()
+            .filter(|item| item["sourceType"].as_str() == Some("pdf"))
+            .collect();
+        let mut any_pair = false;
+        for left in &html {
+            for right in &pdf {
+                if paired(db, left, right)? {
+                    any_pair = true;
+                }
+            }
+        }
+        if !any_pair {
+            diagnostics.push(Diagnostic::new(
+                Code::UnrelatedSourceRendition,
+                format!(
+                    "no {tier} {role} HTML selection corresponds to a PDF one; the renditions must \
+                     be the same passage, related by section number or by an indexed correlation"
+                ),
+                path,
+            ));
         }
     }
-    diagnostics
+    Ok(diagnostics)
 }
 
 /// Validate a submission and, if it is clean, reconstruct the whole bundle.
@@ -581,6 +653,17 @@ pub fn validate_submission(
                     ),
                     format!("{path}.sourceNodeIds"),
                 ));
+            } else if raw_spans.is_empty() && ledger.is_truncated(node_id) {
+                // Selecting the whole node would put text into the bundle that
+                // this session never saw, attributed as though it had.
+                diagnostics.push(Diagnostic::new(
+                    Code::NodeTextTruncated,
+                    format!(
+                        "only part of {node_id} was shown; name the spans you mean, or read it \
+                         in full with spec_show first"
+                    ),
+                    format!("{path}.sourceNodeIds"),
+                ));
             }
         }
         let mut span_ids = Vec::new();
@@ -717,10 +800,11 @@ pub fn validate_submission(
         ));
     }
     diagnostics.extend(rendition_diagnostics(
+        db,
         &records,
         &required_official_renditions(db, scope)?,
         "$.selections",
-    ));
+    )?);
     let ids: Vec<&str> = records
         .iter()
         .filter_map(|item| item["evidenceId"].as_str())

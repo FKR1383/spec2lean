@@ -657,9 +657,13 @@ fn validate_translation_groups(
                 format!("{path}.supportingNodeIds"),
             );
         }
-        // The justification must be structure the member units actually sit
-        // under, not an unrelated section that merely sounds related.
+        // The justification must be structure the members actually sit under —
+        // and, for a group of more than one, structure they sit under
+        // *together*. Checking each member against any support node
+        // independently lets a group be "justified" by listing each unit's own
+        // section, which justifies nothing about grouping them.
         let support_set: BTreeSet<&str> = support.iter().map(String::as_str).collect();
+        let mut common: Option<BTreeSet<String>> = None;
         for unit_id in &group_unit_ids {
             let mut ancestry: BTreeSet<String> = BTreeSet::new();
             for raw_source in candidates[unit_id.as_str()]
@@ -676,16 +680,29 @@ fn validate_translation_groups(
                     ancestry.insert(row.node_id.to_string());
                 }
             }
-            if !support_set
-                .iter()
-                .any(|value| ancestry.contains(*value))
-            {
+            if !support_set.iter().any(|value| ancestry.contains(*value)) {
                 check.push(
                     "UNSUPPORTED_TRANSLATION_GROUP_MEMBER",
                     format!("group support is not in the indexed source ancestry of unit {unit_id}"),
                     format!("{path}.supportingNodeIds"),
                 );
             }
+            common = Some(match common {
+                None => ancestry,
+                Some(shared) => shared.intersection(&ancestry).cloned().collect(),
+            });
+        }
+        if group_unit_ids.len() > 1
+            && !common
+                .unwrap_or_default()
+                .iter()
+                .any(|value| support_set.contains(value.as_str()))
+        {
+            check.push(
+                "UNSHARED_TRANSLATION_GROUP_SUPPORT",
+                "a group of several units needs support they all sit under; none of the                  supporting nodes is common to every member",
+                format!("{path}.supportingNodeIds"),
+            );
         }
 
         groups.push(json!({

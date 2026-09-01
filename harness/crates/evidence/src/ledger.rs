@@ -14,6 +14,10 @@ use spec2lean_specdb::{NodeId, SpanId};
 pub struct ExposureLedger {
     nodes: BTreeMap<NodeId, BTreeSet<String>>,
     selectable: BTreeSet<NodeId>,
+    /// Nodes whose exact text was shown only in part, because it exceeded the
+    /// display limit. Selecting one of these without naming spans would
+    /// attribute text the session never saw.
+    truncated: BTreeSet<NodeId>,
     spans: BTreeSet<SpanId>,
     calls: Vec<Value>,
 }
@@ -29,9 +33,31 @@ impl ExposureLedger {
     /// Expose a node together with its exact text, which is what makes it
     /// selectable, plus the spans that were shown alongside it.
     pub fn expose_selectable(&mut self, node_id: &NodeId, basis: &str, spans: &[SpanId]) {
+        self.expose_text(node_id, basis, spans, false);
+    }
+
+    /// As above, recording whether the text shown was complete.
+    pub fn expose_text(
+        &mut self,
+        node_id: &NodeId,
+        basis: &str,
+        spans: &[SpanId],
+        truncated: bool,
+    ) {
         self.expose(node_id, basis);
         self.selectable.insert(node_id.clone());
         self.spans.extend(spans.iter().cloned());
+        if truncated {
+            self.truncated.insert(node_id.clone());
+        } else {
+            // Seeing it in full later supersedes an earlier partial view.
+            self.truncated.remove(node_id);
+        }
+    }
+
+    /// Whether this node was only ever shown in part.
+    pub fn is_truncated(&self, node_id: &NodeId) -> bool {
+        self.truncated.contains(node_id)
     }
 
     pub fn is_discovered(&self, node_id: &NodeId) -> bool {
@@ -67,6 +93,7 @@ impl ExposureLedger {
                     "nodeId": node_id,
                     "basis": bases.iter().collect::<Vec<_>>(),
                     "selectable": self.selectable.contains(node_id),
+                    "textTruncated": self.truncated.contains(node_id),
                 }))
                 .collect::<Vec<_>>(),
             "exposedSpanIds": self.spans.iter().collect::<Vec<_>>(),

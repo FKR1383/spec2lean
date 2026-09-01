@@ -126,8 +126,9 @@ impl<'a> EvidenceTools<'a> {
                     .into_iter()
                     .map(|span| span.span_id)
                     .collect();
+                let truncated = value["textTruncated"].as_bool().unwrap_or(false);
                 self.ledger
-                    .expose_selectable(&input.node_id, "SHOW", &spans);
+                    .expose_text(&input.node_id, "SHOW", &spans, truncated);
                 Ok(value)
             }
             "spec_children" => {
@@ -172,9 +173,13 @@ impl<'a> EvidenceTools<'a> {
                     let spans = self.db.spans(&row.node_id).map_err(display)?;
                     let span_ids: Vec<_> =
                         spans.iter().map(|span| span.span_id.clone()).collect();
-                    self.ledger
-                        .expose_selectable(&row.node_id, &basis, &span_ids);
                     let mut value = node_summary(row, true);
+                    self.ledger.expose_text(
+                        &row.node_id,
+                        &basis,
+                        &span_ids,
+                        value["textTruncated"].as_bool().unwrap_or(false),
+                    );
                     value["sourceSpanIds"] = json!(span_ids);
                     result.push(value);
                 }

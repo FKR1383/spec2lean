@@ -151,6 +151,7 @@ pub enum DiagnosticCode {
     DuplicateClaimId,
     InvalidClaimKind,
     DuplicateClaim,
+    ConflictingClaimAuthority,
     MissingClaims,
     MissingClaimRendition,
     NonNormativeClaimKind,

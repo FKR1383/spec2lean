@@ -474,3 +474,86 @@ fn the_full_session_runs_the_loop_and_writes_a_transcript() {
     let value = serde_json::to_value(&transcript).unwrap();
     assert_eq!(value["outcome"], json!("SUBMITTED"));
 }
+
+/// External review: the ledger recorded only that a node had been shown, not
+/// whether it had been shown *in full*. A node past the display limit could be
+/// selected whole, putting text the session never saw into the bundle.
+#[test]
+fn text_shown_only_in_part_cannot_be_selected_whole() {
+    let fixture = Fixture::new("truncated");
+    let db = fixture.db();
+    let mut tools = EvidenceTools::new(&db, scope(&html_only_plan())).unwrap();
+
+    // The subtree shows this node's text truncated at the display limit.
+    let outcome = tools.call("spec_subtree", &json!({"nodeId": "node:html-ch1", "maxDepth": 1}));
+    let harness::ToolOutcome::Ok(value) = &outcome else {
+        panic!("{outcome:?}");
+    };
+    let long = value
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["nodeId"] == json!("node:html-long"))
+        .expect("the long node is in the subtree");
+    assert_eq!(long["textTruncated"], json!(true));
+
+    // Selecting it whole would attribute the unseen remainder.
+    let outcome = tools.call("submit_evidence", &submit(&["node:html-long"], "OTHER", "CORE"));
+    assert_eq!(codes(&outcome), vec!["NODE_TEXT_TRUNCATED"]);
+
+    // Naming the spans that were shown is fine.
+    let outcome = tools.call(
+        "submit_evidence",
+        &json!({
+            "unitId": "unit:add",
+            "selections": [{
+                "sourceNodeIds": ["node:html-long"],
+                "sourceSpanIds": ["span:html-long-0"],
+                "role": "OTHER", "tier": "CORE", "rationale": "the shown span",
+            }],
+        }),
+    );
+    assert!(!outcome.is_error(), "{outcome:?}");
+}
+
+/// External review: the both-renditions rule grouped only by role and tier, so
+/// any two unrelated passages carrying the same labels satisfied it.
+#[test]
+fn a_rendition_pair_must_actually_be_the_same_passage() {
+    let fixture = Fixture::new("unrelated");
+    let db = fixture.db();
+    let mut tools = EvidenceTools::new(&db, scope(&both_renditions_plan())).unwrap();
+    tools.call("spec_subtree", &json!({"nodeId": "node:html-ch1", "maxDepth": 1}));
+    tools.call("spec_subtree", &json!({"nodeId": "node:pdf-ch1", "maxDepth": 1}));
+
+    // An HTML note paired with the PDF syntax block: same labels, different
+    // passages, and nothing relating them.
+    let outcome = tools.call(
+        "submit_evidence",
+        &json!({
+            "unitId": "unit:add",
+            "selections": [
+                {"sourceNodeIds": ["node:html-note"], "role": "SYNTAX", "tier": "CORE",
+                 "rationale": "not the same passage"},
+                {"sourceNodeIds": ["node:pdf-syntax"], "role": "SYNTAX", "tier": "CORE",
+                 "rationale": "pdf form"},
+            ],
+        }),
+    );
+    assert_eq!(codes(&outcome), vec!["UNRELATED_SOURCE_RENDITION"]);
+
+    // The genuinely correlated pair is accepted.
+    let outcome = tools.call(
+        "submit_evidence",
+        &json!({
+            "unitId": "unit:add",
+            "selections": [
+                {"sourceNodeIds": ["node:html-syntax"], "role": "SYNTAX", "tier": "CORE",
+                 "rationale": "html form"},
+                {"sourceNodeIds": ["node:pdf-syntax"], "role": "SYNTAX", "tier": "CORE",
+                 "rationale": "pdf form"},
+            ],
+        }),
+    );
+    assert!(!outcome.is_error(), "{outcome:?}");
+}

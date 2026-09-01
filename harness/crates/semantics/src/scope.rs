@@ -55,6 +55,11 @@ pub struct SemanticScope {
     pub evidence_ids: Vec<String>,
     pub run_id: String,
     pub created_at: String,
+    /// Whether the request that produced this unit asked for an instruction.
+    /// A unit the plan selected by instruction spelling or family is an
+    /// instruction whatever the extractor later calls it.
+    #[serde(default)]
+    pub planned_as_instruction: bool,
 }
 
 impl SemanticScope {
@@ -254,6 +259,16 @@ impl SemanticScope {
             }
         }
 
+        // Only an exact-instruction request names an instruction spelling. A
+        // family request names a region of the specification, and a planner may
+        // legitimately select non-instruction units from it — the reset and
+        // error-handling sections of a transport binding, say.
+        let planned_as_instruction = plan
+            .get("request")
+            .and_then(|request| request.get("scope"))
+            .and_then(|scope| scope.get("mode"))
+            .and_then(Value::as_str)
+            == Some("EXACT_INSTRUCTIONS");
         let bundle_hash = evidence_bundle_hash(bundle);
         let plan_run_id = plan
             .get("planRunId")
@@ -273,6 +288,7 @@ impl SemanticScope {
             evidence_bundle_hash: bundle_hash,
             evidence_ids: combined,
             created_at: created_at.to_string(),
+            planned_as_instruction,
         })
     }
 

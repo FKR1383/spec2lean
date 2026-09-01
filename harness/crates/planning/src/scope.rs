@@ -15,15 +15,19 @@ pub enum ScopeError {
     Identity(String),
     Unresolvable(String),
     TooBroad(String),
+    /// The request names something the index contains more than once. Choosing
+    /// silently would plan a section the request may not have meant.
+    Ambiguous(String),
 }
 
 impl std::fmt::Display for ScopeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Db(error) => write!(f, "{error}"),
-            Self::Identity(detail) | Self::Unresolvable(detail) | Self::TooBroad(detail) => {
-                f.write_str(detail)
-            }
+            Self::Identity(detail)
+            | Self::Unresolvable(detail)
+            | Self::TooBroad(detail)
+            | Self::Ambiguous(detail) => f.write_str(detail),
         }
     }
 }
@@ -271,13 +275,15 @@ impl<'a> ScopeResolver<'a> {
         ))
         .map_err(|error| ScopeError::Unresolvable(error.to_string()))?;
 
-        let mut confirmed: Vec<NodeRow> = Vec::new();
+        // Two ways a section can be said to define a spelling, and they are not
+        // equally good. A syntax form *defines* it; prose merely *mentions* it,
+        // and "add.f64 is not supported" mentions it too. Prefer syntax where
+        // any section offers it, and fall back to mention only when none does.
+        let mut by_syntax: Vec<NodeRow> = Vec::new();
+        let mut by_mention: Vec<NodeRow> = Vec::new();
         for (mnemonic, row) in headings {
             let descendants = self.db.descendant_texts(&row.node_id)?;
-            let spelled_out = descendants
-                .iter()
-                .any(|(_, text)| literal.is_match(text));
-            let by_syntax = descendants
+            let syntax_defines = descendants
                 .iter()
                 .any(|(node_type, _)| node_type == "syntax_block")
                 && syntax_accepts(
@@ -289,10 +295,13 @@ impl<'a> ScopeResolver<'a> {
                         .collect::<Vec<_>>()
                         .join("\n"),
                 );
-            if spelled_out || by_syntax {
-                confirmed.push(row);
+            if syntax_defines {
+                by_syntax.push(row);
+            } else if descendants.iter().any(|(_, text)| literal.is_match(text)) {
+                by_mention.push(row);
             }
         }
+        let mut confirmed = if by_syntax.is_empty() { by_mention } else { by_syntax };
         if confirmed.is_empty() {
             return Ok(Vec::new());
         }
@@ -303,6 +312,37 @@ impl<'a> ScopeResolver<'a> {
             .max()
             .unwrap_or_default();
         confirmed.retain(|row| row.depth == deepest);
+
+        // Renditions of one logical section share a number and a title tail.
+        // Anything left over is a different section that also matched, and
+        // picking whichever the database returned first would plan by accident.
+        let distinct: BTreeSet<(Option<String>, Vec<String>)> = confirmed
+            .iter()
+            .map(|row| {
+                (
+                    row.section_number.clone(),
+                    title_mnemonics(row.title.as_deref()),
+                )
+            })
+            .collect();
+        if distinct.len() > 1 {
+            let mut names: Vec<String> = confirmed
+                .iter()
+                .map(|row| {
+                    format!(
+                        "{} {}",
+                        row.section_number.clone().unwrap_or_else(|| "?".into()),
+                        row.title.clone().unwrap_or_else(|| row.node_id.to_string())
+                    )
+                })
+                .collect();
+            names.sort();
+            names.dedup();
+            return Err(ScopeError::Ambiguous(format!(
+                "the instruction {instruction} is defined by more than one section: {}",
+                names.join("; ")
+            )));
+        }
         let best_section = confirmed[0].section_number.clone();
         let best_tail = title_mnemonics(confirmed[0].title.as_deref());
         let mut selected: Vec<NodeId> = confirmed
@@ -354,13 +394,25 @@ impl<'a> ScopeResolver<'a> {
             .map(|found| found.as_str().to_string())
             .filter(|word| !matches!(word.as_str(), "the" | "a" | "an"))
             .collect();
+        // With no significant word left, every heading "matches" and the
+        // request would resolve to an arbitrary section.
+        if significant.is_empty() {
+            return Err(ScopeError::Unresolvable(format!(
+                "instruction family names nothing to match on: {family}"
+            )));
+        }
         let mut scored: Vec<(i64, NodeRow)> = Vec::new();
         for row in self.db.headings()? {
             let Some(title) = row.title.as_deref() else {
                 continue;
             };
             let title = normalize_text(title).to_lowercase();
-            if !significant.iter().all(|word| title.contains(word.as_str())) {
+            // Whole words, not substrings: "add" must not match "Addressing".
+            let words: BTreeSet<String> = WORD
+                .find_iter(&title)
+                .map(|found| found.as_str().to_string())
+                .collect();
+            if !significant.iter().all(|word| words.contains(word)) {
                 continue;
             }
             let score = if title == wanted { 1000 } else { 0 } + significant.len() as i64 * 10

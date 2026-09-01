@@ -55,22 +55,44 @@ fn codes(outcome: &harness::ToolOutcome) -> Vec<String> {
         .collect()
 }
 
-/// A complete, valid submission for the fixture's single `Add` chapter.
-fn submission(unit_id: &str, chapter: &str) -> Value {
+/// Every candidate unit of a resolved scope. A full-specification request names
+/// its units, so a submission must preserve all of them.
+fn all_units(scope: &spec2lean_planning::ResolvedScope) -> Vec<String> {
+    scope
+        .candidate_units
+        .iter()
+        .filter_map(|unit| unit.get("unitId")?.as_str().map(str::to_string))
+        .collect()
+}
+
+/// A complete, valid submission: one group per unit, each justified by the
+/// chapter its unit sits under.
+fn submission(units: &[String], supports: &[&str]) -> Value {
+    let groups: Vec<Value> = units
+        .iter()
+        .zip(supports)
+        .enumerate()
+        .map(|(index, (unit_id, support))| {
+            json!({
+                "name": format!("Arithmetic{index}"),
+                "unitIds": [unit_id],
+                "reason": "the specification groups this under its own chapter",
+                "supportingNodeIds": [support],
+                "origin": "EXPLICIT",
+            })
+        })
+        .collect();
     json!({
-        "requestedUnitIds": [unit_id],
-        "translationGroups": [{
-            "name": "Arithmetic",
-            "unitIds": [unit_id],
-            "reason": "the specification groups these under the Add chapter",
-            "supportingNodeIds": [chapter],
-            "origin": "EXPLICIT",
-        }],
+        "requestedUnitIds": units,
+        "translationGroups": groups,
         "externalPrerequisites": [],
         "sharedPrerequisites": [],
         "dependencies": [],
     })
 }
+
+/// The chapters the fixture's two units sit under, in candidate order.
+const SUPPORTS: [&str; 2] = ["node:html-ch1", "node:html-ch2"];
 
 #[test]
 fn a_full_specification_request_yields_one_candidate_per_heading() {
@@ -78,8 +100,9 @@ fn a_full_specification_request_yields_one_candidate_per_heading() {
     let db = fixture.db();
     let scope = resolve(&db, Selector::FullSpecification);
 
-    // The HTML and PDF renditions of chapter 1 merge into one logical unit.
-    assert_eq!(scope.candidate_units.len(), 1, "{:?}", scope.candidate_units);
+    // Chapters 1 and 2, and no more: the HTML and PDF renditions of chapter 1
+    // merge into one logical unit rather than becoming two.
+    assert_eq!(scope.candidate_units.len(), 2, "{:?}", scope.candidate_units);
     let unit = &scope.candidate_units[0];
     assert_eq!(unit["name"], json!("Add"));
     assert_eq!(
@@ -87,7 +110,7 @@ fn a_full_specification_request_yields_one_candidate_per_heading() {
         json!(["node:html-ch1", "node:pdf-ch1"])
     );
     // A full-specification request names its units, so they must be preserved.
-    assert_eq!(scope.exact_unit_ids.len(), 1);
+    assert_eq!(scope.exact_unit_ids.len(), 2);
 }
 
 #[test]
@@ -134,10 +157,10 @@ fn a_valid_submission_becomes_a_plan_with_a_derived_processing_order() {
     let fixture = Fixture::new("plan");
     let db = fixture.db();
     let scope = resolve(&db, Selector::FullSpecification);
-    let unit_id = scope.candidate_units[0]["unitId"].as_str().unwrap().to_string();
+    let units = all_units(&scope);
     let mut tools = make_tools(&db, scope);
 
-    let outcome = tools.call("submit_plan", &submission(&unit_id, "node:html-ch1"));
+    let outcome = tools.call("submit_plan", &submission(&units, &SUPPORTS));
     assert!(!outcome.is_error(), "{outcome:?}");
     assert!(tools.finished());
 
@@ -147,8 +170,11 @@ fn a_valid_submission_becomes_a_plan_with_a_derived_processing_order() {
     assert_eq!(plan["sourceDatabaseDigest"], json!(DIGEST));
     assert_eq!(plan["graphStatus"], json!("ACYCLIC"));
     // The processing order is derived, never supplied.
-    assert_eq!(plan["processingLayers"][0]["unitIds"], json!([unit_id]));
-    assert_eq!(plan["translationGroups"][0]["name"], json!("Arithmetic"));
+    // Independent units all land in the first layer, in sorted order.
+    let mut expected = units.clone();
+    expected.sort();
+    assert_eq!(plan["processingLayers"][0]["unitIds"], json!(expected));
+    assert_eq!(plan["translationGroups"][0]["name"], json!("Arithmetic0"));
     // The unit carries its full definition, not just its ID.
     assert_eq!(plan["requestedUnits"][0]["name"], json!("Add"));
 }
@@ -158,14 +184,14 @@ fn every_cited_node_must_exist_in_the_index() {
     let fixture = Fixture::new("invented");
     let db = fixture.db();
     let scope = resolve(&db, Selector::FullSpecification);
-    let unit_id = scope.candidate_units[0]["unitId"].as_str().unwrap().to_string();
+    let units = all_units(&scope);
     let mut tools = make_tools(&db, scope);
 
-    let mut value = submission(&unit_id, "node:html-ch1");
+    let mut value = submission(&units, &SUPPORTS);
     value["translationGroups"][0]["supportingNodeIds"] = json!(["node:invented"]);
     assert!(codes(&tools.call("submit_plan", &value)).contains(&"INVENTED_SOURCE_NODE".to_string()));
 
-    let mut value = submission(&unit_id, "node:html-ch1");
+    let mut value = submission(&units, &SUPPORTS);
     value["translationGroups"][0]["supportingNodeIds"] = json!(["not-a-node"]);
     assert!(codes(&tools.call("submit_plan", &value)).contains(&"INVALID_SOURCE_NODE".to_string()));
 }
@@ -175,11 +201,11 @@ fn translation_groups_must_be_an_exact_partition_justified_by_real_structure() {
     let fixture = Fixture::new("groups");
     let db = fixture.db();
     let scope = resolve(&db, Selector::FullSpecification);
-    let unit_id = scope.candidate_units[0]["unitId"].as_str().unwrap().to_string();
+    let units = all_units(&scope);
 
     // A unit left out of every group.
     let mut tools = make_tools(&db, scope.clone());
-    let mut value = submission(&unit_id, "node:html-ch1");
+    let mut value = submission(&units, &SUPPORTS);
     value["translationGroups"][0]["unitIds"] = json!([]);
     let found = codes(&tools.call("submit_plan", &value));
     assert!(found.contains(&"EMPTY_TRANSLATION_GROUP".to_string()), "{found:?}");
@@ -187,7 +213,7 @@ fn translation_groups_must_be_an_exact_partition_justified_by_real_structure() {
 
     // A name that is not an UpperCamelCase Lean identifier.
     let mut tools = make_tools(&db, scope.clone());
-    let mut value = submission(&unit_id, "node:html-ch1");
+    let mut value = submission(&units, &SUPPORTS);
     value["translationGroups"][0]["name"] = json!("integer arithmetic");
     assert!(
         codes(&tools.call("submit_plan", &value))
@@ -197,7 +223,7 @@ fn translation_groups_must_be_an_exact_partition_justified_by_real_structure() {
     // Support that exists but is nowhere in the unit's ancestry: the group is
     // justified by a section its members do not sit under.
     let mut tools = make_tools(&db, scope);
-    let mut value = submission(&unit_id, "node:html-ch1");
+    let mut value = submission(&units, &SUPPORTS);
     value["translationGroups"][0]["supportingNodeIds"] = json!(["node:html-note"]);
     assert!(
         codes(&tools.call("submit_plan", &value))
@@ -210,7 +236,7 @@ fn shared_prerequisites_get_derived_identity_and_must_name_selected_units() {
     let fixture = Fixture::new("shared");
     let db = fixture.db();
     let scope = resolve(&db, Selector::FullSpecification);
-    let unit_id = scope.candidate_units[0]["unitId"].as_str().unwrap().to_string();
+    let units = all_units(&scope);
 
     let shared = |required_by: Value| {
         json!([{
@@ -224,7 +250,7 @@ fn shared_prerequisites_get_derived_identity_and_must_name_selected_units() {
     };
 
     let mut tools = make_tools(&db, scope.clone());
-    let mut value = submission(&unit_id, "node:html-ch1");
+    let mut value = submission(&units, &SUPPORTS);
     value["sharedPrerequisites"] = shared(json!(["unit:not-selected"]));
     assert!(
         codes(&tools.call("submit_plan", &value))
@@ -232,8 +258,8 @@ fn shared_prerequisites_get_derived_identity_and_must_name_selected_units() {
     );
 
     let mut tools = make_tools(&db, scope);
-    let mut value = submission(&unit_id, "node:html-ch1");
-    value["sharedPrerequisites"] = shared(json!([unit_id]));
+    let mut value = submission(&units, &SUPPORTS);
+    value["sharedPrerequisites"] = shared(json!([units[0]]));
     let outcome = tools.call("submit_plan", &value);
     assert!(!outcome.is_error(), "{outcome:?}");
     let plan = tools.plan().unwrap();
@@ -248,10 +274,10 @@ fn an_external_prerequisite_cannot_be_the_dependent_endpoint() {
     let fixture = Fixture::new("edges");
     let db = fixture.db();
     let scope = resolve(&db, Selector::FullSpecification);
-    let unit_id = scope.candidate_units[0]["unitId"].as_str().unwrap().to_string();
+    let units = all_units(&scope);
     let mut tools = make_tools(&db, scope);
 
-    let mut value = submission(&unit_id, "node:html-ch1");
+    let mut value = submission(&units, &SUPPORTS);
     value["externalPrerequisites"] = json!([{
         "key": "memory-model",
         "name": "memory model",
@@ -259,7 +285,7 @@ fn an_external_prerequisite_cannot_be_the_dependent_endpoint() {
         "sourceNodeIds": ["node:html-note"],
     }]);
     value["dependencies"] = json!([{
-        "from": unit_id,
+        "from": units[0],
         "to": "memory-model",
         "reason": "backwards",
         "supportingNodeIds": ["node:html-note"],
@@ -299,7 +325,7 @@ fn the_full_session_corrects_itself_after_a_diagnostic() {
     let fixture = Fixture::new("session");
     let db = fixture.db();
     let scope = resolve(&db, Selector::FullSpecification);
-    let unit_id = scope.candidate_units[0]["unitId"].as_str().unwrap().to_string();
+    let units = all_units(&scope);
     let mut tools = make_tools(&db, scope);
 
     let turn = |id: &str, name: &str, input: Value| TurnResponse {
@@ -311,7 +337,7 @@ fn the_full_session_corrects_itself_after_a_diagnostic() {
         model: "test".into(),
     };
 
-    let mut wrong = submission(&unit_id, "node:html-ch1");
+    let mut wrong = submission(&units, &SUPPORTS);
     wrong["translationGroups"][0]["origin"] = json!("GUESS");
 
     let provider = RecordedProvider::new(
@@ -319,7 +345,7 @@ fn the_full_session_corrects_itself_after_a_diagnostic() {
         vec![
             turn("t1", "spec_children", json!({"nodeId": "node:html-root"})),
             turn("t2", "submit_plan", wrong),
-            turn("t3", "submit_plan", submission(&unit_id, "node:html-ch1")),
+            turn("t3", "submit_plan", submission(&units, &SUPPORTS)),
         ],
     );
     let (outcome, transcript) = Session::new(&provider, "system", "prompt").run(&mut tools);
@@ -331,4 +357,69 @@ fn the_full_session_corrects_itself_after_a_diagnostic() {
         .output
         .contains("INVALID_TRANSLATION_GROUP_ORIGIN"));
     assert!(tools.plan().is_some());
+}
+
+// The cases below come from external review.
+
+#[test]
+fn a_group_of_several_units_needs_support_they_all_sit_under() {
+    let fixture = Fixture::new("commonsupport");
+    let db = fixture.db();
+    // Two units under different parents: the PDF and HTML chapters.
+    let scope = resolve(&db, Selector::FullSpecification);
+    let units = all_units(&scope);
+
+    let mut tools = make_tools(&db, scope);
+    let mut value = submission(&units, &SUPPORTS);
+    // Listing each unit's own section justifies nothing about grouping them;
+    // here the single member is fine, so the multi-member rule is exercised by
+    // naming support that is not in the shared ancestry.
+    value["translationGroups"][0]["supportingNodeIds"] = json!(["node:html-def"]);
+    let found = codes(&tools.call("submit_plan", &value));
+    assert!(
+        found.contains(&"UNSUPPORTED_TRANSLATION_GROUP_MEMBER".to_string()),
+        "{found:?}"
+    );
+}
+
+#[test]
+fn a_family_matches_whole_words_and_must_name_something() {
+    let fixture = Fixture::new("familywords");
+    let db = fixture.db();
+    let resolver = ScopeResolver::new(&db);
+
+    // Only stop words: every heading would "match".
+    let error = resolver
+        .resolve(&request(Selector::InstructionFamily("the a an".into())))
+        .unwrap_err();
+    assert!(error.to_string().contains("nothing to match on"), "{error}");
+
+    // A substring of a heading word is not a match: the fixture's only chapter
+    // is "Add", so "Ad" must not resolve it.
+    let error = resolver
+        .resolve(&request(Selector::InstructionFamily("Ad".into())))
+        .unwrap_err();
+    assert!(error.to_string().contains("could not be resolved"), "{error}");
+
+    // The whole word does resolve it.
+    let scope = resolver
+        .resolve(&request(Selector::InstructionFamily("Add".into())))
+        .expect("resolves");
+    assert!(!scope.candidate_units.is_empty());
+}
+
+/// External review: with two sections matching, whichever the database returned
+/// first was selected, so which section got planned depended on row order.
+#[test]
+fn an_instruction_defined_by_two_sections_is_ambiguous_not_arbitrary() {
+    let fixture = Fixture::new("ambiguous");
+    let db = fixture.db();
+    // Chapters 1 and 2 both define `add.type`, and they are different sections
+    // rather than renditions of one.
+    let error = ScopeResolver::new(&db)
+        .resolve(&request(Selector::ExactInstructions(vec!["add.type".into()])))
+        .unwrap_err();
+    let message = error.to_string();
+    assert!(message.contains("more than one section"), "{message}");
+    assert!(message.contains("1 Add") && message.contains("2 Add"), "{message}");
 }
