@@ -260,6 +260,13 @@ exact page of the source. Two runs:
   register layout, each traced back to the `Bits / Type / Reset / Description`
   table on page 10.
 
+And once on a dual-rendition source, the NVIDIA PTX ISA 9.3 (930-page PDF plus
+HTML, 24,352 nodes): `add.u32`, section 9.7.1.1. An exact-instruction request
+resolves it to one unit carrying both renditions, and the both-renditions rule
+then holds throughout — every SOURCE_FACT and DERIVED_INTERPRETATION cites the
+matching HTML *and* PDF passage. Pairing an HTML syntax block with an unrelated
+PDF paragraph is refused.
+
 Ported: the frozen shared core, and a kernel-level axiom audit that has no
 counterpart in the Python tree.
 
