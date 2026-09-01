@@ -27,7 +27,7 @@ capability to disable — a tool call is a function call in this process.
 
 ```bash
 cargo build
-cargo test          # 133 tests, no network and no API key required
+cargo test          # 136 tests, no network and no API key required
 cargo clippy --all-targets
 ```
 
@@ -37,9 +37,23 @@ checked-in database. Tests that need `lean` skip themselves when it is absent.
 
 ## Running a phase
 
+One command, request to checked Lean:
+
 ```bash
 export ANTHROPIC_API_KEY=...
+s2l run --database indexes/spec.sqlite --language ptx --version 8.5 \
+        --family "integer arithmetic" --out runs/2026-09-01
+```
 
+It plans, then retrieves and extracts per unit, freezes a shared core if the
+plan needs one, translates each group whose units all completed, and checks the
+result. A unit that fails stops that unit, not the run — three units formalized
+and one reported as insufficient is a more useful outcome than "failed". `run.json`
+records what each phase did.
+
+Or a phase at a time:
+
+```bash
 # Phase 2: turn a request into a validated plan.
 s2l plan run --database indexes/spec.sqlite --language ptx --version 8.5 \
              --family "integer arithmetic" --out plans

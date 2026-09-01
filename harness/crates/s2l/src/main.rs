@@ -4,6 +4,8 @@
 //! runtime surface of the harness, and the point of the rewrite is that it
 //! needs nothing on `PATH` to work.
 
+mod pipeline;
+
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -24,6 +26,10 @@ const USAGE: &str = "\
 spec2lean harness
 
 USAGE:
+    s2l run              --database <PATH> --language <L> --version <V> [SELECTOR]
+                         --out <DIR> [PROVIDER OPTIONS] [--lean <EXECUTABLE>]
+                         (plan -> evidence -> semantics -> core -> translate -> check)
+
     s2l plan scope       --database <PATH> --language <L> --version <V> [SELECTOR]
     s2l plan prompt      --database <PATH> --language <L> --version <V> [SELECTOR]
     s2l plan replay      --database <PATH> --language <L> --version <V> [SELECTOR]
@@ -100,6 +106,10 @@ fn run() -> Result<(), String> {
                 "run" => evidence_run(&flags),
                 other => Err(format!("unknown evidence command: {other}\n\n{USAGE}")),
             }
+        }
+        ["run", rest @ ..] => {
+            let flags = Flags::parse(rest)?;
+            pipeline_run(&flags)
         }
         ["plan", command, rest @ ..] => {
             let flags = Flags::parse(rest)?;
@@ -727,6 +737,299 @@ fn write_plan_artifacts(
         write_json(&out.join("transcript.json"), &value)?;
     }
     Ok(())
+}
+
+/// The whole pipeline, one phase at a time.
+///
+/// Composed from the same functions the individual commands use, so there is
+/// one implementation of each phase. It stops a *unit* at its first failure and
+/// keeps going with the others: a run that formalized three of four units is
+/// more useful than one that reports only that it failed.
+fn pipeline_run(flags: &Flags) -> Result<(), String> {
+    use pipeline::{
+        Layout, PhaseRecord, empty_manifest, processable_units, ready_groups, write_manifest,
+    };
+    use spec2lean_evidence::prompt as evidence_prompt;
+    use spec2lean_semantics::prompt as semantic_prompt;
+    use spec2lean_shared_core::prompt as core_prompt_module;
+    use spec2lean_translation::prompt as translation_prompt;
+
+    let layout = Layout::new(flags.path("out")?);
+    let started_at = harness::clock::utc_now_iso();
+    let mut manifest = empty_manifest(&layout.root, started_at.clone());
+    let lean = flags.optional("lean").unwrap_or("lean").to_string();
+    let steps = max_steps(flags)?;
+
+    // ---- Phase 2 ---------------------------------------------------------
+    let (db, scope, plan_run_id, digest) = planning_context(flags)?;
+    let provider = provider(flags)?;
+    let mut planner = PlanningTools::new(&db, scope, plan_run_id, digest.clone());
+    let user = spec2lean_planning::prompt::user_prompt(planner.scope());
+    let (outcome, transcript) =
+        Session::new(provider.as_ref(), spec2lean_planning::prompt::system_prompt(), user)
+            .with_max_steps(steps)
+            .run(&mut planner);
+    write_plan_artifacts(&layout.plan(), &planner, Some(&transcript))?;
+    if let Err(error) = outcome {
+        manifest.phases.push(PhaseRecord::failed("plan", "request", error.to_string()));
+        manifest.status = "FAIL";
+        manifest.finished_at = harness::clock::utc_now_iso();
+        write_manifest(&layout, &manifest)?;
+        println!("{}", manifest.summary());
+        return Err("planning failed".into());
+    }
+    let plan = planner.plan().expect("accepted").clone();
+    manifest.phases.push(PhaseRecord::ok("plan", "request"));
+
+    let (ordered, excluded) = processable_units(&plan);
+    for unit_id in &excluded {
+        manifest.phases.push(PhaseRecord::skipped(
+            "unit",
+            unit_id,
+            "inside or downstream of a dependency cycle the plan could not order",
+        ));
+    }
+
+    // ---- Phases 3 and 4, per unit ----------------------------------------
+    let mut bundles: BTreeMap<String, Value> = BTreeMap::new();
+    let mut semantics: BTreeMap<String, Value> = BTreeMap::new();
+    for unit_id in &ordered {
+        let directory = layout.unit(unit_id);
+        let parsed = match UnitId::parse(unit_id) {
+            Ok(parsed) => parsed,
+            Err(error) => {
+                manifest.phases.push(PhaseRecord::failed("evidence", unit_id, error.to_string()));
+                continue;
+            }
+        };
+        let unit_scope = match EvidenceScope::from_plan(&plan, &parsed) {
+            Ok(scope) => scope,
+            Err(error) => {
+                manifest.phases.push(PhaseRecord::failed("evidence", unit_id, error.to_string()));
+                continue;
+            }
+        };
+        let user = match evidence_prompt::user_prompt(&db, &unit_scope) {
+            Ok(user) => user,
+            Err(error) => {
+                manifest.phases.push(PhaseRecord::failed("evidence", unit_id, error.to_string()));
+                continue;
+            }
+        };
+        let mut tools = match EvidenceTools::new(&db, unit_scope) {
+            Ok(tools) => tools,
+            Err(error) => {
+                manifest.phases.push(PhaseRecord::failed("evidence", unit_id, error.to_string()));
+                continue;
+            }
+        };
+        let (outcome, transcript) =
+            Session::new(provider.as_ref(), evidence_prompt::system_prompt(), user)
+                .with_max_steps(steps)
+                .run(&mut tools);
+        write_artifacts(&directory, &tools, Some(&transcript))?;
+        let Ok(()) = outcome else {
+            manifest.phases.push(PhaseRecord::failed(
+                "evidence",
+                unit_id,
+                outcome.unwrap_err().to_string(),
+            ));
+            continue;
+        };
+        let bundle = tools.bundle().expect("accepted").clone();
+        manifest.phases.push(PhaseRecord::ok("evidence", unit_id));
+
+        let semantic_scope = match SemanticScope::from_inputs(
+            &plan,
+            &bundle,
+            &parsed,
+            &harness::clock::utc_now_iso(),
+        ) {
+            Ok(scope) => scope,
+            Err(error) => {
+                manifest.phases.push(PhaseRecord::failed("semantics", unit_id, error.to_string()));
+                bundles.insert(unit_id.clone(), bundle);
+                continue;
+            }
+        };
+        let user = semantic_prompt::user_prompt(&semantic_scope, &bundle);
+        let mut tools = SemanticTools::new(
+            semantic_scope,
+            bundle.clone(),
+            extractor(provider.as_ref()),
+        );
+        let (outcome, transcript) =
+            Session::new(provider.as_ref(), semantic_prompt::system_prompt(), user)
+                .with_max_steps(steps)
+                .run(&mut tools);
+        write_semantic_artifacts(&directory, &tools, Some(&transcript))?;
+        bundles.insert(unit_id.clone(), bundle);
+        match outcome {
+            Ok(()) => {
+                let artifact = tools.artifact().expect("accepted").clone();
+                // An honest "the evidence does not settle this" is a real
+                // outcome, but nothing downstream can translate it.
+                if artifact["outcome"] == json!("SUCCESS") {
+                    semantics.insert(unit_id.clone(), artifact);
+                    manifest.phases.push(PhaseRecord::ok("semantics", unit_id));
+                } else {
+                    manifest.phases.push(PhaseRecord::failed(
+                        "semantics",
+                        unit_id,
+                        "INSUFFICIENT_EVIDENCE: the retrieved evidence does not settle this unit",
+                    ));
+                }
+            }
+            Err(error) => manifest
+                .phases
+                .push(PhaseRecord::failed("semantics", unit_id, error.to_string())),
+        }
+    }
+
+    // ---- the shared core -------------------------------------------------
+    let requirements =
+        collect_shared_requirements(&plan, &semantics, None).map_err(|error| error.to_string())?;
+    let mut core: Option<(Value, PathBuf)> = None;
+    if !requirements.is_empty() {
+        let count = requirements.len();
+        let mut tools = SharedCoreTools::new(
+            requirements,
+            plan.get("language").and_then(Value::as_str).unwrap_or_default(),
+            plan.get("version").and_then(Value::as_str).unwrap_or_default(),
+            &digest,
+            extractor(provider.as_ref()),
+            layout.core().join("lean"),
+            &lean,
+        );
+        let user = core_prompt_module::user_prompt(tools.requirements());
+        let (outcome, transcript) =
+            Session::new(provider.as_ref(), core_prompt_module::system_prompt(), user)
+                .with_max_steps(steps)
+                .run(&mut tools);
+        write_core_artifacts(&layout.core(), &tools, Some(&transcript))?;
+        match outcome {
+            Ok(()) => {
+                let frozen = tools.frozen().expect("frozen");
+                let source = layout
+                    .core()
+                    .join("lean")
+                    .join(frozen.lean_module.split('.').collect::<PathBuf>())
+                    .with_extension("lean");
+                core = Some((frozen.manifest.clone(), source));
+                manifest
+                    .phases
+                    .push(PhaseRecord::ok("core", format!("{count} shared concept(s)")));
+            }
+            Err(error) => {
+                manifest.phases.push(PhaseRecord::failed("core", "shared concepts", error.to_string()));
+                manifest.status = "FAIL";
+                manifest.finished_at = harness::clock::utc_now_iso();
+                write_manifest(&layout, &manifest)?;
+                println!("{}", manifest.summary());
+                return Err("the shared core could not be frozen".into());
+            }
+        }
+    }
+
+    // ---- Phases 5 and 6, per group ---------------------------------------
+    let (ready, blocked) = ready_groups(&plan, &semantics);
+    for (group, missing) in blocked {
+        manifest.phases.push(PhaseRecord::skipped(
+            "translate",
+            group,
+            format!("waiting on {}", missing.join(", ")),
+        ));
+    }
+    for (group, members) in ready {
+        let directory = layout.group(&group);
+        let group_semantics: BTreeMap<String, Value> = members
+            .iter()
+            .filter_map(|unit_id| Some((unit_id.clone(), semantics.get(unit_id)?.clone())))
+            .collect();
+        let scope = match TranslationScope::from_inputs(
+            &plan,
+            &group,
+            &group_semantics,
+            &harness::clock::utc_now_iso(),
+            core.as_ref().map(|(manifest, _)| manifest),
+        ) {
+            Ok(scope) => scope,
+            Err(error) => {
+                manifest.phases.push(PhaseRecord::failed("translate", &group, error.to_string()));
+                continue;
+            }
+        };
+        let user = translation_prompt::user_prompt(&scope, &group_semantics);
+        let mut tools = TranslationTools::new(
+            scope,
+            directory.join("lean"),
+            &lean,
+            extractor(provider.as_ref()),
+        );
+        if let Some((core_manifest, source)) = &core {
+            tools = tools.with_shared_core(
+                core_manifest["leanModule"].as_str().unwrap_or_default(),
+                source.clone(),
+            );
+        }
+        let (outcome, transcript) =
+            Session::new(provider.as_ref(), translation_prompt::system_prompt(), user)
+                .with_max_steps(steps)
+                .run(&mut tools);
+        write_translation_artifacts(&directory, &tools, Some(&transcript))?;
+        let Ok(()) = outcome else {
+            manifest.phases.push(PhaseRecord::failed(
+                "translate",
+                &group,
+                outcome.unwrap_err().to_string(),
+            ));
+            manifest.status = "FAIL";
+            continue;
+        };
+        manifest.phases.push(PhaseRecord::ok("translate", &group));
+
+        let group_manifest = tools.manifest().expect("accepted").clone();
+        let lean_file = group_manifest["leanFile"].as_str().unwrap_or_default();
+        let source = std::fs::read_to_string(directory.join("lean").join(lean_file))
+            .map_err(|error| error.to_string())?;
+        let core_source = match &core {
+            None => None,
+            Some((_, path)) => Some(std::fs::read_to_string(path).map_err(|e| e.to_string())?),
+        };
+        let report = check(
+            &CheckInputs {
+                bundles: &bundles,
+                semantics: &group_semantics,
+                manifest: &group_manifest,
+                core_manifest: core.as_ref().map(|(manifest, _)| manifest),
+                source: &source,
+                core_source: core_source.as_deref(),
+            },
+            &flags.path("database")?,
+        )?;
+        write_json(
+            &directory.join("check-result.json"),
+            &serde_json::to_value(&report).map_err(|error| error.to_string())?,
+        )?;
+        if report.passed() {
+            manifest.phases.push(PhaseRecord::ok("check", &group));
+        } else {
+            manifest.phases.push(PhaseRecord::failed("check", &group, report.summary()));
+            manifest.status = "FAIL";
+        }
+    }
+
+    if manifest.phases.iter().any(|record| record.status == "FAIL") {
+        manifest.status = "FAIL";
+    }
+    manifest.finished_at = harness::clock::utc_now_iso();
+    write_manifest(&layout, &manifest)?;
+    println!("{}", manifest.summary());
+    if manifest.status == "PASS" {
+        Ok(())
+    } else {
+        Err("the pipeline did not complete every phase".into())
+    }
 }
 
 /// Load every Phase-3 bundle under a directory, keyed by unit.
