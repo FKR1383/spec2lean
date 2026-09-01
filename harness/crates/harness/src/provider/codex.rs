@@ -80,6 +80,10 @@ impl Default for CodexConfig {
 struct Thread {
     id: String,
     sent: usize,
+    /// The instructions the thread is working under. A phase change replaces
+    /// them, and they are only ever sent by the full render, so a thread opened
+    /// under one system prompt cannot be resumed under another.
+    system: String,
 }
 
 pub struct CodexProvider {
@@ -402,6 +406,11 @@ fn wait_with_timeout(
     }
 }
 
+/// Whether an open thread is still the conversation this request continues.
+fn resumable(open: &Thread, request: &Request<'_>) -> bool {
+    open.system == request.system && request.exchanges.len() > open.sent
+}
+
 /// The thread a turn ran in, announced once on `thread.started`.
 fn thread_from_events(events: &str) -> Option<String> {
     for line in events.lines() {
@@ -491,12 +500,16 @@ impl Provider for CodexProvider {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
 
-        // Resume only while the transcript still extends what the thread was
-        // told. A shorter transcript means the caller rewound, and replaying a
-        // stale thread would answer a question that is no longer being asked.
+        // Resume only while this is recognisably the same conversation: the
+        // same instructions, and a transcript that still extends what the
+        // thread was told. Length alone is not enough. A caller that starts a
+        // fresh session hands us an empty transcript, and a thread left at
+        // `sent == 0` by a single-turn phase would otherwise satisfy `0 >= 0`
+        // and be resumed for a task it has never been told about — the delta
+        // carries tool results, and a session with no exchanges yet has none.
         let resume = thread
             .as_ref()
-            .filter(|open| request.exchanges.len() >= open.sent)
+            .filter(|open| resumable(open, request))
             .map(|open| (open.id.clone(), open.sent));
 
         let attempt = match &resume {
@@ -524,6 +537,7 @@ impl Provider for CodexProvider {
         *thread = Some(Thread {
             id,
             sent: request.exchanges.len(),
+            system: request.system.to_string(),
         });
         Ok(response)
     }
@@ -754,5 +768,49 @@ mod tests {
         );
         assert_eq!(thread_from_events(events).as_deref(), Some("01a05d90-73e8"));
         assert_eq!(thread_from_events(r#"{"type":"turn.started"}"#), None);
+    }
+
+    /// The bug this guards against: a phase that finishes in one turn leaves
+    /// the thread at `sent == 0`, and the next phase opens a fresh session
+    /// whose transcript is also empty. Resuming on `0 >= 0` would hand that
+    /// thread a delta built from no exchanges — "no tools ran" — while the new
+    /// phase's task, which only the full render carries, was never stated. The
+    /// model would quietly go on answering the previous phase's question.
+    #[test]
+    fn a_new_phase_is_never_resumed_into_the_previous_phases_thread() {
+        let empty = Request { system: "PHASE A", prompt: "task A", exchanges: &[], tools: &[] };
+        let one_turn_phase = Thread { id: "thread-a".into(), sent: 0, system: "PHASE A".into() };
+
+        // Same phase, but nothing new to say: still not resumable.
+        assert!(!resumable(&one_turn_phase, &empty));
+
+        // A different phase, whose system prompt only a full render carries.
+        let next = Request { system: "PHASE B", prompt: "task B", exchanges: &[], tools: &[] };
+        assert!(!resumable(&one_turn_phase, &next));
+    }
+
+    #[test]
+    fn a_thread_resumes_only_while_the_transcript_grows_under_the_same_instructions() {
+        let exchange = Exchange {
+            assistant: json!({"reply": "r"}),
+            tool_results: Vec::new(),
+            usage: Usage::default(),
+        };
+        let history = vec![exchange.clone(), exchange.clone()];
+        let open = Thread { id: "t".into(), sent: 1, system: "PHASE A".into() };
+
+        let grown = Request { system: "PHASE A", prompt: "p", exchanges: &history, tools: &[] };
+        assert!(resumable(&open, &grown), "two exchanges extend a thread told about one");
+
+        let rewound = Request {
+            system: "PHASE A",
+            prompt: "p",
+            exchanges: &history[..1],
+            tools: &[],
+        };
+        assert!(!resumable(&open, &rewound), "a rewound transcript is a new conversation");
+
+        let relabelled = Request { system: "PHASE B", prompt: "p", exchanges: &history, tools: &[] };
+        assert!(!resumable(&open, &relabelled), "new instructions need a full render");
     }
 }
