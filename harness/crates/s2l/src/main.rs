@@ -290,9 +290,9 @@ fn evidence_run(flags: &Flags) -> Result<(), String> {
     let mut tools = EvidenceTools::new(&db, scope).map_err(|error| error.to_string())?;
 
     let provider = provider(flags)?;
-    let session = Session::new(provider.as_ref(), prompt::system_prompt(), user)
+    let mut session = Session::new(provider.as_ref(), prompt::system_prompt())
         .with_max_steps(max_steps(flags)?);
-    let (outcome, transcript) = session.run(&mut tools);
+    let (outcome, transcript) = session.stage(user, &mut tools);
 
     // The transcript is written whether or not the session succeeded — a failed
     // run is exactly the one whose transcript you need.
@@ -443,9 +443,9 @@ fn semantics_run(flags: &Flags) -> Result<(), String> {
     let user = semantic_prompt::user_prompt(&scope, &bundle);
     let mut tools = SemanticTools::new(scope, bundle, extractor(provider.as_ref()));
 
-    let session = Session::new(provider.as_ref(), semantic_prompt::system_prompt(), user)
+    let mut session = Session::new(provider.as_ref(), semantic_prompt::system_prompt())
         .with_max_steps(max_steps(flags)?);
-    let (outcome, transcript) = session.run(&mut tools);
+    let (outcome, transcript) = session.stage(user, &mut tools);
 
     write_semantic_artifacts(&out, &tools, Some(&transcript))?;
     match outcome {
@@ -553,9 +553,9 @@ fn core_run(flags: &Flags) -> Result<(), String> {
     let out = flags.path("out")?;
     let provider = provider(flags)?;
     let user = core_prompt_module::user_prompt(tools.requirements());
-    let session = Session::new(provider.as_ref(), core_prompt_module::system_prompt(), user)
+    let mut session = Session::new(provider.as_ref(), core_prompt_module::system_prompt())
         .with_max_steps(max_steps(flags)?);
-    let (outcome, transcript) = session.run(&mut tools);
+    let (outcome, transcript) = session.stage(user, &mut tools);
     write_core_artifacts(&out, &tools, Some(&transcript))?;
     match outcome {
         Ok(()) => {
@@ -731,9 +731,9 @@ fn plan_run(flags: &Flags) -> Result<(), String> {
     let user = planning_prompt::user_prompt(&scope);
     let mut tools = PlanningTools::new(&db, scope, plan_run_id, digest);
 
-    let session = Session::new(provider.as_ref(), planning_prompt::system_prompt(), user)
+    let mut session = Session::new(provider.as_ref(), planning_prompt::system_prompt())
         .with_max_steps(max_steps(flags)?);
-    let (outcome, transcript) = session.run(&mut tools);
+    let (outcome, transcript) = session.stage(user, &mut tools);
 
     write_plan_artifacts(&out, &tools, Some(&transcript))?;
     match outcome {
@@ -797,9 +797,9 @@ fn pipeline_run(flags: &Flags) -> Result<(), String> {
     let mut planner = PlanningTools::new(&db, scope, plan_run_id, digest.clone());
     let user = spec2lean_planning::prompt::user_prompt(planner.scope());
     let (outcome, transcript) =
-        Session::new(provider.as_ref(), spec2lean_planning::prompt::system_prompt(), user)
+        Session::new(provider.as_ref(), spec2lean_planning::prompt::system_prompt())
             .with_max_steps(steps)
-            .run(&mut planner);
+            .stage(user, &mut planner);
     write_plan_artifacts(&layout.plan(), &planner, Some(&transcript))?;
     if let Err(error) = outcome {
         manifest.phases.push(PhaseRecord::failed("plan", "request", error.to_string()));
@@ -824,6 +824,18 @@ fn pipeline_run(flags: &Flags) -> Result<(), String> {
     }
 
     // ---- Phases 3 and 4, per unit ----------------------------------------
+    //
+    // One session per phase, not one per unit. Every unit under a phase runs
+    // under the same instructions and the same tool schemas, so a provider
+    // that can resume a conversation pays for them once instead of once per
+    // unit. The two phases stay separate sessions on purpose: semantics must
+    // extract from the evidence bundle it was handed, and a session that had
+    // also gathered that evidence would be extracting from memory of the
+    // specification instead.
+    let mut evidence_session =
+        Session::new(provider.as_ref(), evidence_prompt::system_prompt()).with_max_steps(steps);
+    let mut semantic_session =
+        Session::new(provider.as_ref(), semantic_prompt::system_prompt()).with_max_steps(steps);
     let mut bundles: BTreeMap<String, Value> = BTreeMap::new();
     let mut semantics: BTreeMap<String, Value> = BTreeMap::new();
     for unit_id in &ordered {
@@ -856,10 +868,7 @@ fn pipeline_run(flags: &Flags) -> Result<(), String> {
                 continue;
             }
         };
-        let (outcome, transcript) =
-            Session::new(provider.as_ref(), evidence_prompt::system_prompt(), user)
-                .with_max_steps(steps)
-                .run(&mut tools);
+        let (outcome, transcript) = evidence_session.stage(user, &mut tools);
         write_artifacts(&directory, &tools, Some(&transcript))?;
         let Ok(()) = outcome else {
             manifest.phases.push(PhaseRecord::failed(
@@ -893,10 +902,7 @@ fn pipeline_run(flags: &Flags) -> Result<(), String> {
             bundle.clone(),
             extractor(provider.as_ref()),
         );
-        let (outcome, transcript) =
-            Session::new(provider.as_ref(), semantic_prompt::system_prompt(), user)
-                .with_max_steps(steps)
-                .run(&mut tools);
+        let (outcome, transcript) = semantic_session.stage(user, &mut tools);
         write_semantic_artifacts(&directory, &tools, Some(&transcript))?;
         bundles.insert(unit_id.clone(), bundle);
         match outcome {
@@ -940,9 +946,9 @@ fn pipeline_run(flags: &Flags) -> Result<(), String> {
         );
         let user = core_prompt_module::user_prompt(tools.requirements());
         let (outcome, transcript) =
-            Session::new(provider.as_ref(), core_prompt_module::system_prompt(), user)
+            Session::new(provider.as_ref(), core_prompt_module::system_prompt())
                 .with_max_steps(steps)
-                .run(&mut tools);
+                .stage(user, &mut tools);
         write_core_artifacts(&layout.core(), &tools, Some(&transcript))?;
         match outcome {
             Ok(()) => {
@@ -970,6 +976,12 @@ fn pipeline_run(flags: &Flags) -> Result<(), String> {
     }
 
     // ---- Phases 5 and 6, per group ---------------------------------------
+    //
+    // One session for every group, for the same reason as the unit phases. The
+    // compiler still runs per submission: `after_tool_call` is bound to the
+    // tool set, and each group gets its own.
+    let mut translation_session =
+        Session::new(provider.as_ref(), translation_prompt::system_prompt()).with_max_steps(steps);
     let (ready, blocked) = ready_groups(&plan, &semantics);
     for (group, missing) in blocked {
         manifest.phases.push(PhaseRecord::skipped(
@@ -1010,10 +1022,7 @@ fn pipeline_run(flags: &Flags) -> Result<(), String> {
                 source.clone(),
             );
         }
-        let (outcome, transcript) =
-            Session::new(provider.as_ref(), translation_prompt::system_prompt(), user)
-                .with_max_steps(steps)
-                .run(&mut tools);
+        let (outcome, transcript) = translation_session.stage(user, &mut tools);
         write_translation_artifacts(&directory, &tools, Some(&transcript))?;
         let Ok(()) = outcome else {
             manifest.phases.push(PhaseRecord::failed(
@@ -1370,9 +1379,9 @@ fn translate_run(flags: &Flags) -> Result<(), String> {
         );
     }
 
-    let session = Session::new(provider.as_ref(), translation_prompt::system_prompt(), user)
+    let mut session = Session::new(provider.as_ref(), translation_prompt::system_prompt())
         .with_max_steps(max_steps(flags)?);
-    let (outcome, transcript) = session.run(&mut tools);
+    let (outcome, transcript) = session.stage(user, &mut tools);
 
     write_translation_artifacts(&out, &tools, Some(&transcript))?;
     if tools.underdetermined().is_some() {

@@ -17,19 +17,26 @@ pub struct Session<'a> {
     system: String,
     prompt: String,
     max_steps: u32,
+    /// Every exchange this session has produced, across all of its stages.
+    ///
+    /// A phase that formalizes twenty units used to be twenty sessions, which
+    /// meant twenty cold conversations re-sending the same instructions and
+    /// the same tool schemas. Keeping them here lets one conversation carry all
+    /// twenty, so a provider that can resume has something to resume into.
+    /// Phases still get their own session: the boundary between reading the
+    /// specification and extracting from the evidence bundle is a soundness
+    /// property, not a cost.
+    exchanges: Vec<Exchange>,
 }
 
 impl<'a> Session<'a> {
-    pub fn new(
-        provider: &'a dyn Provider,
-        system: impl Into<String>,
-        prompt: impl Into<String>,
-    ) -> Self {
+    pub fn new(provider: &'a dyn Provider, system: impl Into<String>) -> Self {
         Self {
             provider,
             system: system.into(),
-            prompt: prompt.into(),
+            prompt: String::new(),
             max_steps: 100,
+            exchanges: Vec::new(),
         }
     }
 
@@ -42,10 +49,18 @@ impl<'a> Session<'a> {
     /// or the step ceiling is reached. The transcript is returned in every
     /// case, including failure — a session that ran out of steps is exactly the
     /// one whose transcript you need to read.
-    pub fn run(&self, tools: &mut dyn ToolSet) -> (Result<(), HarnessError>, Transcript) {
+    pub fn stage(
+        &mut self,
+        prompt: impl Into<String>,
+        tools: &mut dyn ToolSet,
+    ) -> (Result<(), HarnessError>, Transcript) {
+        self.prompt = prompt.into();
+        let provider = self.provider;
         let started_at = utc_now_iso();
         let specs = tools.specs();
-        let mut exchanges: Vec<Exchange> = Vec::new();
+        // Earlier stages stay in the conversation but not in this stage's
+        // transcript: the artifact for one unit must not contain another's.
+        let stage_start = self.exchanges.len();
         let mut totals = Usage::default();
         let mut steps = 0u32;
 
@@ -57,22 +72,24 @@ impl<'a> Session<'a> {
             }
             steps += 1;
 
-            let request = Request {
-                system: &self.system,
-                prompt: &self.prompt,
-                exchanges: &exchanges,
-                tools: &specs,
-            };
-            let response = match self.provider.turn(&request) {
-                Ok(response) => response,
-                Err(error) => break Err(error),
+            let response = {
+                let request = Request {
+                    system: &self.system,
+                    prompt: &self.prompt,
+                    exchanges: &self.exchanges,
+                    tools: &specs,
+                };
+                match provider.turn(&request) {
+                    Ok(response) => response,
+                    Err(error) => break Err(error),
+                }
             };
             totals.accumulate(&response.usage);
 
             if response.tool_calls.is_empty() {
                 // The model ended its turn. Record it before deciding: a turn
                 // that explains why it stopped is exactly the one worth reading.
-                exchanges.push(Exchange {
+                self.exchanges.push(Exchange {
                     assistant: response.assistant,
                     tool_results: Vec::new(),
                     usage: response.usage,
@@ -119,7 +136,7 @@ impl<'a> Session<'a> {
                 });
             }
 
-            exchanges.push(Exchange {
+            self.exchanges.push(Exchange {
                 assistant: response.assistant,
                 tool_results: records,
                 usage: response.usage,
@@ -151,8 +168,8 @@ impl<'a> Session<'a> {
 
         let transcript = Transcript {
             schema_version: 1,
-            provider: self.provider.id().to_string(),
-            model: self.provider.model().to_string(),
+            provider: provider.id().to_string(),
+            model: provider.model().to_string(),
             started_at,
             finished_at: utc_now_iso(),
             system: self.system.clone(),
@@ -160,7 +177,7 @@ impl<'a> Session<'a> {
             tools: specs.iter().map(|spec| spec.name.clone()).collect(),
             max_steps: self.max_steps,
             steps,
-            exchanges,
+            exchanges: self.exchanges[stage_start..].to_vec(),
             usage: totals,
             outcome: session_outcome,
         };
@@ -239,8 +256,8 @@ mod tests {
     fn resubmits_after_a_diagnostic_then_completes() {
         let provider = RecordedProvider::new("test", vec![turn("a"), turn("b")]);
         let mut tools = Fussy { attempts: 0, done: false, checked: 0 };
-        let session = Session::new(&provider, "system", "prompt");
-        let (outcome, transcript) = session.run(&mut tools);
+        let mut session = Session::new(&provider, "system");
+        let (outcome, transcript) = session.stage("prompt", &mut tools);
 
         assert!(outcome.is_ok(), "{:?}", outcome.err().map(|e| e.to_string()));
         assert_eq!(transcript.steps, 2);
@@ -259,8 +276,8 @@ mod tests {
     fn step_ceiling_is_enforced_and_still_yields_a_transcript() {
         let provider = RecordedProvider::new("test", vec![turn("a"), turn("b"), turn("c")]);
         let mut tools = Fussy { attempts: 0, done: false, checked: 0 };
-        let session = Session::new(&provider, "system", "prompt").with_max_steps(1);
-        let (outcome, transcript) = session.run(&mut tools);
+        let mut session = Session::new(&provider, "system").with_max_steps(1);
+        let (outcome, transcript) = session.stage("prompt", &mut tools);
 
         assert!(matches!(outcome, Err(HarnessError::StepLimit { steps: 1 })));
         assert_eq!(transcript.outcome, SessionOutcome::StepLimit);
@@ -288,7 +305,7 @@ mod tests {
         };
         let provider = RecordedProvider::new("test", vec![both]);
         let mut tools = Fussy { attempts: 0, done: false, checked: 0 };
-        let (outcome, transcript) = Session::new(&provider, "system", "prompt").run(&mut tools);
+        let (outcome, transcript) = Session::new(&provider, "system").stage("prompt", &mut tools);
 
         assert!(outcome.is_ok(), "{:?}", outcome.err().map(|e| e.to_string()));
         let results = &transcript.exchanges[0].tool_results;
@@ -328,7 +345,7 @@ mod tests {
         // First turn fails once; second turn submits twice.
         let provider = RecordedProvider::new("test", vec![turn(&["a"]), turn(&["b", "c"])]);
         let mut tools = Fussy { attempts: 0, done: false, checked: 0 };
-        let (outcome, transcript) = Session::new(&provider, "system", "prompt").run(&mut tools);
+        let (outcome, transcript) = Session::new(&provider, "system").stage("prompt", &mut tools);
 
         assert!(outcome.is_ok());
         let second = &transcript.exchanges[1].tool_results;
@@ -352,7 +369,7 @@ mod tests {
         };
         let provider = RecordedProvider::new("test", vec![stop]);
         let mut tools = Fussy { attempts: 0, done: false, checked: 0 };
-        let (outcome, transcript) = Session::new(&provider, "system", "prompt").run(&mut tools);
+        let (outcome, transcript) = Session::new(&provider, "system").stage("prompt", &mut tools);
 
         assert!(matches!(outcome, Err(HarnessError::Incomplete { .. })));
         assert_eq!(
@@ -367,5 +384,36 @@ mod tests {
             transcript.exchanges[0].assistant[0]["text"],
             json!("I think that's everything.")
         );
+    }
+
+    /// The reason `Session` outlives one unit: a phase that formalizes many
+    /// units is one conversation, so the second unit's request carries the
+    /// first unit's exchanges and a provider that can resume has something to
+    /// resume into. The per-unit transcript must still contain only that unit,
+    /// because it is written next to that unit's artifact.
+    #[test]
+    fn a_second_stage_continues_the_conversation_but_not_the_transcript() {
+        let provider = RecordedProvider::new(
+            "test",
+            vec![turn("a"), turn("b"), turn("c"), turn("d")],
+        );
+
+        let mut session = Session::new(&provider, "system");
+        let mut first = Fussy { attempts: 0, done: false, checked: 0 };
+        let (outcome, first_transcript) = session.stage("unit A", &mut first);
+        assert!(outcome.is_ok(), "{outcome:?}");
+
+        let mut second = Fussy { attempts: 0, done: false, checked: 0 };
+        let (outcome, second_transcript) = session.stage("unit B", &mut second);
+        assert!(outcome.is_ok(), "{outcome:?}");
+
+        // Each unit's artifact gets its own turns and nobody else's.
+        assert_eq!(first_transcript.exchanges.len(), 2);
+        assert_eq!(second_transcript.exchanges.len(), 2);
+        assert_eq!(first_transcript.prompt, "unit A");
+        assert_eq!(second_transcript.prompt, "unit B");
+        // But the conversation kept growing underneath them, which is what the
+        // provider sees and what makes resuming possible.
+        assert_eq!(session.exchanges.len(), 4);
     }
 }

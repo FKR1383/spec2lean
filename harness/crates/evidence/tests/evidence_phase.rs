@@ -461,7 +461,7 @@ fn the_full_session_runs_the_loop_and_writes_a_transcript() {
     );
 
     let (outcome, transcript): (_, Transcript) =
-        Session::new(&provider, "system", "prompt").run(&mut tools);
+        Session::new(&provider, "system").stage("prompt", &mut tools);
 
     assert!(outcome.is_ok(), "{:?}", outcome.err().map(|e| e.to_string()));
     assert_eq!(transcript.steps, 4);

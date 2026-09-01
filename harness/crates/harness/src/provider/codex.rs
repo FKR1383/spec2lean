@@ -84,6 +84,9 @@ struct Thread {
     /// them, and they are only ever sent by the full render, so a thread opened
     /// under one system prompt cannot be resumed under another.
     system: String,
+    /// The task it was last given. One session runs many units under the same
+    /// instructions, and each is a new task the thread has to be told about.
+    prompt: String,
 }
 
 pub struct CodexProvider {
@@ -207,8 +210,14 @@ impl CodexProvider {
     /// for. The assistant's own reply is deliberately absent — codex wrote it
     /// and still holds it, and echoing it back would both waste the prefix and
     /// invite the model to treat its own words as a new instruction.
-    fn render_delta(request: &Request<'_>, sent: usize) -> String {
+    fn render_delta(request: &Request<'_>, sent: usize, new_task: bool) -> String {
         let mut prompt = String::new();
+        if new_task {
+            prompt.push_str("# New task\n\nThe previous task is finished. Ignore it; this is \
+                             the only task now.\n\n");
+            prompt.push_str(request.prompt);
+            prompt.push_str("\n\n# Results from the last tools you called\n\n");
+        }
         for exchange in request.exchanges.iter().skip(sent) {
             for result in &exchange.tool_results {
                 prompt.push_str(&format!(
@@ -510,12 +519,12 @@ impl Provider for CodexProvider {
         let resume = thread
             .as_ref()
             .filter(|open| resumable(open, request))
-            .map(|open| (open.id.clone(), open.sent));
+            .map(|open| (open.id.clone(), open.sent, open.prompt != request.prompt));
 
         let attempt = match &resume {
-            Some((id, sent)) => self.exec(
+            Some((id, sent, new_task)) => self.exec(
                 Some(id),
-                Self::render_delta(request, *sent),
+                Self::render_delta(request, *sent, *new_task),
                 request.exchanges.len(),
             ),
             None => self.exec(None, Self::render_full(request), request.exchanges.len()),
@@ -538,6 +547,7 @@ impl Provider for CodexProvider {
             id,
             sent: request.exchanges.len(),
             system: request.system.to_string(),
+            prompt: request.prompt.to_string(),
         });
         Ok(response)
     }
@@ -718,7 +728,7 @@ mod tests {
             },
         ];
         let request = Request { system: "s", prompt: "p", exchanges: &exchanges, tools: &[] };
-        let delta = CodexProvider::render_delta(&request, 1);
+        let delta = CodexProvider::render_delta(&request, 1, false);
 
         assert!(delta.contains("NEW RESULT"));
         assert!(!delta.contains("OLD RESULT"), "the thread already has turn 1");
@@ -736,7 +746,7 @@ mod tests {
             usage: Usage::default(),
         }];
         let request = Request { system: "s", prompt: "p", exchanges: &exchanges, tools: &[] };
-        let delta = CodexProvider::render_delta(&request, 0);
+        let delta = CodexProvider::render_delta(&request, 0, false);
         assert!(delta.contains("No tools ran"));
         assert!(delta.contains("JSON reply"));
     }
@@ -779,7 +789,7 @@ mod tests {
     #[test]
     fn a_new_phase_is_never_resumed_into_the_previous_phases_thread() {
         let empty = Request { system: "PHASE A", prompt: "task A", exchanges: &[], tools: &[] };
-        let one_turn_phase = Thread { id: "thread-a".into(), sent: 0, system: "PHASE A".into() };
+        let one_turn_phase = Thread { id: "thread-a".into(), sent: 0, system: "PHASE A".into(), prompt: "task A".into() };
 
         // Same phase, but nothing new to say: still not resumable.
         assert!(!resumable(&one_turn_phase, &empty));
@@ -797,7 +807,7 @@ mod tests {
             usage: Usage::default(),
         };
         let history = vec![exchange.clone(), exchange.clone()];
-        let open = Thread { id: "t".into(), sent: 1, system: "PHASE A".into() };
+        let open = Thread { id: "t".into(), sent: 1, system: "PHASE A".into(), prompt: "p".into() };
 
         let grown = Request { system: "PHASE A", prompt: "p", exchanges: &history, tools: &[] };
         assert!(resumable(&open, &grown), "two exchanges extend a thread told about one");

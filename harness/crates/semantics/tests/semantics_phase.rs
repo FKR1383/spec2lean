@@ -529,7 +529,7 @@ fn the_full_session_corrects_itself_after_a_diagnostic() {
         ],
     );
 
-    let (outcome, transcript) = Session::new(&provider, "system", "prompt").run(&mut tools);
+    let (outcome, transcript) = Session::new(&provider, "system").stage("prompt", &mut tools);
     assert!(outcome.is_ok(), "{:?}", outcome.err().map(|e| e.to_string()));
     assert_eq!(transcript.steps, 3);
     assert!(transcript.exchanges[1].tool_results[0]

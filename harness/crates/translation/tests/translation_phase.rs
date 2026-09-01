@@ -353,7 +353,7 @@ fn the_full_session_repairs_a_build_failure_without_a_second_process() {
     };
 
     let provider = RecordedProvider::new("test", vec![turn("t1", BROKEN), turn("t2", GOOD)]);
-    let (outcome, transcript) = Session::new(&provider, "system", "prompt").run(&mut tools);
+    let (outcome, transcript) = Session::new(&provider, "system").stage("prompt", &mut tools);
 
     assert!(outcome.is_ok(), "{:?}", outcome.err().map(|e| e.to_string()));
     // Two turns, two compiles, one session, one process.
