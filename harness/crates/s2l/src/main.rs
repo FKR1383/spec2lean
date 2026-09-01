@@ -5,6 +5,7 @@
 //! needs nothing on `PATH` to work.
 
 mod pipeline;
+mod verdict;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -58,6 +59,9 @@ USAGE:
     s2l translate run    --plan <PATH> --semantics <DIR> --group <NAME> --out <DIR>
                          [PROVIDER OPTIONS] [--lean <EXECUTABLE>] [--core <DIR>]
 
+    Any command accepts --verdict <WORKSPACE>, which appends one EDLab verdict
+    line to <WORKSPACE>/.edlab/verdicts.jsonl and exits 0 or 1.
+
     s2l check            --database <PATH> --group-dir <DIR> --units <DIR>
                          [--core <DIR>]
 
@@ -80,7 +84,21 @@ are exercised offline.
 ";
 
 fn main() -> ExitCode {
-    match run() {
+    let arguments: Vec<String> = std::env::args().skip(1).collect();
+    let outcome = run();
+    // `--verdict <workspace>` makes this a drop-in EDLab tool: one JSON line
+    // per run, and an exit code that says whether it passed.
+    if let Some(index) = arguments.iter().position(|value| value == "--verdict")
+        && let Some(workspace) = arguments.get(index + 1)
+    {
+        let phase = arguments.first().map(String::as_str).unwrap_or("spec2lean");
+        let (passed, summary) = verdict::summarise(phase, &outcome);
+        let value = verdict::verdict(&format!("spec2lean-{phase}"), passed, &summary, None);
+        if let Err(error) = verdict::append(Path::new(workspace), &value) {
+            eprintln!("warning: {error}");
+        }
+    }
+    match outcome {
         Ok(()) => ExitCode::SUCCESS,
         Err(message) => {
             eprintln!("error: {message}");
@@ -1142,7 +1160,17 @@ fn logical_check(flags: &Flags) -> Result<(), String> {
     if report.passed() {
         Ok(())
     } else {
-        Err("logical checks failed".into())
+        // Carry the first line of the report, so a one-line verdict still says
+        // what went wrong rather than only that something did.
+        // Skip the overall header and report the check that actually failed.
+        Err(report
+            .summary()
+            .lines()
+            .skip(1)
+            .find(|line| line.contains("FAIL"))
+            .unwrap_or("logical checks failed")
+            .trim()
+            .to_string())
     }
 }
 

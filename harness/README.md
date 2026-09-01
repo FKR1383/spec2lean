@@ -27,13 +27,13 @@ capability to disable — a tool call is a function call in this process.
 
 ```bash
 cargo build
-cargo test          # 162 tests, no network and no API key required
+cargo test          # 165 tests, no network and no API key required
 cargo clippy --all-targets
 ```
 
 One of those tests drives every phase in a single process — plan, evidence,
 semantics, core, translate, check — against real `lean`, with nothing mocked but
-the model'''s choices. Each phase has its own tests; that one exists for what
+the model's choices. Each phase has its own tests; that one exists for what
 they cannot see, which is the seam between them.
 
 The test suite builds its own synthetic Phase-1 index in-process
@@ -125,6 +125,24 @@ for the `extractor` block (see below).
 
 `crates/specdb/schema.sql` is extracted verbatim from `spec2lean.database`; keep
 it in sync when Phase 1 changes.
+
+## Using it as an EDLab tool
+
+EDLab's mechanism is *agents propose, tools decide*: every verdict a user sees
+comes from a deterministic tool run rather than a model's judgment. That is the
+principle this harness is built on, so it fits there as a tool rather than as an
+agent. Any command accepts `--verdict <workspace>`:
+
+```bash
+s2l check --database ... --group-dir ... --units ... --verdict .
+# .edlab/verdicts.jsonl
+# {"tool":"spec2lean-check","passed":false,
+#  "summary":"check failed: traceability: FAIL (1 broken)"}
+```
+
+One JSON line per run, and an exit code that says whether it passed. The
+container needs `lean` on PATH and a Phase-1 index; everything else is in the
+binary.
 
 ## Design notes
 
