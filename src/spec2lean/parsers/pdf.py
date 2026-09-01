@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -99,6 +99,57 @@ def _extract_block(page_number: int, index: int, block: dict[str, Any]) -> PdfBl
     )
 
 
+# A table-of-contents line: a title, a run of dot leaders, then a page number.
+TOC_RE = re.compile(r"\.{4,}\s*\d{1,4}\s*$")
+# A block that is nothing but a page number.
+PAGE_NUMBER_RE = re.compile(r"^\d{1,4}$")
+
+
+def _furniture_key(text: str) -> str:
+    """Collapse a running header or footer to what repeats across pages."""
+    return re.sub(r"\d+", "#", normalize_text(text)).casefold()
+
+
+def _page_furniture(
+    blocks: list[PdfBlock], page_heights: dict[int, float], page_count: int
+) -> set[tuple[int, int]]:
+    """Identify running headers, footers and page numbers.
+
+    Position alone is not enough — a real paragraph can begin at the top of a
+    page — so the signal is repetition: the same text, digits masked, appearing
+    in the same margin on several pages. A specification's running header is
+    provenance, not content, and a retriever offered 73 page numbers among 229
+    paragraphs is being asked to filter the index by hand.
+    """
+    threshold = max(3, page_count // 10)
+    seen: dict[str, set[int]] = defaultdict(set)
+    marginal: list[tuple[PdfBlock, str]] = []
+    for block in blocks:
+        if block.block_type != 0:
+            continue
+        height = page_heights.get(block.page)
+        if not height:
+            continue
+        top, bottom = block.bbox[1] <= height * 0.08, block.bbox[3] >= height * 0.92
+        if not (top or bottom):
+            continue
+        text = normalize_text(block.raw_text)
+        if not text:
+            continue
+        key = ("HEAD" if top else "FOOT") + "|" + _furniture_key(text)
+        seen[key].add(block.page)
+        marginal.append((block, key))
+
+    furniture: set[tuple[int, int]] = set()
+    for block, key in marginal:
+        text = normalize_text(block.raw_text)
+        # A bare page number in a margin is furniture on its own; anything else
+        # must actually repeat.
+        if PAGE_NUMBER_RE.fullmatch(text) or len(seen[key]) >= threshold:
+            furniture.add((block.page, block.index))
+    return furniture
+
+
 def _body_font_size(blocks: list[PdfBlock]) -> float:
     weighted: Counter[float] = Counter()
     for block in blocks:
@@ -123,6 +174,10 @@ def _heading(
     # chapter title. They remain content/provenance, never hierarchy.
     if block.bbox[1] <= page_height * 0.065 or block.bbox[3] >= page_height * 0.93:
         return None
+    # A table-of-contents line names a section without being one. Treating it as
+    # a heading invents a second, empty copy of every chapter.
+    if TOC_RE.search(clean):
+        return None
     chapter = re.match(r"^Chapter\s+(\d+)\.?\s+(.+)$", clean, re.I)
     if chapter and block.max_size >= body_size * 1.4:
         return 1, chapter.group(1), chapter.group(2).strip()
@@ -140,7 +195,26 @@ def _heading(
     return None
 
 
-def _classify_content(block: PdfBlock, previous_label: str, page_height: float) -> tuple[str, dict[str, Any], list[Definition]]:
+def _uses_numbered_headings(
+    blocks: list[PdfBlock], body_size: float, page_heights: dict[int, float]
+) -> bool:
+    """Whether this document numbers its headings at all."""
+    for block in blocks:
+        height = page_heights.get(block.page)
+        if not height:
+            continue
+        heading = _heading(block, body_size, height)
+        if heading and heading[1]:
+            return True
+    return False
+
+
+def _classify_content(
+    block: PdfBlock,
+    previous_label: str,
+    page_height: float,
+    furniture: set[tuple[int, int]] = frozenset(),
+) -> tuple[str, dict[str, Any], list[Definition]]:
     clean = normalize_text(block.raw_text)
     metadata: dict[str, Any] = {
         "font_size_max": round(block.max_size, 3),
@@ -154,6 +228,12 @@ def _classify_content(block: PdfBlock, previous_label: str, page_height: float) 
         metadata["layout_role"] = "page_footer"
 
     definitions: list[Definition] = []
+    # Both of these stay in the index with their exact text and provenance; they
+    # are typed so that everything downstream can tell content from furniture.
+    if (block.page, block.index) in furniture:
+        return "page_furniture", metadata, definitions
+    if TOC_RE.search(clean):
+        return "toc_entry", metadata, definitions
     definition = DEFINITION_RE.match(clean)
     if definition:
         term = definition.group(1).strip()
@@ -234,6 +314,13 @@ def parse_pdf(path: str | Path, official_url: str | None = None, *, detect_table
         stats["pdf_tables_discovered"] += len(tables)
 
     body_size = _body_font_size(all_blocks)
+    page_height_by_number = {page["page_number"]: page["height"] for page in pages}
+    numbered_headings = _uses_numbered_headings(all_blocks, body_size, page_height_by_number)
+    furniture = _page_furniture(
+        all_blocks,
+        page_height_by_number,
+        len(pdf),
+    )
     root = Node(
         source_key="root",
         node_type="document",
@@ -298,6 +385,21 @@ def parse_pdf(path: str | Path, official_url: str | None = None, *, detect_table
             if not normalize_text(block.raw_text):
                 continue
             heading = _heading(block, body_size, page_heights[page_number])
+            # A cover page repeats the document title in large bold type, which
+            # is indistinguishable from a chapter heading by style alone. When
+            # the document numbers its real headings, an unnumbered one on page
+            # 1 is cover text: keep the words, drop the false hierarchy.
+            if (
+                heading
+                and numbered_headings
+                and page_number == 1
+                and heading[0] == 1
+                and not heading[1]
+            ):
+                heading = None
+                cover_text = True
+            else:
+                cover_text = False
             if heading:
                 level, section_number, heading_title = heading
                 for old_level in [item for item in heading_stack if item >= level]:
@@ -329,8 +431,10 @@ def parse_pdf(path: str | Path, official_url: str | None = None, *, detect_table
 
             parent = heading_stack[max(heading_stack)] if heading_stack else root
             node_type, node_metadata, definitions = _classify_content(
-                block, previous_label, page_heights[page_number]
+                block, previous_label, page_heights[page_number], furniture
             )
+            if cover_text and node_type == "paragraph":
+                node_type = "cover_text"
             node = Node(
                 source_key=f"page:{page_number}:block:{block.index}",
                 node_type=node_type,
