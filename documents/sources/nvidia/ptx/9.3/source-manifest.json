@@ -5,7 +5,7 @@
   "language": "PTX",
   "specification_version": "9.3",
   "source_classification": "official",
-  "retrieved_at_utc": "2026-08-05T21:34:53Z",
+  "retrieved_at_utc": "2026-09-01T02:36:35Z",
   "initial_formalization_unit": {
     "construct": "add.u32",
     "instruction_family": "add",
@@ -25,8 +25,8 @@
       "kind": "html",
       "url": "https://docs.nvidia.com/cuda/parallel-thread-execution/index.html",
       "local_path": "raw/ptx_isa_9.3.html",
-      "sha256": "e2095c4ae00fe81fa18325b8e26c4a41b94965295c7affd7ff7f787fd98a8856",
-      "size_bytes": 3577575
+      "sha256": "940cc68f858cefdf82425b47ee3bac3afde447c8a85b95f43d7d6fb1f46b4413",
+      "size_bytes": 3578384
     }
   ],
   "semantic_status": "not_started",

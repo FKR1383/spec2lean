@@ -21,20 +21,23 @@ pub fn semantics_artifact_hash(artifact: &Value) -> String {
 pub enum ScopeError {
     Groups(String),
     Inputs(String),
-    /// Shared prerequisites require the frozen shared core, which is not ported
-    /// yet. Named explicitly rather than silently ignored.
-    SharedCoreUnsupported(Vec<String>),
+    /// This group needs shared concepts but was given no frozen core, or a core
+    /// that does not represent them. Named explicitly rather than translated
+    /// against a representation nothing has agreed on.
+    MissingSharedCore {
+        dependency_ids: Vec<String>,
+        detail: String,
+    },
 }
 
 impl std::fmt::Display for ScopeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Groups(detail) | Self::Inputs(detail) => f.write_str(detail),
-            Self::SharedCoreUnsupported(ids) => write!(
+            Self::MissingSharedCore { dependency_ids, detail } => write!(
                 f,
-                "this group has shared prerequisites ({}), which need the frozen shared core; \
-                 that phase is not ported to the Rust harness yet",
-                ids.join(", ")
+                "this group needs shared concepts ({}) that the supplied core does not satisfy: {detail}",
+                dependency_ids.join(", ")
             ),
         }
     }
@@ -146,6 +149,8 @@ pub struct TranslationScope {
     pub claim_refs: Vec<(String, String)>,
     pub translation_run_id: String,
     pub created_at: String,
+    /// The frozen registry, narrowed to what this group actually needs.
+    pub shared_core: Option<Value>,
 }
 
 impl TranslationScope {
@@ -173,6 +178,7 @@ impl TranslationScope {
         group: &str,
         semantics_by_unit: &BTreeMap<String, Value>,
         created_at: &str,
+        shared_core: Option<&Value>,
     ) -> Result<Self, ScopeError> {
         let groups = grouped_units(plan)?;
         let units = groups.get(group).cloned().ok_or_else(|| {
@@ -263,8 +269,8 @@ impl TranslationScope {
             ));
         }
 
-        // Shared prerequisites need the frozen shared core; refuse rather than
-        // translate a group whose shared concepts have no agreed representation.
+        // Shared concepts must be satisfied by a frozen core before this group
+        // may be translated at all.
         let shared: Vec<String> = plan
             .get("sharedPrerequisites")
             .and_then(Value::as_array)
@@ -284,9 +290,7 @@ impl TranslationScope {
                     .collect()
             })
             .unwrap_or_default();
-        if !shared.is_empty() {
-            return Err(ScopeError::SharedCoreUnsupported(shared));
-        }
+        let core_view = build_core_view(&shared, shared_core)?;
 
         let plan_run_id = plan
             .get("planRunId")
@@ -298,6 +302,7 @@ impl TranslationScope {
                 .map(|(unit_id, _, hash)| json!([unit_id, hash]))
                 .collect::<Vec<_>>()
         ));
+        let core_material = canonical_json(&core_reference(core_view.as_ref()));
         Ok(Self {
             plan_run_id: plan_run_id.to_string(),
             language: plan
@@ -314,9 +319,10 @@ impl TranslationScope {
             units,
             translation_run_id: stable_id(
                 "translation-group-run",
-                &[plan_run_id, group, &hash_material],
+                &[plan_run_id, group, &hash_material, &core_material],
                 24,
             ),
+            shared_core: core_view,
             semantics,
             claim_refs,
             created_at: created_at.to_string(),
@@ -341,11 +347,51 @@ impl TranslationScope {
             "createdAt": self.created_at,
             "suggestedNamespace": self.suggested_namespace(),
             "leanFile": self.lean_file(),
+            "sharedCore": self.shared_core,
         })
     }
 
+    /// The shared dependency IDs this group must bind.
+    pub fn shared_dependency_ids(&self) -> Vec<&str> {
+        self.shared_core
+            .as_ref()
+            .and_then(|core| core.get("concepts")?.as_array())
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| item.get("dependencyId")?.as_str())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// The declarations the core registered for one shared concept.
+    pub fn registered_declarations(&self, dependency_id: &str) -> Vec<&str> {
+        self.shared_core
+            .as_ref()
+            .and_then(|core| core.get("concepts")?.as_array())
+            .and_then(|items| {
+                items
+                    .iter()
+                    .find(|item| item.get("dependencyId").and_then(Value::as_str) == Some(dependency_id))
+            })
+            .and_then(|concept| concept.get("leanDeclarations")?.as_array())
+            .map(|items| items.iter().filter_map(Value::as_str).collect())
+            .unwrap_or_default()
+    }
+
+    pub fn core_lean_module(&self) -> Option<&str> {
+        self.shared_core.as_ref()?.get("leanModule")?.as_str()
+    }
+
     /// The accepted translation manifest.
-    pub fn manifest(&self, declarations: &Value, translator: &Value, build: &Value) -> Value {
+    pub fn manifest(
+        &self,
+        declarations: &Value,
+        translator: &Value,
+        build: &Value,
+        shared_uses: &Value,
+    ) -> Value {
         json!({
             "schemaVersion": TRANSLATION_SCHEMA_VERSION,
             "phase": "LLM_GROUP_TRANSLATOR",
@@ -363,8 +409,137 @@ impl TranslationScope {
             "createdAt": self.created_at,
             "declarations": declarations,
             "build": build,
+            "sharedCore": core_reference(self.shared_core.as_ref()),
+            "sharedUses": shared_uses,
         })
     }
+}
+
+
+/// The four fields that pin a translation to one frozen core.
+pub fn core_reference(core: Option<&Value>) -> Value {
+    match core {
+        None => Value::Null,
+        Some(core) => json!({
+            "coreRunId": core.get("coreRunId"),
+            "manifestHash": core.get("manifestHash"),
+            "sourceHash": core.get("sourceHash"),
+            "leanModule": core.get("leanModule"),
+        }),
+    }
+}
+
+/// Narrow a frozen core manifest to what this group needs.
+///
+/// The translator sees only the concepts its own units depend on, plus the
+/// declarations reachable from them — enough to use the core correctly, without
+/// exposing unrelated parts of the specification.
+fn build_core_view(
+    required: &[String],
+    manifest: Option<&Value>,
+) -> Result<Option<Value>, ScopeError> {
+    if required.is_empty() {
+        return match manifest {
+            None => Ok(None),
+            Some(_) => Err(ScopeError::Inputs(
+                "a shared core was supplied but this translation group has no shared prerequisites"
+                    .into(),
+            )),
+        };
+    }
+    let Some(manifest) = manifest else {
+        return Err(ScopeError::MissingSharedCore {
+            dependency_ids: required.to_vec(),
+            detail: "no frozen shared core was supplied".into(),
+        });
+    };
+
+    let concepts: BTreeMap<&str, &Value> = manifest
+        .get("concepts")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| Some((item.get("dependencyId")?.as_str()?, item)))
+                .collect()
+        })
+        .unwrap_or_default();
+    let unrepresented: Vec<String> = required
+        .iter()
+        .filter(|id| !concepts.contains_key(id.as_str()))
+        .cloned()
+        .collect();
+    if !unrepresented.is_empty() {
+        return Err(ScopeError::MissingSharedCore {
+            dependency_ids: unrepresented,
+            detail: "the frozen shared core has no registered representation".into(),
+        });
+    }
+
+    // Start from the declarations the required concepts register, then follow
+    // `supportsDeclarations` so helper definitions the translator will actually
+    // encounter are visible too.
+    let declarations: Vec<&Value> = manifest
+        .get("declarations")
+        .and_then(Value::as_array)
+        .map(|items| items.iter().collect())
+        .unwrap_or_default();
+    let mut needed: BTreeSet<String> = required
+        .iter()
+        .filter_map(|id| concepts.get(id.as_str()))
+        .filter_map(|concept| concept.get("leanDeclarations")?.as_array())
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_string)
+        .collect();
+    loop {
+        let before = needed.len();
+        for mapping in &declarations {
+            let Some(name) = mapping.get("declaration").and_then(Value::as_str) else {
+                continue;
+            };
+            let supports: BTreeSet<&str> = mapping
+                .get("supportsDeclarations")
+                .and_then(Value::as_array)
+                .map(|items| items.iter().filter_map(Value::as_str).collect())
+                .unwrap_or_default();
+            if needed.contains(name) || supports.iter().any(|value| needed.contains(*value)) {
+                needed.insert(name.to_string());
+                needed.extend(supports.iter().map(|value| (*value).to_string()));
+            }
+        }
+        if needed.len() == before {
+            break;
+        }
+    }
+
+    let mut view = json!({
+        "concepts": required
+            .iter()
+            .filter_map(|id| concepts.get(id.as_str()).map(|c| (*c).clone()))
+            .collect::<Vec<_>>(),
+        "declarations": declarations
+            .iter()
+            .filter(|mapping| {
+                mapping
+                    .get("declaration")
+                    .and_then(Value::as_str)
+                    .is_some_and(|name| needed.contains(name))
+            })
+            .map(|mapping| (*mapping).clone())
+            .collect::<Vec<_>>(),
+    });
+    for field in ["coreRunId", "manifestHash", "sourceHash", "leanModule"] {
+        let value = manifest
+            .get(field)
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                ScopeError::Inputs("shared-core identity and integrity hashes are incomplete".into())
+            })?;
+        view[field] = json!(value);
+    }
+    Ok(Some(view))
 }
 
 #[cfg(test)]

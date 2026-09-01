@@ -70,8 +70,15 @@ impl<'a> Session<'a> {
             totals.accumulate(&response.usage);
 
             if response.tool_calls.is_empty() {
-                // The model ended its turn. Completion is decided by the tool
-                // set, never by parsing what the model said.
+                // The model ended its turn. Record it before deciding: a turn
+                // that explains why it stopped is exactly the one worth reading.
+                exchanges.push(Exchange {
+                    assistant: response.assistant,
+                    tool_results: Vec::new(),
+                    usage: response.usage,
+                });
+                // Completion is decided by the tool set, never by parsing what
+                // the model said.
                 break if tools.finished() {
                     Ok(())
                 } else {
@@ -84,23 +91,32 @@ impl<'a> Session<'a> {
 
             let mut records = Vec::with_capacity(response.tool_calls.len());
             for call in &response.tool_calls {
-                let result = tools.call(&call.name, &call.input);
+                // A turn may carry several tool calls. Once the tool set has
+                // produced its artifact, running the rest would overwrite it —
+                // but every tool_use still needs a tool_result, so say so.
+                let (output, is_error) = if tools.finished() {
+                    (
+                        "not executed: this session already produced its artifact".to_string(),
+                        true,
+                    )
+                } else {
+                    let result = tools.call(&call.name, &call.input);
+                    let mut output = result.to_text();
+                    // The deterministic step runs for this call, and its output
+                    // is attached to this call.
+                    if let Some(extra) = tools.after_tool_call() {
+                        output.push('\n');
+                        output.push_str(&extra);
+                    }
+                    (output, result.is_error())
+                };
                 records.push(ToolResultRecord {
                     call_id: call.id.clone(),
                     name: call.name.clone(),
                     input: call.input.clone(),
-                    output: result.to_text(),
-                    is_error: result.is_error(),
+                    output,
+                    is_error,
                 });
-            }
-
-            // The harness's own deterministic step: run a compiler or a checker
-            // and hand the model its output in this same conversation.
-            if let Some(extra) = tools.after_tools()
-                && let Some(last) = records.last_mut()
-            {
-                last.output.push('\n');
-                last.output.push_str(&extra);
             }
 
             exchanges.push(Exchange {
@@ -193,7 +209,7 @@ mod tests {
             self.done
         }
 
-        fn after_tools(&mut self) -> Option<String> {
+        fn after_tool_call(&mut self) -> Option<String> {
             self.checked += 1;
             Some(format!("deterministic check #{}", self.checked))
         }
@@ -251,6 +267,79 @@ mod tests {
         assert_eq!(transcript.exchanges.len(), 1);
     }
 
+    /// Two submissions in one turn must each get their own deterministic
+    /// result. Attaching one build to the wrong call would report the verdict
+    /// on submission A as though it were the verdict on B.
+    #[test]
+    fn parallel_tool_calls_each_get_their_own_deterministic_result() {
+        let both = TurnResponse {
+            assistant: json!([
+                {"type": "tool_use", "id": "a", "name": "submit", "input": {}},
+                {"type": "tool_use", "id": "b", "name": "submit", "input": {}},
+            ]),
+            text: String::new(),
+            tool_calls: vec![
+                ToolCall { id: "a".into(), name: "submit".into(), input: json!({}) },
+                ToolCall { id: "b".into(), name: "submit".into(), input: json!({}) },
+            ],
+            stop_reason: StopReason::ToolUse,
+            usage: Usage::default(),
+            model: "test".into(),
+        };
+        let provider = RecordedProvider::new("test", vec![both]);
+        let mut tools = Fussy { attempts: 0, done: false, checked: 0 };
+        let (outcome, transcript) = Session::new(&provider, "system", "prompt").run(&mut tools);
+
+        assert!(outcome.is_ok(), "{:?}", outcome.err().map(|e| e.to_string()));
+        let results = &transcript.exchanges[0].tool_results;
+        assert_eq!(results.len(), 2, "every tool_use needs a tool_result");
+        // The first is rejected and carries its own check; the second succeeds
+        // and carries its own. Neither borrows the other's verdict.
+        assert!(results[0].is_error);
+        assert!(results[0].output.contains("NOT_YET"));
+        assert!(results[0].output.contains("deterministic check #1"));
+        assert!(!results[1].is_error);
+        assert!(results[1].output.contains("deterministic check #2"));
+    }
+
+    /// Once the artifact exists, later calls in the same turn must not run —
+    /// but must still be answered, or the next request is malformed.
+    #[test]
+    fn calls_after_completion_are_answered_without_being_executed() {
+        let turn = |ids: &[&str]| TurnResponse {
+            assistant: json!(
+                ids.iter()
+                    .map(|id| json!({"type": "tool_use", "id": id, "name": "submit", "input": {}}))
+                    .collect::<Vec<_>>()
+            ),
+            text: String::new(),
+            tool_calls: ids
+                .iter()
+                .map(|id| ToolCall {
+                    id: (*id).to_string(),
+                    name: "submit".into(),
+                    input: json!({}),
+                })
+                .collect(),
+            stop_reason: StopReason::ToolUse,
+            usage: Usage::default(),
+            model: "test".into(),
+        };
+        // First turn fails once; second turn submits twice.
+        let provider = RecordedProvider::new("test", vec![turn(&["a"]), turn(&["b", "c"])]);
+        let mut tools = Fussy { attempts: 0, done: false, checked: 0 };
+        let (outcome, transcript) = Session::new(&provider, "system", "prompt").run(&mut tools);
+
+        assert!(outcome.is_ok());
+        let second = &transcript.exchanges[1].tool_results;
+        assert_eq!(second.len(), 2);
+        assert!(!second[0].is_error, "the first submission of the turn runs");
+        assert!(second[1].is_error);
+        assert!(second[1].output.contains("already produced its artifact"));
+        // The tool set was called twice in total, not three times.
+        assert_eq!(tools.attempts, 2);
+    }
+
     #[test]
     fn a_model_that_stops_without_submitting_is_a_failure() {
         let stop = TurnResponse {
@@ -269,6 +358,14 @@ mod tests {
         assert_eq!(
             transcript.outcome,
             SessionOutcome::Stopped { stop_reason: "end_turn".into() }
+        );
+        // The turn that explains the refusal must survive in the transcript:
+        // it is the only record of why the session ended.
+        assert_eq!(transcript.exchanges.len(), 1);
+        assert!(transcript.exchanges[0].tool_results.is_empty());
+        assert_eq!(
+            transcript.exchanges[0].assistant[0]["text"],
+            json!("I think that's everything.")
         );
     }
 }

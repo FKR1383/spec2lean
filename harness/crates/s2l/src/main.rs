@@ -15,6 +15,7 @@ use serde_json::{Value, json};
 use spec2lean_evidence::{EvidenceScope, EvidenceTools, prompt};
 use spec2lean_planning::{PlanningRequest, PlanningTools, ScopeResolver, Selector};
 use spec2lean_semantics::{SemanticScope, SemanticTools};
+use spec2lean_shared_core::{SharedCoreTools, collect_shared_requirements};
 use spec2lean_translation::{TranslationScope, TranslationTools};
 use spec2lean_specdb::{SpecDb, UnitId};
 
@@ -40,10 +41,15 @@ USAGE:
     s2l semantics run    --plan <PATH> --bundle <PATH> --unit <unit:ID> --out <DIR>
                          [PROVIDER OPTIONS]
 
+    s2l core prompt      --plan <PATH> --semantics <DIR>
+    s2l core replay      --plan <PATH> --semantics <DIR> --calls <PATH> --out <DIR>
+    s2l core run         --plan <PATH> --semantics <DIR> --out <DIR>
+                         [PROVIDER OPTIONS] [--lean <EXECUTABLE>]
+
     s2l translate prompt --plan <PATH> --semantics <DIR> --group <NAME>
     s2l translate replay --plan <PATH> --semantics <DIR> --group <NAME> --calls <PATH> [--out <DIR>]
     s2l translate run    --plan <PATH> --semantics <DIR> --group <NAME> --out <DIR>
-                         [PROVIDER OPTIONS] [--lean <EXECUTABLE>]
+                         [PROVIDER OPTIONS] [--lean <EXECUTABLE>] [--core <DIR>]
 
     s2l lean check       --file <PATH> [--lean <EXECUTABLE>]
 
@@ -104,6 +110,15 @@ fn run() -> Result<(), String> {
         ["lean", "check", rest @ ..] => {
             let flags = Flags::parse(rest)?;
             lean_check(&flags)
+        }
+        ["core", command, rest @ ..] => {
+            let flags = Flags::parse(rest)?;
+            match *command {
+                "prompt" => core_prompt(&flags),
+                "replay" => core_replay(&flags),
+                "run" => core_run(&flags),
+                other => Err(format!("unknown core command: {other}\n\n{USAGE}")),
+            }
         }
         ["translate", command, rest @ ..] => {
             let flags = Flags::parse(rest)?;
@@ -417,6 +432,132 @@ fn write_semantic_artifacts(
     Ok(())
 }
 
+/// Everything the shared core must represent for this plan.
+fn core_context(flags: &Flags) -> Result<(Value, spec2lean_shared_core::SharedCoreTools), String> {
+    let plan: Value = read_json(&flags.path("plan")?)?;
+    let semantics = load_semantics(&flags.path("semantics")?)?;
+    let requirements = collect_shared_requirements(&plan, &semantics, None)
+        .map_err(|error| error.to_string())?;
+    if requirements.is_empty() {
+        return Err("this plan has no shared prerequisites; no core is needed".into());
+    }
+    let out = flags
+        .optional("out")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    let generator = match flags.optional("provider") {
+        None => json!({"provider": "replay", "model": "none"}),
+        Some(_) => json!({"provider": flags.optional("provider").unwrap_or("anthropic"),
+                          "model": flags.optional("model").unwrap_or("default")}),
+    };
+    let tools = SharedCoreTools::new(
+        requirements,
+        plan.get("language").and_then(Value::as_str).unwrap_or_default(),
+        plan.get("version").and_then(Value::as_str).unwrap_or_default(),
+        plan.get("sourceDatabaseDigest").and_then(Value::as_str).unwrap_or_default(),
+        generator,
+        out.join("lean"),
+        flags.optional("lean").unwrap_or("lean"),
+    );
+    Ok((plan, tools))
+}
+
+fn core_prompt(flags: &Flags) -> Result<(), String> {
+    use spec2lean_shared_core::prompt as core_prompt_module;
+    let (_plan, tools) = core_context(flags)?;
+    println!(
+        "=== system ===\n{}\n\n=== user ===\n{}",
+        core_prompt_module::system_prompt(),
+        core_prompt_module::user_prompt(tools.requirements())
+    );
+    Ok(())
+}
+
+fn core_replay(flags: &Flags) -> Result<(), String> {
+    use harness::ToolSet;
+    let (_plan, mut tools) = core_context(flags)?;
+    let out = flags.path("out")?;
+    let calls: Value = read_json(&flags.path("calls")?)?;
+    let calls = calls.as_array().ok_or("the calls file must contain a JSON array")?;
+    for (index, call) in calls.iter().enumerate() {
+        let name = call.get("tool").and_then(Value::as_str).unwrap_or("submit_core");
+        let input = call.get("input").cloned().unwrap_or_else(|| json!({}));
+        let mut text = tools.call(name, &input).to_text();
+        if let Some(extra) = tools.after_tool_call() {
+            text.push('\n');
+            text.push_str(&extra);
+        }
+        println!("--- {index}: {name} ---\n{text}");
+    }
+    write_core_artifacts(&out, &tools, None)?;
+    if tools.finished() {
+        println!("\ncore frozen after {} build(s)", tools.build_count());
+        Ok(())
+    } else {
+        Err("the scripted calls did not freeze a core".into())
+    }
+}
+
+fn core_run(flags: &Flags) -> Result<(), String> {
+    use spec2lean_shared_core::prompt as core_prompt_module;
+    let (_plan, mut tools) = core_context(flags)?;
+    let out = flags.path("out")?;
+    let provider = provider(flags)?;
+    let user = core_prompt_module::user_prompt(tools.requirements());
+    let session = Session::new(provider.as_ref(), core_prompt_module::system_prompt(), user)
+        .with_max_steps(max_steps(flags)?);
+    let (outcome, transcript) = session.run(&mut tools);
+    write_core_artifacts(&out, &tools, Some(&transcript))?;
+    match outcome {
+        Ok(()) => {
+            let frozen = tools.frozen().expect("frozen");
+            println!(
+                "core {} frozen in {} steps after {} build(s): module {}",
+                frozen.core_run_id, transcript.steps, tools.build_count(), frozen.lean_module
+            );
+            Ok(())
+        }
+        Err(error) => Err(format!("{error} (artifacts written to {})", out.display())),
+    }
+}
+
+fn write_core_artifacts(
+    out: &Path,
+    tools: &SharedCoreTools,
+    transcript: Option<&harness::Transcript>,
+) -> Result<(), String> {
+    std::fs::create_dir_all(out).map_err(|error| format!("{}: {error}", out.display()))?;
+    if let Some(frozen) = tools.frozen() {
+        write_json(&out.join("shared-core-manifest.json"), &frozen.manifest)?;
+    }
+    if let Some(transcript) = transcript {
+        let value = serde_json::to_value(transcript).map_err(|error| error.to_string())?;
+        write_json(&out.join("transcript.json"), &value)?;
+    }
+    Ok(())
+}
+
+/// Load a frozen core from a directory produced by `s2l core`.
+fn load_core(flags: &Flags) -> Result<Option<(Value, PathBuf)>, String> {
+    let Some(directory) = flags.optional("core") else {
+        return Ok(None);
+    };
+    let directory = PathBuf::from(directory);
+    let manifest = read_json(&directory.join("shared-core-manifest.json"))?;
+    let module = manifest
+        .get("leanModule")
+        .and_then(Value::as_str)
+        .ok_or("the core manifest has no leanModule")?;
+    let source = directory
+        .join("lean")
+        .join(module.split('.').collect::<PathBuf>())
+        .with_extension("lean");
+    if !source.is_file() {
+        return Err(format!("the core source is missing: {}", source.display()));
+    }
+    Ok(Some((manifest, source)))
+}
+
 /// Build the request from flags. Exactly one selector may be given; the sum
 /// type makes a contradictory request unrepresentable rather than resolved by
 /// precedence.
@@ -632,27 +773,56 @@ fn load_semantics(root: &Path) -> Result<BTreeMap<String, Value>, String> {
     Ok(found)
 }
 
-fn translation_context(flags: &Flags) -> Result<(TranslationScope, BTreeMap<String, Value>), String> {
+type TranslationContext = (
+    TranslationScope,
+    BTreeMap<String, Value>,
+    Option<(Value, PathBuf)>,
+);
+
+fn translation_context(flags: &Flags) -> Result<TranslationContext, String> {
     let plan: Value = read_json(&flags.path("plan")?)?;
-    let semantics = load_semantics(&flags.path("semantics")?)?;
+    let all = load_semantics(&flags.path("semantics")?)?;
+    let group = flags.get("group")?;
+    // A group receives exactly its own units' artifacts.
+    let members: Vec<String> = spec2lean_translation::grouped_units(&plan)
+        .map_err(|error| error.to_string())?
+        .get(group)
+        .map(|units| {
+            units
+                .iter()
+                .filter_map(|unit| unit.get("unitId")?.as_str().map(str::to_string))
+                .collect()
+        })
+        .ok_or_else(|| format!("translation group is not present in the plan: {group}"))?;
+    let semantics: BTreeMap<String, Value> = members
+        .iter()
+        .filter_map(|unit_id| Some((unit_id.clone(), all.get(unit_id)?.clone())))
+        .collect();
     let created_at = flags
         .optional("created-at")
         .map(str::to_string)
         .unwrap_or_else(harness::clock::utc_now_iso);
-    let scope = TranslationScope::from_inputs(&plan, flags.get("group")?, &semantics, &created_at)
-        .map_err(|error| error.to_string())?;
-    Ok((scope, semantics))
+    let core = load_core(flags)?;
+    let scope = TranslationScope::from_inputs(
+        &plan,
+        group,
+        &semantics,
+        &created_at,
+        core.as_ref().map(|(manifest, _)| manifest),
+    )
+    .map_err(|error| error.to_string())?;
+    Ok((scope, semantics, core))
 }
 
 fn translate_scope(flags: &Flags) -> Result<(), String> {
-    let (scope, _) = translation_context(flags)?;
+    let (scope, _, _) = translation_context(flags)?;
     println!("{}", pretty(&scope.to_json()));
     Ok(())
 }
 
 fn translate_prompt(flags: &Flags) -> Result<(), String> {
     use spec2lean_translation::prompt as translation_prompt;
-    let (scope, semantics) = translation_context(flags)?;
+    let (scope, semantics, _) = translation_context(flags)?;
     println!(
         "=== system ===\n{}\n\n=== user ===\n{}",
         translation_prompt::system_prompt(),
@@ -664,7 +834,7 @@ fn translate_prompt(flags: &Flags) -> Result<(), String> {
 fn translate_replay(flags: &Flags) -> Result<(), String> {
     use harness::ToolSet;
 
-    let (scope, _) = translation_context(flags)?;
+    let (scope, _, core) = translation_context(flags)?;
     let calls: Value = read_json(&flags.path("calls")?)?;
     let calls = calls
         .as_array()
@@ -679,6 +849,12 @@ fn translate_replay(flags: &Flags) -> Result<(), String> {
         flags.optional("lean").unwrap_or("lean"),
         json!({"provider": "replay", "model": "none"}),
     );
+    if let Some((manifest, source)) = &core {
+        tools = tools.with_shared_core(
+            manifest["leanModule"].as_str().unwrap_or_default(),
+            source.clone(),
+        );
+    }
 
     for (index, call) in calls.iter().enumerate() {
         let name = call
@@ -688,7 +864,7 @@ fn translate_replay(flags: &Flags) -> Result<(), String> {
         let input = call.get("input").cloned().unwrap_or_else(|| json!({}));
         let mut text = tools.call(name, &input).to_text();
         // The harness's own deterministic step, exactly as the loop runs it.
-        if let Some(extra) = tools.after_tools() {
+        if let Some(extra) = tools.after_tool_call() {
             text.push('\n');
             text.push_str(&extra);
         }
@@ -707,7 +883,7 @@ fn translate_replay(flags: &Flags) -> Result<(), String> {
 fn translate_run(flags: &Flags) -> Result<(), String> {
     use spec2lean_translation::prompt as translation_prompt;
 
-    let (scope, semantics) = translation_context(flags)?;
+    let (scope, semantics, core) = translation_context(flags)?;
     let out = flags.path("out")?;
     let provider = provider(flags)?;
     let user = translation_prompt::user_prompt(&scope, &semantics);
@@ -717,6 +893,12 @@ fn translate_run(flags: &Flags) -> Result<(), String> {
         flags.optional("lean").unwrap_or("lean"),
         extractor(provider.as_ref()),
     );
+    if let Some((manifest, source)) = &core {
+        tools = tools.with_shared_core(
+            manifest["leanModule"].as_str().unwrap_or_default(),
+            source.clone(),
+        );
+    }
 
     let session = Session::new(provider.as_ref(), translation_prompt::system_prompt(), user)
         .with_max_steps(max_steps(flags)?);

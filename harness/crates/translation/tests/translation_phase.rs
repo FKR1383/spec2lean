@@ -35,7 +35,7 @@ fn unit() -> Value {
     json!({"unitId": "unit:add", "name": "add", "sourceNodeIds": ["node:x"]})
 }
 
-fn plan() -> Value {
+fn base_plan() -> Value {
     json!({
         "planRunId": "plan:test",
         "language": "synthetic",
@@ -67,7 +67,7 @@ fn semantics() -> BTreeMap<String, Value> {
 }
 
 fn scope() -> TranslationScope {
-    TranslationScope::from_inputs(&plan(), "arithmetic", &semantics(), "2026-01-01T00:00:00.000000Z")
+    TranslationScope::from_inputs(&base_plan(), "arithmetic", &semantics(), "2026-01-01T00:00:00.000000Z", None)
         .expect("scope resolves")
 }
 
@@ -95,7 +95,7 @@ fn submit(tools: &mut TranslationTools, source: &str) -> String {
     );
     let mut text = outcome.to_text();
     // The harness runs the compiler here, exactly as the session loop does.
-    if let Some(extra) = tools.after_tools() {
+    if let Some(extra) = tools.after_tool_call() {
         text.push('\n');
         text.push_str(&extra);
     }
@@ -188,7 +188,7 @@ fn structural_failures_are_reported_before_the_compiler_runs() {
     assert!(codes.contains(&"MISSING_DECLARATION"), "{codes:?}");
     assert!(codes.contains(&"UNMAPPED_DECLARATION"), "{codes:?}");
     // No build was attempted, and nothing was left pending for one.
-    assert!(tools.after_tools().is_none());
+    assert!(tools.after_tool_call().is_none());
     assert_eq!(tools.build_count(), 0);
 }
 
@@ -269,16 +269,37 @@ fn escape_hatches_are_refused_however_they_are_spelled() {
 }
 
 #[test]
-fn a_group_with_shared_prerequisites_is_refused_rather_than_half_translated() {
-    let mut plan = plan();
+fn a_group_with_shared_concepts_is_refused_without_a_frozen_core() {
+    let mut plan = base_plan();
     plan["sharedPrerequisites"] = json!([{
         "dependencyId": "shared:predicate",
         "name": "predicate",
         "requiredBy": ["unit:add"],
     }]);
-    let error = TranslationScope::from_inputs(&plan, "arithmetic", &semantics(), "t").unwrap_err();
+
+    // No core at all.
+    let error = TranslationScope::from_inputs(&plan, "arithmetic", &semantics(), "t", None)
+        .unwrap_err();
     assert!(error.to_string().contains("shared:predicate"), "{error}");
-    assert!(error.to_string().contains("not ported"), "{error}");
+    assert!(error.to_string().contains("no frozen shared core"), "{error}");
+
+    // A core that represents something else.
+    let other = json!({
+        "coreRunId": "shared-core-run:x", "manifestHash": "sha256:x",
+        "sourceHash": "sha256:y", "leanModule": "Spec2LeanShared.X",
+        "concepts": [{"dependencyId": "shared:something-else", "leanDeclarations": ["A"]}],
+        "declarations": [],
+    });
+    let error = TranslationScope::from_inputs(&plan, "arithmetic", &semantics(), "t", Some(&other))
+        .unwrap_err();
+    assert!(error.to_string().contains("no registered representation"), "{error}");
+
+    // A core supplied to a group that has no shared concepts at all.
+    let bare = base_plan();
+    let error =
+        TranslationScope::from_inputs(&bare, "arithmetic", &semantics(), "t", Some(&other))
+            .unwrap_err();
+    assert!(error.to_string().contains("has no shared prerequisites"), "{error}");
 }
 
 #[test]
@@ -286,18 +307,18 @@ fn the_scope_refuses_semantics_that_do_not_match_the_plan() {
     // A failed extraction cannot be translated.
     let mut broken = semantics();
     broken.get_mut("unit:add").unwrap()["outcome"] = json!("INSUFFICIENT_EVIDENCE");
-    let error = TranslationScope::from_inputs(&plan(), "arithmetic", &broken, "t").unwrap_err();
+    let error = TranslationScope::from_inputs(&base_plan(), "arithmetic", &broken, "t", None).unwrap_err();
     assert!(error.to_string().contains("requires successful semantics"));
 
     // Nor can semantics for a different plan.
     let mut wrong = semantics();
     wrong.get_mut("unit:add").unwrap()["planRunId"] = json!("plan:other");
-    let error = TranslationScope::from_inputs(&plan(), "arithmetic", &wrong, "t").unwrap_err();
+    let error = TranslationScope::from_inputs(&base_plan(), "arithmetic", &wrong, "t", None).unwrap_err();
     assert!(error.to_string().contains("planRunId does not match"));
 
     // Nor a group missing one of its units' artifacts.
     let error =
-        TranslationScope::from_inputs(&plan(), "arithmetic", &BTreeMap::new(), "t").unwrap_err();
+        TranslationScope::from_inputs(&base_plan(), "arithmetic", &BTreeMap::new(), "t", None).unwrap_err();
     assert!(error.to_string().contains("exactly one semantic artifact"));
 }
 

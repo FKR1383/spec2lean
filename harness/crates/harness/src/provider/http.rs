@@ -48,6 +48,10 @@ impl JsonHttp {
     pub fn new(timeout: Duration) -> Self {
         let config = ureq::Agent::config_builder()
             .timeout_global(Some(timeout))
+            // Do not let the transport turn a non-2xx into an opaque error: the
+            // provider explains *why* a request was rejected in the response
+            // body, and losing it leaves "HTTP 400" with nothing to act on.
+            .http_status_as_error(false)
             .build();
         Self {
             agent: config.new_agent(),
@@ -90,14 +94,37 @@ impl JsonHttp {
             request = request.header(*name, value.as_str());
         }
         match request.send_json(body) {
-            Ok(mut response) => response
-                .body_mut()
-                .read_json::<Value>()
-                .map_err(|error| HarnessError::Decode(error.to_string())),
-            Err(ureq::Error::StatusCode(code)) => Err(HarnessError::Status {
-                code,
-                body: String::new(),
-            }),
+            Ok(mut response) => {
+                let status = response.status().as_u16();
+                if (200..300).contains(&status) {
+                    // Read, then parse, so the two failures stay distinct: a
+                    // connection dropped mid-body is transient and worth
+                    // retrying, while a fully received body that will not parse
+                    // is not going to parse on the next attempt either.
+                    let text = response
+                        .body_mut()
+                        .read_to_string()
+                        .map_err(|error| HarnessError::Transport(format!(
+                            "the response body ended early: {error}"
+                        )))?;
+                    return serde_json::from_str::<Value>(&text).map_err(|error| {
+                        HarnessError::Decode(format!(
+                            "{error}; body was {}",
+                            crate::error::truncate(&text, 500)
+                        ))
+                    });
+                }
+                // Carry the provider's explanation through, truncated: it names
+                // the offending field on a 400 and the reset time on a 429.
+                let body = response
+                    .body_mut()
+                    .read_to_string()
+                    .unwrap_or_else(|error| format!("<unreadable body: {error}>"));
+                Err(HarnessError::Status {
+                    code: status,
+                    body: crate::error::truncate(&body, 2000),
+                })
+            }
             Err(error) => Err(HarnessError::Transport(error.to_string())),
         }
     }
@@ -114,9 +141,8 @@ fn is_retryable(error: &HarnessError) -> bool {
 }
 
 fn retry_after(_error: &HarnessError) -> Option<Duration> {
-    // ureq surfaces the status without headers on the error path; exponential
-    // backoff covers the case. Kept as a seam so a header-aware transport can
-    // honour `retry-after` without touching the retry loop.
+    // Seam for honouring a `retry-after` header. The status path now keeps the
+    // body but not the headers, so exponential backoff still covers 429.
     None
 }
 
@@ -149,5 +175,78 @@ mod tests {
         assert_eq!(policy.backoff(1, None), Duration::from_secs(2));
         assert_eq!(policy.backoff(3, None), Duration::from_secs(8));
         assert_eq!(policy.backoff(30, None), policy.max_delay);
+    }
+}
+
+#[cfg(test)]
+mod status_tests {
+    use super::*;
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::TcpListener;
+
+    /// One-shot HTTP server that answers with the given status and body.
+    fn serve_once(status: u16, body: &'static str) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+        std::thread::spawn(move || {
+            let Ok((stream, _)) = listener.accept() else {
+                return;
+            };
+            let mut reader = BufReader::new(&stream);
+            // Drain headers, then the declared body, so the client sees a
+            // complete request rather than a reset connection.
+            let mut length = 0usize;
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
+                    break;
+                }
+                if let Some(value) = line.to_lowercase().strip_prefix("content-length:") {
+                    length = value.trim().parse().unwrap_or(0);
+                }
+            }
+            let mut discard = vec![0u8; length];
+            use std::io::Read;
+            let _ = reader.read_exact(&mut discard);
+            let mut stream = &stream;
+            let _ = write!(
+                stream,
+                "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = stream.flush();
+        });
+        format!("http://127.0.0.1:{port}/")
+    }
+
+    #[test]
+    fn a_rejected_request_keeps_the_providers_explanation() {
+        let url = serve_once(
+            400,
+            r#"{"type":"error","error":{"type":"invalid_request_error","message":"tools.0.name: unsupported"}}"#,
+        );
+        let http = JsonHttp::new(Duration::from_secs(5));
+        let error = http
+            .post_json(&url, &[], &serde_json::json!({"hello": "world"}))
+            .expect_err("400 must be an error");
+
+        match error {
+            HarnessError::Status { code, body } => {
+                assert_eq!(code, 400);
+                // Without this, the operator sees "HTTP 400" and nothing else.
+                assert!(body.contains("tools.0.name: unsupported"), "{body}");
+            }
+            other => panic!("expected a status error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_successful_response_still_decodes() {
+        let url = serve_once(200, r#"{"stop_reason":"end_turn"}"#);
+        let http = JsonHttp::new(Duration::from_secs(5));
+        let value = http
+            .post_json(&url, &[], &serde_json::json!({}))
+            .expect("200 decodes");
+        assert_eq!(value["stop_reason"], serde_json::json!("end_turn"));
     }
 }

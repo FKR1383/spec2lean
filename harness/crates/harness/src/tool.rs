@@ -72,11 +72,15 @@ pub trait ToolSet {
         false
     }
 
-    /// Deterministic work the harness runs itself after each batch of tool
-    /// calls — a compiler, a validator, a checker. Returning `Some(text)`
-    /// appends it to the tool-result message, so the model sees the outcome in
-    /// the same conversation rather than in a fresh process one phase later.
-    fn after_tools(&mut self) -> Option<String> {
+    /// Deterministic work the harness runs itself after *each* tool call — a
+    /// compiler, a validator, a checker. Returning `Some(text)` appends it to
+    /// that call's own result, so the model sees the outcome in the same
+    /// conversation rather than in a fresh process one phase later.
+    ///
+    /// Per call, not per batch: a model may emit several tool calls in one
+    /// turn, and attaching one deterministic result to the wrong call would
+    /// report a build of submission A as though it were the verdict on B.
+    fn after_tool_call(&mut self) -> Option<String> {
         None
     }
 }

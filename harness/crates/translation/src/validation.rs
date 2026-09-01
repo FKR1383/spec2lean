@@ -54,7 +54,7 @@ pub fn validate_submission(
     };
     let mut unexpected: Vec<&String> = object
         .keys()
-        .filter(|key| !matches!(key.as_str(), "leanSource" | "declarations"))
+        .filter(|key| !matches!(key.as_str(), "leanSource" | "declarations" | "sharedUses"))
         .collect();
     unexpected.sort();
     for key in unexpected {
@@ -266,10 +266,114 @@ pub fn validate_submission(
         ));
     }
 
+    // ---- shared uses -----------------------------------------------------
+    // Every shared concept this group depends on must be bound to declarations
+    // the frozen core actually registered. Without this a group could define
+    // its own version of a concept its siblings import from the core, and the
+    // two would agree only by luck.
+    let required = scope.shared_dependency_ids();
+    let raw_uses: Vec<&Value> = match object.get("sharedUses") {
+        None => Vec::new(),
+        Some(Value::Array(items)) => items.iter().collect(),
+        Some(_) => {
+            diagnostics.push(Diagnostic::new(
+                "EXPECTED_ARRAY",
+                "sharedUses must be an array",
+                "$.sharedUses",
+            ));
+            Vec::new()
+        }
+    };
+    let mut bound: BTreeSet<String> = BTreeSet::new();
+    for (index, raw) in raw_uses.iter().enumerate() {
+        let path = format!("$.sharedUses[{index}]");
+        let Some(use_object) = raw.as_object() else {
+            diagnostics.push(Diagnostic::new("EXPECTED_OBJECT", "shared use must be an object", &path));
+            continue;
+        };
+        let Some(dependency_id) = use_object.get("dependencyId").and_then(Value::as_str) else {
+            diagnostics.push(Diagnostic::new(
+                "INVALID_SHARED_USE",
+                "dependencyId must be a shared:* identifier",
+                format!("{path}.dependencyId"),
+            ));
+            continue;
+        };
+        if !required.contains(&dependency_id) {
+            diagnostics.push(Diagnostic::new(
+                "UNKNOWN_SHARED_USE",
+                format!("this group does not depend on {dependency_id}"),
+                format!("{path}.dependencyId"),
+            ));
+            continue;
+        }
+        if !bound.insert(dependency_id.to_string()) {
+            diagnostics.push(Diagnostic::new(
+                "DUPLICATE_SHARED_USE",
+                format!("shared concept is bound more than once: {dependency_id}"),
+                format!("{path}.dependencyId"),
+            ));
+            continue;
+        }
+        let registered: BTreeSet<&str> =
+            scope.registered_declarations(dependency_id).into_iter().collect();
+        let used: Vec<&str> = use_object
+            .get("leanDeclarations")
+            .and_then(Value::as_array)
+            .map(|items| items.iter().filter_map(Value::as_str).collect())
+            .unwrap_or_default();
+        if used.is_empty() {
+            diagnostics.push(Diagnostic::new(
+                "MISSING_SHARED_USE_DECLARATIONS",
+                format!("{dependency_id} must name at least one declaration from the frozen core"),
+                format!("{path}.leanDeclarations"),
+            ));
+        }
+        for name in used {
+            if !registered.contains(name) {
+                diagnostics.push(Diagnostic::new(
+                    "UNREGISTERED_SHARED_DECLARATION",
+                    format!(
+                        "the frozen core does not register {name} for {dependency_id}; registered: {}",
+                        registered.iter().copied().collect::<Vec<_>>().join(", ")
+                    ),
+                    format!("{path}.leanDeclarations"),
+                ));
+            }
+        }
+    }
+    let unbound: Vec<&&str> = required.iter().filter(|id| !bound.contains(**id)).collect();
+    if !unbound.is_empty() {
+        diagnostics.push(Diagnostic::new(
+            "MISSING_SHARED_USE",
+            format!(
+                "every shared concept this group depends on must be bound to the frozen core; missing: {}",
+                unbound.iter().map(|id| **id).collect::<Vec<_>>().join(", ")
+            ),
+            "$.sharedUses",
+        ));
+    }
+
+    // The group must actually import the core it claims to use.
+    if let Some(module) = scope.core_lean_module()
+        && !clean.lines().any(|line| {
+            line.trim().strip_prefix("import ").is_some_and(|rest| rest.trim() == module)
+        })
+    {
+        diagnostics.push(Diagnostic::new(
+            "MISSING_CORE_IMPORT",
+            format!("leanSource must import the frozen shared core: import {module}"),
+            "$.leanSource",
+        ));
+    }
+
     if !diagnostics.is_empty() {
         return Err(diagnostics);
     }
-    Ok(json!(raw_declarations))
+    Ok(json!({
+        "declarations": raw_declarations,
+        "sharedUses": raw_uses,
+    }))
 }
 
 /// The claim-to-declaration index, for the manifest and for tracing.

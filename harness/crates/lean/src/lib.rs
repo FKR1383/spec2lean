@@ -5,9 +5,11 @@
 //! becomes a tool result in the same conversation, rather than a separate phase
 //! reached through a fresh process.
 
+pub mod axioms;
 pub mod build;
 pub mod diagnostic;
 pub mod tempdir;
 
+pub use axioms::{AxiomAudit, DeclarationAxioms, audit};
 pub use build::{BuildResult, BuildStatus, DependencyModule, run_build};
 pub use diagnostic::{Diagnostic, Severity};
