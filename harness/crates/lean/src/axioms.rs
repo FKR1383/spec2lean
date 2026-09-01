@@ -97,6 +97,16 @@ fn parse_line(line: &str) -> Option<(String, Vec<String>)> {
 /// The module the audited source is staged under.
 const AUDIT_MODULE: &str = "Spec2LeanAudit.Target";
 
+/// A declaration the harness defines in the probe itself, which genuinely rests
+/// on `sorryAx`.
+///
+/// Lean exports syntax and elaborators through imports, so an audited module
+/// can redefine `#print axioms` and make the probe print whatever it likes —
+/// demonstrated working before this control existed. A hijacker that suppresses
+/// the truth suppresses it for this declaration too, and the audit notices its
+/// own control coming back clean.
+const CONTROL: &str = "spec2leanAuditControl";
+
 /// Report the axiom dependencies of every named declaration.
 ///
 /// The audited source is compiled to a `.olean`, and the `#print axioms`
@@ -196,8 +206,11 @@ pub fn audit(
         lean_path.push(existing);
     }
 
-    // The probe contains nothing but an import and the queries.
-    let mut probe = format!("import {AUDIT_MODULE}\n");
+    // The probe contains an import, the harness's own control, and the queries.
+    let mut probe = format!(
+        "import {AUDIT_MODULE}\n\ntheorem {CONTROL} : False := sorryAx False true\n"
+    );
+    probe.push_str(&format!("#print axioms {CONTROL}\n"));
     for declaration in declarations {
         probe.push_str(&format!("#print axioms {declaration}\n"));
     }
@@ -232,6 +245,19 @@ pub fn audit(
     for line in text.lines() {
         if let Some((name, axioms)) = parse_line(line) {
             reported.insert(name, axioms);
+        }
+    }
+
+    // If the control does not come back as resting on `sorryAx`, the answers
+    // are not Lean's and nothing else in this report can be trusted.
+    match reported.get(CONTROL) {
+        Some(axioms) if axioms.iter().any(|name| name == "sorryAx") => {}
+        _ => {
+            return fail(
+                "the audit control did not report its own unproved hole; the queries did not \
+                 reach Lean's own answer"
+                    .into(),
+            );
         }
     }
 

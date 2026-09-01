@@ -437,3 +437,57 @@ fn a_vague_underdetermined_report_is_refused() {
     }));
     assert!(found.contains(&"INVALID_TEXT".to_string()), "{found:?}");
 }
+
+/// The same hijack, refused before it reaches a compiler. A formalization of a
+/// specification defines meaning, not new command syntax — and Lean exports
+/// syntax through imports, so a module that declares an elaborator can rewrite
+/// the checks that judge it.
+#[test]
+fn command_extensions_are_refused() {
+    let work = Work::new("extensions");
+    for source in [
+        "syntax (name := f) \"#x\" : command\n",
+        "macro \"foo\" : term => `(1)\n",
+        "macro_rules | `(foo) => `(1)\n",
+        "elab \"bar\" : term => return default\n",
+        "elab_rules : command | `(baz) => pure ()\n",
+        "declare_syntax_cat mycat\n",
+    ] {
+        let mut tools = make_tools(&work);
+        let outcome = tools.call(
+            "submit_translation",
+            &json!({"leanSource": source, "declarations": mapping()}),
+        );
+        let value: Value = serde_json::from_str(&outcome.to_text()).unwrap();
+        let codes: Vec<&str> = value["diagnostics"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|item| item["code"].as_str())
+            .collect();
+        assert!(
+            codes.iter().any(|code| code.starts_with("FORBIDDEN_")),
+            "{source:?} produced {codes:?}"
+        );
+        assert_eq!(tools.build_count(), 0);
+    }
+}
+
+/// The fix for interpolation must not reject ordinary string literals.
+#[test]
+fn braces_in_a_plain_string_literal_are_text() {
+    let work = Work::new("braces");
+    let mut tools = make_tools(&work);
+    // `"{sorry}"` is a literal containing braces, not interpolated code.
+    let source = "namespace Spec2Lean.Synthetic.Arithmetic\n\
+         def add : String := \"{sorry}\"\n\
+         end Spec2Lean.Synthetic.Arithmetic\n";
+    let outcome = tools.call(
+        "submit_translation",
+        &json!({"leanSource": source, "declarations": [{
+            "declaration": "Spec2Lean.Synthetic.Arithmetic.add", "role": "OPERATION",
+            "claimRefs": [{"unitId": "unit:add", "claimId": "claim:1"}]}]}),
+    );
+    let value: Value = serde_json::from_str(&outcome.to_text()).unwrap();
+    assert!(value.get("diagnostics").is_none(), "{value}");
+}

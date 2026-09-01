@@ -111,6 +111,10 @@ pub fn without_comments_and_strings(source: &str) -> String {
                 index = cursor;
             }
             _ if character == '"' => {
+                // Only an interpolated string — `s!"..."`, `m!"..."` — treats
+                // braces as code. In a plain literal `"{sorry}"` they are text,
+                // and keeping them would reject a legitimate string.
+                let interpolated = index > 0 && characters[index - 1] == '!';
                 result.push(' ');
                 index += 1;
                 let mut brace_depth = 0usize;
@@ -127,7 +131,7 @@ pub fn without_comments_and_strings(source: &str) -> String {
                         index += 1;
                         break;
                     }
-                    if character == '{' {
+                    if interpolated && character == '{' {
                         // Interpolated code: keep it, it is not string content.
                         brace_depth += 1;
                         result.push(character);
@@ -359,6 +363,12 @@ pub fn declarations(source: &str) -> BTreeMap<String, String> {
 /// `sorry` and `admit` leave holes; `axiom` and `constant` assert without
 /// justification; `unsafe` and `partial` sidestep totality. A spec formalized
 /// with any of these is not formalized.
+/// Escape hatches that would make a formalization assert nothing, and the
+/// command-extension constructs that would let it rewrite the check that judges
+/// it. Lean exports syntax and elaborators through imports, so a module that
+/// defines `syntax`/`elab_rules` for `#print axioms` hijacks the axiom audit in
+/// any file importing it. A formalization of a specification defines meaning,
+/// not new command syntax.
 pub const FORBIDDEN: &[(&str, &str, &str)] = &[
     ("FORBIDDEN_SORRY", "sorry", "Lean source contains forbidden 'sorry'"),
     ("FORBIDDEN_ADMIT", "admit", "Lean source contains forbidden 'admit'"),
@@ -366,6 +376,12 @@ pub const FORBIDDEN: &[(&str, &str, &str)] = &[
     ("FORBIDDEN_CONSTANT", "constant", "Lean source declares a forbidden constant/axiom"),
     ("FORBIDDEN_UNSAFE", "unsafe", "Lean source contains forbidden unsafe code"),
     ("FORBIDDEN_PARTIAL", "partial", "Lean source contains a forbidden partial definition"),
+    ("FORBIDDEN_SYNTAX", "syntax", "Lean source declares command syntax, which can redefine the checks that judge it"),
+    ("FORBIDDEN_MACRO", "macro", "Lean source declares a macro, which can redefine the checks that judge it"),
+    ("FORBIDDEN_MACRO_RULES", "macro_rules", "Lean source declares macro rules, which can redefine the checks that judge it"),
+    ("FORBIDDEN_ELAB", "elab", "Lean source declares an elaborator, which can redefine the checks that judge it"),
+    ("FORBIDDEN_ELAB_RULES", "elab_rules", "Lean source declares elaboration rules, which can redefine the checks that judge it"),
+    ("FORBIDDEN_SYNTAX_CAT", "declare_syntax_cat", "Lean source declares a syntax category"),
 ];
 
 /// Whole-word search over comment- and string-stripped source, so a token in

@@ -181,3 +181,32 @@ fn a_source_that_does_not_compile_fails_the_audit_rather_than_passing_it() {
     assert!(!report.passed(), "{}", report.summary());
     assert!(report.summary().contains("did not compile") || !report.unreported.is_empty());
 }
+
+/// External review, verified against real `lean`: an audited module can define
+/// `syntax` and `elab_rules` for `#print axioms`, and Lean exports those through
+/// the import — so the probe in a separate file printed the hijacker's answer.
+/// Before the control existed, this reported PASS for a theorem resting on a
+/// user axiom.
+#[test]
+fn a_module_that_redefines_print_axioms_cannot_fake_a_pass() {
+    if !lean_available() {
+        return;
+    }
+    let work = Work::new("hijack");
+    let file = work.write(
+        "Hijack.lean",
+        "import Lean\n\
+         syntax (name := forged) \"#print\" \"axioms\" ident : command\n\
+         elab_rules (kind := forged) : command | `(#print axioms $id:ident) => \
+             Lean.logInfo m!\"'x' does not depend on any axioms\"\n\
+         axiom bad : False\n\
+         theorem x : False := bad\n",
+    );
+    let report = audit(&file, &[], &["x".to_string()], "lean");
+    assert!(!report.passed(), "{}", report.summary());
+    assert!(
+        report.summary().contains("audit control"),
+        "{}",
+        report.summary()
+    );
+}
