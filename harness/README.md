@@ -27,7 +27,7 @@ capability to disable — a tool call is a function call in this process.
 
 ```bash
 cargo build
-cargo test          # 191 tests, no network and no API key required
+cargo test          # 195 tests, no network and no API key required
 cargo clippy --all-targets
 ```
 
@@ -79,8 +79,18 @@ s2l plan run --database indexes/pcie-transport-1.0d-fixed.sqlite \
              --out runs/resets/plan --provider codex
 ```
 
-The cost is the conversation re-sent every turn and a process start per turn;
-the benefit is that no phase behaves differently than it does over HTTP.
+The conversation lives in one codex thread, resumed per turn, so each turn
+sends only the tool results the thread has not seen. The first version opened a
+fresh `codex exec` every turn; on the same PCIe plan that cost 71.5k input
+tokens across 4 turns with a 0% cache hit, because a new process rebuilds
+codex's own preamble ahead of ours and the stable prefix never lands at a
+stable offset. Holding one thread brought the same plan to 53.9k tokens in 2
+turns at a 30% cache hit.
+
+A process start per turn is still the standing cost, and codex's own harness
+prompt — about 14k tokens of instructions and tool schemas the adapter does not
+want — rides underneath every request. An OpenAI API key would remove both by
+letting `--provider openai` talk to the model directly.
 
 It plans, then retrieves and extracts per unit, freezes a shared core if the
 plan needs one, translates each group whose units all completed, and checks the
