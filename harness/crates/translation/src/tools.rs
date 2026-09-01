@@ -26,6 +26,9 @@ pub struct TranslationTools {
     /// Set by `submit_translation`, consumed by `after_tool_call`.
     pending: Option<(String, Value)>,
     accepted: Option<Value>,
+    /// Set when the translator reports that the semantics do not determine a
+    /// formalization. A terminal outcome, but not a translation.
+    underdetermined: Option<Value>,
     last_build: Option<BuildResult>,
     last_audit: Option<AxiomAudit>,
     builds: u32,
@@ -46,6 +49,7 @@ impl TranslationTools {
             core: None,
             pending: None,
             accepted: None,
+            underdetermined: None,
             last_build: None,
             last_audit: None,
             builds: 0,
@@ -70,6 +74,11 @@ impl TranslationTools {
         self.accepted.as_ref()
     }
 
+    /// The recorded reason this group could not be formalized, if it could not.
+    pub fn underdetermined(&self) -> Option<&Value> {
+        self.underdetermined.as_ref()
+    }
+
     pub fn last_build(&self) -> Option<&BuildResult> {
         self.last_build.as_ref()
     }
@@ -86,6 +95,118 @@ impl TranslationTools {
 
     pub fn lean_path(&self) -> PathBuf {
         self.workspace.join(self.scope.lean_file())
+    }
+
+    /// What the translator must supply to report that it cannot proceed.
+    ///
+    /// Deliberately as demanding as a successful submission: naming which
+    /// claims are underdetermined and what is missing from each is the point.
+    /// A vague "not enough information" would be indistinguishable from
+    /// unwillingness, and would give Phase 4 nothing to act on.
+    fn underdetermined_schema() -> Value {
+        json!({
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["explanation", "underdeterminedClaims"],
+            "properties": {
+                "explanation": {"type": "string", "minLength": 1},
+                "underdeterminedClaims": {
+                    "type": "array", "minItems": 1,
+                    "items": {
+                        "type": "object", "additionalProperties": false,
+                        "required": ["unitId", "claimId", "missing"],
+                        "properties": {
+                            "unitId": {"type": "string", "pattern": "^unit:"},
+                            "claimId": {"type": "string", "pattern": "^claim:"},
+                            "missing": {"type": "string", "minLength": 1},
+                        },
+                    },
+                },
+            },
+        })
+    }
+
+    /// Validate an underdetermined report against the group's own claims.
+    fn validate_underdetermined(&self, input: &Value) -> Result<Value, Vec<Value>> {
+        let mut diagnostics = Vec::new();
+        let allowed: std::collections::BTreeSet<(&str, &str)> = self
+            .scope
+            .claim_refs
+            .iter()
+            .map(|(unit_id, claim_id)| (unit_id.as_str(), claim_id.as_str()))
+            .collect();
+        let explanation = input
+            .get("explanation")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .unwrap_or_default();
+        if explanation.is_empty() {
+            diagnostics.push(json!({
+                "code": "INVALID_TEXT",
+                "message": "an underdetermined report requires an explanation",
+                "path": "$.explanation",
+            }));
+        }
+        let claims = input
+            .get("underdeterminedClaims")
+            .and_then(Value::as_array)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        if claims.is_empty() {
+            diagnostics.push(json!({
+                "code": "MISSING_UNDERDETERMINED_CLAIMS",
+                "message": "name at least one claim the semantics do not determine",
+                "path": "$.underdeterminedClaims",
+            }));
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        for (index, item) in claims.iter().enumerate() {
+            let path = format!("$.underdeterminedClaims[{index}]");
+            let unit_id = item.get("unitId").and_then(Value::as_str).unwrap_or_default();
+            let claim_id = item.get("claimId").and_then(Value::as_str).unwrap_or_default();
+            if !allowed.contains(&(unit_id, claim_id)) {
+                diagnostics.push(json!({
+                    "code": "UNKNOWN_CLAIM_REF",
+                    "message": format!("this group has no claim {unit_id}/{claim_id}"),
+                    "path": format!("{path}.claimId"),
+                }));
+                continue;
+            }
+            if !seen.insert((unit_id.to_string(), claim_id.to_string())) {
+                diagnostics.push(json!({
+                    "code": "DUPLICATE_CLAIM_REF",
+                    "message": format!("claim named more than once: {unit_id}/{claim_id}"),
+                    "path": format!("{path}.claimId"),
+                }));
+            }
+            if item
+                .get("missing")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .is_none_or(str::is_empty)
+            {
+                diagnostics.push(json!({
+                    "code": "INVALID_TEXT",
+                    "message": "say what is missing from this claim",
+                    "path": format!("{path}.missing"),
+                }));
+            }
+        }
+        if !diagnostics.is_empty() {
+            return Err(diagnostics);
+        }
+        Ok(json!({
+            "schemaVersion": crate::scope::TRANSLATION_SCHEMA_VERSION,
+            "phase": "LLM_GROUP_TRANSLATOR",
+            "outcome": "UNDERDETERMINED",
+            "planRunId": self.scope.plan_run_id,
+            "group": {"name": self.scope.group, "unitIds": self.scope.unit_ids()},
+            "translationRunId": self.scope.translation_run_id,
+            "translator": self.translator,
+            "createdAt": self.scope.created_at,
+            "explanation": explanation,
+            "underdeterminedClaims": claims,
+        }))
     }
 
     fn submission_schema() -> Value {
@@ -133,16 +254,40 @@ impl TranslationTools {
 
 impl ToolSet for TranslationTools {
     fn specs(&self) -> Vec<ToolSpec> {
-        vec![ToolSpec::new(
+        vec![
+            ToolSpec::new(
             "submit_translation",
             "Submit the complete Lean 4 source for this group together with a declaration-to-claim \
              mapping. Structural validation runs immediately, and the source is then compiled; \
              both results come back in this same session, so correct and resubmit here.",
             Self::submission_schema(),
-        )]
+            ),
+            ToolSpec::new(
+                "report_underdetermined",
+                "Report that these semantic artifacts do not determine a Lean formalization, \
+                 naming each claim that is underdetermined and what is missing from it. Use this \
+                 instead of guessing; the report is routed back to semantic extraction.",
+                Self::underdetermined_schema(),
+            ),
+        ]
     }
 
     fn call(&mut self, name: &str, input: &Value) -> ToolOutcome {
+        if name == "report_underdetermined" {
+            return match self.validate_underdetermined(input) {
+                Ok(report) => {
+                    self.underdetermined = Some(report);
+                    ToolOutcome::Ok(json!({
+                        "accepted": true,
+                        "outcome": "UNDERDETERMINED",
+                        "message": "Recorded. This group will be routed back to semantic extraction.",
+                    }))
+                }
+                Err(diagnostics) => ToolOutcome::Ok(json!({
+                    "accepted": false, "stage": "STRUCTURE", "diagnostics": diagnostics,
+                })),
+            };
+        }
         if name != "submit_translation" {
             return ToolOutcome::Err(format!("unknown tool: {name}"));
         }
@@ -234,6 +379,6 @@ impl ToolSet for TranslationTools {
     }
 
     fn finished(&self) -> bool {
-        self.accepted.is_some()
+        self.accepted.is_some() || self.underdetermined.is_some()
     }
 }

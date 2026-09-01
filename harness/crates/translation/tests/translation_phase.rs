@@ -365,3 +365,75 @@ fn the_full_session_repairs_a_build_failure_without_a_second_process() {
         .contains("lean build: FAIL"));
     assert!(tools.manifest().is_some());
 }
+
+/// A translator that cannot honestly formalize must be able to say so, and to
+/// say so precisely enough that semantic extraction can act on it.
+#[test]
+fn an_underdetermined_group_is_reported_rather_than_guessed() {
+    let work = Work::new("underdetermined");
+    let mut tools = make_tools(&work);
+
+    let outcome = tools.call(
+        "report_underdetermined",
+        &json!({
+            "explanation": "the claims name a result but never say how it is computed",
+            "underdeterminedClaims": [{
+                "unitId": "unit:add",
+                "claimId": "claim:1",
+                "missing": "the arithmetic performed on the two operands",
+            }],
+        }),
+    );
+    assert!(!outcome.is_error(), "{outcome:?}");
+    let value: Value = serde_json::from_str(&outcome.to_text()).unwrap();
+    assert_eq!(value["accepted"], json!(true));
+    assert_eq!(value["outcome"], json!("UNDERDETERMINED"));
+
+    // Terminal: the session ends, but with no translation and no build.
+    assert!(tools.finished());
+    assert!(tools.manifest().is_none());
+    assert_eq!(tools.build_count(), 0);
+    let report = tools.underdetermined().expect("recorded");
+    assert_eq!(report["outcome"], json!("UNDERDETERMINED"));
+    assert_eq!(report["group"]["name"], json!("arithmetic"));
+    assert_eq!(
+        report["underdeterminedClaims"][0]["missing"],
+        json!("the arithmetic performed on the two operands")
+    );
+}
+
+#[test]
+fn a_vague_underdetermined_report_is_refused() {
+    let work = Work::new("vague");
+    let codes = |input: &Value| {
+        let mut tools = make_tools(&work);
+        let outcome = tools.call("report_underdetermined", input);
+        let value: Value = serde_json::from_str(&outcome.to_text()).unwrap();
+        assert_eq!(value["accepted"], json!(false), "{value}");
+        assert!(!tools.finished());
+        value["diagnostics"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|item| item["code"].as_str().map(str::to_string))
+            .collect::<Vec<_>>()
+    };
+
+    // No claims named: indistinguishable from unwillingness.
+    let found = codes(&json!({"explanation": "not enough information", "underdeterminedClaims": []}));
+    assert!(found.contains(&"MISSING_UNDERDETERMINED_CLAIMS".to_string()), "{found:?}");
+
+    // A claim this group does not have.
+    let found = codes(&json!({
+        "explanation": "unclear",
+        "underdeterminedClaims": [{"unitId": "unit:add", "claimId": "claim:elsewhere", "missing": "x"}],
+    }));
+    assert!(found.contains(&"UNKNOWN_CLAIM_REF".to_string()), "{found:?}");
+
+    // A named claim with nothing said about what is missing.
+    let found = codes(&json!({
+        "explanation": "unclear",
+        "underdeterminedClaims": [{"unitId": "unit:add", "claimId": "claim:1", "missing": "  "}],
+    }));
+    assert!(found.contains(&"INVALID_TEXT".to_string()), "{found:?}");
+}

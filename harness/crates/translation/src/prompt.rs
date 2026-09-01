@@ -24,6 +24,10 @@ Rules:
 - When you call submit_translation, the source is validated and then compiled. The compiler
   output comes back to you in this same session. Read the diagnostics, fix the source, and
   resubmit here — there is no later repair pass.
+- If the semantic artifacts genuinely do not determine a formalization, call
+  report_underdetermined instead, naming each claim that is underdetermined and what is missing
+  from it. Do not invent a representation to get something to compile: a formalization that
+  compiles but does not follow from the claims is worse than an honest report.
 - The tools listed for you are the only capabilities that exist in this session."
     )
 }

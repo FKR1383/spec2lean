@@ -986,6 +986,30 @@ fn pipeline_run(flags: &Flags) -> Result<(), String> {
             manifest.status = "FAIL";
             continue;
         };
+        // The translator may have reported that the semantics do not determine
+        // a formalization. That ends the group without a translation to check.
+        if let Some(report) = tools.underdetermined() {
+            let claims: Vec<String> = report["underdeterminedClaims"]
+                .as_array()
+                .map(Vec::as_slice)
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|item| {
+                    Some(format!(
+                        "{}/{}",
+                        item.get("unitId")?.as_str()?,
+                        item.get("claimId")?.as_str()?
+                    ))
+                })
+                .collect();
+            manifest.phases.push(PhaseRecord::failed(
+                "translate",
+                &group,
+                format!("UNDERDETERMINED: {}", claims.join(", ")),
+            ));
+            manifest.status = "FAIL";
+            continue;
+        }
         manifest.phases.push(PhaseRecord::ok("translate", &group));
 
         let group_manifest = tools.manifest().expect("accepted").clone();
@@ -1263,6 +1287,10 @@ fn translate_replay(flags: &Flags) -> Result<(), String> {
     }
 
     write_translation_artifacts(&out, &tools, None)?;
+    if tools.underdetermined().is_some() {
+        println!("\nreported UNDERDETERMINED; see underdetermined.json");
+        return Ok(());
+    }
     if tools.finished() {
         println!("\ntranslation accepted after {} build(s)", tools.build_count());
         Ok(())
@@ -1296,6 +1324,10 @@ fn translate_run(flags: &Flags) -> Result<(), String> {
     let (outcome, transcript) = session.run(&mut tools);
 
     write_translation_artifacts(&out, &tools, Some(&transcript))?;
+    if tools.underdetermined().is_some() {
+        println!("reported UNDERDETERMINED; see underdetermined.json");
+        return Ok(());
+    }
     match outcome {
         Ok(()) => {
             println!(
@@ -1319,6 +1351,11 @@ fn write_translation_artifacts(
     write_json(&out.join("translation-scope.json"), &tools.scope().to_json())?;
     if let Some(manifest) = tools.manifest() {
         write_json(&out.join("translation-manifest.json"), manifest)?;
+    }
+    // An honest "these semantics do not determine a formalization" is a real
+    // result and is written as one, not folded into a generic failure.
+    if let Some(report) = tools.underdetermined() {
+        write_json(&out.join("underdetermined.json"), report)?;
     }
     if let Some(transcript) = transcript {
         let value = serde_json::to_value(transcript).map_err(|error| error.to_string())?;
