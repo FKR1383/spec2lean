@@ -26,6 +26,7 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::collections::HashMap;
 use std::sync::Mutex;
 
 use serde_json::{Value, json};
@@ -89,10 +90,20 @@ struct Thread {
     prompt: String,
 }
 
+/// The longest a single turn may run. Beyond this the deadline arithmetic in
+/// `wait_with_timeout` overflows and panics, which would strand a running child
+/// holding state the provider has already committed to.
+const MAX_TIMEOUT_SECONDS: u64 = 24 * 60 * 60;
+
 pub struct CodexProvider {
     config: CodexConfig,
     model: String,
-    thread: Mutex<Option<Thread>>,
+    /// One thread per session, not one for the process. The pipeline
+    /// interleaves sessions — a unit's evidence, then that unit's semantics,
+    /// then the next unit's evidence — so a single slot would be destroyed and
+    /// reopened on every alternation, which is both the cost this adapter
+    /// exists to avoid and a way to resume the wrong conversation.
+    threads: Mutex<HashMap<u64, Thread>>,
 }
 
 impl CodexProvider {
@@ -101,10 +112,14 @@ impl CodexProvider {
             Some(name) => format!("codex:{name}"),
             None => "codex:config-default".to_string(),
         };
+        let config = CodexConfig {
+            timeout_seconds: config.timeout_seconds.clamp(1, MAX_TIMEOUT_SECONDS),
+            ..config
+        };
         Self {
             config,
             model,
-            thread: Mutex::new(None),
+            threads: Mutex::new(HashMap::new()),
         }
     }
 
@@ -170,14 +185,20 @@ impl CodexProvider {
         prompt.push_str(request.system);
         prompt.push_str("\n\n");
         prompt.push_str(&Self::render_tools(request.tools));
-        prompt.push_str("# Task\n\n");
-        prompt.push_str(request.prompt);
-        prompt.push_str("\n\n# Transcript so far\n\n");
+        prompt.push_str("# Transcript so far\n\n");
 
-        if request.exchanges.is_empty() {
+        if request.exchanges.is_empty() && !request.prompt_pending {
             prompt.push_str("(nothing yet — this is the first turn)\n");
         }
         for (index, exchange) in request.exchanges.iter().enumerate() {
+            // Each task appears where it was given. A session runs many units,
+            // and putting the current task above every unit's work would read
+            // as though the earlier results answered the current question.
+            if let Some(task) = &exchange.prompt {
+                prompt.push_str("## Task\n\n");
+                prompt.push_str(task);
+                prompt.push_str("\n\n");
+            }
             prompt.push_str(&format!("## Turn {}\n\nYou replied:\n", index + 1));
             let reply = exchange.assistant["reply"].as_str().unwrap_or("");
             if reply.is_empty() {
@@ -198,6 +219,11 @@ impl CodexProvider {
             prompt.push('\n');
         }
 
+        if request.prompt_pending {
+            prompt.push_str("## Task\n\n");
+            prompt.push_str(request.prompt);
+            prompt.push_str("\n\n");
+        }
         prompt.push_str(
             "# Now\n\nDecide the next step and answer with the JSON reply. Call tools when you \
              need them; return an empty `tool_calls` only when you genuinely cannot continue, \
@@ -304,6 +330,7 @@ impl CodexProvider {
         resume: Option<&str>,
         prompt: String,
         turn_index: usize,
+        spent: &mut Usage,
     ) -> Result<(String, TurnResponse), HarnessError> {
         let dir = self.scratch()?;
         let schema_path = dir.join("schema.json");
@@ -320,7 +347,10 @@ impl CodexProvider {
         let body = std::fs::read_to_string(&out_path).unwrap_or_default();
         let _ = std::fs::remove_dir_all(&dir);
 
+        // A turn that produced no usable reply was still charged for. Recording
+        // it here means a retry reports what the attempt cost as well.
         if body.trim().is_empty() {
+            spent.accumulate(&usage_from_events(&events));
             let detail = crate::error::truncate(errors.trim(), 800);
             return Err(if ok {
                 HarnessError::Decode(format!("codex produced no final message: {detail}"))
@@ -329,15 +359,35 @@ impl CodexProvider {
             });
         }
 
-        let (text, tool_calls) = parse_reply(body.trim(), turn_index)?;
+        let (text, tool_calls) = match parse_reply(body.trim(), turn_index) {
+            Ok(parsed) => parsed,
+            Err(error) => {
+                spent.accumulate(&usage_from_events(&events));
+                return Err(error);
+            }
+        };
         let stop_reason = if tool_calls.is_empty() {
             StopReason::EndTurn
         } else {
             StopReason::ToolUse
         };
-        let thread = thread_from_events(&events).unwrap_or_else(|| {
-            resume.map(str::to_string).unwrap_or_default()
-        });
+        let announced = thread_from_events(&events);
+        // Resuming T and being told the turn ran in U means the reply was
+        // produced by a conversation that never received this request's
+        // history. Treat it as a failed resume rather than adopting U.
+        if let (Some(asked), Some(got)) = (resume, announced.as_deref())
+            && asked != got
+        {
+            spent.accumulate(&usage_from_events(&events));
+            return Err(HarnessError::Transport(format!(
+                "asked codex to resume thread {asked} but the turn ran in {got}"
+            )));
+        }
+        let thread = announced
+            .or_else(|| resume.map(str::to_string))
+            .ok_or_else(|| {
+                HarnessError::Decode("codex never announced the thread it ran in".into())
+            })?;
         Ok((
             thread,
             TurnResponse {
@@ -504,51 +554,64 @@ impl Provider for CodexProvider {
     }
 
     fn turn(&self, request: &Request<'_>) -> Result<TurnResponse, HarnessError> {
-        let mut thread = self
-            .thread
+        let mut threads = self
+            .threads
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
 
-        // Resume only while this is recognisably the same conversation: the
-        // same instructions, and a transcript that still extends what the
-        // thread was told. Length alone is not enough. A caller that starts a
-        // fresh session hands us an empty transcript, and a thread left at
-        // `sent == 0` by a single-turn phase would otherwise satisfy `0 >= 0`
-        // and be resumed for a task it has never been told about — the delta
-        // carries tool results, and a session with no exchanges yet has none.
-        let resume = thread
-            .as_ref()
+        let resume = threads
+            .get(&request.session)
             .filter(|open| resumable(open, request))
             .map(|open| (open.id.clone(), open.sent, open.prompt != request.prompt));
+
+        // What a failed first attempt cost. The turn was billed whether or not
+        // it produced a usable reply, so it is added to whatever the retry
+        // reports rather than vanishing from the transcript.
+        let mut spent = Usage::default();
 
         let attempt = match &resume {
             Some((id, sent, new_task)) => self.exec(
                 Some(id),
                 Self::render_delta(request, *sent, *new_task),
                 request.exchanges.len(),
+                &mut spent,
             ),
-            None => self.exec(None, Self::render_full(request), request.exchanges.len()),
+            None => self.exec(
+                None,
+                Self::render_full(request),
+                request.exchanges.len(),
+                &mut spent,
+            ),
         };
 
         // A thread that cannot be resumed is recoverable, because the harness
         // still holds the whole conversation: open a new one and replay it.
-        let (id, response) = match attempt {
+        let (id, mut response) = match attempt {
             Ok(turn) => turn,
             Err(error) => {
                 if resume.is_none() {
                     return Err(error);
                 }
-                *thread = None;
-                self.exec(None, Self::render_full(request), request.exchanges.len())?
+                threads.remove(&request.session);
+                self.exec(
+                    None,
+                    Self::render_full(request),
+                    request.exchanges.len(),
+                    &mut spent,
+                )?
             }
         };
+        response.usage.accumulate(&spent);
 
-        *thread = Some(Thread {
-            id,
-            sent: request.exchanges.len(),
-            system: request.system.to_string(),
-            prompt: request.prompt.to_string(),
-        });
+        threads.insert(
+            request.session,
+            Thread {
+                id,
+                sent: request.exchanges.len(),
+                system: request.system.to_string(),
+                prompt: request.prompt.to_string(),
+            },
+        );
         Ok(response)
     }
 }
@@ -636,6 +699,7 @@ mod tests {
     fn the_prompt_carries_the_tools_the_task_and_every_earlier_tool_result() {
         let tools = vec![ToolSpec::new("get_node", "Fetch one node.", json!({"type": "object"}))];
         let exchanges = vec![Exchange {
+            prompt: None,
             assistant: json!({"reply": "first look"}),
             tool_results: vec![ToolResultRecord {
                 call_id: "codex_0_0".into(),
@@ -647,6 +711,8 @@ mod tests {
             usage: Usage::default(),
         }];
         let request = Request {
+            prompt_pending: true,
+            session: 1,
             system: "SYSTEM RULES",
             prompt: "TASK BODY",
             exchanges: &exchanges,
@@ -666,14 +732,23 @@ mod tests {
     }
 
     #[test]
-    fn the_first_turn_says_the_transcript_is_empty_rather_than_leaving_a_gap() {
-        let request = Request {
+    fn the_first_turn_states_its_task_and_never_leaves_an_empty_gap() {
+        let opening = Request {
+            prompt_pending: true,
+            session: 1,
             system: "s",
-            prompt: "p",
+            prompt: "THE TASK",
             exchanges: &[],
             tools: &[],
         };
-        assert!(CodexProvider::render_full(&request).contains("this is the first turn"));
+        let rendered = CodexProvider::render_full(&opening);
+        assert!(rendered.contains("THE TASK"));
+        // The task is content, so the "nothing yet" note would be a lie.
+        assert!(!rendered.contains("this is the first turn"));
+
+        // Only a conversation with neither history nor a pending task is empty.
+        let nothing = Request { prompt_pending: false, ..opening };
+        assert!(CodexProvider::render_full(&nothing).contains("this is the first turn"));
     }
 
     #[test]
@@ -682,7 +757,10 @@ mod tests {
             executable: "codex-does-not-exist".into(),
             ..CodexConfig::default()
         });
-        let request = Request { system: "s", prompt: "p", exchanges: &[], tools: &[] };
+        let request = Request {
+            prompt_pending: true,
+            session: 1,
+            system: "s", prompt: "p", exchanges: &[], tools: &[] };
         match provider.turn(&request) {
             Err(HarnessError::Config(detail)) => {
                 assert!(detail.contains("codex-does-not-exist"));
@@ -705,6 +783,7 @@ mod tests {
     fn a_delta_carries_only_the_tool_results_the_thread_has_not_seen() {
         let exchanges = vec![
             Exchange {
+            prompt: None,
                 assistant: json!({"reply": "first reply"}),
                 tool_results: vec![ToolResultRecord {
                     call_id: "c0".into(),
@@ -716,6 +795,7 @@ mod tests {
                 usage: Usage::default(),
             },
             Exchange {
+            prompt: None,
                 assistant: json!({"reply": "second reply"}),
                 tool_results: vec![ToolResultRecord {
                     call_id: "c1".into(),
@@ -727,7 +807,10 @@ mod tests {
                 usage: Usage::default(),
             },
         ];
-        let request = Request { system: "s", prompt: "p", exchanges: &exchanges, tools: &[] };
+        let request = Request {
+            prompt_pending: true,
+            session: 1,
+            system: "s", prompt: "p", exchanges: &exchanges, tools: &[] };
         let delta = CodexProvider::render_delta(&request, 1, false);
 
         assert!(delta.contains("NEW RESULT"));
@@ -741,11 +824,15 @@ mod tests {
     #[test]
     fn a_delta_still_asks_for_a_decision_when_no_tools_ran() {
         let exchanges = vec![Exchange {
+            prompt: None,
             assistant: json!({"reply": "thinking"}),
             tool_results: Vec::new(),
             usage: Usage::default(),
         }];
-        let request = Request { system: "s", prompt: "p", exchanges: &exchanges, tools: &[] };
+        let request = Request {
+            prompt_pending: true,
+            session: 1,
+            system: "s", prompt: "p", exchanges: &exchanges, tools: &[] };
         let delta = CodexProvider::render_delta(&request, 0, false);
         assert!(delta.contains("No tools ran"));
         assert!(delta.contains("JSON reply"));
@@ -754,6 +841,7 @@ mod tests {
     #[test]
     fn the_full_render_is_what_reopens_a_thread_and_keeps_the_whole_history() {
         let exchanges = vec![Exchange {
+            prompt: None,
             assistant: json!({"reply": "first reply"}),
             tool_results: vec![ToolResultRecord {
                 call_id: "c0".into(),
@@ -764,7 +852,10 @@ mod tests {
             }],
             usage: Usage::default(),
         }];
-        let request = Request { system: "s", prompt: "p", exchanges: &exchanges, tools: &[] };
+        let request = Request {
+            prompt_pending: true,
+            session: 1,
+            system: "s", prompt: "p", exchanges: &exchanges, tools: &[] };
         let full = CodexProvider::render_full(&request);
         assert!(full.contains("OLD RESULT"));
         assert!(full.contains("first reply"));
@@ -788,20 +879,27 @@ mod tests {
     /// model would quietly go on answering the previous phase's question.
     #[test]
     fn a_new_phase_is_never_resumed_into_the_previous_phases_thread() {
-        let empty = Request { system: "PHASE A", prompt: "task A", exchanges: &[], tools: &[] };
+        let empty = Request {
+            prompt_pending: true,
+            session: 1,
+            system: "PHASE A", prompt: "task A", exchanges: &[], tools: &[] };
         let one_turn_phase = Thread { id: "thread-a".into(), sent: 0, system: "PHASE A".into(), prompt: "task A".into() };
 
         // Same phase, but nothing new to say: still not resumable.
         assert!(!resumable(&one_turn_phase, &empty));
 
         // A different phase, whose system prompt only a full render carries.
-        let next = Request { system: "PHASE B", prompt: "task B", exchanges: &[], tools: &[] };
+        let next = Request {
+            prompt_pending: true,
+            session: 1,
+            system: "PHASE B", prompt: "task B", exchanges: &[], tools: &[] };
         assert!(!resumable(&one_turn_phase, &next));
     }
 
     #[test]
     fn a_thread_resumes_only_while_the_transcript_grows_under_the_same_instructions() {
         let exchange = Exchange {
+            prompt: None,
             assistant: json!({"reply": "r"}),
             tool_results: Vec::new(),
             usage: Usage::default(),
@@ -809,10 +907,15 @@ mod tests {
         let history = vec![exchange.clone(), exchange.clone()];
         let open = Thread { id: "t".into(), sent: 1, system: "PHASE A".into(), prompt: "p".into() };
 
-        let grown = Request { system: "PHASE A", prompt: "p", exchanges: &history, tools: &[] };
+        let grown = Request {
+            prompt_pending: true,
+            session: 1,
+            system: "PHASE A", prompt: "p", exchanges: &history, tools: &[] };
         assert!(resumable(&open, &grown), "two exchanges extend a thread told about one");
 
         let rewound = Request {
+            prompt_pending: true,
+            session: 1,
             system: "PHASE A",
             prompt: "p",
             exchanges: &history[..1],
@@ -820,7 +923,28 @@ mod tests {
         };
         assert!(!resumable(&open, &rewound), "a rewound transcript is a new conversation");
 
-        let relabelled = Request { system: "PHASE B", prompt: "p", exchanges: &history, tools: &[] };
+        let relabelled = Request {
+            prompt_pending: true,
+            session: 1,
+            system: "PHASE B", prompt: "p", exchanges: &history, tools: &[] };
         assert!(!resumable(&open, &relabelled), "new instructions need a full render");
+    }
+
+    /// A timeout large enough to overflow the deadline arithmetic would panic
+    /// after the child was already started, stranding a process that may have
+    /// advanced the thread the provider still believes it owns.
+    #[test]
+    fn an_unrepresentable_timeout_is_clamped_rather_than_left_to_overflow() {
+        let provider = CodexProvider::new(CodexConfig {
+            timeout_seconds: u64::MAX,
+            ..CodexConfig::default()
+        });
+        assert_eq!(provider.config.timeout_seconds, MAX_TIMEOUT_SECONDS);
+        std::time::Instant::now()
+            .checked_add(std::time::Duration::from_secs(provider.config.timeout_seconds))
+            .expect("the clamped deadline must be representable");
+
+        let zero = CodexProvider::new(CodexConfig { timeout_seconds: 0, ..CodexConfig::default() });
+        assert_eq!(zero.config.timeout_seconds, 1, "a zero timeout would kill every turn");
     }
 }

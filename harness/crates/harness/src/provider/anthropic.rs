@@ -119,20 +119,25 @@ impl AnthropicProvider {
     }
 
     pub(crate) fn body(&self, request: &Request<'_>) -> Value {
-        let mut messages = vec![json!({
-            "role": "user",
-            "content": [{
-                "type": "text",
-                "text": request.prompt,
-                "cache_control": Self::cache_control(),
-            }],
-        })];
+        let mut messages: Vec<Value> = Vec::new();
+        let mut opened = false;
 
         let count = request.exchanges.len();
         // The rolling breakpoint trails by one exchange so it never lands on
         // content that is still being appended to this turn.
         let rolling = count.checked_sub(2);
         for (index, exchange) in request.exchanges.iter().enumerate() {
+            // A task is stated where it was given. One session runs many units,
+            // so putting the current task first and every unit's work after it
+            // would say that the earlier results answered the later question.
+            if let Some(task) = &exchange.prompt {
+                let mut content = json!({"type": "text", "text": task});
+                if !opened {
+                    content["cache_control"] = Self::cache_control();
+                    opened = true;
+                }
+                messages.push(json!({"role": "user", "content": [content]}));
+            }
             messages.push(json!({"role": "assistant", "content": exchange.assistant}));
             let mut results: Vec<Value> = exchange
                 .tool_results
@@ -151,6 +156,16 @@ impl AnthropicProvider {
                 last["cache_control"] = Self::cache_control();
             }
             messages.push(json!({"role": "user", "content": results}));
+        }
+
+        // A stage whose first exchange does not exist yet still has to state
+        // its task, and it belongs last: it is the newest thing said.
+        if request.prompt_pending {
+            let mut content = json!({"type": "text", "text": request.prompt});
+            if !opened {
+                content["cache_control"] = Self::cache_control();
+            }
+            messages.push(json!({"role": "user", "content": [content]}));
         }
 
         let tools: Vec<Value> = request
@@ -313,7 +328,17 @@ mod tests {
     }
 
     fn exchange() -> Exchange {
+        exchange_for(None)
+    }
+
+    /// The first exchange of a stage carries the task it was given under.
+    fn opening_exchange() -> Exchange {
+        exchange_for(Some("PROMPT".to_string()))
+    }
+
+    fn exchange_for(prompt: Option<String>) -> Exchange {
         Exchange {
+            prompt,
             assistant: json!([
                 {"type": "thinking", "thinking": "", "signature": "sig"},
                 {"type": "tool_use", "id": "toolu_1", "name": "spec_show", "input": {"nodeId": "node:1"}}
@@ -339,8 +364,10 @@ mod tests {
     #[test]
     fn caches_the_stable_prefix() {
         let tools = [ToolSpec::new("spec_show", "show", json!({"type": "object"}))];
-        let exchanges = [exchange()];
+        let exchanges = [opening_exchange()];
         let body = provider().body(&Request {
+            prompt_pending: false,
+            session: 1,
             system: "SYSTEM",
             prompt: "PROMPT",
             exchanges: &exchanges,
@@ -365,9 +392,12 @@ mod tests {
 
     #[test]
     fn the_rolling_breakpoint_trails_by_one_and_stays_within_the_limit() {
-        let exchanges: Vec<Exchange> = (0..6).map(|_| exchange()).collect();
+        let mut exchanges: Vec<Exchange> = (0..6).map(|_| exchange()).collect();
+        exchanges[0].prompt = Some("P".to_string());
         for count in 0..=exchanges.len() {
             let body = provider().body(&Request {
+                prompt_pending: count == 0,
+                session: 1,
                 system: "S",
                 prompt: "P",
                 exchanges: &exchanges[..count],
@@ -383,6 +413,8 @@ mod tests {
         // With six exchanges: system, prompt, exchange 0, and exchange 4 —
         // never the exchange being appended to this turn.
         let body = provider().body(&Request {
+            prompt_pending: false,
+            session: 1,
             system: "S",
             prompt: "P",
             exchanges: &exchanges,
@@ -399,8 +431,10 @@ mod tests {
 
     #[test]
     fn replays_assistant_content_verbatim() {
-        let exchanges = [exchange()];
+        let exchanges = [opening_exchange()];
         let body = provider().body(&Request {
+            prompt_pending: false,
+            session: 1,
             system: "SYSTEM",
             prompt: "PROMPT",
             exchanges: &exchanges,
@@ -420,6 +454,8 @@ mod tests {
     #[test]
     fn sends_adaptive_thinking_and_effort_but_never_a_token_budget() {
         let body = provider().body(&Request {
+            prompt_pending: true,
+            session: 1,
             system: "S",
             prompt: "P",
             exchanges: &[],
@@ -486,5 +522,57 @@ mod tests {
             }
             other => panic!("expected a refusal, got {other:?}"),
         }
+    }
+
+    /// One session runs many units, so the conversation contains many tasks.
+    /// Rendering only the current task, ahead of every unit's work, tells the
+    /// model that the earlier results were produced for the current question.
+    #[test]
+    fn each_stages_task_is_rendered_where_it_was_given() {
+        let exchanges = [
+            exchange_for(Some("TASK A".into())),
+            exchange_for(None),
+            exchange_for(Some("TASK B".into())),
+        ];
+        let body = provider().body(&Request {
+            prompt_pending: false,
+            session: 1,
+            system: "S",
+            prompt: "TASK B",
+            exchanges: &exchanges,
+            tools: &[],
+        });
+        let messages = body["messages"].as_array().unwrap();
+        let text_of = |m: &Value| m["content"][0]["text"].as_str().unwrap_or("").to_string();
+        let users: Vec<String> = messages
+            .iter()
+            .filter(|m| m["role"] == "user")
+            .map(text_of)
+            .filter(|t| !t.is_empty())
+            .collect();
+        assert_eq!(users, vec!["TASK A".to_string(), "TASK B".to_string()]);
+
+        // And TASK B is stated after unit A's work, not before it.
+        let a = messages.iter().position(|m| text_of(m) == "TASK A").unwrap();
+        let b = messages.iter().position(|m| text_of(m) == "TASK B").unwrap();
+        assert!(a < b, "task A was given first and must be rendered first");
+        assert_eq!(b, 5, "task B belongs after A's two exchanges, not at the top");
+    }
+
+    #[test]
+    fn a_stage_that_has_produced_nothing_yet_states_its_task_last() {
+        let exchanges = [exchange_for(Some("TASK A".into()))];
+        let body = provider().body(&Request {
+            prompt_pending: true,
+            session: 1,
+            system: "S",
+            prompt: "TASK B",
+            exchanges: &exchanges,
+            tools: &[],
+        });
+        let messages = body["messages"].as_array().unwrap();
+        let last = messages.last().unwrap();
+        assert_eq!(last["role"], json!("user"));
+        assert_eq!(last["content"][0]["text"], json!("TASK B"));
     }
 }

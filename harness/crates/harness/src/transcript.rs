@@ -40,6 +40,15 @@ pub struct ToolResultRecord {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Exchange {
+    /// The task stated immediately before this exchange, present only on the
+    /// first exchange of a stage.
+    ///
+    /// One session runs many units, so a conversation contains several tasks.
+    /// Without recording where each one was given, a provider can only render
+    /// the *current* task followed by every earlier unit's work, which reads as
+    /// though the earlier results were produced for the current task.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
     pub assistant: Value,
     pub tool_results: Vec<ToolResultRecord>,
     pub usage: Usage,

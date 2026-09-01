@@ -308,6 +308,8 @@ mod auth_tests {
         });
         let turn = provider
             .turn(&Request {
+            prompt_pending: true,
+            session: 1,
                 system: "s",
                 prompt: "p",
                 exchanges: &[],

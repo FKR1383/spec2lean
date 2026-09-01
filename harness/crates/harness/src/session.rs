@@ -6,6 +6,15 @@ use crate::provider::{Provider, Request, StopReason};
 use crate::tool::ToolSet;
 use crate::transcript::{Exchange, SessionOutcome, ToolResultRecord, Transcript, Usage};
 
+/// Sessions are distinguished by a counter rather than by address: a session
+/// can move in memory, and a provider's per-conversation state must not follow
+/// it to a different conversation that happens to reuse the address.
+fn next_session_id() -> u64 {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    NEXT.fetch_add(1, Ordering::Relaxed)
+}
+
 /// One bounded agent session.
 ///
 /// This is the whole replacement for `opencode run --pure` plus its synthesized
@@ -27,6 +36,10 @@ pub struct Session<'a> {
     /// specification and extracting from the evidence bundle is a soundness
     /// property, not a cost.
     exchanges: Vec<Exchange>,
+    /// The current stage's task, until the exchange that carries it exists.
+    pending_prompt: Option<String>,
+    /// Distinguishes this conversation from the others running in this process.
+    id: u64,
 }
 
 impl<'a> Session<'a> {
@@ -37,6 +50,8 @@ impl<'a> Session<'a> {
             prompt: String::new(),
             max_steps: 100,
             exchanges: Vec::new(),
+            pending_prompt: None,
+            id: next_session_id(),
         }
     }
 
@@ -55,6 +70,9 @@ impl<'a> Session<'a> {
         tools: &mut dyn ToolSet,
     ) -> (Result<(), HarnessError>, Transcript) {
         self.prompt = prompt.into();
+        // The task is announced to the model once, attached to the first
+        // exchange this stage produces.
+        self.pending_prompt = Some(self.prompt.clone());
         let provider = self.provider;
         let started_at = utc_now_iso();
         let specs = tools.specs();
@@ -76,8 +94,10 @@ impl<'a> Session<'a> {
                 let request = Request {
                     system: &self.system,
                     prompt: &self.prompt,
+                    prompt_pending: self.pending_prompt.is_some(),
                     exchanges: &self.exchanges,
                     tools: &specs,
+                    session: self.id,
                 };
                 match provider.turn(&request) {
                     Ok(response) => response,
@@ -90,6 +110,7 @@ impl<'a> Session<'a> {
                 // The model ended its turn. Record it before deciding: a turn
                 // that explains why it stopped is exactly the one worth reading.
                 self.exchanges.push(Exchange {
+                    prompt: self.pending_prompt.take(),
                     assistant: response.assistant,
                     tool_results: Vec::new(),
                     usage: response.usage,
@@ -137,6 +158,7 @@ impl<'a> Session<'a> {
             }
 
             self.exchanges.push(Exchange {
+                prompt: self.pending_prompt.take(),
                 assistant: response.assistant,
                 tool_results: records,
                 usage: response.usage,
@@ -415,5 +437,20 @@ mod tests {
         // But the conversation kept growing underneath them, which is what the
         // provider sees and what makes resuming possible.
         assert_eq!(session.exchanges.len(), 4);
+    }
+
+    /// The pipeline interleaves sessions — a unit's evidence, that unit's
+    /// semantics, then the next unit's evidence — through one shared provider.
+    /// A provider holding per-conversation state keys it by this identity, so
+    /// it must never be reused between two live sessions.
+    #[test]
+    fn every_session_is_distinguishable_from_the_others_in_this_process() {
+        let provider = RecordedProvider::new("test", vec![turn("a")]);
+        let first = Session::new(&provider, "system");
+        let second = Session::new(&provider, "system");
+        assert_ne!(
+            first.id, second.id,
+            "two sessions sharing an id would share a provider's thread"
+        );
     }
 }

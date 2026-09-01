@@ -53,11 +53,13 @@ impl OpenAiProvider {
     }
 
     pub(crate) fn body(&self, request: &Request<'_>) -> Value {
-        let mut messages = vec![
-            json!({"role": "system", "content": request.system}),
-            json!({"role": "user", "content": request.prompt}),
-        ];
+        let mut messages = vec![json!({"role": "system", "content": request.system})];
         for exchange in request.exchanges {
+            // Each task is stated where it was given, so a session that runs
+            // several units does not attribute one unit's results to another.
+            if let Some(task) = &exchange.prompt {
+                messages.push(json!({"role": "user", "content": task}));
+            }
             messages.push(exchange.assistant.clone());
             for record in &exchange.tool_results {
                 messages.push(json!({
@@ -66,6 +68,9 @@ impl OpenAiProvider {
                     "content": record.output,
                 }));
             }
+        }
+        if request.prompt_pending {
+            messages.push(json!({"role": "user", "content": request.prompt}));
         }
         let tools: Vec<Value> = request
             .tools
@@ -242,6 +247,8 @@ mod tests {
     #[test]
     fn tool_results_become_their_own_messages() {
         let exchanges = [Exchange {
+            // The stage's first exchange carries the task it was given under.
+            prompt: Some("P".to_string()),
             assistant: json!({
                 "role": "assistant",
                 "tool_calls": [{"id": "call_1", "type": "function",
@@ -257,6 +264,8 @@ mod tests {
             usage: Usage::default(),
         }];
         let body = provider().body(&Request {
+            prompt_pending: false,
+            session: 1,
             system: "S",
             prompt: "P",
             exchanges: &exchanges,
@@ -264,6 +273,7 @@ mod tests {
         });
         assert_eq!(body["messages"][0]["role"], json!("system"));
         assert_eq!(body["messages"][1]["role"], json!("user"));
+        assert_eq!(body["messages"][1]["content"], json!("P"));
         assert_eq!(body["messages"][2], exchanges[0].assistant);
         assert_eq!(body["messages"][3]["role"], json!("tool"));
         assert_eq!(body["messages"][3]["tool_call_id"], json!("call_1"));

@@ -74,9 +74,18 @@ pub struct TurnResponse {
 /// Everything a provider needs to render one request.
 pub struct Request<'a> {
     pub system: &'a str,
+    /// The task for the stage now running.
     pub prompt: &'a str,
+    /// Whether `prompt` has yet to appear in the conversation. It is false once
+    /// the stage's first exchange carries it, so a provider renders each task
+    /// exactly once, in the position it was actually given.
+    pub prompt_pending: bool,
     pub exchanges: &'a [Exchange],
     pub tools: &'a [ToolSpec],
+    /// Which session this request belongs to. Providers that hold per-conversation
+    /// state key it by this: one process runs several sessions, and they
+    /// interleave, so a single slot would be thrashed between them.
+    pub session: u64,
 }
 
 /// The whole LLM dependency, in five lines.
