@@ -67,3 +67,8 @@ documents/sources/nvidia/ptx/9.3/raw/
 
 # Rust harness
 harness/target/
+
+# Fetched specification sources and generated indexes
+documents/sources/*/*/*/raw/
+documents/sources/pcisig/pcie/raw/
+indexes/*.sqlite

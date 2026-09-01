@@ -17,7 +17,8 @@ capability to disable — a tool call is a function call in this process.
 | `spec2lean-planning` | Phase 2: scope resolution, plan validation, dependency-graph derivation. |
 | `spec2lean-evidence` | Phase 3: the nine retrieval tools, the exposure ledger, the deterministic validator, bundle reconstruction. |
 | `spec2lean-semantics` | Phase 4: evidence-bounded extraction, the claim taxonomy, deterministic artifact validation. |
-| `spec2lean-lean` | Invokes the Lean toolchain and parses its diagnostics. No phase knowledge. |
+| `spec2lean-lean` | Invokes the Lean toolchain, parses diagnostics, and audits axiom dependencies. No phase knowledge. |
+| `spec2lean-shared-core` | The frozen shared core: one agreed representation for concepts several units depend on. |
 | `spec2lean-translation` | Phase 5: group translation to Lean 4, with the compiler in the loop. |
 | `s2l` | Command line entry point. |
 
@@ -25,7 +26,7 @@ capability to disable — a tool call is a function call in this process.
 
 ```bash
 cargo build
-cargo test          # 102 tests, no network and no API key required
+cargo test          # 125 tests, no network and no API key required
 cargo clippy --all-targets
 ```
 
@@ -51,9 +52,12 @@ s2l semantics run --plan plans/plan.json \
                   --bundle runs/add/evidence-bundle.json \
                   --unit unit:add --out runs/add
 
+# Shared core: one representation for the concepts several units depend on.
+s2l core run --plan plans/plan.json --semantics runs --out runs/core
+
 # Phase 5: translate a group of semantic artifacts into Lean 4.
 s2l translate run --plan plans/plan.json --semantics runs \
-                  --group add --out runs/group-add
+                  --group add --core runs/core --out runs/group-add
 ```
 
 Artifacts land in `--out`: `evidence-scope.json`, `exposure-trace.json`,
@@ -67,6 +71,7 @@ Offline, with no provider at all:
 s2l plan      replay --database ... --language ... --version ... --calls calls.json
 s2l evidence  replay --database ... --plan ... --unit ... --calls calls.json
 s2l semantics replay --plan ... --bundle ... --unit ... --calls calls.json
+s2l core      replay --plan ... --semantics ... --calls calls.json --out ...
 s2l translate replay --plan ... --semantics ... --group ... --calls calls.json
 s2l lean check --file Add.lean
 ```
@@ -128,6 +133,22 @@ and checked against the index. Every node ID it cites must exist, and a
 translation group must be justified by structure its members actually sit under,
 not a section that merely sounds related.
 
+**Compiling is not the soundness check; the kernel is.** A Lean file full of
+`sorry` compiles perfectly and asserts nothing, and a textual scan for `sorry`
+or `axiom` can always be evaded — a raw string, an interpolated expression. So
+after a successful build the harness runs `#print axioms` over every mapped
+declaration and rejects anything depending on `sorryAx` or on an axiom outside
+Lean's standard classical foundation (`propext`, `Classical.choice`,
+`Quot.sound`). It sees through imports, so a hole in the shared core fails every
+group that uses it. The textual scan remains as a fast, legible first pass.
+
+**One representation for shared concepts.** When several units depend on the
+same concept, each group formalizing it independently produces Lean that agrees
+only by accident. The core gives it one representation, compiled and audited
+once, then frozen; groups import it and must bind to the declarations it
+registered. A group with shared concepts and no core is refused rather than
+translated against a representation nothing agreed on.
+
 **Phase 1 stays in Python for now.** It emits a SQLite database, which is a file
 artifact rather than a live protocol, so reading it from Rust introduces no
 process boundary of the kind this rewrite exists to remove.
@@ -162,15 +183,20 @@ for every unit kind, as before.
 ## Status
 
 Ported: Phase 2 (planning), Phase 3 (evidence retrieval), Phase 4 (semantic
-extraction), Phase 5 (group translation, including the build loop that absorbs
-Phases 6 and 7 for the build-failure case).
+extraction), the shared core, and Phase 5 (group translation, including the
+build loop that absorbs Phases 6 and 7 for the build-failure case).
+
+Exercised end to end on a real specification: the NVM Express PCIe Transport
+Specification 1.0d, indexed from the published PDF, planned, retrieved,
+extracted, cored and translated into Lean that compiles and passes the axiom
+audit — with every declaration traceable back through its claim to the exact
+page of the source.
+
+Ported: the frozen shared core, and a kernel-level axiom audit that has no
+counterpart in the Python tree.
 
 Not yet ported:
 
-- **The frozen shared core.** A group with shared prerequisites is refused with
-  an explicit error rather than translated against an unagreed representation.
-  This is now the binding gap: a realistic plan almost always has shared
-  concepts, so Phase 5 cannot yet consume most of what Phase 2 produces.
 - **Phase 6's logical checking** (`checking/logical.py`, ~900 lines): reverse
   traceability and group-wide coverage beyond what Phase 5 validates per group.
 - **Phase 7's semantic routing.** The build-failure path is now an inner loop;
