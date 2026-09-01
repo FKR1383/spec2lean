@@ -27,7 +27,7 @@ capability to disable — a tool call is a function call in this process.
 
 ```bash
 cargo build
-cargo test          # 165 tests, no network and no API key required
+cargo test          # 169 tests, no network and no API key required
 cargo clippy --all-targets
 ```
 
