@@ -106,15 +106,31 @@ pub fn derive_processing_order(
         .collect();
 
     let components = strongly_connected_components(requested_unit_ids, &edges);
+    // A unit that depends on itself is a cycle of one. Tarjan reports it as a
+    // singleton component like any other, so it has to be recognised by the
+    // self-edge. Plan validation rejects self-edges upstream, but a graph
+    // routine that silently drops such a unit from every output — no layer, no
+    // cycle, no blocked list — is wrong on its own terms.
+    let self_looping: BTreeSet<&str> = edges
+        .iter()
+        .filter(|(source, target)| source == target)
+        .map(|(source, _)| source.as_str())
+        .collect();
+    let is_cycle = |component: &Vec<String>| {
+        component.len() > 1
+            || component
+                .first()
+                .is_some_and(|unit_id| self_looping.contains(unit_id.as_str()))
+    };
     let cyclic: BTreeSet<String> = components
         .iter()
-        .filter(|component| component.len() > 1)
+        .filter(|component| is_cycle(component))
         .flatten()
         .cloned()
         .collect();
     let cycles: Vec<Value> = components
         .iter()
-        .filter(|component| component.len() > 1)
+        .filter(|component| is_cycle(component))
         .map(|component| json!({"unitIds": component}))
         .collect();
 
@@ -230,6 +246,20 @@ mod tests {
         // The healthy part of the plan still gets an order.
         assert_eq!(layers.len(), 1);
         assert_eq!(layers[0]["unitIds"], json!(["unit:d"]));
+    }
+
+    #[test]
+    fn a_unit_that_depends_on_itself_is_a_cycle_of_one() {
+        let units = vec!["unit:a".to_string(), "unit:b".to_string()];
+        let edges = [edge("unit:a", "unit:a")];
+        let (layers, cycles, blocked) = derive_processing_order(&units, &edges);
+        // It must appear somewhere: reporting no layer, no cycle and no blocked
+        // unit would lose the unit entirely.
+        assert_eq!(cycles.len(), 1);
+        assert_eq!(cycles[0]["unitIds"], json!(["unit:a"]));
+        assert!(blocked.is_empty());
+        // The healthy unit still gets ordered.
+        assert_eq!(layers[0]["unitIds"], json!(["unit:b"]));
     }
 
     #[test]

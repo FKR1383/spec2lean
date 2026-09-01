@@ -307,3 +307,14 @@ pub fn run_build(
         diagnostics,
     }
 }
+
+
+/// The first error line in a compilation's output, for a one-line explanation.
+pub(crate) fn first_error(stdout: &[u8], stderr: &[u8]) -> String {
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(stdout),
+        String::from_utf8_lossy(stderr)
+    );
+    crate::axioms::error_line(&text)
+}

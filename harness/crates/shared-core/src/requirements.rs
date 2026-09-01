@@ -272,12 +272,22 @@ pub fn collect_shared_requirements(
             if field("phase") != Some("SEMANTIC_EXTRACTOR") || field("outcome") != Some("SUCCESS") {
                 return Err(missing(dependency_id, unit_id, "the required Phase-4 artifact is not successful"));
             }
-            if artifact.get("planRunId") != plan.get("planRunId") {
+            // Compare present values, never two absences: `None == None` would
+            // let a plan and an artifact that both omit their identity agree
+            // about belonging to the same specification.
+            let identical = |key: &str| -> bool {
+                match (
+                    plan.get(key).and_then(Value::as_str),
+                    artifact.get(key).and_then(Value::as_str),
+                ) {
+                    (Some(left), Some(right)) => left == right,
+                    _ => false,
+                }
+            };
+            if !identical("planRunId") {
                 return Err(missing(dependency_id, unit_id, "the Phase-4 artifact belongs to another plan"));
             }
-            if artifact.get("language") != plan.get("language")
-                || artifact.get("version") != plan.get("version")
-            {
+            if !identical("language") || !identical("version") {
                 return Err(missing(dependency_id, unit_id, "the Phase-4 artifact belongs to another specification"));
             }
             if artifact

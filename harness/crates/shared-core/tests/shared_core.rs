@@ -403,3 +403,71 @@ fn a_group_must_import_the_core_and_bind_only_registered_declarations() {
     }));
     assert!(found.contains(&"MISSING_SHARED_USE".to_string()), "{found:?}");
 }
+
+/// External review: claim authorisation was one global union across every
+/// required concept, so a single declaration citing concept B's claims could
+/// stand in as the representation of concept A. This is that exact trigger.
+#[test]
+fn a_concept_cannot_be_represented_by_another_concepts_claims() {
+    let work = Work::new("crosswired");
+    let requirements = collect_shared_requirements(&plan(), &semantics(), None).expect("ok");
+    let mut tools = SharedCoreTools::new(
+        requirements,
+        "synthetic",
+        "1.0",
+        "d".repeat(64),
+        json!({"provider": "test", "model": "test"}),
+        work.0.join("core"),
+        "lean",
+    );
+    // One declaration, registered for the concept, citing a claim that
+    // describes something else entirely.
+    let outcome = tools.call(
+        "submit_core",
+        &json!({
+            "leanSource": CORE_SOURCE,
+            "concepts": [{
+                "dependencyId": SHARED,
+                "leanDeclarations": ["Spec2LeanShared.Predicate.Predicate"],
+            }],
+            "declarations": [
+                {"declaration": "Spec2LeanShared.Predicate.Predicate", "role": "PRIMARY_TYPE",
+                 "claimRefs": [{"unitId": "unit:add", "claimId": "claim:op"}]},
+                {"declaration": "Spec2LeanShared.Predicate.executes", "role": "SEMANTIC_HELPER",
+                 "claimRefs": [{"unitId": "unit:add", "claimId": "claim:op"}]},
+            ],
+        }),
+    );
+    let value: Value = serde_json::from_str(&outcome.to_text()).expect("json");
+    assert_eq!(value["accepted"], json!(false), "{value}");
+    let codes: Vec<&str> = value["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|item| item["code"].as_str())
+        .collect();
+    // `claim:op` is not one of the claims that describe the predicate concept.
+    assert!(
+        codes.contains(&"UNKNOWN_CLAIM_REF") || codes.contains(&"UNGROUNDED_SHARED_CONCEPT"),
+        "{codes:?}"
+    );
+    assert!(!tools.finished());
+}
+
+/// External review: `None == None` let a plan and an artifact that both omit
+/// their identity agree about belonging to the same specification.
+#[test]
+fn artifacts_and_plans_missing_their_identity_do_not_match_by_default() {
+    let mut bare_plan = plan();
+    for key in ["planRunId", "language", "version"] {
+        bare_plan.as_object_mut().unwrap().remove(key);
+    }
+    let mut bare_semantics = semantics();
+    for artifact in bare_semantics.values_mut() {
+        for key in ["planRunId", "language", "version"] {
+            artifact.as_object_mut().unwrap().remove(key);
+        }
+    }
+    let error = collect_shared_requirements(&bare_plan, &bare_semantics, None).unwrap_err();
+    assert!(error.to_string().contains("belongs to another"), "{error}");
+}

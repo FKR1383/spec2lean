@@ -103,10 +103,15 @@ fn verify_evidence(db: &SpecDb, record: &Value) -> Result<(), String> {
         );
     }
 
-    // The document identity the record claims must still be the index's.
-    if let Some(recorded) = record.get("documentSha256").and_then(Value::as_str)
-        && recorded != rows[0].document_sha256
-    {
+    // The document identity the record claims must be present and must still be
+    // the index's. Treating an absent hash as "nothing to check" would let a
+    // record opt out of the one comparison that pins it to a document.
+    let recorded = record
+        .get("documentSha256")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .ok_or("the record does not say which document it came from")?;
+    if recorded != rows[0].document_sha256 {
         return Err(format!(
             "the document has changed since this evidence was retrieved: recorded {recorded}, index has {}",
             rows[0].document_sha256
@@ -130,6 +135,14 @@ fn verify_evidence(db: &SpecDb, record: &Value) -> Result<(), String> {
             .collect();
         if spans.len() != span_ids.len() {
             return Err("a named source span is no longer in the index".into());
+        }
+        // A span that exists but belongs to a different node would let a record
+        // quote one passage while citing another as its source.
+        if let Some(stray) = spans.iter().find(|row| !order.contains_key(&row.node_id)) {
+            return Err(format!(
+                "span {} belongs to {}, which this record does not name",
+                stray.span_id, stray.node_id
+            ));
         }
         spans.sort_by_key(|row| {
             (
@@ -209,6 +222,9 @@ pub fn traceability(
         })
         .collect();
 
+    // Which declarations the manifests account for, so the source can be
+    // checked against them and not only the other way round.
+    let mut mapped: BTreeSet<String> = BTreeSet::new();
     let mut declarations_checked = 0usize;
     let mut verified: BTreeSet<(String, String)> = BTreeSet::new();
     // Verify each evidence item once, whatever the outcome: several
@@ -228,6 +244,7 @@ pub fn traceability(
                 continue;
             };
             *checked += 1;
+            mapped.insert(name.to_string());
             if !defined.contains(name) {
                 links.push(BrokenLink {
                     declaration: Some(name.to_string()),
@@ -252,6 +269,11 @@ pub fn traceability(
                     )
                 });
             }
+            // A declaration whose every claim is evidence-free reaches no
+            // indexed text at all. That is legitimate only for a claim kind
+            // that is explicitly not a specification fact.
+            let mut reaches_evidence = false;
+            let mut all_modelling = !refs.is_empty();
             for reference in refs {
                 let (Some(unit_id), Some(claim_id)) = (
                     reference.get("unitId").and_then(Value::as_str),
@@ -275,6 +297,9 @@ pub fn traceability(
                     });
                     continue;
                 };
+                if claim.get("kind").and_then(Value::as_str) != Some("DESIGN_DEPENDENCY") {
+                    all_modelling = false;
+                }
                 for evidence_id in claim
                     .get("evidenceIds")
                     .and_then(Value::as_array)
@@ -283,6 +308,7 @@ pub fn traceability(
                     .iter()
                     .filter_map(Value::as_str)
                 {
+                    reaches_evidence = true;
                     let Some(record) = evidence.get(&(unit_id, evidence_id)) else {
                         links.push(BrokenLink {
                             declaration: Some(name.to_string()),
@@ -322,12 +348,37 @@ pub fn traceability(
                     }
                 }
             }
+            if !refs.is_empty() && !reaches_evidence && !all_modelling {
+                links.push(BrokenLink {
+                    declaration: Some(name.to_string()),
+                    ..broken(
+                        "UNGROUNDED_DECLARATION",
+                        format!(
+                            "{name} cites claims that rest on no evidence, and they are not \
+                             declared as modelling dependencies"
+                        ),
+                    )
+                });
+            }
         }
     };
 
     walk(inputs.manifest, &mut links, &mut declarations_checked);
     if let Some(core) = inputs.core_manifest {
         walk(core, &mut links, &mut declarations_checked);
+    }
+
+    // Every declaration the Lean defines must be accounted for. Phase 5 checks
+    // this at submission time; a finished artifact can still be edited, and an
+    // unmapped declaration is untraceable by construction.
+    for name in defined.difference(&mapped) {
+        links.push(BrokenLink {
+            declaration: Some(name.clone()),
+            ..broken(
+                "UNMAPPED_DECLARATION",
+                format!("the Lean defines {name}, which no manifest accounts for"),
+            )
+        });
     }
 
     Ok(TraceabilityReport {

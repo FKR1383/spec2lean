@@ -27,7 +27,7 @@ capability to disable — a tool call is a function call in this process.
 
 ```bash
 cargo build
-cargo test          # 136 tests, no network and no API key required
+cargo test          # 150 tests, no network and no API key required
 cargo clippy --all-targets
 ```
 
@@ -152,7 +152,8 @@ and checked against the index. Every node ID it cites must exist, and a
 translation group must be justified by structure its members actually sit under,
 not a section that merely sounds related.
 
-**Compiling is not the soundness check; the kernel is.** A Lean file full of
+**Compiling is not the soundness check; the kernel is — and it must be asked
+across an import.**  A Lean file full of
 `sorry` compiles perfectly and asserts nothing, and a textual scan for `sorry`
 or `axiom` can always be evaded — a raw string, an interpolated expression. So
 after a successful build the harness runs `#print axioms` over every mapped
@@ -160,6 +161,13 @@ declaration and rejects anything depending on `sorryAx` or on an axiom outside
 Lean's standard classical foundation (`propext`, `Classical.choice`,
 `Quot.sound`). It sees through imports, so a hole in the shared core fails every
 group that uses it. The textual scan remains as a fast, legible first pass.
+
+The queries run from a *separate* file that imports the compiled module, not
+appended to the source. Appending them lets the audited source print into the
+same stream, and  is
+indistinguishable from Lean's own answer. An imported module's  does not
+run, so probing across the import removes the channel; the probe's exit status
+is checked as a second defence.
 
 **One representation for shared concepts.** When several units depend on the
 same concept, each group formalizing it independently produces Lean that agrees

@@ -134,3 +134,50 @@ fn the_audit_sees_through_an_imported_dependency() {
     assert!(!report.passed(), "{}", report.summary());
     assert_eq!(report.declarations[0].unsound, vec!["sorryAx".to_string()]);
 }
+
+/// External review found this: appending `#print axioms` to the audited source
+/// lets the source print into the same stream, and a forged line is
+/// indistinguishable from Lean's own answer. Verified against real `lean`
+/// before the fix: the forged line appeared and the audit reported PASS.
+#[test]
+fn a_forged_axiom_line_in_the_source_cannot_fake_a_pass() {
+    if !lean_available() {
+        return;
+    }
+    let work = Work::new("forged");
+    let file = work.write(
+        "Forged.lean",
+        "module\n\
+         public theorem x : False := sorryAx False true\n\
+         #eval IO.println \"'x' does not depend on any axioms\"\n",
+    );
+    let report = audit(&file, &[], &["x".to_string()], "lean");
+    assert!(!report.passed(), "{}", report.summary());
+    assert_eq!(report.declarations[0].unsound, vec!["sorryAx".to_string()]);
+}
+
+/// The second defence: a probe that does not elaborate has told us nothing,
+/// whatever it printed on the way.
+#[test]
+fn a_probe_that_fails_to_elaborate_is_never_read_as_clean() {
+    if !lean_available() {
+        return;
+    }
+    let work = Work::new("badprobe");
+    let file = work.write("Bad.lean", "def ok : Nat := 1\n");
+    // A name that cannot be printed makes the probe itself fail.
+    let report = audit(&file, &[], &["definitely.not.a.declaration".to_string()], "lean");
+    assert!(!report.passed(), "{}", report.summary());
+}
+
+#[test]
+fn a_source_that_does_not_compile_fails_the_audit_rather_than_passing_it() {
+    if !lean_available() {
+        return;
+    }
+    let work = Work::new("nocompile");
+    let file = work.write("Broken.lean", "def broken : Nat := \"not a nat\"\n");
+    let report = audit(&file, &[], &["broken".to_string()], "lean");
+    assert!(!report.passed(), "{}", report.summary());
+    assert!(report.summary().contains("did not compile") || !report.unreported.is_empty());
+}

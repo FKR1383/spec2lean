@@ -83,7 +83,8 @@ pub fn validate_submission(
     }
     let present = declarations(lean_source);
 
-    // Every claim that described any of these concepts, as a lookup.
+    // Every claim that described any of these concepts, and separately which
+    // claims described *which* concept.
     let allowed_claims: BTreeSet<(&str, &str)> = requirements
         .iter()
         .flat_map(|requirement| {
@@ -93,6 +94,22 @@ pub fn validate_submission(
                 .map(|(unit_id, claim_id)| (unit_id.as_str(), claim_id.as_str()))
         })
         .collect();
+    let claims_by_concept: BTreeMap<&str, BTreeSet<(&str, &str)>> = requirements
+        .iter()
+        .map(|requirement| {
+            (
+                requirement.dependency_id.as_str(),
+                requirement
+                    .claim_refs
+                    .iter()
+                    .map(|(unit_id, claim_id)| (unit_id.as_str(), claim_id.as_str()))
+                    .collect(),
+            )
+        })
+        .collect();
+    // What each declaration cites, so a concept's own registration can be
+    // checked against its own claims.
+    let mut declaration_claims: BTreeMap<String, BTreeSet<(String, String)>> = BTreeMap::new();
 
     // ---- declarations ----------------------------------------------------
     let raw_declarations = match object.get("declarations") {
@@ -163,7 +180,15 @@ pub fn validate_submission(
                         reference.get("claimId").and_then(Value::as_str),
                     ) {
                         (Some(unit_id), Some(claim_id))
-                            if allowed_claims.contains(&(unit_id, claim_id)) => {}
+                            if allowed_claims.contains(&(unit_id, claim_id)) =>
+                        {
+                            if let Some(name) = mapping.get("declaration").and_then(Value::as_str) {
+                                declaration_claims
+                                    .entry(name.to_string())
+                                    .or_default()
+                                    .insert((unit_id.to_string(), claim_id.to_string()));
+                            }
+                        }
                         (Some(unit_id), Some(claim_id)) => diagnostics.push(Diagnostic::new(
                             "UNKNOWN_CLAIM_REF",
                             format!(
@@ -259,6 +284,29 @@ pub fn validate_submission(
                     format!("{path}.leanDeclarations"),
                 ));
             }
+        }
+        // The declarations registered for a concept must actually cite that
+        // concept's claims. A global check would let one declaration citing
+        // concept B's claims stand in as the representation of concept A.
+        let own: &BTreeSet<(&str, &str)> = claims_by_concept
+            .get(dependency_id)
+            .unwrap_or(const { &BTreeSet::new() });
+        let cites_own = names.iter().any(|name| {
+            declaration_claims.get(name).is_some_and(|cited| {
+                cited
+                    .iter()
+                    .any(|(unit_id, claim_id)| own.contains(&(unit_id.as_str(), claim_id.as_str())))
+            })
+        });
+        if !names.is_empty() && !own.is_empty() && !cites_own {
+            diagnostics.push(Diagnostic::new(
+                "UNGROUNDED_SHARED_CONCEPT",
+                format!(
+                    "no declaration registered for {dependency_id} cites any of the claims that \
+                     describe it"
+                ),
+                format!("{path}.leanDeclarations"),
+            ));
         }
         registered.insert(dependency_id, names);
     }

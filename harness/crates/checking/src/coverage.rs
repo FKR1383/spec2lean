@@ -98,19 +98,39 @@ pub fn coverage(inputs: &CheckInputs<'_>) -> CoverageReport {
     let mut uncovered = Vec::new();
 
     for (unit_id, artifact) in inputs.semantics {
-        let claims = artifact
+        // An artifact with no usable claim array is not "trivially covered";
+        // it means nothing can be checked, which is a failure, not a pass.
+        let Some(claims) = artifact
             .get("semantics")
             .and_then(|value| value.get("claims"))
             .and_then(Value::as_array)
-            .map(Vec::as_slice)
-            .unwrap_or_default();
+        else {
+            uncovered.push(CoverageItem {
+                item_type: "SEMANTIC_CLAIM",
+                item_id: "<no claims>".to_string(),
+                unit_id: unit_id.clone(),
+                declarations: Vec::new(),
+                semantic_claim_ids: Vec::new(),
+            });
+            continue;
+        };
+        let claims = claims.as_slice();
 
         // evidence id -> the claims that cite it, and the declarations reached.
         let mut evidence_claims: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         let mut evidence_declarations: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
 
-        for claim in claims {
+        for (position, claim) in claims.iter().enumerate() {
             let Some(claim_id) = claim.get("claimId").and_then(Value::as_str) else {
+                // A claim without an ID cannot be covered by anything, and
+                // skipping it would quietly shrink what coverage means.
+                uncovered.push(CoverageItem {
+                    item_type: "SEMANTIC_CLAIM",
+                    item_id: format!("<malformed claim at position {position}>"),
+                    unit_id: unit_id.clone(),
+                    declarations: Vec::new(),
+                    semantic_claim_ids: Vec::new(),
+                });
                 continue;
             };
             let declarations: Vec<String> = index

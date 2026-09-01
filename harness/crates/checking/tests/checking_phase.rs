@@ -244,3 +244,108 @@ fn declarations_in_the_frozen_core_count_towards_coverage() {
         .expect("covered");
     assert_eq!(predicate.declarations, vec!["Shared.predicate".to_string()]);
 }
+
+// The cases below all come from external review. Each one previously reported
+// PASS; each trigger here is the one that was given.
+
+#[test]
+fn a_span_belonging_to_another_node_is_caught() {
+    let fixture = Fixture::new("straySpan");
+    let mut bundles = bundles();
+    // The span exists and the text is real — but it belongs to node:html-def,
+    // which this record does not name.
+    bundles.get_mut("unit:add").unwrap()["evidence"][0]["sourceSpanIds"] =
+        json!(["span:html-def-0"]);
+    bundles.get_mut("unit:add").unwrap()["evidence"][0]["exactText"] =
+        json!("predicate: a one-bit value.");
+    let report = run(&bundles, &semantics(), &manifest(), SOURCE, &fixture);
+    assert!(!report.passed(), "{}", report.summary());
+    assert!(
+        report.traceability.broken[0].message.contains("which this record does not name"),
+        "{}",
+        report.traceability.broken[0].message
+    );
+}
+
+#[test]
+fn lean_the_manifest_never_mentions_is_caught() {
+    let fixture = Fixture::new("extra");
+    // The source defines something the manifest does not account for.
+    let source = format!("{SOURCE}\ndef Spec.extra : Nat := 1\n");
+    let report = run(&bundles(), &semantics(), &manifest(), &source, &fixture);
+    assert!(!report.passed(), "{}", report.summary());
+    let link = report
+        .traceability
+        .broken
+        .iter()
+        .find(|link| link.code == "UNMAPPED_DECLARATION")
+        .expect("reported");
+    assert_eq!(link.declaration.as_deref(), Some("Spec.extra"));
+}
+
+#[test]
+fn a_declaration_resting_on_claims_with_no_evidence_is_caught() {
+    let fixture = Fixture::new("ungrounded");
+    let mut semantics = semantics();
+    // A SOURCE_FACT with no evidence: it asserts something about the
+    // specification while citing none of it.
+    semantics.get_mut("unit:add").unwrap()["semantics"]["claims"][0]["evidenceIds"] = json!([]);
+    let report = run(&bundles(), &semantics, &manifest(), SOURCE, &fixture);
+    assert!(!report.passed(), "{}", report.summary());
+    assert!(report
+        .traceability
+        .broken
+        .iter()
+        .any(|link| link.code == "UNGROUNDED_DECLARATION"));
+}
+
+#[test]
+fn a_declaration_resting_only_on_modelling_dependencies_is_allowed() {
+    let fixture = Fixture::new("modelling");
+    let mut semantics = semantics();
+    // A DESIGN_DEPENDENCY is explicitly a later modelling need, not a
+    // specification fact, so having no evidence is correct for it.
+    semantics.get_mut("unit:add").unwrap()["semantics"]["claims"][0]["kind"] =
+        json!("DESIGN_DEPENDENCY");
+    semantics.get_mut("unit:add").unwrap()["semantics"]["claims"][0]["evidenceIds"] = json!([]);
+    let report = run(&bundles(), &semantics, &manifest(), SOURCE, &fixture);
+    assert!(report.passed(), "{}", report.summary());
+}
+
+#[test]
+fn a_record_that_omits_its_document_identity_is_caught() {
+    let fixture = Fixture::new("nodoc");
+    let mut bundles = bundles();
+    bundles
+        .get_mut("unit:add")
+        .unwrap()["evidence"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("documentSha256");
+    let report = run(&bundles, &semantics(), &manifest(), SOURCE, &fixture);
+    assert!(!report.passed(), "{}", report.summary());
+    assert!(report.traceability.broken[0]
+        .message
+        .contains("does not say which document"));
+}
+
+#[test]
+fn an_artifact_with_malformed_claims_does_not_pass_by_default() {
+    let fixture = Fixture::new("malformed");
+    let semantics = BTreeMap::from([(
+        "unit:add".to_string(),
+        json!({"unit": {"unitId": "unit:add"},
+               "semantics": {"claims": [{"kind": "SOURCE_FACT"}]}}),
+    )]);
+    let report = run(&bundles(), &semantics, &json!({"declarations": []}), "", &fixture);
+    assert!(!report.passed(), "{}", report.summary());
+    assert!(report.coverage.uncovered[0].item_id.contains("malformed"));
+
+    // And an artifact with no claim array at all.
+    let semantics = BTreeMap::from([(
+        "unit:add".to_string(),
+        json!({"unit": {"unitId": "unit:add"}, "semantics": {}}),
+    )]);
+    let report = run(&bundles(), &semantics, &json!({"declarations": []}), "", &fixture);
+    assert!(!report.passed(), "{}", report.summary());
+}

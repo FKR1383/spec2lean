@@ -94,11 +94,24 @@ fn parse_line(line: &str) -> Option<(String, Vec<String>)> {
     ))
 }
 
-/// Compile a probe that prints the axiom dependencies of every named
-/// declaration, and judge the result.
+/// The module the audited source is staged under.
+const AUDIT_MODULE: &str = "Spec2LeanAudit.Target";
+
+/// Report the axiom dependencies of every named declaration.
 ///
-/// The probe is the real source with `#print axioms` appended, so it sees
-/// exactly the declarations the build produced.
+/// The audited source is compiled to a `.olean`, and the `#print axioms`
+/// queries then run from a *separate* file that imports it. That separation is
+/// the point: appending the queries to the source itself lets the source write
+/// into the same output stream, and a line such as
+///
+/// ```lean
+/// #eval IO.println "'x' does not depend on any axioms"
+/// ```
+///
+/// is indistinguishable from Lean's own answer. Probing across an import
+/// removes the channel — an imported module's `#eval` does not run — and the
+/// probe's exit status is checked, so a query that fails to elaborate can never
+/// be read as a clean result.
 pub fn audit(
     lean_file: &Path,
     dependencies: &[DependencyModule],
@@ -126,39 +139,56 @@ pub fn audit(
         return fail("could not create an audit directory".into());
     };
     let root = temporary.path();
-
-    // Stage the same dependency modules the build used, so imports resolve.
     let mut lean_path = root.as_os_str().to_owned();
-    for dependency in dependencies {
-        let relative: PathBuf = dependency
-            .module
-            .split('.')
-            .collect::<PathBuf>()
-            .with_extension("lean");
+
+    // Compile every module the audited source imports, then the source itself.
+    let mut modules: Vec<(String, String)> = dependencies
+        .iter()
+        .map(|dependency| (dependency.module.clone(), String::new()))
+        .collect();
+    for (index, dependency) in dependencies.iter().enumerate() {
+        match std::fs::read_to_string(&dependency.source) {
+            Ok(text) => modules[index].1 = text,
+            Err(_) => {
+                return fail(format!(
+                    "could not read {} for the audit",
+                    dependency.source.display()
+                ));
+            }
+        }
+    }
+    modules.push((AUDIT_MODULE.to_string(), source));
+
+    for (module, text) in &modules {
+        let relative: PathBuf = module.split('.').collect::<PathBuf>().with_extension("lean");
         let target = root.join(&relative);
         if let Some(parent) = target.parent()
             && std::fs::create_dir_all(parent).is_err()
         {
-            return fail("could not stage an audit dependency".into());
+            return fail("could not stage a module for the audit".into());
         }
-        if std::fs::copy(&dependency.source, &target).is_err() {
-            return fail(format!(
-                "could not stage {} for the audit",
-                dependency.source.display()
-            ));
+        if std::fs::write(&target, text).is_err() {
+            return fail(format!("could not stage {module} for the audit"));
         }
-        let olean = relative.with_extension("olean");
         let built = Command::new(lean_executable)
             .args(["-R", &root.to_string_lossy()])
             .arg("-o")
-            .arg(&olean)
+            .arg(relative.with_extension("olean"))
             .arg(&relative)
             .current_dir(root)
             .env("LEAN_PATH", &lean_path)
             .output();
+        // Whatever this compilation prints is ignored: it is the audited
+        // source's own output, and the audit must not read it.
         match built {
             Ok(output) if output.status.success() => {}
-            _ => return fail(format!("audit dependency {} did not compile", dependency.module)),
+            Ok(output) => {
+                return fail(format!(
+                    "{module} did not compile during the audit: {}",
+                    crate::build::first_error(&output.stdout, &output.stderr)
+                ));
+            }
+            Err(error) => return fail(format!("could not run Lean for the audit: {error}")),
         }
     }
     if let Some(existing) = std::env::var_os("LEAN_PATH") {
@@ -166,23 +196,18 @@ pub fn audit(
         lean_path.push(existing);
     }
 
-    let probe_name = lean_file
-        .file_name()
-        .map(|name| name.to_string_lossy().to_string())
-        .unwrap_or_else(|| "Probe.lean".into());
-    let probe = root.join(&probe_name);
-    let mut body = source;
-    body.push_str("\n\n-- appended by the harness; not part of the translation\n");
+    // The probe contains nothing but an import and the queries.
+    let mut probe = format!("import {AUDIT_MODULE}\n");
     for declaration in declarations {
-        body.push_str(&format!("#print axioms {declaration}\n"));
+        probe.push_str(&format!("#print axioms {declaration}\n"));
     }
-    if std::fs::write(&probe, body).is_err() {
+    let probe_path = root.join("Spec2LeanAuditProbe.lean");
+    if std::fs::write(&probe_path, probe).is_err() {
         return fail("could not write the audit probe".into());
     }
-
     let output = Command::new(lean_executable)
         .args(["-R", &root.to_string_lossy()])
-        .arg(&probe_name)
+        .arg("Spec2LeanAuditProbe.lean")
         .current_dir(root)
         .env("LEAN_PATH", &lean_path)
         .output();
@@ -194,6 +219,14 @@ pub fn audit(
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+    // A probe that did not elaborate cleanly has told us nothing, whatever it
+    // printed on the way.
+    if !output.status.success() {
+        return fail(format!(
+            "the axiom probe did not elaborate: {}",
+            error_line(&text)
+        ));
+    }
 
     let mut reported: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for line in text.lines() {
@@ -228,6 +261,15 @@ pub fn audit(
         unreported,
         notes: Vec::new(),
     }
+}
+
+/// The first line of output that looks like a diagnostic, for error messages.
+pub(crate) fn error_line(text: &str) -> String {
+    text.lines()
+        .find(|line| line.contains("error"))
+        .unwrap_or_else(|| text.lines().next().unwrap_or("no output"))
+        .trim()
+        .to_string()
 }
 
 #[cfg(test)]
