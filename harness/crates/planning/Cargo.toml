@@ -1,0 +1,17 @@
+[package]
+name = "spec2lean-planning"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Phase 2: resolve a bounded request into a validated, specification-supported plan."
+
+[dependencies]
+harness = { workspace = true }
+spec2lean-specdb = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+regex = { workspace = true }
+
+[dev-dependencies]
+spec2lean-specdb = { workspace = true, features = ["fixture"] }

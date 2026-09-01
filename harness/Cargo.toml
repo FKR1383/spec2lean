@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/harness",
     "crates/lean",
+    "crates/planning",
     "crates/specdb",
     "crates/evidence",
     "crates/semantics",
@@ -19,6 +20,7 @@ license = "UNLICENSED"
 [workspace.dependencies]
 harness = { path = "crates/harness" }
 spec2lean-lean = { path = "crates/lean" }
+spec2lean-planning = { path = "crates/planning" }
 spec2lean-specdb = { path = "crates/specdb" }
 spec2lean-evidence = { path = "crates/evidence" }
 spec2lean-semantics = { path = "crates/semantics" }
@@ -30,6 +32,10 @@ rusqlite = { version = "0.38", features = ["bundled"] }
 ureq = { version = "3", features = ["json"] }
 sha2 = "0.11"
 unicode-normalization = "0.1"
+# Used only by Phase 2, whose scope-resolution heuristics must match the
+# Python implementation pattern for pattern. Hand-rolled scanners would risk
+# divergence exactly where it decides which units get planned.
+regex = "1"
 
 [profile.release]
 debug = 1

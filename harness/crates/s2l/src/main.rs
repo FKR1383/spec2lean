@@ -13,6 +13,7 @@ use harness::provider::openai::{OpenAiConfig, OpenAiProvider};
 use harness::{Effort, Provider, Session};
 use serde_json::{Value, json};
 use spec2lean_evidence::{EvidenceScope, EvidenceTools, prompt};
+use spec2lean_planning::{PlanningRequest, PlanningTools, ScopeResolver, Selector};
 use spec2lean_semantics::{SemanticScope, SemanticTools};
 use spec2lean_translation::{TranslationScope, TranslationTools};
 use spec2lean_specdb::{SpecDb, UnitId};
@@ -21,6 +22,13 @@ const USAGE: &str = "\
 spec2lean harness
 
 USAGE:
+    s2l plan scope       --database <PATH> --language <L> --version <V> [SELECTOR]
+    s2l plan prompt      --database <PATH> --language <L> --version <V> [SELECTOR]
+    s2l plan replay      --database <PATH> --language <L> --version <V> [SELECTOR]
+                         --calls <PATH> [--out <DIR>]
+    s2l plan run         --database <PATH> --language <L> --version <V> [SELECTOR]
+                         --out <DIR> [PROVIDER OPTIONS]
+
     s2l evidence prompt  --database <PATH> --plan <PATH> --unit <unit:ID>
     s2l evidence scope   --database <PATH> --plan <PATH> --unit <unit:ID>
     s2l evidence replay  --database <PATH> --plan <PATH> --unit <unit:ID> --calls <PATH> [--out <DIR>]
@@ -38,6 +46,9 @@ USAGE:
                          [PROVIDER OPTIONS] [--lean <EXECUTABLE>]
 
     s2l lean check       --file <PATH> [--lean <EXECUTABLE>]
+
+SELECTOR (exactly one; --full is the default):
+    --instructions <a,b,c> | --family <NAME> | --subtree <node:ID> | --full
 
 PROVIDER OPTIONS:
     [--provider anthropic|openai] [--model <ID>]
@@ -78,6 +89,16 @@ fn run() -> Result<(), String> {
                 "replay" => evidence_replay(&flags),
                 "run" => evidence_run(&flags),
                 other => Err(format!("unknown evidence command: {other}\n\n{USAGE}")),
+            }
+        }
+        ["plan", command, rest @ ..] => {
+            let flags = Flags::parse(rest)?;
+            match *command {
+                "scope" => plan_scope(&flags),
+                "prompt" => plan_prompt(&flags),
+                "replay" => plan_replay(&flags),
+                "run" => plan_run(&flags),
+                other => Err(format!("unknown plan command: {other}\n\n{USAGE}")),
             }
         }
         ["lean", "check", rest @ ..] => {
@@ -388,6 +409,169 @@ fn write_semantic_artifacts(
     write_json(&out.join("semantic-scope.json"), &tools.scope().to_json())?;
     if let Some(artifact) = tools.artifact() {
         write_json(&out.join("semantic-artifact.json"), artifact)?;
+    }
+    if let Some(transcript) = transcript {
+        let value = serde_json::to_value(transcript).map_err(|error| error.to_string())?;
+        write_json(&out.join("transcript.json"), &value)?;
+    }
+    Ok(())
+}
+
+/// Build the request from flags. Exactly one selector may be given; the sum
+/// type makes a contradictory request unrepresentable rather than resolved by
+/// precedence.
+fn planning_request(flags: &Flags) -> Result<PlanningRequest, String> {
+    let mut selectors = Vec::new();
+    if let Some(value) = flags.optional("instructions") {
+        selectors.push(Selector::ExactInstructions(
+            value.split(',').map(|item| item.trim().to_string()).collect(),
+        ));
+    }
+    if let Some(value) = flags.optional("family") {
+        selectors.push(Selector::InstructionFamily(value.to_string()));
+    }
+    if let Some(value) = flags.optional("subtree") {
+        selectors.push(Selector::SourceSubtree(
+            spec2lean_specdb::NodeId::parse(value).map_err(|error| error.to_string())?,
+        ));
+    }
+    if flags.optional("full").is_some() {
+        selectors.push(Selector::FullSpecification);
+    }
+    let selector = match selectors.len() {
+        0 => Selector::FullSpecification,
+        1 => selectors.remove(0),
+        _ => {
+            return Err(
+                "give exactly one of --instructions, --family, --subtree, or --full".into(),
+            );
+        }
+    };
+    PlanningRequest::new(flags.get("language")?, flags.get("version")?, selector)
+        .map_err(|error| error.to_string())
+}
+
+/// Open the index, resolve the request, and derive the plan run identity.
+fn planning_context(
+    flags: &Flags,
+) -> Result<(SpecDb, spec2lean_planning::ResolvedScope, String, String), String> {
+    let db = SpecDb::open(&flags.path("database")?).map_err(|error| error.to_string())?;
+    let request = planning_request(flags)?;
+    let scope = ScopeResolver::new(&db)
+        .resolve(&request)
+        .map_err(|error| error.to_string())?;
+    let digest = db.semantic_digest().map_err(|error| error.to_string())?;
+    let started_at = flags
+        .optional("created-at")
+        .map(str::to_string)
+        .unwrap_or_else(harness::clock::utc_now_iso);
+    // Identity binds the request, the exact index, and when it ran.
+    let plan_run_id = flags.optional("plan-run-id").map(str::to_string).unwrap_or_else(|| {
+        spec2lean_specdb::stable_id(
+            "plan",
+            &[
+                &request.language.to_lowercase(),
+                &request.version,
+                &digest,
+                &started_at,
+            ],
+            24,
+        )
+    });
+    Ok((db, scope, plan_run_id, digest))
+}
+
+fn plan_scope(flags: &Flags) -> Result<(), String> {
+    let (_db, scope, _, _) = planning_context(flags)?;
+    println!("{}", pretty(&scope.to_json()));
+    Ok(())
+}
+
+fn plan_prompt(flags: &Flags) -> Result<(), String> {
+    use spec2lean_planning::prompt as planning_prompt;
+    let (_db, scope, _, _) = planning_context(flags)?;
+    println!(
+        "=== system ===\n{}\n\n=== user ===\n{}",
+        planning_prompt::system_prompt(),
+        planning_prompt::user_prompt(&scope)
+    );
+    Ok(())
+}
+
+fn plan_replay(flags: &Flags) -> Result<(), String> {
+    use harness::ToolSet;
+
+    let (db, scope, plan_run_id, digest) = planning_context(flags)?;
+    let calls: Value = read_json(&flags.path("calls")?)?;
+    let calls = calls
+        .as_array()
+        .ok_or("the calls file must contain a JSON array")?;
+    let mut tools = PlanningTools::new(&db, scope, plan_run_id, digest);
+
+    for (index, call) in calls.iter().enumerate() {
+        let name = call
+            .get("tool")
+            .and_then(Value::as_str)
+            .ok_or_else(|| format!("call {index} has no \"tool\""))?;
+        let input = call.get("input").cloned().unwrap_or_else(|| json!({}));
+        let outcome = tools.call(name, &input);
+        println!(
+            "--- {index}: {name} ({}) ---",
+            if outcome.is_error() { "error" } else { "ok" }
+        );
+        println!("{}", outcome.to_text());
+    }
+    if let Some(out) = flags.optional("out") {
+        write_plan_artifacts(Path::new(out), &tools, None)?;
+    }
+    if tools.finished() {
+        println!("\nplan accepted");
+        Ok(())
+    } else {
+        Err("the scripted calls did not produce an accepted plan".into())
+    }
+}
+
+fn plan_run(flags: &Flags) -> Result<(), String> {
+    use spec2lean_planning::prompt as planning_prompt;
+
+    let (db, scope, plan_run_id, digest) = planning_context(flags)?;
+    let out = flags.path("out")?;
+    let provider = provider(flags)?;
+    let user = planning_prompt::user_prompt(&scope);
+    let mut tools = PlanningTools::new(&db, scope, plan_run_id, digest);
+
+    let session = Session::new(provider.as_ref(), planning_prompt::system_prompt(), user)
+        .with_max_steps(max_steps(flags)?);
+    let (outcome, transcript) = session.run(&mut tools);
+
+    write_plan_artifacts(&out, &tools, Some(&transcript))?;
+    match outcome {
+        Ok(()) => {
+            let plan = tools.plan().expect("accepted");
+            println!(
+                "plan {} accepted in {} steps: {} unit(s), {} group(s), {}",
+                plan["planRunId"].as_str().unwrap_or_default(),
+                transcript.steps,
+                plan["requestedUnits"].as_array().map_or(0, Vec::len),
+                plan["translationGroups"].as_array().map_or(0, Vec::len),
+                plan["graphStatus"].as_str().unwrap_or("UNKNOWN"),
+            );
+            Ok(())
+        }
+        Err(error) => Err(format!("{error} (artifacts written to {})", out.display())),
+    }
+}
+
+fn write_plan_artifacts(
+    out: &Path,
+    tools: &PlanningTools<'_>,
+    transcript: Option<&harness::Transcript>,
+) -> Result<(), String> {
+    std::fs::create_dir_all(out).map_err(|error| format!("{}: {error}", out.display()))?;
+    write_json(&out.join("planning-scope.json"), &tools.scope().to_json())?;
+    if let Some(plan) = tools.plan() {
+        write_json(&out.join("plan.json"), plan)?;
     }
     if let Some(transcript) = transcript {
         let value = serde_json::to_value(transcript).map_err(|error| error.to_string())?;

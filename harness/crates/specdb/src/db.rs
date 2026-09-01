@@ -77,6 +77,7 @@ pub struct NodeRow {
     pub parent_id: Option<NodeId>,
     pub node_type: String,
     pub ordinal: i64,
+    pub depth: i64,
     pub title: Option<String>,
     pub section_number: Option<String>,
     pub raw_text: String,
@@ -98,6 +99,7 @@ impl NodeRow {
             parent_id: row.get::<_, Option<String>>("parent_id")?.map(NodeId::trusted),
             node_type: row.get("node_type")?,
             ordinal: row.get("ordinal")?,
+            depth: row.get("depth")?,
             title: row.get("title")?,
             section_number: row.get("section_number")?,
             raw_text: row.get("raw_text")?,
@@ -385,31 +387,108 @@ impl SpecDb {
         collect(rows)
     }
 
-    pub fn definitions(&self, query: &str, limit: i64) -> Result<Vec<DefinitionRow>> {
+    /// Definitions matching a term. Phase 3 requires a query; Phase 2 allows
+    /// browsing the whole index, so the query is optional here and the
+    /// non-empty rule is enforced by the caller that needs it.
+    pub fn definitions_matching(
+        &self,
+        query: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<DefinitionRow>> {
         bounded_limit(limit)?;
-        let normalized = crate::text::normalize_text(query).to_lowercase();
-        if normalized.is_empty() {
+        let read = |row: &Row<'_>| {
+            Ok(DefinitionRow {
+                term: row.get("term")?,
+                definition_text: row.get("definition_text")?,
+                structural_basis: row.get("structural_basis")?,
+                node_id: NodeId::trusted(row.get("node_id")?),
+            })
+        };
+        let normalized = query
+            .map(crate::text::normalize_text)
+            .map(|value| value.to_lowercase())
+            .filter(|value| !value.is_empty());
+        match normalized {
+            Some(normalized) => {
+                let mut statement = self.connection.prepare(
+                    "SELECT t.term, d.definition_text, d.structural_basis, d.node_id
+                     FROM definitions d JOIN terms t USING(term_id)
+                     WHERE t.normalized_term LIKE ?1
+                     ORDER BY t.normalized_term, d.node_id LIMIT ?2",
+                )?;
+                let rows = statement
+                    .query_map(rusqlite::params![format!("%{normalized}%"), limit], read)?;
+                collect(rows)
+            }
+            None => {
+                let mut statement = self.connection.prepare(
+                    "SELECT t.term, d.definition_text, d.structural_basis, d.node_id
+                     FROM definitions d JOIN terms t USING(term_id)
+                     ORDER BY t.normalized_term, d.node_id LIMIT ?1",
+                )?;
+                let rows = statement.query_map(rusqlite::params![limit], read)?;
+                collect(rows)
+            }
+        }
+    }
+
+    pub fn definitions(&self, query: &str, limit: i64) -> Result<Vec<DefinitionRow>> {
+        if crate::text::normalize_text(query).is_empty() {
             return Err(SpecDbError::OutOfRange(
                 "definition query must be non-empty".into(),
             ));
         }
+        self.definitions_matching(Some(query), limit)
+    }
+
+    /// Every chapter/section/subsection, HTML rendition first, then shallowest.
+    ///
+    /// The ordering is load-bearing: scope resolution prefers the HTML
+    /// rendition and the least deeply nested heading when several match.
+    pub fn headings(&self) -> Result<Vec<NodeRow>> {
+        let sql = format!(
+            "SELECT {NODE_COLUMNS} FROM nodes n JOIN documents d USING(document_id)
+             WHERE n.node_type IN ('chapter', 'section', 'subsection')
+             ORDER BY CASE d.source_type WHEN 'html' THEN 0 ELSE 1 END, n.depth, n.node_id"
+        );
+        let mut statement = self.connection.prepare(&sql)?;
+        let rows = statement.query_map([], NodeRow::from_row)?;
+        collect(rows)
+    }
+
+    /// `(node_type, raw_text)` for a node and its whole subtree, unbounded.
+    ///
+    /// Used only to decide whether a heading's subtree actually mentions an
+    /// instruction; never returned to a model.
+    pub fn descendant_texts(&self, node_id: &NodeId) -> Result<Vec<(String, String)>> {
         let mut statement = self.connection.prepare(
-            "SELECT t.term, d.definition_text, d.structural_basis, d.node_id
-             FROM definitions d JOIN terms t USING(term_id)
-             WHERE t.normalized_term LIKE ?1
-             ORDER BY t.normalized_term, d.node_id LIMIT ?2",
+            "WITH RECURSIVE tree(node_id) AS (
+                 SELECT node_id FROM nodes WHERE node_id = ?1
+                 UNION ALL SELECT n.node_id FROM nodes n JOIN tree t ON n.parent_id = t.node_id
+             ) SELECT node_type, raw_text FROM nodes JOIN tree USING(node_id)",
         )?;
-        let rows = statement.query_map(
-            rusqlite::params![format!("%{normalized}%"), limit],
-            |row| {
-                Ok(DefinitionRow {
-                    term: row.get("term")?,
-                    definition_text: row.get("definition_text")?,
-                    structural_basis: row.get("structural_basis")?,
-                    node_id: NodeId::trusted(row.get("node_id")?),
-                })
-            },
-        )?;
+        let rows = statement.query_map([node_id], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        collect(rows)
+    }
+
+    /// Heading children of a node, in document order.
+    pub fn heading_children(&self, node_id: &NodeId) -> Result<Vec<NodeRow>> {
+        let sql = format!(
+            "SELECT {NODE_COLUMNS} FROM nodes n JOIN documents d USING(document_id)
+             WHERE n.parent_id = ?1 AND n.node_type IN ('chapter', 'section', 'subsection')
+             ORDER BY n.ordinal, n.node_id"
+        );
+        let mut statement = self.connection.prepare(&sql)?;
+        let rows = statement.query_map([node_id], NodeRow::from_row)?;
+        collect(rows)
+    }
+
+    /// Document roots, one per indexed rendition.
+    pub fn root_nodes(&self) -> Result<Vec<NodeId>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT node_id FROM nodes WHERE parent_id IS NULL ORDER BY document_id, node_id")?;
+        let rows = statement.query_map([], |row| Ok(NodeId::trusted(row.get(0)?)))?;
         collect(rows)
     }
 

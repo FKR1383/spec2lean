@@ -4,6 +4,10 @@
 Builds one Phase-1 index, runs the same scripted tool sequences through both
 implementations, and diffs the resulting artifacts.
 
+Phase 2 plans must be byte-identical: the plan is what every later phase keys
+off, and its unit IDs, shared dependency IDs, and processing layers are all
+derived, so a match proves the derivation agrees.
+
 Phase 3 bundles must be byte-identical, including every `evidenceId` — those are
 SHA-256 digests over the canonical JSON identity, so a match proves that text
 normalisation, canonical JSON, the stable-ID construction, provenance
@@ -120,6 +124,81 @@ def main() -> int:
             {"tool": "spec_definitions", "input": {"query": "predicate"}},
             {"tool": "submit_evidence", "input": submission},
         ]
+
+        # ---- Phase 2 -------------------------------------------------------
+        # Both implementations resolve the same request and validate the same
+        # planner submission; the resulting plans must be identical.
+        from spec2lean.database import connect as _connect
+        from spec2lean.planning.models import PlanningRequest
+        from spec2lean.planning.scope import Phase1Query, ScopeResolver
+        from spec2lean.planning.validation import build_validated_plan
+
+        py_request = PlanningRequest.full("synthetic", "1.0")
+        with _connect(database, read_only=True) as connection:
+            py_scope = ScopeResolver(connection).resolve(py_request)
+            planner_units = [item["unitId"] for item in py_scope.candidate_units]
+            planner_submission = {
+                "requestedUnitIds": planner_units,
+                "translationGroups": [
+                    {
+                        "name": "Whole",
+                        "unitIds": planner_units,
+                        "reason": "the fixture specification has a single chapter",
+                        "supportingNodeIds": sorted(
+                            {
+                                node
+                                for unit in py_scope.candidate_units
+                                for node in unit["sourceNodeIds"]
+                            }
+                        ),
+                        "origin": "EXPLICIT",
+                    }
+                ],
+                "externalPrerequisites": [],
+                "sharedPrerequisites": [],
+                "dependencies": [],
+            }
+            python_plan = build_validated_plan(
+                Phase1Query(connection),
+                py_scope,
+                planner_submission,
+                language="synthetic",
+                version="1.0",
+                plan_run_id="plan:crosscheck",
+                source_database_digest=digest,
+            )
+
+        (work / "planner-calls.json").write_text(
+            json.dumps([{"tool": "submit_plan", "input": planner_submission}], indent=2)
+        )
+        completed = subprocess.run(
+            [
+                str(BINARY), "plan", "replay",
+                "--database", str(database),
+                "--language", "synthetic", "--version", "1.0", "--full", "true",
+                "--plan-run-id", "plan:crosscheck",
+                "--calls", str(work / "planner-calls.json"),
+                "--out", str(work / "rust-plan"),
+            ],
+            capture_output=True, text=True, check=False,
+        )
+        if completed.returncode != 0:
+            print(completed.stdout)
+            print(completed.stderr, file=sys.stderr)
+            return 1
+        rust_plan = json.loads((work / "rust-plan" / "plan.json").read_text())
+        if python_plan != rust_plan:
+            print("PHASE 2 PLANS DIFFER", file=sys.stderr)
+            print(json.dumps({"python": python_plan, "rust": rust_plan}, indent=2, sort_keys=True))
+            return 1
+        print(
+            f"phase 2: plans are identical "
+            f"({len(rust_plan['requestedUnits'])} unit(s), "
+            f"{len(rust_plan['translationGroups'])} group(s), "
+            f"{rust_plan['graphStatus']})"
+        )
+        for unit in rust_plan["requestedUnits"]:
+            print(f"  {unit['unitId']}  {unit['name']}")
 
         (work / "plan.json").write_text(json.dumps(plan, indent=2))
         (work / "calls.json").write_text(json.dumps(calls, indent=2))

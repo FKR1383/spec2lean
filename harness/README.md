@@ -14,6 +14,7 @@ capability to disable — a tool call is a function call in this process.
 |---|---|
 | `harness` | Provider trait, Anthropic + OpenAI-compatible adapters, HTTP with retry, the agent loop, transcripts. Provider-agnostic and spec2lean-agnostic. |
 | `spec2lean-specdb` | Read-only typed access to the Phase-1 SQLite index; typed IDs; text normalisation and stable IDs. |
+| `spec2lean-planning` | Phase 2: scope resolution, plan validation, dependency-graph derivation. |
 | `spec2lean-evidence` | Phase 3: the nine retrieval tools, the exposure ledger, the deterministic validator, bundle reconstruction. |
 | `spec2lean-semantics` | Phase 4: evidence-bounded extraction, the claim taxonomy, deterministic artifact validation. |
 | `spec2lean-lean` | Invokes the Lean toolchain and parses its diagnostics. No phase knowledge. |
@@ -24,7 +25,7 @@ capability to disable — a tool call is a function call in this process.
 
 ```bash
 cargo build
-cargo test          # 78 tests, no network and no API key required
+cargo test          # 102 tests, no network and no API key required
 cargo clippy --all-targets
 ```
 
@@ -36,6 +37,10 @@ checked-in database. Tests that need `lean` skip themselves when it is absent.
 
 ```bash
 export ANTHROPIC_API_KEY=...
+
+# Phase 2: turn a request into a validated plan.
+s2l plan run --database indexes/spec.sqlite --language ptx --version 8.5 \
+             --family "integer arithmetic" --out plans
 
 # Phase 3: retrieve evidence for one planned unit.
 s2l evidence  run --database indexes/spec.sqlite \
@@ -59,6 +64,7 @@ succeeded.
 Offline, with no provider at all:
 
 ```bash
+s2l plan      replay --database ... --language ... --version ... --calls calls.json
 s2l evidence  replay --database ... --plan ... --unit ... --calls calls.json
 s2l semantics replay --plan ... --bundle ... --unit ... --calls calls.json
 s2l translate replay --plan ... --semantics ... --group ... --calls calls.json
@@ -73,6 +79,10 @@ a token.
 
 `scripts/crosscheck.py` runs the same tool sequences through both
 implementations and diffs the resulting artifacts.
+
+Phase 2 plans must be byte-identical. Unit IDs, shared dependency IDs, and the
+processing layers are all *derived*, so a match proves the derivations agree —
+not merely that both accepted the same submission.
 
 Phase 3 bundles must be byte-identical, including every `evidenceId` — those are
 SHA-256 digests over canonical JSON, so a match proves that text normalisation,
@@ -110,6 +120,14 @@ the result back in the same conversation. This is the seam that lets a Lean buil
 failure become an inner-loop tool result instead of a Phase 6 → Phase 7 round
 trip through a fresh process.
 
+**Phase 2 selects, deterministic code derives.** The planner owns judgement —
+which units, which groups, which shared concepts, which dependencies, and why.
+It never owns identity: unit IDs, shared dependency IDs, prerequisite IDs, the
+processing layers, and the cycle report are all derived from what it submitted
+and checked against the index. Every node ID it cites must exist, and a
+translation group must be justified by structure its members actually sit under,
+not a section that merely sounds related.
+
 **Phase 1 stays in Python for now.** It emits a SQLite database, which is a file
 artifact rather than a live protocol, so reading it from Rust introduces no
 process boundary of the kind this rewrite exists to remove.
@@ -143,15 +161,16 @@ for every unit kind, as before.
 
 ## Status
 
-Ported: Phase 3 (evidence retrieval), Phase 4 (semantic extraction), Phase 5
-(group translation, including the build loop that absorbs Phases 6 and 7 for the
-build-failure case).
+Ported: Phase 2 (planning), Phase 3 (evidence retrieval), Phase 4 (semantic
+extraction), Phase 5 (group translation, including the build loop that absorbs
+Phases 6 and 7 for the build-failure case).
 
 Not yet ported:
 
-- **Phase 2 (planner).** Plans must be supplied as JSON.
 - **The frozen shared core.** A group with shared prerequisites is refused with
   an explicit error rather than translated against an unagreed representation.
+  This is now the binding gap: a realistic plan almost always has shared
+  concepts, so Phase 5 cannot yet consume most of what Phase 2 produces.
 - **Phase 6's logical checking** (`checking/logical.py`, ~900 lines): reverse
   traceability and group-wide coverage beyond what Phase 5 validates per group.
 - **Phase 7's semantic routing.** The build-failure path is now an inner loop;
