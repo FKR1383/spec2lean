@@ -27,9 +27,14 @@ capability to disable — a tool call is a function call in this process.
 
 ```bash
 cargo build
-cargo test          # 160 tests, no network and no API key required
+cargo test          # 162 tests, no network and no API key required
 cargo clippy --all-targets
 ```
+
+One of those tests drives every phase in a single process — plan, evidence,
+semantics, core, translate, check — against real `lean`, with nothing mocked but
+the model'''s choices. Each phase has its own tests; that one exists for what
+they cannot see, which is the seam between them.
 
 The test suite builds its own synthetic Phase-1 index in-process
 (`spec2lean-specdb`'s `fixture` feature), so it needs neither Python nor a
