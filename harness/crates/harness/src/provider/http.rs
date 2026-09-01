@@ -250,3 +250,81 @@ mod status_tests {
         assert_eq!(value["stop_reason"], serde_json::json!("end_turn"));
     }
 }
+
+#[cfg(test)]
+mod auth_tests {
+    use super::super::anthropic::{AnthropicConfig, AnthropicProvider, Credential};
+    use super::super::{Provider, Request};
+    use std::io::{BufRead, BufReader, Read, Write};
+    use std::net::TcpListener;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    /// A server that records the request headers it was sent, then answers with
+    /// a minimal valid turn.
+    #[test]
+    fn an_oauth_token_reaches_the_api_as_a_bearer_credential() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().unwrap().port();
+        let (sender, receiver) = mpsc::channel::<String>();
+        std::thread::spawn(move || {
+            let Ok((stream, _)) = listener.accept() else {
+                return;
+            };
+            let mut reader = BufReader::new(&stream);
+            let mut headers = String::new();
+            let mut length = 0usize;
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
+                    break;
+                }
+                if let Some(value) = line.to_lowercase().strip_prefix("content-length:") {
+                    length = value.trim().parse().unwrap_or(0);
+                }
+                headers.push_str(&line.to_lowercase());
+            }
+            let mut discard = vec![0u8; length];
+            let _ = reader.read_exact(&mut discard);
+            let body = r#"{"model":"claude-opus-5","stop_reason":"end_turn","content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":1,"output_tokens":1}}"#;
+            let mut stream = &stream;
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = stream.flush();
+            let _ = sender.send(headers);
+        });
+
+        let provider = AnthropicProvider::new(AnthropicConfig {
+            credential: Credential::OAuth("sk-ant-oat01-secret".into()),
+            base_url: format!("http://127.0.0.1:{port}"),
+            model: "claude-opus-5".into(),
+            max_tokens: 16,
+            effort: None,
+            strict_tools: false,
+            timeout: Duration::from_secs(5),
+        });
+        let turn = provider
+            .turn(&Request {
+                system: "s",
+                prompt: "p",
+                exchanges: &[],
+                tools: &[],
+            })
+            .expect("the turn completes");
+        assert_eq!(turn.text, "ok");
+
+        let headers = receiver
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the server saw a request");
+        assert!(
+            headers.contains("authorization: bearer sk-ant-oat01-secret"),
+            "{headers}"
+        );
+        // Without this beta the Messages API does not accept an OAuth token.
+        assert!(headers.contains("anthropic-beta: oauth-2025-04-20"), "{headers}");
+        assert!(!headers.contains("x-api-key"), "{headers}");
+    }
+}

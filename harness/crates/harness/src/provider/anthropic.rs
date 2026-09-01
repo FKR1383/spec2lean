@@ -11,9 +11,37 @@ pub const DEFAULT_MODEL: &str = "claude-opus-5";
 const API_VERSION: &str = "2023-06-01";
 const DEFAULT_BASE_URL: &str = "https://api.anthropic.com";
 
+/// How this client authenticates.
+///
+/// An API key and an OAuth token are sent differently, and mixing them up
+/// yields a 401 that says nothing useful. The distinction is a type so it
+/// cannot be got wrong at the call site.
+#[derive(Debug, Clone)]
+pub enum Credential {
+    /// A `sk-ant-api…` key, sent as `x-api-key`.
+    ApiKey(String),
+    /// An OAuth access token, sent as `Authorization: Bearer` with the beta
+    /// header that opts into OAuth on the Messages API. This is what a
+    /// `claude` or `ant auth login` session already has, so a machine that can
+    /// run Claude Code needs no second credential.
+    OAuth(String),
+}
+
+impl Credential {
+    fn headers(&self) -> Vec<(&'static str, String)> {
+        match self {
+            Self::ApiKey(key) => vec![("x-api-key", key.clone())],
+            Self::OAuth(token) => vec![
+                ("authorization", format!("Bearer {token}")),
+                ("anthropic-beta", "oauth-2025-04-20".to_string()),
+            ],
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AnthropicConfig {
-    pub api_key: String,
+    pub credential: Credential,
     pub base_url: String,
     pub model: String,
     pub max_tokens: u32,
@@ -27,16 +55,26 @@ pub struct AnthropicConfig {
 }
 
 impl AnthropicConfig {
-    /// Read credentials from the environment. `ANTHROPIC_API_KEY` is required;
-    /// `ANTHROPIC_BASE_URL` overrides the endpoint for proxies and gateways.
+    /// Read credentials from the environment, in the order the SDKs use:
+    /// `ANTHROPIC_API_KEY`, then `ANTHROPIC_AUTH_TOKEN`. `ANTHROPIC_BASE_URL`
+    /// overrides the endpoint for proxies and gateways.
     pub fn from_env(model: Option<String>) -> Result<Self, HarnessError> {
-        let api_key = std::env::var("ANTHROPIC_API_KEY").map_err(|_| {
-            HarnessError::Config(
-                "ANTHROPIC_API_KEY is not set; export a key or select the openai provider".into(),
-            )
-        })?;
+        let credential = match std::env::var("ANTHROPIC_API_KEY") {
+            Ok(key) if !key.is_empty() => Credential::ApiKey(key),
+            _ => match std::env::var("ANTHROPIC_AUTH_TOKEN") {
+                Ok(token) if !token.is_empty() => Credential::OAuth(token),
+                _ => {
+                    return Err(HarnessError::Config(
+                        "no Anthropic credential: set ANTHROPIC_API_KEY, or set \
+                         ANTHROPIC_AUTH_TOKEN to an OAuth access token, or select the openai \
+                         provider"
+                            .into(),
+                    ));
+                }
+            },
+        };
         Ok(Self {
-            api_key,
+            credential,
             base_url: std::env::var("ANTHROPIC_BASE_URL")
                 .unwrap_or_else(|_| DEFAULT_BASE_URL.to_string()),
             model: model.unwrap_or_else(|| DEFAULT_MODEL.to_string()),
@@ -246,11 +284,11 @@ impl Provider for AnthropicProvider {
 
     fn turn(&self, request: &Request<'_>) -> Result<TurnResponse, HarnessError> {
         let url = format!("{}/v1/messages", self.config.base_url.trim_end_matches('/'));
-        let headers = [
+        let mut headers = vec![
             ("content-type", "application/json".to_string()),
-            ("x-api-key", self.config.api_key.clone()),
             ("anthropic-version", API_VERSION.to_string()),
         ];
+        headers.extend(self.config.credential.headers());
         let response = self.http.post_json(&url, &headers, &self.body(request))?;
         self.parse(&response)
     }
@@ -264,7 +302,7 @@ mod tests {
 
     fn provider() -> AnthropicProvider {
         AnthropicProvider::new(AnthropicConfig {
-            api_key: "test".into(),
+            credential: Credential::ApiKey("test".into()),
             base_url: DEFAULT_BASE_URL.into(),
             model: DEFAULT_MODEL.into(),
             max_tokens: 16_000,
@@ -414,6 +452,23 @@ mod tests {
         assert_eq!(turn.tool_calls[0].input["nodeId"], json!("node:html-syntax"));
         assert_eq!(turn.usage.cache_read_input_tokens, 13);
         assert_eq!(turn.usage.cache_creation_input_tokens, 11);
+    }
+
+    #[test]
+    fn each_credential_kind_is_sent_the_way_the_api_expects() {
+        let key = Credential::ApiKey("sk-ant-api-x".into()).headers();
+        assert_eq!(key, vec![("x-api-key", "sk-ant-api-x".to_string())]);
+
+        // An OAuth token goes on Authorization, and needs the beta that opts
+        // the Messages API into accepting one at all.
+        let oauth = Credential::OAuth("sk-ant-oat01-x".into()).headers();
+        assert_eq!(
+            oauth,
+            vec![
+                ("authorization", "Bearer sk-ant-oat01-x".to_string()),
+                ("anthropic-beta", "oauth-2025-04-20".to_string()),
+            ]
+        );
     }
 
     #[test]

@@ -27,7 +27,7 @@ capability to disable — a tool call is a function call in this process.
 
 ```bash
 cargo build
-cargo test          # 178 tests, no network and no API key required
+cargo test          # 179 tests, no network and no API key required
 cargo clippy --all-targets
 ```
 
@@ -49,6 +49,18 @@ export ANTHROPIC_API_KEY=...
 s2l run --database indexes/spec.sqlite --language ptx --version 8.5 \
         --family "integer arithmetic" --out runs/2026-09-01
 ```
+
+A machine that can run Claude Code already has a usable credential, so no second
+login is needed. `ANTHROPIC_AUTH_TOKEN` is sent as an OAuth bearer token:
+
+```bash
+export ANTHROPIC_AUTH_TOKEN=$(python3 -c \
+  "import json,pathlib;print(json.loads(pathlib.Path.home().joinpath('.claude/.credentials.json').read_text())['claudeAiOauth']['accessToken'])")
+```
+
+That token carries the `user:inference` scope and is subject to the account's
+Claude Code rate limit, so a long run competes with the session that produced
+it.
 
 It plans, then retrieves and extracts per unit, freezes a shared core if the
 plan needs one, translates each group whose units all completed, and checks the
