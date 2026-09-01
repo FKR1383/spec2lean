@@ -150,6 +150,48 @@ def _page_furniture(
     return furniture
 
 
+def _compact_table(rows: list[list[Any]]) -> tuple[list[list[str]], int]:
+    """Drop columns that are empty in every row.
+
+    Merged and spanning cells make PyMuPDF report a grid several times wider
+    than the table really is, padded with `None`. In a specification's register
+    tables two of every three columns can be padding, which is what an extractor
+    then has to read past to find the bit fields.
+    """
+    width = max((len(row) for row in rows), default=0)
+    normalized = [
+        [("" if cell is None else str(cell)) for cell in row] + [""] * (width - len(row))
+        for row in rows
+    ]
+    keep = [
+        column
+        for column in range(width)
+        if any(normalized[row][column].strip() for row in range(len(normalized)))
+    ]
+    compacted = [[row[column] for column in keep] for row in normalized]
+
+    # A merged header cell also splits one logical column across two grid
+    # columns: the header lands in one, every data value in the other, and the
+    # two are never occupied in the same row. Merging them puts each column
+    # back under its own heading.
+    merged = True
+    while merged and compacted and len(compacted[0]) > 1:
+        merged = False
+        for column in range(len(compacted[0]) - 1):
+            left = [row[column].strip() for row in compacted]
+            right = [row[column + 1].strip() for row in compacted]
+            if not any(left) or not any(right):
+                continue
+            if any(a and b for a, b in zip(left, right)):
+                continue
+            for row in compacted:
+                combined = row[column] or row[column + 1]
+                row[column : column + 2] = [combined]
+            merged = True
+            break
+    return compacted, width - len(compacted[0] if compacted else [])
+
+
 def _body_font_size(blocks: list[PdfBlock]) -> float:
     weighted: Counter[float] = Counter()
     for block in blocks:
@@ -297,14 +339,15 @@ def parse_pdf(path: str | Path, official_url: str | None = None, *, detect_table
             try:
                 finder = page.find_tables()
                 for table_index, table in enumerate(finder.tables):
-                    rows = table.extract()
-                    raw = "\n".join("\t".join(cell or "" for cell in row) for row in rows)
+                    rows, dropped = _compact_table(table.extract())
+                    raw = "\n".join("\t".join(row) for row in rows)
                     tables.append(
                         {
                             "index": table_index,
                             "bbox": tuple(float(value) for value in table.bbox),
                             "rows": rows,
                             "raw_text": raw,
+                            "empty_columns_dropped": dropped,
                         }
                     )
             except Exception as exc:  # retain page content even when table inference fails
@@ -357,7 +400,11 @@ def parse_pdf(path: str | Path, official_url: str | None = None, *, detect_table
                     raw_text=raw,
                     page_start=page_number,
                     page_end=page_number,
-                    metadata={"rows": table["rows"], "pdf_table_index": table["index"]},
+                    metadata={
+                        "rows": table["rows"],
+                        "pdf_table_index": table["index"],
+                        "empty_columns_dropped": table.get("empty_columns_dropped", 0),
+                    },
                     spans=[SourceSpan(raw, page_number, table["bbox"])],
                     references=text_references(raw),
                 )

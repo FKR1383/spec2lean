@@ -269,3 +269,46 @@ def test_an_unnumbered_document_keeps_its_headings(tmp_path):
         if node.node_type in {"chapter", "section", "subsection"}
     ]
     assert "Overview" in headings, headings
+
+
+def test_merged_cells_do_not_widen_a_table_with_padding():
+    """PyMuPDF reports a grid, not a table.
+
+    Merged and spanning cells pad the grid with `None` and split one logical
+    column across two, so a register table arrives several times wider than it
+    is. Both are recoverable without guessing: a column empty in every row
+    carries nothing, and two adjacent columns never occupied in the same row are
+    one column split by a merged header.
+    """
+    from spec2lean.parsers.pdf import _compact_table
+
+    raw = [
+        ["", "Start", "", "", "End", "", "", "Name", ""],
+        ["00h", None, None, "3Fh", None, None, "PCI Header", None, None],
+        ["PMCAP", None, None, "PMCAP+7h", None, None, "PCI Power Management", None, None],
+    ]
+    rows, dropped = _compact_table(raw)
+    assert rows == [
+        ["Start", "End", "Name"],
+        ["00h", "3Fh", "PCI Header"],
+        ["PMCAP", "PMCAP+7h", "PCI Power Management"],
+    ], rows
+    assert dropped == 6
+
+
+def test_genuinely_distinct_columns_are_left_alone():
+    """Two columns that are ever occupied together are two columns."""
+    from spec2lean.parsers.pdf import _compact_table
+
+    rows, dropped = _compact_table(
+        [["Bits", "Type"], ["31:16", "RO"], ["15:00", "RW"]]
+    )
+    assert rows == [["Bits", "Type"], ["31:16", "RO"], ["15:00", "RW"]]
+    assert dropped == 0
+
+
+def test_a_table_of_only_empty_cells_does_not_crash():
+    from spec2lean.parsers.pdf import _compact_table
+
+    rows, _ = _compact_table([[None, None], ["", ""]])
+    assert all(not any(cell.strip() for cell in row) for row in rows)
