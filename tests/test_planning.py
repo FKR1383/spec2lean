@@ -10,7 +10,7 @@ from spec2lean.database import connect
 from spec2lean.planning.models import PlanningRequest, ScopeMode
 from spec2lean.planning.mcp import PlannerMcpServer, tool_definitions
 from spec2lean.planning.runner import PLANNER_MODEL, PLANNER_REASONING, build_plan, opencode_config
-from spec2lean.planning.scope import Phase1Query, ScopeResolver
+from spec2lean.planning.scope import Phase1Query, ScopeResolver, _syntax_accepts
 from spec2lean.planning.validation import build_validated_plan, validate_submission
 
 
@@ -81,6 +81,36 @@ def test_invalid_exact_instruction_fails_during_resolution(planner_database):
                 ScopeResolver(connection).resolve(
                     PlanningRequest.exact("synthetic", "1.0", [invalid])
                 )
+
+
+def test_syntax_templates_support_alias_chains_without_language_specific_rules():
+    syntax = """
+convert{.round}.destination.source output, input;
+.round = { .nearest, .zero };
+.destination = .source = { .word, .real };
+"""
+
+    assert _syntax_accepts("convert.nearest.real.word", "convert", syntax)
+    assert _syntax_accepts("convert.word.real", "convert", syntax)
+    assert not _syntax_accepts("convert.nearest.unknown.word", "convert", syntax)
+
+
+def test_syntax_templates_support_namespaces_and_nested_alternatives():
+    syntax = """
+fetch{.space}{.level::policy}{.vector}.type output, [address];
+.space = { .global, .parameter{::entry, ::function}, .shared{::group, ::cluster} };
+.level::policy = { .L1::keep, .L2::stream };
+.vector = { .pair, .quad };
+.type = { .word, .long };
+"""
+
+    assert _syntax_accepts("fetch.global.word", "fetch", syntax)
+    assert _syntax_accepts(
+        "fetch.parameter::function.L2::stream.quad.long", "fetch", syntax
+    )
+    assert _syntax_accepts("fetch.parameter.word", "fetch", syntax)
+    assert not _syntax_accepts("fetch.word.global", "fetch", syntax)
+    assert not _syntax_accepts("fetch.global.unknown", "fetch", syntax)
 
 
 def test_family_and_source_subtree_build_bounded_candidates(planner_database):

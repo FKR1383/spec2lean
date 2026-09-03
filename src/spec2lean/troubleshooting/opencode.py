@@ -94,7 +94,7 @@ def run_opencode_repair(
         raise RuntimeError("OpenCode executable is not installed or not on PATH")
     require_troubleshooter_model(executable)
     version = _version(executable, run_command)
-    prompt = build_troubleshooter_prompt(context)
+    prompt = build_troubleshooter_prompt()
     with tempfile.TemporaryDirectory(prefix="spec2lean-troubleshooting-") as temporary_name:
         temporary = Path(temporary_name)
         context_path = temporary / "repair-context.json"

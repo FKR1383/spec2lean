@@ -14,6 +14,13 @@ MAX_FAMILY_CANDIDATES = 200
 MAX_TOOL_ROWS = 100
 MAX_TOOL_TEXT_CHARS = 24_000
 
+_SUFFIX_NAME = r"[A-Za-z][A-Za-z0-9_]*(?:::[A-Za-z0-9_]+)*"
+_SUFFIX_TOKEN = re.compile(rf"\.(?P<name>{_SUFFIX_NAME})")
+_DEFINITION_HEAD = re.compile(
+    rf"(?P<aliases>(?:\.{_SUFFIX_NAME}\s*=\s*)+)\{{",
+    re.I,
+)
+
 
 def _title_mnemonics(title: str | None) -> list[str]:
     if not title:
@@ -22,32 +29,114 @@ def _title_mnemonics(title: str | None) -> list[str]:
     return [item.casefold() for item in re.findall(r"[@A-Za-z_{}][@A-Za-z0-9_.{}]*", tail)]
 
 
-def _syntax_accepts(instruction: str, mnemonic: str, syntax_text: str) -> bool:
-    """Match an exact spelling against syntax forms and their finite alternatives."""
+def _matching_brace(text: str, opening: int) -> int | None:
+    depth = 0
+    for position in range(opening, len(text)):
+        if text[position] == "{":
+            depth += 1
+        elif text[position] == "}":
+            depth -= 1
+            if depth == 0:
+                return position
+    return None
+
+
+def _definition_choices(body: str) -> set[str]:
+    """Extract finite dotted alternatives, including nested namespace choices."""
+    choices: set[str] = set()
+    position = 0
+    nested_choice = re.compile(rf"(?:::|\.){_SUFFIX_NAME}")
+    while match := _SUFFIX_TOKEN.search(body, position):
+        base = match.group(0).casefold()
+        choices.add(base)
+        position = match.end()
+        if position >= len(body) or body[position] != "{":
+            continue
+        closing = _matching_brace(body, position)
+        if closing is None:
+            break
+        for nested in nested_choice.finditer(body, position + 1, closing):
+            choices.add(base + nested.group(0).casefold())
+        position = closing + 1
+    return choices
+
+
+def _syntax_definitions(syntax_text: str) -> dict[str, set[str]]:
+    """Parse finite suffix definitions and assign alias chains to every name."""
     definitions: dict[str, set[str]] = {}
-    for match in re.finditer(r"\.([A-Za-z][A-Za-z0-9_]*)\s*=\s*\{([^}]*)\}", syntax_text):
-        definitions[match.group(1).casefold()] = {
-            item.casefold() for item in re.findall(r"\.[A-Za-z0-9_]+", match.group(2))
+    position = 0
+    while match := _DEFINITION_HEAD.search(syntax_text, position):
+        opening = match.end() - 1
+        closing = _matching_brace(syntax_text, opening)
+        if closing is None:
+            break
+        choices = _definition_choices(syntax_text[opening + 1 : closing])
+        for alias in _SUFFIX_TOKEN.finditer(match.group("aliases")):
+            definitions.setdefault(alias.group("name").casefold(), set()).update(choices)
+        position = closing + 1
+    return definitions
+
+
+def _syntax_form_terms(syntax_text: str, position: int) -> list[tuple[bool, str]]:
+    """Read adjacent required or braced-optional dotted suffix terms."""
+    terms: list[tuple[bool, str]] = []
+    while position < len(syntax_text):
+        if syntax_text.startswith("{.", position):
+            closing = _matching_brace(syntax_text, position)
+            if closing is None:
+                break
+            token = _SUFFIX_TOKEN.fullmatch(syntax_text[position + 1 : closing].strip())
+            if token is None:
+                break
+            terms.append((True, token.group("name").casefold()))
+            position = closing + 1
+            continue
+        token = _SUFFIX_TOKEN.match(syntax_text, position)
+        if token is None:
+            break
+        terms.append((False, token.group("name").casefold()))
+        position = token.end()
+    return terms
+
+
+def _terms_accept(
+    wanted_suffix: str,
+    terms: list[tuple[bool, str]],
+    definitions: dict[str, set[str]],
+) -> bool:
+    """Match without materializing the Cartesian product of all alternatives."""
+    positions = {0}
+    for optional, name in terms:
+        choices = definitions.get(name, {f".{name}"})
+        candidates = choices | ({""} if optional else set())
+        positions = {
+            position + len(candidate)
+            for position in positions
+            for candidate in candidates
+            if wanted_suffix.startswith(candidate, position)
         }
-    form_pattern = re.compile(
-        rf"(?<![A-Za-z0-9_.]){re.escape(mnemonic)}"
-        r"((?:(?:\{\.[A-Za-z0-9_]+\})|(?:\.[A-Za-z0-9_]+))+)",
+        if not positions:
+            return False
+    return len(wanted_suffix) in positions
+
+
+def _syntax_accepts(instruction: str, mnemonic: str, syntax_text: str) -> bool:
+    """Match an exact spelling against source-defined finite syntax templates."""
+    wanted = instruction.casefold()
+    mnemonic = mnemonic.casefold()
+    if not wanted.startswith(mnemonic):
+        return False
+    definitions = _syntax_definitions(syntax_text)
+    form_start = re.compile(
+        rf"(?<![A-Za-z0-9_.]){re.escape(mnemonic)}(?=\.|\{{\.)",
         re.I,
     )
-    wanted = instruction.casefold()
-    for match in form_pattern.finditer(syntax_text):
-        suffix_terms = re.findall(r"\{\.[A-Za-z0-9_]+\}|\.[A-Za-z0-9_]+", match.group(1))
-        expansions = [mnemonic.casefold()]
-        for term in suffix_terms:
-            optional = term.startswith("{")
-            name = term.strip("{}")[1:].casefold()
-            choices = sorted(definitions.get(name, {f".{name}"}))
-            if optional:
-                choices = [""] + choices
-            expansions = [prefix + choice for prefix in expansions for choice in choices]
-        if wanted in expansions:
-            return True
-    return False
+    wanted_suffix = wanted[len(mnemonic) :]
+    return any(
+        terms and _terms_accept(wanted_suffix, terms, definitions)
+        for match in form_start.finditer(syntax_text)
+        if (terms := _syntax_form_terms(syntax_text, match.end()))
+    )
 
 
 def _node_summary(row: sqlite3.Row | dict[str, Any], *, include_text: bool = False) -> dict[str, Any]:

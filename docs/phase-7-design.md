@@ -20,10 +20,14 @@ handoff contains the exact `uncovered` array.
 
 A build-only failure starts one restricted OpenCode session using the exact
 installed model `openai/gpt-5.6-sol` with `medium` reasoning. No model is
-substituted if it is unavailable. The session receives the complete group Lean source,
-compiler diagnostics, all group Phase-4 semantic artifacts, Phase-5 manifest, and Phase-6
-traceability result. All ordinary file, shell, browsing, task, and editing tools
-are denied. Its only capability is a local `submit_repair` tool.
+substituted if it is unavailable. The session receives the complete group Lean source, compiler
+diagnostics, all group Phase-4 semantic artifacts, Phase-5 manifest, and Phase-6 traceability result
+through bounded components of a local read-only `get_context` tool. The model reads the overview,
+Lean source, manifest, traceability result, and each group member's semantic artifact before it may
+submit. Keeping this potentially large payload out of both the process argument list and any single
+tool response avoids operating-system launch-size and tool-output truncation limits. All ordinary
+file, shell, browsing, task, and editing tools are denied. Its only other capability is a local
+`submit_repair` tool.
 
 The submitted candidate is deterministically checked using the Phase-5
 translation validator. Every named declaration must remain mapped to existing

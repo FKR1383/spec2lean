@@ -1,14 +1,18 @@
 from __future__ import annotations
 
-import json
-from typing import Any
 
+def build_troubleshooter_prompt() -> str:
+    return """You are the Spec2Lean Phase-7 Troubleshooter for one failed Lean build.
 
-def build_troubleshooter_prompt(context: dict[str, Any]) -> str:
-    return f"""You are the Spec2Lean Phase-7 Troubleshooter for one failed Lean build.
+Before analyzing or repairing anything, call troubleshooting_get_context for `overview`. Then fetch
+`leanSource`, `translationManifest`, and `traceability`, plus `semantics` once for every unit ID listed
+by the overview. Each immutable response is one complete component of the repair context. Together
+they contain the group Lean source, compiler diagnostics, semantic artifacts, translation manifest,
+traceability result, toolchain version, and prior repair attempts. Do not try to read that context
+from the filesystem or submit until every listed component has been read.
 
 Repair only the syntax, elaboration, type-checking, import, name-resolution, or Lean API problems
-identified by the supplied compiler diagnostics. Prefer the smallest local patch. Finish by calling
+identified by those compiler diagnostics. Prefer the smallest local patch. Finish by calling
 troubleshooting_submit_repair with the complete repaired group Lean source, complete updated
 cross-unit declaration mappings, and a concise list of changes. Never submit a fragment. If the
 tool returns validation diagnostics, correct the submission and call it again within this same
@@ -37,10 +41,10 @@ Hard boundaries:
 - For a file-level import change that affects no mapped declaration body or responsibility, use an
   empty `affectedDeclarations` array. Otherwise list every mapped declaration actually affected.
 - Do not manufacture hashes, timestamps, model/version data, run IDs, or other deterministic metadata.
-- Use only troubleshooting_submit_repair. The repaired candidate will return to Phase 6; do not run
-  the compiler, start another repair session, or claim that it builds. Correcting rejected tool
-  arguments within this same session is allowed as described above.
+- Use only troubleshooting_get_context and troubleshooting_submit_repair. The repaired candidate
+  will return to Phase 6; do not run the compiler, start another repair session, or claim that it
+  builds. Correcting rejected tool arguments within this same session is allowed as described above.
 
-Compiler-guided repair context:
-{json.dumps(context, ensure_ascii=False, indent=2, sort_keys=True)}
+The complete context is transported through troubleshooting_get_context so it is not duplicated
+inside this operating-system command-line argument.
 """
