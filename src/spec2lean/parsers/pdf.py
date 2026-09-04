@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 from collections import Counter
 from dataclasses import dataclass, field
@@ -33,7 +34,7 @@ ENTRY_TITLE_RE = re.compile(
 class PdfBlock:
     page: int
     index: int
-    bbox: tuple[float, float, float, float]
+    bbox: tuple[float, float, float, float] | None
     raw_text: str
     max_size: float
     bold_ratio: float
@@ -59,6 +60,102 @@ def _overlap_ratio(a: tuple[float, float, float, float], b: tuple[float, float, 
     area = max(0.0, x1 - x0) * max(0.0, y1 - y0)
     own = max(1.0, (a[2] - a[0]) * (a[3] - a[1]))
     return area / own
+
+
+def _bbox_on_page(
+    bbox: tuple[float, float, float, float],
+    page_width: float,
+    page_height: float,
+) -> bool:
+    """Return whether a PDF bbox is finite, ordered, and within the page."""
+    x0, y0, x1, y1 = bbox
+    return (
+        all(math.isfinite(value) for value in bbox)
+        and 0 <= x0 <= x1 <= page_width + 1
+        and 0 <= y0 <= y1 <= page_height + 1
+    )
+
+
+def _bbox_from_transform(transform: Any) -> tuple[float, float, float, float] | None:
+    """Map the unit image rectangle through a six-value PDF transform."""
+    try:
+        a, b, c, d, e, f = (float(value) for value in transform)
+    except (TypeError, ValueError):
+        return None
+    points = ((e, f), (a + e, b + f), (c + e, d + f), (a + c + e, b + d + f))
+    return (
+        min(point[0] for point in points),
+        min(point[1] for point in points),
+        max(point[0] for point in points),
+        max(point[1] for point in points),
+    )
+
+
+def _extract_image_block(
+    page_number: int,
+    image_index: int,
+    image: dict[str, Any],
+    page_width: float,
+    page_height: float,
+) -> PdfBlock:
+    """Create a non-text block from PyMuPDF's displayed-image inventory.
+
+    ``get_text('dict')`` can return corrupt image-mask bboxes when media-box
+    clipping is enabled. ``get_image_info()`` avoids loading image binaries and
+    normally supplies the correct displayed bbox. The transform provides a
+    deterministic fallback, and an untrustworthy bbox is never persisted.
+    """
+    try:
+        reported_bbox = tuple(float(value) for value in image.get("bbox", ()))
+    except (TypeError, ValueError):
+        reported_bbox = ()
+    bbox: tuple[float, float, float, float] | None = None
+    bbox_source = "unavailable"
+    if len(reported_bbox) == 4 and _bbox_on_page(reported_bbox, page_width, page_height):
+        bbox = reported_bbox
+        bbox_source = "get_image_info"
+    else:
+        transformed_bbox = _bbox_from_transform(image.get("transform"))
+        if transformed_bbox is not None and _bbox_on_page(
+            transformed_bbox, page_width, page_height
+        ):
+            bbox = transformed_bbox
+            bbox_source = "transform_fallback"
+
+    transform = image.get("transform")
+    metadata: dict[str, Any] = {
+        "pdf_block_type": 1,
+        "pdf_image_index": image_index,
+        "pdf_image_number": image.get("number"),
+        "width": image.get("width"),
+        "height": image.get("height"),
+        "colorspace": image.get("colorspace"),
+        "colorspace_name": image.get("cs-name"),
+        "bits_per_component": image.get("bpc"),
+        "x_resolution": image.get("xres"),
+        "y_resolution": image.get("yres"),
+        "encoded_size": image.get("size"),
+        "has_mask": image.get("has-mask"),
+        "bbox_source": bbox_source,
+    }
+    if transform is not None:
+        try:
+            metadata["transform"] = tuple(float(value) for value in transform)
+        except (TypeError, ValueError):
+            metadata["transform_invalid"] = True
+    if len(reported_bbox) == 4 and bbox_source != "get_image_info":
+        metadata["invalid_reported_bbox"] = reported_bbox
+    return PdfBlock(
+        page=page_number,
+        index=image_index,
+        bbox=bbox,
+        raw_text="",
+        max_size=0,
+        bold_ratio=0,
+        mono_ratio=0,
+        block_type=1,
+        metadata=metadata,
+    )
 
 
 def _extract_block(page_number: int, index: int, block: dict[str, Any]) -> PdfBlock:
@@ -289,9 +386,26 @@ def parse_pdf(path: str | Path, official_url: str | None = None, *, detect_table
                 "source_text_chars": len(normalize_text(page_text)),
             }
         )
-        page_dict = page.get_text("dict", sort=True)
+        # Text and displayed images intentionally use separate APIs. PyMuPDF's
+        # default dictionary flags preserve images and apply media-box clipping;
+        # that combination can produce malformed bboxes for image masks.
+        text_flags = fitz.TEXTFLAGS_DICT & ~fitz.TEXT_PRESERVE_IMAGES
+        page_dict = page.get_text("dict", flags=text_flags, sort=True)
         for block_index, block_data in enumerate(page_dict.get("blocks", [])):
             all_blocks.append(_extract_block(page_number, block_index, block_data))
+        for image_index, image_info in enumerate(page.get_image_info()):
+            image_block = _extract_image_block(
+                page_number,
+                image_index,
+                image_info,
+                float(page.rect.width),
+                float(page.rect.height),
+            )
+            all_blocks.append(image_block)
+            if image_block.bbox is None:
+                stats["pdf_image_bbox_unavailable"] += 1
+            elif image_block.metadata["bbox_source"] == "transform_fallback":
+                stats["pdf_image_bbox_transform_fallback"] += 1
 
         tables: list[dict[str, Any]] = []
         if detect_tables and hasattr(page, "find_tables"):
@@ -335,15 +449,26 @@ def parse_pdf(path: str | Path, official_url: str | None = None, *, detect_table
 
     for page_number in range(1, len(pdf) + 1):
         blocks = [block for block in all_blocks if block.page == page_number]
-        blocks.sort(key=lambda item: (round(item.bbox[1], 2), round(item.bbox[0], 2), item.index))
+        blocks.sort(
+            key=lambda item: (
+                round(item.bbox[1], 2) if item.bbox is not None else float("inf"),
+                round(item.bbox[0], 2) if item.bbox is not None else float("inf"),
+                item.block_type,
+                item.index,
+            )
+        )
         tables = table_by_page.get(page_number, [])
         events: list[tuple[float, float, str, Any]] = []
         for table in tables:
             events.append((table["bbox"][1], table["bbox"][0], "table", table))
         for block in blocks:
-            if any(_overlap_ratio(block.bbox, table["bbox"]) >= 0.5 for table in tables):
+            if block.bbox is not None and any(
+                _overlap_ratio(block.bbox, table["bbox"]) >= 0.5 for table in tables
+            ):
                 continue
-            events.append((block.bbox[1], block.bbox[0], "block", block))
+            event_y = block.bbox[1] if block.bbox is not None else float("inf")
+            event_x = block.bbox[0] if block.bbox is not None else float("inf")
+            events.append((event_y, event_x, "block", block))
         events.sort(key=lambda event: (round(event[0], 2), round(event[1], 2), event[2]))
 
         for _, _, kind, value in events:
@@ -369,7 +494,7 @@ def parse_pdf(path: str | Path, official_url: str | None = None, *, detect_table
             block: PdfBlock = value
             if block.block_type != 0:
                 node = Node(
-                    source_key=f"page:{page_number}:block:{block.index}",
+                    source_key=f"page:{page_number}:image:{block.index}",
                     node_type="generic",
                     raw_text="",
                     page_start=page_number,

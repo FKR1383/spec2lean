@@ -8,7 +8,13 @@ import pymupdf as fitz
 
 from spec2lean.database import build_database, connect
 from spec2lean.cli import main
-from spec2lean.parsers.pdf import PdfBlock, _body_font_size, _heading, parse_pdf
+from spec2lean.parsers.pdf import (
+    PdfBlock,
+    _body_font_size,
+    _extract_image_block,
+    _heading,
+    parse_pdf,
+)
 from spec2lean.util import walk_nodes
 from spec2lean.validation import validate_database
 
@@ -37,6 +43,16 @@ def _make_pdf(path):
     page2.insert_text((72, 72), "2 Operations", fontsize=18, fontname="hebo")
     page2.insert_textbox((72, 95, 540, 145), "See Section 1.1 for syntax.", fontsize=10, fontname="helv")
     page2.insert_textbox((72, 160, 540, 220), "Definition predicate: a one-bit guard.", fontsize=10, fontname="helv")
+    document.save(path)
+    document.close()
+
+
+def _make_image_pdf(path):
+    document = fitz.open()
+    page = document.new_page(width=100, height=100)
+    pixmap = fitz.Pixmap(fitz.csGRAY, fitz.IRect(0, 0, 2, 2), False)
+    pixmap.clear_with(127)
+    page.insert_image(fitz.Rect(10, 20, 30, 40), pixmap=pixmap)
     document.save(path)
     document.close()
 
@@ -115,6 +131,77 @@ def test_cli_build_records_page_text_in_manifest(tmp_path, capsys):
     assert page_text["format_version"] == 1
     assert page_text["relative_path"].startswith("text/")
     assert Path(page_text["path"]).is_file()
+
+
+def test_pdf_images_use_displayed_image_inventory_deterministically(tmp_path):
+    source = tmp_path / "image.pdf"
+    _make_image_pdf(source)
+
+    parsed = parse_pdf(source, detect_tables=False)
+    repeated = parse_pdf(source, detect_tables=False)
+    image_nodes = [
+        node for node, _, _, _ in walk_nodes(parsed.root) if node.node_type == "generic"
+    ]
+    repeated_images = [
+        node for node, _, _, _ in walk_nodes(repeated.root) if node.node_type == "generic"
+    ]
+
+    assert len(image_nodes) == 1
+    assert image_nodes[0].source_key == "page:1:image:0"
+    assert image_nodes[0].spans[0].bbox == (10.0, 20.0, 30.0, 40.0)
+    assert image_nodes[0].metadata["bbox_source"] == "get_image_info"
+    assert image_nodes[0].source_key == repeated_images[0].source_key
+    assert image_nodes[0].spans[0].bbox == repeated_images[0].spans[0].bbox
+    assert image_nodes[0].metadata == repeated_images[0].metadata
+
+    database = tmp_path / "image.sqlite"
+    build_database(database, language="synthetic-pdf", version="1.0", documents=[parsed])
+    with connect(database, read_only=True) as db:
+        report = validate_database(db)
+    assert report["ok"], report["issues"]
+
+
+def test_pdf_invalid_image_bbox_uses_transform_fallback():
+    block = _extract_image_block(
+        page_number=836,
+        image_index=0,
+        image={
+            "number": 12,
+            "bbox": (153, 594, 56.875, -507.25),
+            "transform": (0.96, 0, 0, 0.96, 153, 594),
+            "width": 8,
+            "height": 8,
+            "colorspace": 0,
+            "bpc": 1,
+        },
+        page_width=612,
+        page_height=792,
+    )
+
+    assert block.bbox == (153.0, 594.0, 153.96, 594.96)
+    assert block.metadata["bbox_source"] == "transform_fallback"
+    assert block.metadata["invalid_reported_bbox"] == (
+        153.0,
+        594.0,
+        56.875,
+        -507.25,
+    )
+
+
+def test_pdf_unrecoverable_image_bbox_is_omitted():
+    block = _extract_image_block(
+        page_number=1,
+        image_index=0,
+        image={
+            "bbox": (-20, 10, -5, 20),
+            "transform": (10, 0, 0, 10, -20, 10),
+        },
+        page_width=100,
+        page_height=100,
+    )
+
+    assert block.bbox is None
+    assert block.metadata["bbox_source"] == "unavailable"
 
 
 def test_pdf_entry_title_uses_document_typography_not_instruction_names():
