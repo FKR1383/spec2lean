@@ -834,19 +834,28 @@ fn tasks_run(flags: &Flags) -> Result<(), String> {
         let directory = out.join(&task.name);
         std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
 
-        // Only what this task declared it depends on, so a task cannot quietly
-        // build on something the plan never said it needed.
-        let dependencies: Vec<DependencyModule> = task
-            .depends_on
-            .iter()
-            .filter_map(|name| finished.get(name).cloned())
-            .collect();
-        // As source, not as names: an isolated stage cannot remember writing it.
-        let already: Vec<(String, String)> = dependencies
+        // Everything finished so far, not only what the plan drew an edge to.
+        // The edges order the work; they are not an access list, and a task
+        // that cannot see an existing definition will write a second one.
+        let dependencies: Vec<DependencyModule> = finished.values().cloned().collect();
+        let mut signatures = spec2lean_lean::signatures(&dependencies, &lean);
+        let available: Vec<(String, Vec<(String, String)>)> = dependencies
             .iter()
             .map(|module| {
-                let source = std::fs::read_to_string(&module.source).unwrap_or_default();
-                (module.module.clone(), source)
+                let prefix = format!("{}.", module.module);
+                let mut owned: Vec<(String, String)> = signatures
+                    .keys()
+                    .filter(|name| name.starts_with(&prefix))
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .map(|name| {
+                        let signature = signatures.remove(&name).unwrap_or_default();
+                        (name, signature)
+                    })
+                    .collect();
+                owned.sort();
+                (module.module.clone(), owned)
             })
             .collect();
 
@@ -864,7 +873,7 @@ fn tasks_run(flags: &Flags) -> Result<(), String> {
 
         let mut tools = TaskTools::new(&db, task.clone(), units.clone(), directory.join("lean"), &lean)
             .with_dependencies(dependencies);
-        let user = task_prompt::user_prompt(task, &units, &already);
+        let user = task_prompt::user_prompt(task, &units, &available);
         let (outcome, transcript) = session.stage(user, &mut tools);
 
         write_json(&directory.join("transcript.json"), &serde_json::to_value(&transcript)
