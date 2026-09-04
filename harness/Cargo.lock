@@ -646,6 +646,7 @@ dependencies = [
  "spec2lean-semantics",
  "spec2lean-shared-core",
  "spec2lean-specdb",
+ "spec2lean-tasks",
  "spec2lean-translation",
 ]
 
@@ -794,6 +795,19 @@ dependencies = [
  "serde_json",
  "sha2",
  "unicode-normalization",
+]
+
+[[package]]
+name = "spec2lean-tasks"
+version = "0.1.0"
+dependencies = [
+ "harness",
+ "serde",
+ "serde_json",
+ "spec2lean-evidence",
+ "spec2lean-lean",
+ "spec2lean-specdb",
+ "spec2lean-translation",
 ]
 
 [[package]]

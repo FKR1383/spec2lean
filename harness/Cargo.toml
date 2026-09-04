@@ -9,6 +9,7 @@ members = [
     "crates/evidence",
     "crates/semantics",
     "crates/shared-core",
+    "crates/tasks",
     "crates/translation",
     "crates/s2l",
 ]
@@ -28,6 +29,7 @@ spec2lean-checking = { path = "crates/checking" }
 spec2lean-evidence = { path = "crates/evidence" }
 spec2lean-semantics = { path = "crates/semantics" }
 spec2lean-shared-core = { path = "crates/shared-core" }
+spec2lean-tasks = { path = "crates/tasks", version = "0.1.0" }
 spec2lean-translation = { path = "crates/translation" }
 
 serde = { version = "1", features = ["derive"] }

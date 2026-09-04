@@ -64,6 +64,10 @@ USAGE:
     Any command accepts --verdict <WORKSPACE>, which appends one EDLab verdict
     line to <WORKSPACE>/.edlab/verdicts.jsonl and exits 0 or 1.
 
+    s2l tasks run        --database <PATH> --plan <PATH> --out <DIR>
+                         [PROVIDER OPTIONS] [--lean <EXECUTABLE>]
+                         (one session per task: read the index, write Lean, compile)
+
     s2l check            --database <PATH> --group-dir <DIR> --units <DIR>
                          [--core <DIR>]
 
@@ -127,6 +131,10 @@ fn run() -> Result<(), String> {
                 "run" => evidence_run(&flags),
                 other => Err(format!("unknown evidence command: {other}\n\n{USAGE}")),
             }
+        }
+        ["tasks", "run", rest @ ..] => {
+            let flags = Flags::parse(rest)?;
+            tasks_run(&flags)
         }
         ["run", rest @ ..] => {
             let flags = Flags::parse(rest)?;
@@ -785,6 +793,122 @@ fn write_plan_artifacts(
 /// one implementation of each phase. It stops a *unit* at its first failure and
 /// keeps going with the others: a run that formalized three of four units is
 /// more useful than one that reports only that it failed.
+/// The task loop.
+///
+/// One session per task, in the order the plan already worked out, each writing
+/// one Lean file that cites the text it rests on. The phases between planning
+/// and checking are gone: the model that reads the specification is the model
+/// that formalizes it, so nothing has to be serialised and handed on.
+fn tasks_run(flags: &Flags) -> Result<(), String> {
+    use spec2lean_lean::DependencyModule;
+    use spec2lean_tasks::{TaskTools, prompt as task_prompt, tasks_from_plan};
+
+    let db = SpecDb::open(&flags.path("database")?).map_err(|e| e.to_string())?;
+    let plan = read_json(&flags.path("plan")?)?;
+    let out = flags.path("out")?;
+    let lean = flags.optional("lean").unwrap_or("lean").to_string();
+    let provider = provider(flags)?;
+    let steps = max_steps(flags)?;
+
+    let (tasks, blocked) = tasks_from_plan(&plan);
+    if tasks.is_empty() {
+        return Err(format!(
+            "the plan yielded no runnable task ({} blocked by dependency cycles)",
+            blocked.len()
+        ));
+    }
+
+    // One session for the whole loop: every task runs under the same
+    // instructions, so a provider that can resume pays for them once.
+    let mut session = Session::new(provider.as_ref(), task_prompt::system_prompt())
+        .with_max_steps(steps);
+
+    let mut finished: BTreeMap<String, DependencyModule> = BTreeMap::new();
+    let mut records: Vec<Value> = Vec::new();
+    let mut failures = 0usize;
+
+    for task in &tasks {
+        let directory = out.join(&task.name);
+        std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
+
+        // Only what this task declared it depends on, so a task cannot quietly
+        // build on something the plan never said it needed.
+        let dependencies: Vec<DependencyModule> = task
+            .depends_on
+            .iter()
+            .filter_map(|name| finished.get(name).cloned())
+            .collect();
+        let already: Vec<String> = dependencies.iter().map(|d| d.module.clone()).collect();
+
+        let units: Vec<Value> = plan["requestedUnits"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|unit| {
+                unit["unitId"]
+                    .as_str()
+                    .is_some_and(|id| task.unit_ids.iter().any(|wanted| wanted == id))
+            })
+            .cloned()
+            .collect();
+
+        let mut tools = TaskTools::new(&db, task.clone(), units.clone(), directory.join("lean"), &lean)
+            .with_dependencies(dependencies);
+        let user = task_prompt::user_prompt(task, &units, &already);
+        let (outcome, transcript) = session.stage(user, &mut tools);
+
+        write_json(&directory.join("transcript.json"), &serde_json::to_value(&transcript)
+            .map_err(|e| e.to_string())?)?;
+        write_json(&directory.join("exposure-trace.json"), &tools.exposure_trace())?;
+
+        match (outcome, tools.accepted()) {
+            (Ok(()), Some(accepted)) => {
+                write_json(&directory.join("task.json"), accepted)?;
+                let status = accepted["status"].as_str().unwrap_or("UNKNOWN");
+                if status == "FORMALIZED" {
+                    finished.insert(
+                        task.name.clone(),
+                        DependencyModule {
+                            module: tools.module_name(),
+                            source: directory.join("lean").join(format!("{}.lean", task.name)),
+                        },
+                    );
+                }
+                println!("  [{}] {}", status.to_lowercase(), task.name);
+                records.push(json!({"task": task.name, "status": status}));
+            }
+            (outcome, _) => {
+                failures += 1;
+                let detail = outcome.err().map(|e| e.to_string())
+                    .unwrap_or_else(|| "the session ended without a submission".into());
+                println!("  [failed] {} — {detail}", task.name);
+                records.push(json!({"task": task.name, "status": "FAILED", "detail": detail}));
+            }
+        }
+    }
+
+    for (name, waiting) in &blocked {
+        println!("  [blocked] {name} — waiting on {waiting}");
+        records.push(json!({"task": name, "status": "BLOCKED", "detail": waiting}));
+    }
+
+    // The loop is finished when the plan is covered, which is a property of the
+    // records rather than anything the model said about itself.
+    let covered = records.iter().filter(|r| r["status"] == "FORMALIZED").count();
+    write_json(&out.join("tasks-manifest.json"), &json!({
+        "schemaVersion": 1,
+        "taskCount": tasks.len() + blocked.len(),
+        "formalized": covered,
+        "tasks": records,
+    }))?;
+
+    println!("tasks: {covered}/{} formalized", tasks.len() + blocked.len());
+    if failures > 0 || !blocked.is_empty() {
+        return Err(format!("{failures} task(s) failed, {} blocked", blocked.len()));
+    }
+    Ok(())
+}
+
 fn pipeline_run(flags: &Flags) -> Result<(), String> {
     use pipeline::{
         Layout, PhaseRecord, empty_manifest, processable_units, ready_groups, write_manifest,

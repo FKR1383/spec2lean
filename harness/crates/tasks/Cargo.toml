@@ -1,0 +1,19 @@
+[package]
+name = "spec2lean-tasks"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "A task loop: one session per batch of properties, from indexed text to checked Lean."
+
+[dependencies]
+harness = { workspace = true }
+spec2lean-specdb = { workspace = true }
+spec2lean-evidence = { workspace = true }
+spec2lean-lean = { workspace = true }
+spec2lean-translation = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+spec2lean-specdb = { workspace = true, features = ["fixture"] }
