@@ -16,6 +16,7 @@
 //!
 //! Evidence is not a stage here. It is the citation on a declaration.
 
+pub mod embedder;
 pub mod prompt;
 pub mod spec_tool;
 pub mod task;

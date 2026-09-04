@@ -326,3 +326,27 @@ bodies and response parsing, but have not been exercised against the live
 endpoints from this workspace (no API key present). `strict_tools` is off by
 default for that reason; the typed deserialisation in each tool set is the
 primary guarantee either way.
+
+## Two index modes
+
+The index is full-text, which finds passages sharing words with the query. A
+specification rarely obliges: the section that answers "what happens when the
+controller is restarted" is headed *Controller Level Reset*, and shares not one
+of those words. On this index that query returns nothing lexically and the right
+section at 0.611 semantically.
+
+Embeddings are optional and live in the same SQLite file, so an index either
+carries them or does not:
+
+```bash
+python3 -m spec2lean.embeddings --database indexes/pcie-transport-1.0d-fixed.sqlite
+```
+
+`spec` then takes a `mode`. `lexical` matches words and needs the
+specification's own vocabulary. `semantic` matches meaning and reaches
+paraphrase, but drifts toward the merely topical. `hybrid` is the default
+wherever embeddings exist, and fuses the two rankings by reciprocal rank rather
+than by score, because a similarity and a full-text relevance are not the same
+quantity. An index built without embeddings keeps working, lexically, and a
+`semantic` search against one is refused rather than quietly answered the other
+way.

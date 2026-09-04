@@ -610,3 +610,114 @@ pub fn truncate_chars(value: &str, limit: usize) -> (String, bool) {
 }
 
 use rusqlite::OptionalExtension;
+
+/// One node ranked by how close its text is to a query vector.
+#[derive(Debug, Clone)]
+pub struct SemanticHit {
+    pub node: NodeRow,
+    pub similarity: f32,
+}
+
+/// What an index knows about its own embeddings, if it has any.
+#[derive(Debug, Clone)]
+pub struct EmbeddingBuild {
+    pub model: String,
+    pub dim: usize,
+    pub node_count: i64,
+}
+
+impl SpecDb {
+    /// The embedding build this index carries, or `None` if it was built
+    /// without one. Every index answers this — a semantic search against a
+    /// lexical-only index should say so rather than return nothing.
+    pub fn embedding_build(&self) -> Result<Option<EmbeddingBuild>> {
+        let exists: i64 = self.connection.query_row(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='embedding_builds'",
+            [],
+            |row| row.get(0),
+        )?;
+        if exists == 0 {
+            return Ok(None);
+        }
+        let mut statement = self
+            .connection
+            .prepare("SELECT model, dim, node_count FROM embedding_builds LIMIT 1")?;
+        let mut rows = statement.query([])?;
+        match rows.next()? {
+            Some(row) => Ok(Some(EmbeddingBuild {
+                model: row.get(0)?,
+                dim: row.get::<_, i64>(1)? as usize,
+                node_count: row.get(2)?,
+            })),
+            None => Ok(None),
+        }
+    }
+
+    /// Nodes most similar to `query`, best first.
+    ///
+    /// Brute force over every stored vector. A specification index holds
+    /// hundreds to low thousands of nodes, so this is a few milliseconds of
+    /// arithmetic, and it keeps the index one SQLite file with no extension to
+    /// load and no second store to keep in step.
+    pub fn semantic_search(&self, query: &[f32], limit: i64) -> Result<Vec<SemanticHit>> {
+        bounded_limit(limit)?;
+        if self.embedding_build()?.is_none() || query.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut statement = self
+            .connection
+            .prepare("SELECT node_id, vector FROM embeddings")?;
+        let mut rows = statement.query([])?;
+        let mut scored: Vec<(f32, NodeId)> = Vec::new();
+        while let Some(row) = rows.next()? {
+            let node_id: String = row.get(0)?;
+            let blob: Vec<u8> = row.get(1)?;
+            let Some(similarity) = cosine(query, &blob) else {
+                continue;
+            };
+            scored.push((similarity, NodeId::trusted(node_id)));
+        }
+        // Descending by similarity; ties by node id so a run is reproducible.
+        scored.sort_by(|left, right| {
+            right
+                .0
+                .partial_cmp(&left.0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| left.1.as_str().cmp(right.1.as_str()))
+        });
+        scored.truncate(limit as usize);
+
+        let mut hits = Vec::with_capacity(scored.len());
+        for (similarity, node_id) in scored {
+            hits.push(SemanticHit {
+                node: self.node(&node_id)?,
+                similarity,
+            });
+        }
+        Ok(hits)
+    }
+}
+
+/// Cosine similarity between a query and a stored little-endian float32 vector.
+///
+/// Stored vectors are normalised at build time and queries are normalised when
+/// they are embedded, so this is a dot product — but the norms are applied
+/// anyway, because an index built by an older writer that did not normalise
+/// would otherwise rank by magnitude.
+fn cosine(query: &[f32], blob: &[u8]) -> Option<f32> {
+    if blob.len() != query.len() * 4 {
+        return None;
+    }
+    let mut dot = 0f32;
+    let mut norm = 0f32;
+    for (index, chunk) in blob.chunks_exact(4).enumerate() {
+        let value = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+        dot += value * query[index];
+        norm += value * value;
+    }
+    let query_norm: f32 = query.iter().map(|value| value * value).sum();
+    if norm == 0.0 || query_norm == 0.0 {
+        return None;
+    }
+    Some(dot / (norm.sqrt() * query_norm.sqrt()))
+}

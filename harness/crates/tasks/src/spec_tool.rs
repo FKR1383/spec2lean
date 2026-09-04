@@ -12,10 +12,14 @@
 //! caller reassemble one. Every bound the eight had is kept, because the point
 //! was never that they were too strict.
 
+use std::collections::BTreeMap;
+
 use serde_json::{Value, json};
 use spec2lean_specdb::{NodeId, NodeRow, SpecDb, truncate_chars};
 
 use spec2lean_evidence::ExposureLedger;
+
+use crate::embedder::{Embedder, fuse};
 
 /// Text budget for one node, and how many neighbours to name. A neighbourhood
 /// is for orienting; reading a whole subtree is what `depth` is for.
@@ -48,6 +52,15 @@ pub fn schema() -> Value {
                 "minimum": 1,
                 "maximum": 25,
                 "description": "Maximum matches for a query. Defaults to 5."
+            },
+            "mode": {
+                "type": "string",
+                "enum": ["lexical", "semantic", "hybrid"],
+                "description": "How to search. `lexical` matches words, so it needs the \
+                                specification's own vocabulary. `semantic` matches meaning, \
+                                which finds a passage that says what you mean in other words. \
+                                `hybrid`, the default where this index has embeddings, uses \
+                                both. Ignored when you give `node`."
             }
         }
     })
@@ -60,7 +73,12 @@ pub fn description() -> &'static str {
      Cite only span ids this tool has shown you."
 }
 
-pub fn call(db: &SpecDb, ledger: &mut ExposureLedger, input: &Value) -> Result<Value, String> {
+pub fn call(
+    db: &SpecDb,
+    ledger: &mut ExposureLedger,
+    embedder: Option<&mut Embedder>,
+    input: &Value,
+) -> Result<Value, String> {
     let query = input.get("query").and_then(Value::as_str);
     let node = input.get("node").and_then(Value::as_str);
     let depth = input.get("depth").and_then(Value::as_i64).unwrap_or(0).clamp(0, 3);
@@ -73,12 +91,83 @@ pub fn call(db: &SpecDb, ledger: &mut ExposureLedger, input: &Value) -> Result<V
             if text.trim().is_empty() {
                 return Err("`query` is empty".into());
             }
-            let hits = db.search(text, limit).map_err(|e| e.to_string())?;
-            let matches: Vec<Value> = hits
+            let semantic_available = embedder.is_some()
+                && db.embedding_build().map_err(|e| e.to_string())?.is_some();
+            let requested = input.get("mode").and_then(Value::as_str);
+            let mode = match requested {
+                Some(mode @ ("semantic" | "hybrid")) if !semantic_available => {
+                    // Silently answering lexically would make an index without
+                    // embeddings look like one whose meaning search found little.
+                    return Err(format!(
+                        "`{mode}` needs an index built with embeddings and an embedder for this \
+                         run; this one has neither. Search with `lexical`."
+                    ));
+                }
+                Some(mode) => mode,
+                None if semantic_available => "hybrid",
+                None => "lexical",
+            };
+
+            let lexical = if mode == "semantic" {
+                Vec::new()
+            } else {
+                db.search(text, limit).map_err(|e| e.to_string())?
+            };
+            let mut snippets: BTreeMap<String, String> = lexical
                 .iter()
-                .map(|hit| render(db, ledger, &hit.node, depth, Some(&hit.snippet)))
-                .collect::<Result<_, _>>()?;
-            Ok(json!({"query": text, "matchCount": matches.len(), "matches": matches}))
+                .map(|hit| (hit.node.node_id.as_str().to_string(), hit.snippet.clone()))
+                .collect();
+
+            let semantic = if mode == "lexical" {
+                Vec::new()
+            } else {
+                let embedder = embedder.expect("checked by semantic_available");
+                let vector = embedder.embed(text)?;
+                db.semantic_search(&vector, limit).map_err(|e| e.to_string())?
+            };
+
+            let ranked: Vec<String> = match mode {
+                "lexical" => lexical
+                    .iter()
+                    .map(|hit| hit.node.node_id.as_str().to_string())
+                    .collect(),
+                "semantic" => semantic
+                    .iter()
+                    .map(|hit| hit.node.node_id.as_str().to_string())
+                    .collect(),
+                _ => fuse(
+                    &lexical
+                        .iter()
+                        .map(|hit| hit.node.node_id.as_str().to_string())
+                        .collect::<Vec<_>>(),
+                    &semantic
+                        .iter()
+                        .map(|hit| hit.node.node_id.as_str().to_string())
+                        .collect::<Vec<_>>(),
+                    limit as usize,
+                ),
+            };
+            let similarity: BTreeMap<String, f32> = semantic
+                .iter()
+                .map(|hit| (hit.node.node_id.as_str().to_string(), hit.similarity))
+                .collect();
+
+            let mut matches = Vec::new();
+            for id in &ranked {
+                let node_id = NodeId::parse(id).map_err(|e| e.to_string())?;
+                let row = db.node(&node_id).map_err(|e| e.to_string())?;
+                let mut value = render(db, ledger, &row, depth, snippets.remove(id).as_deref())?;
+                if let Some(score) = similarity.get(id) {
+                    value["similarity"] = json!((score * 1000.0).round() / 1000.0);
+                }
+                matches.push(value);
+            }
+            Ok(json!({
+                "query": text,
+                "mode": mode,
+                "matchCount": matches.len(),
+                "matches": matches,
+            }))
         }
         (None, Some(id)) => {
             let node_id = NodeId::parse(id).map_err(|e| e.to_string())?;

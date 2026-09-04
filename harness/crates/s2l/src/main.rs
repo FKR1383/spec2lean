@@ -852,6 +852,27 @@ fn tasks_run(flags: &Flags) -> Result<(), String> {
         }
     };
 
+    // Semantic search is a property of the index, not a flag: an index built
+    // with embeddings gets it, one built without carries on lexically. A model
+    // that will not start is reported once and then not mentioned again.
+    let mut embedder = match db.embedding_build().map_err(|e| e.to_string())? {
+        None => None,
+        Some(build) => {
+            let python = flags.optional("python").unwrap_or("python3");
+            let root = flags.optional("python-path").unwrap_or("src");
+            match spec2lean_tasks::embedder::Embedder::start(python, &build.model, root) {
+                Ok(embedder) => {
+                    println!("  [index] semantic search over {} node(s)", build.node_count);
+                    Some(embedder)
+                }
+                Err(error) => {
+                    println!("  [index] lexical search only: {error}");
+                    None
+                }
+            }
+        }
+    };
+
     let (tasks, blocked) = tasks_from_plan(&plan);
     if tasks.is_empty() {
         return Err(format!(
@@ -914,9 +935,12 @@ fn tasks_run(flags: &Flags) -> Result<(), String> {
             .collect();
 
         let mut tools = TaskTools::new(&db, task.clone(), units.clone(), directory.join("lean"), &lean)
-            .with_dependencies(dependencies);
+            .with_dependencies(dependencies)
+            .with_embedder(embedder.take());
         let user = task_prompt::user_prompt(task, &units, &available);
         let (outcome, transcript) = session.stage(user, &mut tools);
+        // The model is loaded once for the run; every task borrows it in turn.
+        embedder = tools.take_embedder();
 
         write_json(&directory.join("transcript.json"), &serde_json::to_value(&transcript)
             .map_err(|e| e.to_string())?)?;

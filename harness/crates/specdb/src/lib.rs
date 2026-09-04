@@ -11,7 +11,7 @@ pub mod fixture;
 pub mod ids;
 pub mod text;
 
-pub use db::{
+pub use db::{EmbeddingBuild, SemanticHit, 
     CorrelationRow, DefinitionRow, MAX_NODE_TEXT_CHARS, MAX_TOOL_ROWS, NodeRow, SearchHit, SpanRow,
     SpecDb, SpecDbError, SourceType, XrefRow, truncate_chars,
 };

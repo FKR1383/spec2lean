@@ -9,6 +9,7 @@ use spec2lean_lean::{AxiomAudit, BuildResult, DependencyModule, audit, run_build
 use spec2lean_specdb::SpecDb;
 use spec2lean_translation::source;
 
+use crate::embedder::Embedder;
 use crate::task::Task;
 use crate::validation::{Diagnostic, validate};
 
@@ -33,6 +34,8 @@ pub struct TaskTools<'a> {
     last_build: Option<BuildResult>,
     last_audit: Option<AxiomAudit>,
     builds: u32,
+    /// Absent when this index has no embeddings, or the model could not start.
+    embedder: Option<Embedder>,
 }
 
 impl<'a> TaskTools<'a> {
@@ -56,7 +59,19 @@ impl<'a> TaskTools<'a> {
             last_build: None,
             last_audit: None,
             builds: 0,
+            embedder: None,
         }
+    }
+
+    pub fn with_embedder(mut self, embedder: Option<Embedder>) -> Self {
+        self.embedder = embedder;
+        self
+    }
+
+    /// Hand the embedder back so the next task can use it. The model is loaded
+    /// once per run, not once per task, and the tool set is per task.
+    pub fn take_embedder(&mut self) -> Option<Embedder> {
+        self.embedder.take()
     }
 
     pub fn with_dependencies(mut self, dependencies: Vec<DependencyModule>) -> Self {
@@ -160,7 +175,12 @@ impl ToolSet for TaskTools<'_> {
     fn call(&mut self, name: &str, input: &Value) -> ToolOutcome {
         self.ledger.record_call(name, input);
         match name {
-            "spec" => match crate::spec_tool::call(self.db, &mut self.ledger, input) {
+            "spec" => match crate::spec_tool::call(
+                self.db,
+                &mut self.ledger,
+                self.embedder.as_mut(),
+                input,
+            ) {
                 Ok(value) => ToolOutcome::Ok(value),
                 Err(message) => ToolOutcome::Err(message),
             },
