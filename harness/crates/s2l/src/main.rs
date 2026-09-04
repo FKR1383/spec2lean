@@ -336,6 +336,7 @@ fn provider(flags: &Flags) -> Result<Box<dyn Provider>, String> {
         "codex" => {
             let mut config = CodexConfig {
                 model,
+                effort,
                 ..CodexConfig::default()
             };
             if let Some(value) = flags.optional("timeout") {

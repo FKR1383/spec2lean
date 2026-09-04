@@ -32,7 +32,7 @@ use std::sync::Mutex;
 use serde_json::{Value, json};
 
 use crate::error::HarnessError;
-use crate::provider::{Provider, Request, StopReason, ToolCall, TurnResponse};
+use crate::provider::{Effort, Provider, Request, StopReason, ToolCall, TurnResponse};
 use crate::tool::ToolSpec;
 use crate::transcript::Usage;
 
@@ -62,6 +62,10 @@ pub struct CodexConfig {
     pub model: Option<String>,
     pub sandbox: Sandbox,
     pub timeout_seconds: u64,
+    /// `None` leaves the user's configured effort alone. Passing it matters:
+    /// every phase otherwise inherits one setting, and the phases that only
+    /// retrieve text pay for the reasoning the phases that write Lean need.
+    pub effort: Option<Effort>,
 }
 
 impl Default for CodexConfig {
@@ -71,6 +75,7 @@ impl Default for CodexConfig {
             model: None,
             sandbox: Sandbox::ReadOnly,
             timeout_seconds: 900,
+            effort: None,
         }
     }
 }
@@ -317,6 +322,11 @@ impl CodexProvider {
         if let Some(model) = &self.config.model {
             command.arg("--model").arg(model);
         }
+        if let Some(effort) = self.config.effort {
+            command
+                .arg("-c")
+                .arg(format!("model_reasoning_effort=\"{}\"", codex_effort(effort)));
+        }
         command
             .arg("-")
             .stdin(Stdio::piped())
@@ -477,6 +487,17 @@ fn resumable(open: &Thread, request: &Request<'_>) -> bool {
     open.system == request.system && request.exchanges.len() > open.sent
 }
 
+/// The harness offers five effort levels; codex accepts four. The two above
+/// `high` map onto it rather than being dropped, because silently ignoring a
+/// requested effort is how every phase ended up reasoning at the same setting.
+fn codex_effort(effort: Effort) -> &'static str {
+    match effort {
+        Effort::Low => "low",
+        Effort::Medium => "medium",
+        Effort::High | Effort::XHigh | Effort::Max => "high",
+    }
+}
+
 /// The thread a turn ran in, announced once on `thread.started`.
 fn thread_from_events(events: &str) -> Option<String> {
     for line in events.lines() {
@@ -504,7 +525,11 @@ fn usage_from_events(events: &str) -> Usage {
         if event["type"] == "turn.completed" {
             let counts = &event["usage"];
             usage.input_tokens += counts["input_tokens"].as_u64().unwrap_or(0);
-            usage.output_tokens += counts["output_tokens"].as_u64().unwrap_or(0);
+            // Reasoning tokens are generated, billed, and are most of the wall
+            // clock at high effort. Counting only the visible reply reports a
+            // fraction of what a turn cost.
+            usage.output_tokens += counts["output_tokens"].as_u64().unwrap_or(0)
+                + counts["reasoning_output_tokens"].as_u64().unwrap_or(0);
             usage.cache_read_input_tokens += counts["cached_input_tokens"].as_u64().unwrap_or(0);
         }
     }
@@ -988,5 +1013,32 @@ mod tests {
         // And the schema says it too, where the model is actually looking.
         let schema = CodexProvider::reply_schema().to_string();
         assert!(schema.contains("not just the first"));
+    }
+
+    /// Reasoning tokens are generated and billed, and at high effort they are
+    /// most of a turn's wall clock. A transcript that counts only the visible
+    /// reply reports a fraction of what the run cost.
+    #[test]
+    fn usage_counts_reasoning_tokens_as_output_not_as_nothing() {
+        let events = concat!(
+            r#"{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":10,"#,
+            r#""cached_input_tokens":40,"reasoning_output_tokens":900}}"#, "\n",
+        );
+        let usage = usage_from_events(events);
+        assert_eq!(usage.output_tokens, 910, "the 900 reasoning tokens were generated too");
+        assert_eq!(usage.input_tokens, 100);
+        assert_eq!(usage.cache_read_input_tokens, 40);
+    }
+
+    /// Every level must reach codex. Dropping the two above `high` is how a
+    /// requested effort silently becomes whatever the user's config said.
+    #[test]
+    fn every_effort_level_maps_onto_one_codex_accepts() {
+        use Effort::*;
+        assert_eq!(codex_effort(Low), "low");
+        assert_eq!(codex_effort(Medium), "medium");
+        for high in [High, XHigh, Max] {
+            assert_eq!(codex_effort(high), "high");
+        }
     }
 }
