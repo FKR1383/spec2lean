@@ -64,9 +64,11 @@ USAGE:
     Any command accepts --verdict <WORKSPACE>, which appends one EDLab verdict
     line to <WORKSPACE>/.edlab/verdicts.jsonl and exits 0 or 1.
 
-    s2l tasks run        --database <PATH> --plan <PATH> --out <DIR>
-                         [PROVIDER OPTIONS] [--lean <EXECUTABLE>]
-                         (one session per task: read the index, write Lean, compile)
+    s2l tasks run        --database <PATH> --language <L> --version <V> [SELECTOR]
+                         --out <DIR> [PROVIDER OPTIONS] [--lean <EXECUTABLE>]
+                         [--plan <PATH> to re-use a plan instead of making one]
+                         (plan, then one session per task: read the index,
+                          write Lean, compile, check)
 
     s2l check            --database <PATH> --group-dir <DIR> --units <DIR>
                          [--core <DIR>]
@@ -193,6 +195,11 @@ fn run() -> Result<(), String> {
 
 struct Flags(BTreeMap<String, String>);
 
+/// Flags that are a choice, not a setting. Everything else takes a value, and
+/// keeping the list explicit means a missing value is still an error rather
+/// than being guessed at from what happens to follow.
+const VALUELESS: &[&str] = &["full"];
+
 impl Flags {
     fn parse(words: &[&str]) -> Result<Self, String> {
         let mut flags = BTreeMap::new();
@@ -202,6 +209,11 @@ impl Flags {
             let name = word
                 .strip_prefix("--")
                 .ok_or_else(|| format!("expected a --flag, found {word:?}"))?;
+            if VALUELESS.contains(&name) {
+                flags.insert(name.to_string(), String::new());
+                index += 1;
+                continue;
+            }
             let value = words
                 .get(index + 1)
                 .ok_or_else(|| format!("--{name} requires a value"))?;
@@ -803,12 +815,42 @@ fn tasks_run(flags: &Flags) -> Result<(), String> {
     use spec2lean_lean::DependencyModule;
     use spec2lean_tasks::{TaskTools, prompt as task_prompt, tasks_from_plan};
 
-    let db = SpecDb::open(&flags.path("database")?).map_err(|e| e.to_string())?;
-    let plan = read_json(&flags.path("plan")?)?;
     let out = flags.path("out")?;
     let lean = flags.optional("lean").unwrap_or("lean").to_string();
     let provider = provider(flags)?;
     let steps = max_steps(flags)?;
+
+    // One command. Planning is the first thing the loop does, not something the
+    // caller is expected to have run and to hand over on the command line —
+    // `--plan` stays only so an existing plan can be re-run without paying for
+    // it twice.
+    let (db, plan) = match flags.optional("plan") {
+        Some(path) => (
+            SpecDb::open(&flags.path("database")?).map_err(|e| e.to_string())?,
+            read_json(&PathBuf::from(path))?,
+        ),
+        None => {
+            let (db, scope, plan_run_id, digest) = planning_context(flags)?;
+            let mut planner = PlanningTools::new(&db, scope, plan_run_id, digest);
+            let user = spec2lean_planning::prompt::user_prompt(planner.scope());
+            let (outcome, transcript) =
+                Session::new(provider.as_ref(), spec2lean_planning::prompt::system_prompt())
+                    .with_max_steps(steps)
+                    .stage(user, &mut planner);
+            let plan_directory = out.join("plan");
+            write_plan_artifacts(&plan_directory, &planner, Some(&transcript))?;
+            outcome.map_err(|error| {
+                format!("planning failed: {error} (artifacts in {})", plan_directory.display())
+            })?;
+            let plan = planner.plan().expect("accepted").clone();
+            println!(
+                "  [planned] {} unit(s), {} group(s)",
+                plan["requestedUnits"].as_array().map_or(0, Vec::len),
+                plan["translationGroups"].as_array().map_or(0, Vec::len),
+            );
+            (db, plan)
+        }
+    };
 
     let (tasks, blocked) = tasks_from_plan(&plan);
     if tasks.is_empty() {
@@ -1620,4 +1662,30 @@ fn write_json(path: &Path, value: &Value) -> Result<(), String> {
 
 fn pretty(value: &Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| "{}".into())
+}
+
+#[cfg(test)]
+mod flag_tests {
+    use super::*;
+
+    /// `--full` is documented as a selector that takes no value, and used to be
+    /// unusable as documented: the parser demanded one and then never read it.
+    #[test]
+    fn a_valueless_flag_does_not_swallow_the_next_argument() {
+        let flags = Flags::parse(&["--full", "--out", "runs/x"]).expect("parses");
+        assert!(flags.optional("full").is_some());
+        assert_eq!(flags.optional("out"), Some("runs/x"));
+
+        let trailing = Flags::parse(&["--out", "runs/x", "--full"]).expect("parses");
+        assert!(trailing.optional("full").is_some());
+        assert_eq!(trailing.optional("out"), Some("runs/x"));
+    }
+
+    #[test]
+    fn a_flag_that_needs_a_value_still_fails_without_one() {
+        match Flags::parse(&["--database"]) {
+            Err(error) => assert!(error.contains("--database requires a value")),
+            Ok(_) => panic!("a flag that needs a value must not parse without one"),
+        }
+    }
 }
