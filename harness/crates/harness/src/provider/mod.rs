@@ -1,5 +1,6 @@
 pub mod anthropic;
 pub mod codex;
+pub mod codex_mcp;
 pub mod http;
 pub mod openai;
 pub mod recorded;

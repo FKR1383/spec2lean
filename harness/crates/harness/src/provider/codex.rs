@@ -46,7 +46,7 @@ pub enum Sandbox {
 }
 
 impl Sandbox {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::ReadOnly => "read-only",
             Self::WorkspaceWrite => "workspace-write",
@@ -83,16 +83,16 @@ impl Default for CodexConfig {
 /// The codex thread this session is talking to, and how much of the harness's
 /// transcript it has already been told about.
 #[derive(Debug)]
-struct Thread {
-    id: String,
-    sent: usize,
+pub(crate) struct Thread {
+    pub(crate) id: String,
+    pub(crate) sent: usize,
     /// The instructions the thread is working under. A phase change replaces
     /// them, and they are only ever sent by the full render, so a thread opened
     /// under one system prompt cannot be resumed under another.
-    system: String,
+    pub(crate) system: String,
     /// The task it was last given. One session runs many units under the same
     /// instructions, and each is a new task the thread has to be told about.
-    prompt: String,
+    pub(crate) prompt: String,
 }
 
 /// The longest a single turn may run. Beyond this the deadline arithmetic in
@@ -133,7 +133,7 @@ impl CodexProvider {
     /// itself with `additionalProperties: false`, which no schema for
     /// "arbitrary tool input" can satisfy. Parsing one extra layer here is the
     /// price of keeping the constraint enforceable.
-    fn reply_schema() -> Value {
+    pub(crate) fn reply_schema() -> Value {
         json!({
             "type": "object",
             "additionalProperties": false,
@@ -166,7 +166,7 @@ impl CodexProvider {
         })
     }
 
-    fn render_tools(tools: &[ToolSpec]) -> String {
+    pub(crate) fn render_tools(tools: &[ToolSpec]) -> String {
         let mut rendered = String::from("# Tools\n\nYou may call only these:\n\n");
         for tool in tools {
             rendered.push_str(&format!(
@@ -181,7 +181,7 @@ impl CodexProvider {
 
     /// The whole conversation. Used to open a thread, and to rebuild one after
     /// a resume fails — the only two moments the history is not already there.
-    fn render_full(request: &Request<'_>) -> String {
+    pub(crate) fn render_full(request: &Request<'_>) -> String {
         let mut prompt = String::new();
         prompt.push_str(
             "You are driving a tool-using task through a harness that executes every tool for \
@@ -246,7 +246,7 @@ impl CodexProvider {
     /// for. The assistant's own reply is deliberately absent — codex wrote it
     /// and still holds it, and echoing it back would both waste the prefix and
     /// invite the model to treat its own words as a new instruction.
-    fn render_delta(request: &Request<'_>, sent: usize, new_task: bool) -> String {
+    pub(crate) fn render_delta(request: &Request<'_>, sent: usize, new_task: bool) -> String {
         let mut prompt = String::new();
         if new_task {
             prompt.push_str("# New task\n\nThe previous task is finished. Ignore it; this is \
@@ -483,14 +483,14 @@ fn wait_with_timeout(
 }
 
 /// Whether an open thread is still the conversation this request continues.
-fn resumable(open: &Thread, request: &Request<'_>) -> bool {
+pub(crate) fn resumable(open: &Thread, request: &Request<'_>) -> bool {
     open.system == request.system && request.exchanges.len() > open.sent
 }
 
 /// The harness offers five effort levels; codex accepts four. The two above
 /// `high` map onto it rather than being dropped, because silently ignoring a
 /// requested effort is how every phase ended up reasoning at the same setting.
-fn codex_effort(effort: Effort) -> &'static str {
+pub(crate) fn codex_effort(effort: Effort) -> &'static str {
     match effort {
         Effort::Low => "low",
         Effort::Medium => "medium",
@@ -542,7 +542,7 @@ fn usage_from_events(events: &str) -> Usage {
 /// subprocess: this is where a schema-constrained reply becomes something the
 /// loop can execute, and it is the only place that decides what a malformed
 /// reply means.
-fn parse_reply(body: &str, turn_index: usize) -> Result<(String, Vec<ToolCall>), HarnessError> {
+pub(crate) fn parse_reply(body: &str, turn_index: usize) -> Result<(String, Vec<ToolCall>), HarnessError> {
     let reply: Value = serde_json::from_str(body).map_err(|e| {
         HarnessError::Decode(format!(
             "codex's final message was not JSON ({e}): {}",

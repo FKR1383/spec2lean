@@ -14,6 +14,7 @@ use std::process::ExitCode;
 use harness::provider::anthropic::{AnthropicConfig, AnthropicProvider};
 use harness::provider::openai::{OpenAiConfig, OpenAiProvider};
 use harness::provider::codex::{CodexConfig, CodexProvider};
+use harness::provider::codex_mcp::McpCodexProvider;
 use harness::{Effort, Provider, Session};
 use serde_json::{Value, json};
 use spec2lean_checking::{CheckInputs, check};
@@ -72,7 +73,8 @@ SELECTOR (exactly one; --full is the default):
     --instructions <a,b,c> | --family <NAME> | --subtree <node:ID> | --full
 
 PROVIDER OPTIONS:
-    [--provider anthropic|openai|codex] [--model <ID>] [--timeout <S>]
+    [--provider anthropic|openai|codex|codex-mcp] [--model <ID>]
+    [--timeout <S>]
     [--effort low|medium|high|xhigh|max] [--max-steps <N>]
 
 ENVIRONMENT:
@@ -333,7 +335,7 @@ fn provider(flags: &Flags) -> Result<Box<dyn Provider>, String> {
         "openai" => Box::new(OpenAiProvider::new(
             OpenAiConfig::from_env(model).map_err(|e| e.to_string())?,
         )),
-        "codex" => {
+        "codex" | "codex-mcp" => {
             let mut config = CodexConfig {
                 model,
                 effort,
@@ -344,7 +346,13 @@ fn provider(flags: &Flags) -> Result<Box<dyn Provider>, String> {
                     .parse()
                     .map_err(|_| format!("--timeout must be whole seconds, found {value:?}"))?;
             }
-            Box::new(CodexProvider::new(config))
+            // One long-lived MCP server instead of a process per turn, which
+            // also replaces codex's own preamble rather than re-sending it.
+            if flags.optional("provider") == Some("codex-mcp") {
+                Box::new(McpCodexProvider::new(config))
+            } else {
+                Box::new(CodexProvider::new(config))
+            }
         }
         other => return Err(format!("unknown provider: {other}")),
     })
