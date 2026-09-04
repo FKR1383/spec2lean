@@ -231,13 +231,25 @@ fn check_citation(
     let Some(row) = rows.first() else {
         return;
     };
-    if !contains_normalized(&row.raw_text, quote) {
-        diagnostics.push(Diagnostic::new(
-            "QUOTE_NOT_IN_SPAN",
-            "`quote` does not appear in the span it cites",
-            format!("{path}.quote"),
-        ));
+    if contains_normalized(&row.raw_text, quote) {
+        return;
     }
+
+    // A span is a line of a PDF, not a sentence. A requirement that runs across
+    // a line break is one quotation and belongs to one node, so the node's text
+    // is the honest boundary: the words must be there, in the passage the
+    // citation names. Demanding they fit inside a single span rejects accurate
+    // quotations of exactly the prose worth citing.
+    let node_text = db.node(&row.node_id).map(|node| node.raw_text).unwrap_or_default();
+    if contains_normalized(&node_text, quote) {
+        return;
+    }
+
+    diagnostics.push(Diagnostic::new(
+        "QUOTE_NOT_IN_SPAN",
+        "`quote` does not appear in the cited span, or anywhere in the passage it belongs to",
+        format!("{path}.quote"),
+    ));
 }
 
 /// Whitespace is not evidence. A quotation that differs from the span only by
@@ -246,4 +258,29 @@ fn contains_normalized(haystack: &str, needle: &str) -> bool {
     let flatten = |value: &str| value.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
     let needle = flatten(needle);
     !needle.is_empty() && flatten(haystack).contains(&needle)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_quotation_is_the_same_however_a_pdf_broke_its_lines() {
+        let span = "This value shall overwrite any previous\nSubmission Queue Tail entry pointer";
+        assert!(contains_normalized(span, "shall overwrite any previous Submission Queue Tail"));
+        assert!(contains_normalized(span, "SHALL   overwrite\tany previous"));
+    }
+
+    #[test]
+    fn an_empty_quotation_matches_nothing() {
+        // Otherwise every span contains it and the check means nothing.
+        assert!(!contains_normalized("anything at all", ""));
+        assert!(!contains_normalized("anything at all", "   \n\t "));
+    }
+
+    #[test]
+    fn words_that_are_not_there_are_still_refused() {
+        let span = "Indicates the new value of the Submission Queue Tail entry pointer.";
+        assert!(!contains_normalized(span, "the controller shall reset the link"));
+    }
 }

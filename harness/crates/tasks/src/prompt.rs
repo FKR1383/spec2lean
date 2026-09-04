@@ -26,19 +26,39 @@ pub fn system_prompt() -> &'static str {
      on each other's output belong together."
 }
 
-pub fn user_prompt(task: &Task, units: &[Value], dependencies: &[String]) -> String {
+/// One task, stated whole.
+///
+/// Every earlier task has left the conversation by the time this is read, so
+/// anything this task needs from one has to be here. That is why the
+/// dependencies arrive as source rather than as names: the model has to write
+/// `import` and then use what was imported, and it cannot remember writing it.
+pub fn user_prompt(task: &Task, units: &[Value], dependencies: &[(String, String)]) -> String {
     let context = json!({
         "task": task.name,
         "properties": units,
-        "alreadyFormalized": dependencies,
     });
-    format!(
+    let mut prompt = format!(
         "Formalize the properties of task `{}` into a single Lean file in namespace \
          `Spec2Lean.{}`.\n\n\
-         Task context (do not copy this metadata into your submission):\n```json\n{}\n```\n\n\
-         Start by reading the specification for each property with the `spec` tool.",
+         Task context (do not copy this metadata into your submission):\n```json\n{}\n```\n\n",
         task.name,
         task.name,
         serde_json::to_string_pretty(&context).unwrap_or_default()
-    )
+    );
+
+    if dependencies.is_empty() {
+        prompt.push_str("This task depends on nothing already formalized.\n\n");
+    } else {
+        prompt.push_str(
+            "These modules are already formalized and compiled. Import what you need and use \
+             their declarations rather than restating them — a second definition of the same \
+             concept is the thing this ordering exists to prevent.\n\n",
+        );
+        for (module, source) in dependencies {
+            prompt.push_str(&format!("`import {module}`\n```lean\n{source}\n```\n\n"));
+        }
+    }
+
+    prompt.push_str("Start by reading the specification for each property with the `spec` tool.");
+    prompt
 }

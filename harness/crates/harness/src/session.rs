@@ -38,6 +38,18 @@ pub struct Session<'a> {
     exchanges: Vec<Exchange>,
     /// The current stage's task, until the exchange that carries it exists.
     pending_prompt: Option<String>,
+    /// Whether a finished stage's turns leave the conversation.
+    ///
+    /// Stages that share instructions but not subject matter — one task after
+    /// another — would otherwise make every stage carry all its predecessors,
+    /// so the tenth task pays for the first nine. Dropping them keeps the
+    /// request the size of one task while the instructions, which are what a
+    /// prefix cache can actually reuse, stay byte-identical in front of it.
+    ///
+    /// It is only safe when a stage's prompt is self-contained: anything the
+    /// stage needs from an earlier one has to be in its prompt, not in the
+    /// conversation it is about to lose.
+    isolated_stages: bool,
     /// Distinguishes this conversation from the others running in this process.
     id: u64,
 }
@@ -51,12 +63,20 @@ impl<'a> Session<'a> {
             max_steps: 100,
             exchanges: Vec::new(),
             pending_prompt: None,
+            isolated_stages: false,
             id: next_session_id(),
         }
     }
 
     pub fn with_max_steps(mut self, max_steps: u32) -> Self {
         self.max_steps = max_steps;
+        self
+    }
+
+    /// Drop each stage's turns once it ends, so the conversation does not grow
+    /// with the number of stages. Requires self-contained stage prompts.
+    pub fn with_isolated_stages(mut self, isolated: bool) -> Self {
+        self.isolated_stages = isolated;
         self
     }
 
@@ -203,6 +223,11 @@ impl<'a> Session<'a> {
             usage: totals,
             outcome: session_outcome,
         };
+        if self.isolated_stages {
+            // The transcript above already owns this stage's turns, so the
+            // artifact keeps them even though the conversation does not.
+            self.exchanges.truncate(stage_start);
+        }
         (outcome, transcript)
     }
 }
@@ -452,5 +477,32 @@ mod tests {
             first.id, second.id,
             "two sessions sharing an id would share a provider's thread"
         );
+    }
+
+    /// Ten tasks must not make the tenth carry the first nine. What a prefix
+    /// cache can reuse is the instructions, which do not move; what it cannot
+    /// is nine unrelated tasks in front of the request.
+    #[test]
+    fn an_isolated_stage_leaves_the_conversation_but_keeps_its_transcript() {
+        let provider = RecordedProvider::new(
+            "test",
+            vec![turn("a"), turn("b"), turn("c"), turn("d")],
+        );
+        let mut session = Session::new(&provider, "system").with_isolated_stages(true);
+
+        let mut first = Fussy { attempts: 0, done: false, checked: 0 };
+        let (outcome, first_transcript) = session.stage("task A", &mut first);
+        assert!(outcome.is_ok(), "{outcome:?}");
+        assert_eq!(first_transcript.exchanges.len(), 2, "the artifact keeps the turns");
+        assert!(session.exchanges.is_empty(), "the conversation does not");
+
+        let mut second = Fussy { attempts: 0, done: false, checked: 0 };
+        let (outcome, second_transcript) = session.stage("task B", &mut second);
+        assert!(outcome.is_ok(), "{outcome:?}");
+        assert_eq!(second_transcript.exchanges.len(), 2);
+        assert_eq!(second_transcript.prompt, "task B");
+        // Task B was never told about task A, which is why its prompt has to
+        // carry anything it needs from it.
+        assert!(session.exchanges.is_empty());
     }
 }

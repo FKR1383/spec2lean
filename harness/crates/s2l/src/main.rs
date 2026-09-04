@@ -820,8 +820,11 @@ fn tasks_run(flags: &Flags) -> Result<(), String> {
 
     // One session for the whole loop: every task runs under the same
     // instructions, so a provider that can resume pays for them once.
+    // Tasks share instructions but not subject matter, so a finished task
+    // leaves the conversation: the tenth must not pay for the first nine.
     let mut session = Session::new(provider.as_ref(), task_prompt::system_prompt())
-        .with_max_steps(steps);
+        .with_max_steps(steps)
+        .with_isolated_stages(true);
 
     let mut finished: BTreeMap<String, DependencyModule> = BTreeMap::new();
     let mut records: Vec<Value> = Vec::new();
@@ -838,7 +841,14 @@ fn tasks_run(flags: &Flags) -> Result<(), String> {
             .iter()
             .filter_map(|name| finished.get(name).cloned())
             .collect();
-        let already: Vec<String> = dependencies.iter().map(|d| d.module.clone()).collect();
+        // As source, not as names: an isolated stage cannot remember writing it.
+        let already: Vec<(String, String)> = dependencies
+            .iter()
+            .map(|module| {
+                let source = std::fs::read_to_string(&module.source).unwrap_or_default();
+                (module.module.clone(), source)
+            })
+            .collect();
 
         let units: Vec<Value> = plan["requestedUnits"]
             .as_array()
