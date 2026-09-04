@@ -7,11 +7,14 @@ from pathlib import Path
 import pytest
 
 from spec2lean.database import connect
+from spec2lean.database import build_database
 from spec2lean.planning.models import PlanningRequest, ScopeMode
 from spec2lean.planning.mcp import PlannerMcpServer, tool_definitions
+from spec2lean.planning.prompt import build_planner_prompt
 from spec2lean.planning.runner import PLANNER_MODEL, PLANNER_REASONING, build_plan, opencode_config
 from spec2lean.planning.scope import Phase1Query, ScopeResolver, _syntax_accepts
 from spec2lean.planning.validation import build_validated_plan, validate_submission
+from spec2lean.parsers.html import parse_html
 
 
 def _resolved(planner_database: Path, names: list[str]):
@@ -81,6 +84,61 @@ def test_invalid_exact_instruction_fails_during_resolution(planner_database):
                 ScopeResolver(connection).resolve(
                     PlanningRequest.exact("synthetic", "1.0", [invalid])
                 )
+
+
+def test_exact_scope_orders_explicit_identity_above_description_and_prose(tmp_path):
+    source = tmp_path / "identity-headings.html"
+    source.write_text(
+        """<!doctype html><html><head><meta charset="utf-8"></head><body><main>
+        <section><h1>Instructions</h1>
+          <section><h2>ADD—Add</h2><p>ADD destination, source.</p></section>
+          <section><h2>FADD/FADDP/FIADD—Add</h2><p>Floating-point add.</p></section>
+          <section><h2>AND—Logical AND</h2><p>AND destination, source.</p></section>
+          <section><h2>Vector Length Transition and Programming Considerations</h2>
+            <p>Vector length and programming guidance.</p>
+          </section>
+        </section>
+        </main></body></html>""",
+        encoding="utf-8",
+    )
+    database = tmp_path / "identity-headings.sqlite"
+    build_database(
+        database,
+        language="synthetic",
+        version="1.0",
+        documents=[parse_html(source)],
+    )
+
+    with connect(database, read_only=True) as connection:
+        scope = ScopeResolver(connection).resolve(
+            PlanningRequest.exact("synthetic", "1.0", ["ADD", "AND"])
+        )
+        titles = []
+        for unit in scope.candidate_units:
+            node_id = unit["sourceNodeIds"][0]
+            titles.append(
+                connection.execute(
+                    "SELECT title FROM nodes WHERE node_id = ?", (node_id,)
+                ).fetchone()[0]
+            )
+
+    assert titles == ["ADD—Add", "AND—Logical AND"]
+
+
+def test_planner_prompt_requires_general_candidate_relevance_check(planner_database):
+    connection, scope = _resolved(planner_database, ["alpha.u32"])
+    try:
+        prompt = build_planner_prompt(Phase1Query(connection), scope)
+    finally:
+        connection.close()
+
+    normalized = " ".join(prompt.split())
+    assert "compare every extracted candidate unit" in normalized
+    assert "concrete logical relationship to the user's input" in normalized
+    assert "explicitly documented alias" in normalized
+    assert "explicit semantic dependency or cross-reference" in normalized
+    assert "Completely ignore every unrelated candidate" in normalized
+    assert "never reintroduce an unrelated candidate just to make validation pass" in normalized
 
 
 def test_syntax_templates_support_alias_chains_without_language_specific_rules():

@@ -20,6 +20,12 @@ _DEFINITION_HEAD = re.compile(
     rf"(?P<aliases>(?:\.{_SUFFIX_NAME}\s*=\s*)+)\{{",
     re.I,
 )
+_TITLE_IDENTIFIER = r"[@A-Za-z_{}][@A-Za-z0-9_.{}]*"
+_TITLE_ALIAS_LIST = re.compile(
+    rf"^{_TITLE_IDENTIFIER}(?:\s*(?:/|,|\bor\b)\s*{_TITLE_IDENTIFIER})*$",
+    re.I,
+)
+_TITLE_ENTRY_SEPARATOR = re.compile(r"\s*[—–]\s*|\s+-\s+")
 
 
 def _title_mnemonics(title: str | None) -> list[str]:
@@ -27,6 +33,33 @@ def _title_mnemonics(title: str | None) -> list[str]:
         return []
     tail = title.rsplit(":", 1)[-1].strip() if ":" in title else title.strip()
     return [item.casefold() for item in re.findall(r"[@A-Za-z_{}][@A-Za-z0-9_.{}]*", tail)]
+
+
+def _title_identity_labels(title: str | None) -> tuple[str, ...]:
+    """Extract aliases only from a heading's explicit instruction-identity zone."""
+    if not title:
+        return ()
+    clean = normalize_text(title)
+    separator = _TITLE_ENTRY_SEPARATOR.search(clean)
+    if separator:
+        identity = clean[: separator.start()].strip()
+        # Support a category prefix such as ``Instructions: ADD—Add``.
+        identity = identity.rsplit(":", 1)[-1].strip()
+    elif ":" in clean:
+        identity = clean.rsplit(":", 1)[-1].strip()
+    elif re.fullmatch(_TITLE_IDENTIFIER, clean):
+        identity = clean
+    else:
+        # A prose section heading has no explicit instruction identity.  Its
+        # individual words must not be treated as mnemonic aliases.
+        return ()
+    if not _TITLE_ALIAS_LIST.fullmatch(identity):
+        return ()
+    return tuple(
+        match.group(0).casefold()
+        for match in re.finditer(_TITLE_IDENTIFIER, identity)
+        if match.group(0).casefold() != "or"
+    )
 
 
 def _matching_brace(text: str, opening: int) -> int | None:
@@ -371,49 +404,42 @@ class ScopeResolver:
         ).fetchall()
         heading_matches: list[tuple[int, str, sqlite3.Row]] = []
         for row in rows:
-            for mnemonic in _title_mnemonics(row["title"]):
+            for mnemonic in _title_identity_labels(row["title"]):
                 if wanted == mnemonic or wanted.startswith(mnemonic + "."):
-                    heading_matches.append((len(mnemonic), mnemonic, row))
+                    match_quality = 2 if wanted == mnemonic else 1
+                    heading_matches.append((match_quality, mnemonic, row))
         if not heading_matches:
             return []
-        longest_mnemonic = max(length for length, _, _ in heading_matches)
-        headings = [
-            (mnemonic, row)
-            for length, mnemonic, row in heading_matches
-            if length == longest_mnemonic
-        ]
         exact_pattern = re.compile(rf"(?<![A-Za-z0-9_.]){re.escape(instruction)}(?![A-Za-z0-9_.])", re.I)
-        matches: list[sqlite3.Row] = []
-        for mnemonic, row in headings:
+        matches: list[tuple[tuple[int, int], sqlite3.Row]] = []
+        for match_quality, mnemonic, row in heading_matches:
             descendants = self.connection.execute(
                 """WITH RECURSIVE tree(node_id) AS (
                        SELECT node_id FROM nodes WHERE node_id = ?
                        UNION ALL SELECT n.node_id FROM nodes n JOIN tree t ON n.parent_id = t.node_id
-                   ) SELECT node_type, raw_text FROM nodes JOIN tree USING(node_id)""",
+                   ) SELECT node_id, node_type, raw_text FROM nodes JOIN tree USING(node_id)""",
                 (row["node_id"],),
             ).fetchall()
             literal = any(exact_pattern.search(item["raw_text"]) for item in descendants)
+            literal_content = any(
+                item["node_id"] != row["node_id"] and exact_pattern.search(item["raw_text"])
+                for item in descendants
+            )
             syntax = any(item["node_type"] == "syntax_block" for item in descendants) and _syntax_accepts(
                 instruction,
                 mnemonic,
                 "\n".join(item["raw_text"] for item in descendants),
             )
             if literal or syntax:
-                matches.append(row)
+                evidence_quality = 2 if syntax else 1 if literal_content else 0
+                matches.append(((match_quality, evidence_quality), row))
         if not matches:
             return []
-        # Keep corresponding source representations of the most specific logical section.
-        best_depth = max(row["depth"] for row in matches)
-        matches = [row for row in matches if row["depth"] == best_depth]
-        best_section = matches[0]["section_number"]
-        best_tail = tuple(_title_mnemonics(matches[0]["title"]))
-        selected = [
-            row["node_id"]
-            for row in matches
-            if row["section_number"] == best_section
-            and tuple(_title_mnemonics(row["title"])) == best_tail
-        ]
-        return sorted(set(selected))
+        # Semantic match and evidence quality determine precedence.  Document
+        # depth and opaque node IDs never decide which instruction a heading
+        # denotes; equally supported representations are intentionally kept.
+        best_score = max(score for score, _ in matches)
+        return sorted({row["node_id"] for score, row in matches if score == best_score})
 
     def _resolve_family(self, request: PlanningRequest) -> ResolvedScope:
         assert request.family is not None

@@ -100,6 +100,28 @@ less indexes/ptx/9.3/text/*.pages.txt
 rg -n 'PDF PAGE|shl' indexes/ptx/9.3/text/*.pages.txt
 ```
 
+## Run the x86 sample
+
+Fetch Intel's official revision-092 Volume 2A instruction-set reference once:
+
+```bash
+documents/sources/intel/x86/092/fetch.sh
+```
+
+Then run the complete pipeline from Phase 1 for five simple instructions:
+
+```bash
+./spec2lean run \
+  --language x86 \
+  --version 092 \
+  --instructions ADD,AND,CMP,DEC,INC \
+  --from index
+```
+
+Volume 2A covers instructions A-L. The source PDF is cached locally and ignored
+by Git; its acquisition URL, SHA-256 checksum, and metadata are preserved under
+`documents/sources/intel/x86/092/`.
+
 ## Inspect without SQL
 
 ```bash

@@ -8,7 +8,7 @@ import pymupdf as fitz
 
 from spec2lean.database import build_database, connect
 from spec2lean.cli import main
-from spec2lean.parsers.pdf import parse_pdf
+from spec2lean.parsers.pdf import PdfBlock, _body_font_size, _heading, parse_pdf
 from spec2lean.util import walk_nodes
 from spec2lean.validation import validate_database
 
@@ -115,3 +115,83 @@ def test_cli_build_records_page_text_in_manifest(tmp_path, capsys):
     assert page_text["format_version"] == 1
     assert page_text["relative_path"].startswith("text/")
     assert Path(page_text["path"]).is_file()
+
+
+def test_pdf_entry_title_uses_document_typography_not_instruction_names():
+    title = "OPX—Operation X"
+    entry = PdfBlock(
+        page=4,
+        index=2,
+        bbox=(46, 80, 220, 96),
+        raw_text=title,
+        max_size=12,
+        bold_ratio=0,
+        mono_ratio=0,
+        font_size_weights=((12, len(title)),),
+        emphasis_ratio=1,
+    )
+    match = _heading(entry, body_size=9, page_height=792, entry_level=3)
+
+    assert match is not None
+    assert match.level == 3
+    assert match.title == title
+    assert match.basis == "label_description_entry"
+
+
+def test_pdf_entry_title_rule_does_not_promote_body_prose():
+    prose = "The result—after rounding—is written to the destination."
+    block = PdfBlock(
+        page=4,
+        index=3,
+        bbox=(46, 120, 500, 132),
+        raw_text=prose,
+        max_size=9,
+        bold_ratio=0,
+        mono_ratio=0,
+        font_size_weights=((9, len(prose)),),
+    )
+
+    assert _heading(block, body_size=9, page_height=792, entry_level=3) is None
+
+
+def test_pdf_numbered_bit_labels_are_not_sections():
+    bit_labels = "15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 0"
+    block = PdfBlock(
+        page=4,
+        index=4,
+        bbox=(46, 120, 500, 136),
+        raw_text=bit_labels,
+        max_size=14,
+        bold_ratio=0,
+        mono_ratio=0,
+        font_size_weights=((14, len(bit_labels)),),
+        emphasis_ratio=1,
+    )
+
+    assert _heading(block, body_size=9, page_height=792, entry_level=3) is None
+
+
+def test_pdf_body_font_baseline_uses_font_points():
+    body = PdfBlock(
+        page=1,
+        index=1,
+        bbox=(46, 100, 500, 114),
+        raw_text="body text" * 20,
+        max_size=9,
+        bold_ratio=0,
+        mono_ratio=0,
+        font_size_weights=((9, 180),),
+    )
+    heading = PdfBlock(
+        page=1,
+        index=0,
+        bbox=(46, 70, 200, 86),
+        raw_text="ENTRY—Description",
+        max_size=12,
+        bold_ratio=0,
+        mono_ratio=0,
+        font_size_weights=((12, 17),),
+        emphasis_ratio=1,
+    )
+
+    assert _body_font_size([heading, body]) == 9
