@@ -140,7 +140,10 @@ impl CodexProvider {
                 },
                 "tool_calls": {
                     "type": "array",
-                    "description": "The tools to run next. Empty ends the turn.",
+                    "description": "Every tool to run next, not just the first. Calls that \
+                                    do not depend on each other's output belong in one array: \
+                                    the harness runs them all and returns every result \
+                                    together. Empty ends the turn.",
                     "items": {
                         "type": "object",
                         "additionalProperties": false,
@@ -225,9 +228,11 @@ impl CodexProvider {
             prompt.push_str("\n\n");
         }
         prompt.push_str(
-            "# Now\n\nDecide the next step and answer with the JSON reply. Call tools when you \
-             need them; return an empty `tool_calls` only when you genuinely cannot continue, \
-             and then say why in `reply`.\n",
+            "# Now\n\nDecide what to do next and answer with the JSON reply. Ask for \
+             everything you can already see you will need: calls that do not depend on each \
+             other's output belong in this one turn, because a turn you did not have to take \
+             is the most expensive thing here. Return an empty `tool_calls` only when you \
+             genuinely cannot continue, and then say why in `reply`.\n",
         );
         prompt
     }
@@ -259,9 +264,11 @@ impl CodexProvider {
             prompt.push_str("No tools ran.\n\n");
         }
         prompt.push_str(
-            "Decide the next step and answer with the JSON reply. Call tools when you need \
-             them; return an empty `tool_calls` only when you genuinely cannot continue, and \
-             then say why in `reply`.\n",
+            "Decide what to do next and answer with the JSON reply. Ask for everything you \
+             can already see you will need: calls that do not depend on each other's output \
+             belong in this one turn, because a turn you did not have to take is the most \
+             expensive thing here. Return an empty `tool_calls` only when you genuinely cannot \
+             continue, and then say why in `reply`.\n",
         );
         prompt
     }
@@ -946,5 +953,40 @@ mod tests {
 
         let zero = CodexProvider::new(CodexConfig { timeout_seconds: 0, ..CodexConfig::default() });
         assert_eq!(zero.config.timeout_seconds, 1, "a zero timeout would kill every turn");
+    }
+
+    /// A turn is a process start. The loop has executed independent calls in
+    /// one turn since it was written, but nothing said so to the model, and
+    /// "decide the next step" reads as an instruction to take exactly one.
+    #[test]
+    fn both_render_paths_ask_for_every_independent_call_at_once() {
+        let opening = Request {
+            prompt_pending: true,
+            session: 1,
+            system: "s",
+            prompt: "p",
+            exchanges: &[],
+            tools: &[],
+        };
+        let exchanges = vec![Exchange {
+            prompt: Some("p".into()),
+            assistant: json!({"reply": "r"}),
+            tool_results: Vec::new(),
+            usage: Usage::default(),
+        }];
+        let continuing = Request { exchanges: &exchanges, prompt_pending: false, ..opening };
+
+        for rendered in [
+            CodexProvider::render_full(&opening),
+            CodexProvider::render_delta(&continuing, 0, false),
+        ] {
+            assert!(
+                rendered.contains("do not depend on each other"),
+                "a render that does not ask for batching pays a process start per call"
+            );
+        }
+        // And the schema says it too, where the model is actually looking.
+        let schema = CodexProvider::reply_schema().to_string();
+        assert!(schema.contains("not just the first"));
     }
 }
