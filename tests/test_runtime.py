@@ -92,8 +92,70 @@ time.sleep(60)
         "default_agent": "test", "agent": {"test": {"model": "openai/test", "variant": "medium", "steps": 1}},
         "mcp": {"test": {"command": ["unused"]}},
     })
-    with pytest.raises(subprocess.TimeoutExpired):
+    with pytest.raises(subprocess.TimeoutExpired) as caught:
         run_session([str(executable), "prompt"], run_command=subprocess.run, env=env, timeout=1)
+    assert isinstance(caught.value.stdout, str) and isinstance(caught.value.stderr, str)
     pid = int(pid_file.read_text())
     stat = Path(f"/proc/{pid}/stat")
     assert not stat.exists() or stat.read_text().split()[2] == "Z"
+
+
+def test_custom_runner_receives_rust_protocol_without_starting_a_process():
+    calls = []
+    def injected(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, 'test', '')
+    config = {'default_agent': 'test', 'agent': {'test': {
+        'model': 'openai/gpt-5.6-sol', 'variant': 'medium', 'steps': 3,
+    }}, 'mcp': {'bounded': {'command': ['python', '-m', 'test'], 'timeout': 12000}}}
+    result = run_session(['/missing/spec2lean-harness', 'unchanged phase prompt'],
+                         run_command=injected, env={'OPENCODE_CONFIG_CONTENT': json.dumps(config)},
+                         timeout=20, text=True, capture_output=True, check=False)
+    request = json.loads(calls[0][1]['input'])
+    assert request['prompt'] == 'unchanged phase prompt'
+    assert request['mcp_command'] == ['python', '-m', 'test']
+    assert request['model'] == 'openai/gpt-5.6-sol'
+    assert calls[0][1]['env']['SPEC2LEAN_RUNTIME'] == 'rust-harness'
+    assert result.stdout == 'test'
+
+
+def test_rust_repair_preserves_context_gate_and_current_manifests(tmp_path, monkeypatch, harness_binary):
+    from test_troubleshooting import _run, _write_build_inputs, GROUP, REPAIRED_SOURCE, UNIT
+    from spec2lean.troubleshooting.opencode import run_opencode_repair
+    plan, roots, _, manifest = _write_build_inputs(tmp_path)
+    submission = {'leanSource': REPAIRED_SOURCE, 'declarations': manifest['declarations'],
+                  'changes': [{'description': 'Use explicit Nat.add for the compiler diagnostic.',
+                               'affectedDeclarations': ['Spec2Lean.Repair.operation']}]}
+    calls = [{'name': 'get_context', 'arguments_json': json.dumps({'component': name})}
+             for name in ('overview', 'leanSource', 'translationManifest', 'traceability')]
+    calls.append({'name': 'get_context', 'arguments_json': json.dumps({'component': 'semantics', 'unitId': UNIT['unitId']})})
+    submit = {'name': 'submit_repair', 'arguments_json': json.dumps(submission)}
+    calls.append(submit)
+    provider = tmp_path / 'codex-repair-double'
+    provider.write_text(f'''#!{sys.executable}
+import json, sys
+turn = 0
+for line in sys.stdin:
+    message = json.loads(line)
+    if 'id' not in message: continue
+    if message['method'] == 'tools/call':
+        turn += 1
+        calls = {[submit]!r} if turn == 1 else {calls!r}
+        result = {{'structuredContent':{{'threadId':'repair-thread','content':json.dumps({{'reply':'','tool_calls':calls}})}}}}
+    else: result = {{'protocolVersion':'2025-06-18','capabilities':{{}},'serverInfo':{{'name':'test','version':'1'}}}}
+    print(json.dumps({{'jsonrpc':'2.0','id':message['id'],'result':result}}), flush=True)
+''')
+    provider.chmod(0o755)
+    monkeypatch.setenv('SPEC2LEAN_CODEX', str(provider))
+    monkeypatch.setenv('SPEC2LEAN_RUNTIME', 'rust-harness')
+    _, artifact = _run(plan, roots, run_opencode_repair)
+    assert artifact['model']['provider'] == 'rust-harness'
+    assert artifact['opencodeVersion'].startswith('spec2lean-harness')
+    assert artifact['changedFiles']
+    transcript = json.loads(artifact['session']['stdout'])['transcript']
+    assert transcript['steps'] == 2
+    assert '"accepted":false' in transcript['exchanges'][0]['toolResults'][0]['output']
+    source = next(roots['translations'].rglob(f'{GROUP}.lean'))
+    assert source.read_text() == REPAIRED_SOURCE
+    published = json.loads(source.with_name('translation-manifest.json').read_text())
+    assert published['declarations'] == manifest['declarations']

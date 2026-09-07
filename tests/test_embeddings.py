@@ -139,3 +139,16 @@ def test_semantic_plan_is_not_reused_as_lexical(planner_database, tmp_path, monk
     calls.clear()
     run_pipeline(request, replace(options, index_mode='semantic'), services=services)
     assert calls == ['plan']
+
+
+def test_latest_resume_selects_the_latest_matching_mode(tmp_path):
+    from spec2lean.pipeline.runner import _latest_compatible_run
+    from spec2lean.planning.models import PlanningRequest
+    request = PlanningRequest.exact('synthetic', '1.0', ['alpha.u32'])
+    for mode, updated in [('lexical', '2026-01-01'), ('semantic', '2026-01-02')]:
+        path = tmp_path / 'synthetic/1.0' / f'pipeline-run:{mode}' / 'run.json'
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({'request': request.to_dict(), 'updatedAt': updated,
+                                    'indexMode': mode, 'pipelineRunId': f'pipeline-run:{mode}'}))
+    assert _latest_compatible_run(tmp_path, request) == 'pipeline-run:lexical'
+    assert _latest_compatible_run(tmp_path, request, 'semantic') == 'pipeline-run:semantic'

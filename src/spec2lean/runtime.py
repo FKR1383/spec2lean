@@ -60,7 +60,7 @@ def runtime_executable() -> str:
 def run_session(command: list[str], *, run_command: Callable[..., Any], **kwargs: Any):
     """Translate main's existing session configuration into the Rust protocol.
 
-    Custom command runners retain the historical injection seam. A real Rust
+    Custom command runners receive the selected runtime's protocol. A real Rust
     session gets its own process group so timeout/interrupt also stops its MCP
     workers and provider, before temporary artifact inputs are removed.
     """
@@ -82,15 +82,29 @@ def run_session(command: list[str], *, run_command: Callable[..., Any], **kwargs
         "mcp_command": servers[0]["command"],
     }
     environment["SPEC2LEAN_RUNTIME"] = "rust-harness"
+    if run_command is not subprocess.run:
+        return run_command([command[0]], input=json.dumps(request), **{**kwargs, "env": environment})
     process = subprocess.Popen(
         [command[0]], cwd=kwargs.get("cwd"), env=environment,
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, start_new_session=True,
     )
+
+    def stop() -> tuple[str, str]:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        return process.communicate()
+
     try:
         stdout, stderr = process.communicate(json.dumps(request), timeout=kwargs["timeout"])
+    except subprocess.TimeoutExpired as exc:
+        stdout, stderr = stop()
+        # Popen's timeout exception can hold bytes even in text mode. Main's
+        # session artifacts require strings, including on timeout.
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"], output=stdout, stderr=stderr) from exc
     except BaseException:
-        os.killpg(process.pid, signal.SIGKILL)
-        process.communicate()
+        stop()
         raise
     return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)

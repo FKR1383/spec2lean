@@ -219,10 +219,7 @@ impl Provider for OpenAiProvider {
         );
         let headers = [
             ("content-type", "application/json".to_string()),
-            (
-                "authorization",
-                format!("Bearer {}", self.config.api_key),
-            ),
+            ("authorization", format!("Bearer {}", self.config.api_key)),
         ];
         let response = self.http.post_json(&url, &headers, &self.body(request))?;
         self.parse(&response)

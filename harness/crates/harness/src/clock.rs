@@ -21,9 +21,7 @@ pub fn iso_from_unix_micros(micros: i64) -> String {
         (secs_of_day % 3600) / 60,
         secs_of_day % 60,
     );
-    format!(
-        "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{micros_part:06}Z"
-    )
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{micros_part:06}Z")
 }
 
 fn civil_from_days(days: i64) -> (i64, u32, u32) {

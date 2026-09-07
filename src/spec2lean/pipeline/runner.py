@@ -137,14 +137,14 @@ def load_pipeline_run(runs_root: Path, run_id: str) -> tuple[Path, dict[str, Any
     return directory, json.loads((directory / "run.json").read_text(encoding="utf-8"))
 
 
-def _latest_compatible_run(runs_root: Path, request: PlanningRequest) -> str:
+def _latest_compatible_run(runs_root: Path, request: PlanningRequest, mode: str = "lexical") -> str:
     candidates: list[tuple[str, str]] = []
     for path in runs_root.resolve().glob(f"{request.language.casefold()}/{request.version}/*/run.json"):
         try:
             item = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        if item.get("request") == request.to_dict():
+        if item.get("request") == request.to_dict() and item.get("indexMode", "lexical") == mode:
             candidates.append((str(item.get("updatedAt", "")), str(item.get("pipelineRunId", ""))))
     if not candidates:
         raise FileNotFoundError("no compatible pipeline run exists to resume")
@@ -452,7 +452,7 @@ def _run_pipeline(
     services = services or PipelineServices()
     progress = progress or (lambda _message: None)
     if options.resume == "latest":
-        resume_id = _latest_compatible_run(options.runs_root, request)
+        resume_id = _latest_compatible_run(options.runs_root, request, options.index_mode)
     else:
         resume_id = options.resume
     if resume_id:
@@ -466,6 +466,7 @@ def _run_pipeline(
         manifest["untilPhase"] = options.until_phase
         manifest["dryRun"] = options.dry_run
         manifest["maxQuestionRounds"] = options.max_question_rounds
+        manifest["indexMode"] = options.index_mode
         manifest["error"] = None
     else:
         directory, manifest = _new_manifest(request, options)
@@ -549,6 +550,7 @@ def _run_pipeline(
         report("phase 1/7 index: validating freshness")
         phase1 = _ensure_phase1(options, request)
         if options.index_mode == "semantic" and phase1.get("ok"):
+            report("phase 1/7 index: ensuring semantic vectors")
             embedding_state = ensure_embeddings(
                 _database_for(options, request),
                 dry_run=options.dry_run or not _phase_selected(options, "index"),

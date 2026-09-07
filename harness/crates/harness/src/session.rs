@@ -254,7 +254,11 @@ mod tests {
 
     impl ToolSet for Fussy {
         fn specs(&self) -> Vec<ToolSpec> {
-            vec![ToolSpec::new("submit", "submit the artifact", json!({"type": "object"}))]
+            vec![ToolSpec::new(
+                "submit",
+                "submit the artifact",
+                json!({"type": "object"}),
+            )]
         }
 
         fn call(&mut self, name: &str, _input: &Value) -> ToolOutcome {
@@ -302,11 +306,19 @@ mod tests {
     #[test]
     fn resubmits_after_a_diagnostic_then_completes() {
         let provider = RecordedProvider::new("test", vec![turn("a"), turn("b")]);
-        let mut tools = Fussy { attempts: 0, done: false, checked: 0 };
+        let mut tools = Fussy {
+            attempts: 0,
+            done: false,
+            checked: 0,
+        };
         let mut session = Session::new(&provider, "system");
         let (outcome, transcript) = session.stage("prompt", &mut tools);
 
-        assert!(outcome.is_ok(), "{:?}", outcome.err().map(|e| e.to_string()));
+        assert!(
+            outcome.is_ok(),
+            "{:?}",
+            outcome.err().map(|e| e.to_string())
+        );
         assert_eq!(transcript.steps, 2);
         assert_eq!(transcript.exchanges.len(), 2);
         assert!(transcript.exchanges[0].tool_results[0].is_error);
@@ -316,13 +328,21 @@ mod tests {
         assert_eq!(transcript.usage.input_tokens, 20);
         assert_eq!(transcript.usage.cache_read_input_tokens, 14);
         // The deterministic step ran after each batch and reached the model.
-        assert!(transcript.exchanges[0].tool_results[0].output.contains("deterministic check #1"));
+        assert!(
+            transcript.exchanges[0].tool_results[0]
+                .output
+                .contains("deterministic check #1")
+        );
     }
 
     #[test]
     fn step_ceiling_is_enforced_and_still_yields_a_transcript() {
         let provider = RecordedProvider::new("test", vec![turn("a"), turn("b"), turn("c")]);
-        let mut tools = Fussy { attempts: 0, done: false, checked: 0 };
+        let mut tools = Fussy {
+            attempts: 0,
+            done: false,
+            checked: 0,
+        };
         let mut session = Session::new(&provider, "system").with_max_steps(1);
         let (outcome, transcript) = session.stage("prompt", &mut tools);
 
@@ -343,18 +363,34 @@ mod tests {
             ]),
             text: String::new(),
             tool_calls: vec![
-                ToolCall { id: "a".into(), name: "submit".into(), input: json!({}) },
-                ToolCall { id: "b".into(), name: "submit".into(), input: json!({}) },
+                ToolCall {
+                    id: "a".into(),
+                    name: "submit".into(),
+                    input: json!({}),
+                },
+                ToolCall {
+                    id: "b".into(),
+                    name: "submit".into(),
+                    input: json!({}),
+                },
             ],
             stop_reason: StopReason::ToolUse,
             usage: Usage::default(),
             model: "test".into(),
         };
         let provider = RecordedProvider::new("test", vec![both]);
-        let mut tools = Fussy { attempts: 0, done: false, checked: 0 };
+        let mut tools = Fussy {
+            attempts: 0,
+            done: false,
+            checked: 0,
+        };
         let (outcome, transcript) = Session::new(&provider, "system").stage("prompt", &mut tools);
 
-        assert!(outcome.is_ok(), "{:?}", outcome.err().map(|e| e.to_string()));
+        assert!(
+            outcome.is_ok(),
+            "{:?}",
+            outcome.err().map(|e| e.to_string())
+        );
         let results = &transcript.exchanges[0].tool_results;
         assert_eq!(results.len(), 2, "every tool_use needs a tool_result");
         // The first is rejected and carries its own check; the second succeeds
@@ -391,7 +427,11 @@ mod tests {
         };
         // First turn fails once; second turn submits twice.
         let provider = RecordedProvider::new("test", vec![turn(&["a"]), turn(&["b", "c"])]);
-        let mut tools = Fussy { attempts: 0, done: false, checked: 0 };
+        let mut tools = Fussy {
+            attempts: 0,
+            done: false,
+            checked: 0,
+        };
         let (outcome, transcript) = Session::new(&provider, "system").stage("prompt", &mut tools);
 
         assert!(outcome.is_ok());
@@ -415,13 +455,19 @@ mod tests {
             model: "test".into(),
         };
         let provider = RecordedProvider::new("test", vec![stop]);
-        let mut tools = Fussy { attempts: 0, done: false, checked: 0 };
+        let mut tools = Fussy {
+            attempts: 0,
+            done: false,
+            checked: 0,
+        };
         let (outcome, transcript) = Session::new(&provider, "system").stage("prompt", &mut tools);
 
         assert!(matches!(outcome, Err(HarnessError::Incomplete { .. })));
         assert_eq!(
             transcript.outcome,
-            SessionOutcome::Stopped { stop_reason: "end_turn".into() }
+            SessionOutcome::Stopped {
+                stop_reason: "end_turn".into()
+            }
         );
         // The turn that explains the refusal must survive in the transcript:
         // it is the only record of why the session ended.
@@ -440,17 +486,23 @@ mod tests {
     /// because it is written next to that unit's artifact.
     #[test]
     fn a_second_stage_continues_the_conversation_but_not_the_transcript() {
-        let provider = RecordedProvider::new(
-            "test",
-            vec![turn("a"), turn("b"), turn("c"), turn("d")],
-        );
+        let provider =
+            RecordedProvider::new("test", vec![turn("a"), turn("b"), turn("c"), turn("d")]);
 
         let mut session = Session::new(&provider, "system");
-        let mut first = Fussy { attempts: 0, done: false, checked: 0 };
+        let mut first = Fussy {
+            attempts: 0,
+            done: false,
+            checked: 0,
+        };
         let (outcome, first_transcript) = session.stage("unit A", &mut first);
         assert!(outcome.is_ok(), "{outcome:?}");
 
-        let mut second = Fussy { attempts: 0, done: false, checked: 0 };
+        let mut second = Fussy {
+            attempts: 0,
+            done: false,
+            checked: 0,
+        };
         let (outcome, second_transcript) = session.stage("unit B", &mut second);
         assert!(outcome.is_ok(), "{outcome:?}");
 
@@ -484,19 +536,29 @@ mod tests {
     /// is nine unrelated tasks in front of the request.
     #[test]
     fn an_isolated_stage_leaves_the_conversation_but_keeps_its_transcript() {
-        let provider = RecordedProvider::new(
-            "test",
-            vec![turn("a"), turn("b"), turn("c"), turn("d")],
-        );
+        let provider =
+            RecordedProvider::new("test", vec![turn("a"), turn("b"), turn("c"), turn("d")]);
         let mut session = Session::new(&provider, "system").with_isolated_stages(true);
 
-        let mut first = Fussy { attempts: 0, done: false, checked: 0 };
+        let mut first = Fussy {
+            attempts: 0,
+            done: false,
+            checked: 0,
+        };
         let (outcome, first_transcript) = session.stage("task A", &mut first);
         assert!(outcome.is_ok(), "{outcome:?}");
-        assert_eq!(first_transcript.exchanges.len(), 2, "the artifact keeps the turns");
+        assert_eq!(
+            first_transcript.exchanges.len(),
+            2,
+            "the artifact keeps the turns"
+        );
         assert!(session.exchanges.is_empty(), "the conversation does not");
 
-        let mut second = Fussy { attempts: 0, done: false, checked: 0 };
+        let mut second = Fussy {
+            attempts: 0,
+            done: false,
+            checked: 0,
+        };
         let (outcome, second_transcript) = session.stage("task B", &mut second);
         assert!(outcome.is_ok(), "{outcome:?}");
         assert_eq!(second_transcript.exchanges.len(), 2);

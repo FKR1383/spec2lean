@@ -101,12 +101,9 @@ impl JsonHttp {
                     // connection dropped mid-body is transient and worth
                     // retrying, while a fully received body that will not parse
                     // is not going to parse on the next attempt either.
-                    let text = response
-                        .body_mut()
-                        .read_to_string()
-                        .map_err(|error| HarnessError::Transport(format!(
-                            "the response body ended early: {error}"
-                        )))?;
+                    let text = response.body_mut().read_to_string().map_err(|error| {
+                        HarnessError::Transport(format!("the response body ended early: {error}"))
+                    })?;
                     return serde_json::from_str::<Value>(&text).map_err(|error| {
                         HarnessError::Decode(format!(
                             "{error}; body was {}",
@@ -133,9 +130,7 @@ impl JsonHttp {
 fn is_retryable(error: &HarnessError) -> bool {
     match error {
         HarnessError::Transport(_) => true,
-        HarnessError::Status { code, .. } => {
-            matches!(code, 408 | 409 | 429) || *code >= 500
-        }
+        HarnessError::Status { code, .. } => matches!(code, 408 | 409 | 429) || *code >= 500,
         _ => false,
     }
 }
@@ -308,8 +303,8 @@ mod auth_tests {
         });
         let turn = provider
             .turn(&Request {
-            prompt_pending: true,
-            session: 1,
+                prompt_pending: true,
+                session: 1,
                 system: "s",
                 prompt: "p",
                 exchanges: &[],
@@ -326,7 +321,10 @@ mod auth_tests {
             "{headers}"
         );
         // Without this beta the Messages API does not accept an OAuth token.
-        assert!(headers.contains("anthropic-beta: oauth-2025-04-20"), "{headers}");
+        assert!(
+            headers.contains("anthropic-beta: oauth-2025-04-20"),
+            "{headers}"
+        );
         assert!(!headers.contains("x-api-key"), "{headers}");
     }
 }

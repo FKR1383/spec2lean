@@ -363,7 +363,11 @@ mod tests {
 
     #[test]
     fn caches_the_stable_prefix() {
-        let tools = [ToolSpec::new("spec_show", "show", json!({"type": "object"}))];
+        let tools = [ToolSpec::new(
+            "spec_show",
+            "show",
+            json!({"type": "object"}),
+        )];
         let exchanges = [opening_exchange()];
         let body = provider().body(&Request {
             prompt_pending: false,
@@ -376,7 +380,10 @@ mod tests {
 
         // End of system and end of the opening prompt: the whole per-session
         // prefix, unchanged from the first step to the last.
-        assert_eq!(body["system"][0]["cache_control"], json!({"type": "ephemeral"}));
+        assert_eq!(
+            body["system"][0]["cache_control"],
+            json!({"type": "ephemeral"})
+        );
         assert_eq!(
             body["messages"][0]["content"][0]["cache_control"],
             json!({"type": "ephemeral"})
@@ -485,7 +492,10 @@ mod tests {
         assert_eq!(turn.text, "Reading the syntax block.");
         assert_eq!(turn.tool_calls.len(), 1);
         assert_eq!(turn.tool_calls[0].name, "spec_show");
-        assert_eq!(turn.tool_calls[0].input["nodeId"], json!("node:html-syntax"));
+        assert_eq!(
+            turn.tool_calls[0].input["nodeId"],
+            json!("node:html-syntax")
+        );
         assert_eq!(turn.usage.cache_read_input_tokens, 13);
         assert_eq!(turn.usage.cache_creation_input_tokens, 11);
     }
@@ -553,10 +563,19 @@ mod tests {
         assert_eq!(users, vec!["TASK A".to_string(), "TASK B".to_string()]);
 
         // And TASK B is stated after unit A's work, not before it.
-        let a = messages.iter().position(|m| text_of(m) == "TASK A").unwrap();
-        let b = messages.iter().position(|m| text_of(m) == "TASK B").unwrap();
+        let a = messages
+            .iter()
+            .position(|m| text_of(m) == "TASK A")
+            .unwrap();
+        let b = messages
+            .iter()
+            .position(|m| text_of(m) == "TASK B")
+            .unwrap();
         assert!(a < b, "task A was given first and must be rendered first");
-        assert_eq!(b, 5, "task B belongs after A's two exchanges, not at the top");
+        assert_eq!(
+            b, 5,
+            "task B belongs after A's two exchanges, not at the top"
+        );
     }
 
     #[test]

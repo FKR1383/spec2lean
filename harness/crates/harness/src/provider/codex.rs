@@ -22,12 +22,12 @@
 //! seen, and any disagreement — a rewound transcript, a resume that fails —
 //! falls back to replaying the whole conversation into a new thread.
 
+use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::collections::HashMap;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::{Value, json};
 
@@ -249,8 +249,10 @@ impl CodexProvider {
     pub(crate) fn render_delta(request: &Request<'_>, sent: usize, new_task: bool) -> String {
         let mut prompt = String::new();
         if new_task {
-            prompt.push_str("# New task\n\nThe previous task is finished. Ignore it; this is \
-                             the only task now.\n\n");
+            prompt.push_str(
+                "# New task\n\nThe previous task is finished. Ignore it; this is \
+                             the only task now.\n\n",
+            );
             prompt.push_str(request.prompt);
             prompt.push_str("\n\n# Results from the last tools you called\n\n");
         }
@@ -260,7 +262,11 @@ impl CodexProvider {
                     "`{}` with:\n```json\n{}\n```\nThe harness answered{}:\n```\n{}\n```\n\n",
                     result.name,
                     serde_json::to_string(&result.input).unwrap_or_default(),
-                    if result.is_error { " with an error" } else { "" },
+                    if result.is_error {
+                        " with an error"
+                    } else {
+                        ""
+                    },
                     result.output
                 ));
             }
@@ -281,10 +287,10 @@ impl CodexProvider {
     fn scratch(&self) -> Result<PathBuf, HarnessError> {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let nonce = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let dir =
-            std::env::temp_dir().join(format!("s2l-codex-{}-{nonce}", std::process::id()));
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| HarnessError::Transport(format!("could not create {}: {e}", dir.display())))?;
+        let dir = std::env::temp_dir().join(format!("s2l-codex-{}-{nonce}", std::process::id()));
+        std::fs::create_dir_all(&dir).map_err(|e| {
+            HarnessError::Transport(format!("could not create {}: {e}", dir.display()))
+        })?;
         Ok(dir)
     }
 
@@ -323,9 +329,10 @@ impl CodexProvider {
             command.arg("--model").arg(model);
         }
         if let Some(effort) = self.config.effort {
-            command
-                .arg("-c")
-                .arg(format!("model_reasoning_effort=\"{}\"", codex_effort(effort)));
+            command.arg("-c").arg(format!(
+                "model_reasoning_effort=\"{}\"",
+                codex_effort(effort)
+            ));
         }
         command
             .arg("-")
@@ -359,8 +366,7 @@ impl CodexProvider {
         .map_err(|e| HarnessError::Transport(format!("could not write the reply schema: {e}")))?;
 
         let child = self.spawn(&dir, &schema_path, &out_path, resume)?;
-        let (ok, events, errors) =
-            wait_with_timeout(child, prompt, self.config.timeout_seconds)?;
+        let (ok, events, errors) = wait_with_timeout(child, prompt, self.config.timeout_seconds)?;
         let body = std::fs::read_to_string(&out_path).unwrap_or_default();
         let _ = std::fs::remove_dir_all(&dir);
 
@@ -504,10 +510,10 @@ fn thread_from_events(events: &str) -> Option<String> {
         let Ok(event) = serde_json::from_str::<Value>(line) else {
             continue;
         };
-        if event["type"] == "thread.started" {
-            if let Some(id) = event["thread_id"].as_str() {
-                return Some(id.to_string());
-            }
+        if event["type"] == "thread.started"
+            && let Some(id) = event["thread_id"].as_str()
+        {
+            return Some(id.to_string());
         }
     }
     None
@@ -542,7 +548,10 @@ fn usage_from_events(events: &str) -> Usage {
 /// subprocess: this is where a schema-constrained reply becomes something the
 /// loop can execute, and it is the only place that decides what a malformed
 /// reply means.
-pub(crate) fn parse_reply(body: &str, turn_index: usize) -> Result<(String, Vec<ToolCall>), HarnessError> {
+pub(crate) fn parse_reply(
+    body: &str,
+    turn_index: usize,
+) -> Result<(String, Vec<ToolCall>), HarnessError> {
     let reply: Value = serde_json::from_str(body).map_err(|e| {
         HarnessError::Decode(format!(
             "codex's final message was not JSON ({e}): {}",
@@ -673,7 +682,8 @@ mod tests {
     fn a_malformed_argument_string_becomes_an_empty_input_rather_than_a_failed_session() {
         // The tool's own validator is a better diagnostic than a decode error,
         // and it leaves the model a turn in which to correct itself.
-        let (_, calls) = reply(r#"{"reply":"","tool_calls":[{"name":"get_node","arguments_json":"{oops"}]}"#);
+        let (_, calls) =
+            reply(r#"{"reply":"","tool_calls":[{"name":"get_node","arguments_json":"{oops"}]}"#);
         assert_eq!(calls[0].input, json!({}));
     }
 
@@ -686,8 +696,11 @@ mod tests {
 
     #[test]
     fn a_nameless_tool_call_is_a_decode_error() {
-        let error = parse_reply(r#"{"reply":"","tool_calls":[{"name":"","arguments_json":"{}"}]}"#, 0)
-            .expect_err("a call with no name cannot be dispatched");
+        let error = parse_reply(
+            r#"{"reply":"","tool_calls":[{"name":"","arguments_json":"{}"}]}"#,
+            0,
+        )
+        .expect_err("a call with no name cannot be dispatched");
         assert!(matches!(error, HarnessError::Decode(_)));
     }
 
@@ -706,7 +719,11 @@ mod tests {
             {"name":"a","arguments_json":"{}"},{"name":"b","arguments_json":"{}"}]}"#;
         let (_, first) = parse_reply(body, 0).unwrap();
         let (_, second) = parse_reply(body, 1).unwrap();
-        let ids: Vec<_> = first.iter().chain(second.iter()).map(|c| c.id.clone()).collect();
+        let ids: Vec<_> = first
+            .iter()
+            .chain(second.iter())
+            .map(|c| c.id.clone())
+            .collect();
         let unique: std::collections::BTreeSet<_> = ids.iter().collect();
         assert_eq!(ids.len(), unique.len(), "duplicate call ids: {ids:?}");
     }
@@ -714,10 +731,13 @@ mod tests {
     #[test]
     fn usage_sums_every_completed_turn_and_never_invents_a_cache_write() {
         let events = concat!(
-            r#"{"type":"thread.started","thread_id":"t"}"#, "\n",
-            r#"{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":2,"cached_input_tokens":7}}"#, "\n",
+            r#"{"type":"thread.started","thread_id":"t"}"#,
+            "\n",
+            r#"{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":2,"cached_input_tokens":7}}"#,
+            "\n",
             "not json at all\n",
-            r#"{"type":"turn.completed","usage":{"input_tokens":5,"output_tokens":1,"cached_input_tokens":0}}"#, "\n",
+            r#"{"type":"turn.completed","usage":{"input_tokens":5,"output_tokens":1,"cached_input_tokens":0}}"#,
+            "\n",
         );
         let usage = usage_from_events(events);
         assert_eq!(usage.input_tokens, 15);
@@ -729,7 +749,11 @@ mod tests {
 
     #[test]
     fn the_prompt_carries_the_tools_the_task_and_every_earlier_tool_result() {
-        let tools = vec![ToolSpec::new("get_node", "Fetch one node.", json!({"type": "object"}))];
+        let tools = vec![ToolSpec::new(
+            "get_node",
+            "Fetch one node.",
+            json!({"type": "object"}),
+        )];
         let exchanges = vec![Exchange {
             prompt: None,
             assistant: json!({"reply": "first look"}),
@@ -779,7 +803,10 @@ mod tests {
         assert!(!rendered.contains("this is the first turn"));
 
         // Only a conversation with neither history nor a pending task is empty.
-        let nothing = Request { prompt_pending: false, ..opening };
+        let nothing = Request {
+            prompt_pending: false,
+            ..opening
+        };
         assert!(CodexProvider::render_full(&nothing).contains("this is the first turn"));
     }
 
@@ -792,7 +819,11 @@ mod tests {
         let request = Request {
             prompt_pending: true,
             session: 1,
-            system: "s", prompt: "p", exchanges: &[], tools: &[] };
+            system: "s",
+            prompt: "p",
+            exchanges: &[],
+            tools: &[],
+        };
         match provider.turn(&request) {
             Err(HarnessError::Config(detail)) => {
                 assert!(detail.contains("codex-does-not-exist"));
@@ -804,9 +835,16 @@ mod tests {
 
     #[test]
     fn the_recorded_model_never_invents_an_id_the_user_did_not_choose() {
-        assert_eq!(CodexProvider::new(CodexConfig::default()).model(), "codex:config-default");
         assert_eq!(
-            CodexProvider::new(CodexConfig { model: Some("gpt-5.6-sol".into()), ..CodexConfig::default() }).model(),
+            CodexProvider::new(CodexConfig::default()).model(),
+            "codex:config-default"
+        );
+        assert_eq!(
+            CodexProvider::new(CodexConfig {
+                model: Some("gpt-5.6-sol".into()),
+                ..CodexConfig::default()
+            })
+            .model(),
             "codex:gpt-5.6-sol"
         );
     }
@@ -815,7 +853,7 @@ mod tests {
     fn a_delta_carries_only_the_tool_results_the_thread_has_not_seen() {
         let exchanges = vec![
             Exchange {
-            prompt: None,
+                prompt: None,
                 assistant: json!({"reply": "first reply"}),
                 tool_results: vec![ToolResultRecord {
                     call_id: "c0".into(),
@@ -827,7 +865,7 @@ mod tests {
                 usage: Usage::default(),
             },
             Exchange {
-            prompt: None,
+                prompt: None,
                 assistant: json!({"reply": "second reply"}),
                 tool_results: vec![ToolResultRecord {
                     call_id: "c1".into(),
@@ -842,11 +880,18 @@ mod tests {
         let request = Request {
             prompt_pending: true,
             session: 1,
-            system: "s", prompt: "p", exchanges: &exchanges, tools: &[] };
+            system: "s",
+            prompt: "p",
+            exchanges: &exchanges,
+            tools: &[],
+        };
         let delta = CodexProvider::render_delta(&request, 1, false);
 
         assert!(delta.contains("NEW RESULT"));
-        assert!(!delta.contains("OLD RESULT"), "the thread already has turn 1");
+        assert!(
+            !delta.contains("OLD RESULT"),
+            "the thread already has turn 1"
+        );
         // Echoing codex's own words back invites it to read them as a new
         // instruction, and wastes the prefix that makes resuming worthwhile.
         assert!(!delta.contains("second reply"));
@@ -864,7 +909,11 @@ mod tests {
         let request = Request {
             prompt_pending: true,
             session: 1,
-            system: "s", prompt: "p", exchanges: &exchanges, tools: &[] };
+            system: "s",
+            prompt: "p",
+            exchanges: &exchanges,
+            tools: &[],
+        };
         let delta = CodexProvider::render_delta(&request, 0, false);
         assert!(delta.contains("No tools ran"));
         assert!(delta.contains("JSON reply"));
@@ -887,7 +936,11 @@ mod tests {
         let request = Request {
             prompt_pending: true,
             session: 1,
-            system: "s", prompt: "p", exchanges: &exchanges, tools: &[] };
+            system: "s",
+            prompt: "p",
+            exchanges: &exchanges,
+            tools: &[],
+        };
         let full = CodexProvider::render_full(&request);
         assert!(full.contains("OLD RESULT"));
         assert!(full.contains("first reply"));
@@ -896,8 +949,10 @@ mod tests {
     #[test]
     fn the_thread_id_is_read_from_the_events_that_announce_it() {
         let events = concat!(
-            r#"{"type":"turn.started"}"#, "\n",
-            r#"{"type":"thread.started","thread_id":"01a05d90-73e8"}"#, "\n",
+            r#"{"type":"turn.started"}"#,
+            "\n",
+            r#"{"type":"thread.started","thread_id":"01a05d90-73e8"}"#,
+            "\n",
         );
         assert_eq!(thread_from_events(events).as_deref(), Some("01a05d90-73e8"));
         assert_eq!(thread_from_events(r#"{"type":"turn.started"}"#), None);
@@ -914,8 +969,17 @@ mod tests {
         let empty = Request {
             prompt_pending: true,
             session: 1,
-            system: "PHASE A", prompt: "task A", exchanges: &[], tools: &[] };
-        let one_turn_phase = Thread { id: "thread-a".into(), sent: 0, system: "PHASE A".into(), prompt: "task A".into() };
+            system: "PHASE A",
+            prompt: "task A",
+            exchanges: &[],
+            tools: &[],
+        };
+        let one_turn_phase = Thread {
+            id: "thread-a".into(),
+            sent: 0,
+            system: "PHASE A".into(),
+            prompt: "task A".into(),
+        };
 
         // Same phase, but nothing new to say: still not resumable.
         assert!(!resumable(&one_turn_phase, &empty));
@@ -924,7 +988,11 @@ mod tests {
         let next = Request {
             prompt_pending: true,
             session: 1,
-            system: "PHASE B", prompt: "task B", exchanges: &[], tools: &[] };
+            system: "PHASE B",
+            prompt: "task B",
+            exchanges: &[],
+            tools: &[],
+        };
         assert!(!resumable(&one_turn_phase, &next));
     }
 
@@ -937,13 +1005,25 @@ mod tests {
             usage: Usage::default(),
         };
         let history = vec![exchange.clone(), exchange.clone()];
-        let open = Thread { id: "t".into(), sent: 1, system: "PHASE A".into(), prompt: "p".into() };
+        let open = Thread {
+            id: "t".into(),
+            sent: 1,
+            system: "PHASE A".into(),
+            prompt: "p".into(),
+        };
 
         let grown = Request {
             prompt_pending: true,
             session: 1,
-            system: "PHASE A", prompt: "p", exchanges: &history, tools: &[] };
-        assert!(resumable(&open, &grown), "two exchanges extend a thread told about one");
+            system: "PHASE A",
+            prompt: "p",
+            exchanges: &history,
+            tools: &[],
+        };
+        assert!(
+            resumable(&open, &grown),
+            "two exchanges extend a thread told about one"
+        );
 
         let rewound = Request {
             prompt_pending: true,
@@ -953,13 +1033,23 @@ mod tests {
             exchanges: &history[..1],
             tools: &[],
         };
-        assert!(!resumable(&open, &rewound), "a rewound transcript is a new conversation");
+        assert!(
+            !resumable(&open, &rewound),
+            "a rewound transcript is a new conversation"
+        );
 
         let relabelled = Request {
             prompt_pending: true,
             session: 1,
-            system: "PHASE B", prompt: "p", exchanges: &history, tools: &[] };
-        assert!(!resumable(&open, &relabelled), "new instructions need a full render");
+            system: "PHASE B",
+            prompt: "p",
+            exchanges: &history,
+            tools: &[],
+        };
+        assert!(
+            !resumable(&open, &relabelled),
+            "new instructions need a full render"
+        );
     }
 
     /// A timeout large enough to overflow the deadline arithmetic would panic
@@ -973,11 +1063,19 @@ mod tests {
         });
         assert_eq!(provider.config.timeout_seconds, MAX_TIMEOUT_SECONDS);
         std::time::Instant::now()
-            .checked_add(std::time::Duration::from_secs(provider.config.timeout_seconds))
+            .checked_add(std::time::Duration::from_secs(
+                provider.config.timeout_seconds,
+            ))
             .expect("the clamped deadline must be representable");
 
-        let zero = CodexProvider::new(CodexConfig { timeout_seconds: 0, ..CodexConfig::default() });
-        assert_eq!(zero.config.timeout_seconds, 1, "a zero timeout would kill every turn");
+        let zero = CodexProvider::new(CodexConfig {
+            timeout_seconds: 0,
+            ..CodexConfig::default()
+        });
+        assert_eq!(
+            zero.config.timeout_seconds, 1,
+            "a zero timeout would kill every turn"
+        );
     }
 
     /// A turn is a process start. The loop has executed independent calls in
@@ -999,7 +1097,11 @@ mod tests {
             tool_results: Vec::new(),
             usage: Usage::default(),
         }];
-        let continuing = Request { exchanges: &exchanges, prompt_pending: false, ..opening };
+        let continuing = Request {
+            exchanges: &exchanges,
+            prompt_pending: false,
+            ..opening
+        };
 
         for rendered in [
             CodexProvider::render_full(&opening),
@@ -1022,10 +1124,14 @@ mod tests {
     fn usage_counts_reasoning_tokens_as_output_not_as_nothing() {
         let events = concat!(
             r#"{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":10,"#,
-            r#""cached_input_tokens":40,"reasoning_output_tokens":900}}"#, "\n",
+            r#""cached_input_tokens":40,"reasoning_output_tokens":900}}"#,
+            "\n",
         );
         let usage = usage_from_events(events);
-        assert_eq!(usage.output_tokens, 910, "the 900 reasoning tokens were generated too");
+        assert_eq!(
+            usage.output_tokens, 910,
+            "the 900 reasoning tokens were generated too"
+        );
         assert_eq!(usage.input_tokens, 100);
         assert_eq!(usage.cache_read_input_tokens, 40);
     }

@@ -13,7 +13,7 @@ import os
 import sqlite3
 import struct
 from functools import lru_cache
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -88,7 +88,10 @@ def _load(model_name: str, revision: str | None = None):
     except ImportError as exc:
         raise RuntimeError("semantic indexing requires pip install -e '.[semantic]'") from exc
     # CPU is deliberate: predictable memory use for small specification indexes.
-    return SentenceTransformer(model_name, revision=revision, device="cpu")
+    try:
+        return SentenceTransformer(model_name, revision=revision, device="cpu")
+    except OSError as exc:
+        raise RuntimeError(f"could not load semantic embedding model {model_name}: {exc}") from exc
 
 
 def _texts(connection: sqlite3.Connection) -> list[tuple[str, str]]:
@@ -139,7 +142,7 @@ def build(database: Path, model_name: str = DEFAULT_MODEL, *, revision: str | No
         raise FileNotFoundError(database)
     if batch < 1:
         raise ValueError("embedding batch must be positive")
-    with connect(database, read_only=True) as connection:
+    with closing(connect(database, read_only=True)) as connection:
         digests = _digests(connection)
         items = _texts(connection)
     if not items:
@@ -155,8 +158,9 @@ def build(database: Path, model_name: str = DEFAULT_MODEL, *, revision: str | No
         raise ValueError("embedder returned inconsistent vector dimensions")
     # Capture the immutable HF revision, when supplied by SentenceTransformer.
     if revision is None and hasattr(model, "_first_module"):
-        revision = getattr(model._first_module().auto_model.config, "_commit_hash", None)
-    with connect(database) as connection:
+        auto_model = getattr(model._first_module(), "auto_model", None)
+        revision = getattr(getattr(auto_model, "config", None), "_commit_hash", None)
+    with closing(connect(database)) as connection, connection:
         # DDL and replacement are one transaction; failed rebuilds retain the old index.
         connection.execute("BEGIN IMMEDIATE")
         for statement in SCHEMA.split(';'):
@@ -176,7 +180,7 @@ def build(database: Path, model_name: str = DEFAULT_MODEL, *, revision: str | No
 
 
 def ensure(database: Path, *, dry_run: bool = False) -> dict[str, Any]:
-    with connect(database, read_only=True) as connection:
+    with closing(connect(database, read_only=True)) as connection:
         try:
             return {**metadata(connection), "disposition": "REUSED"}
         except ValueError:

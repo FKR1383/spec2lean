@@ -40,10 +40,24 @@ struct Server {
 impl Server {
     fn start(executable: &str) -> Result<Self, HarnessError> {
         let mut child = Command::new(executable)
-            .args(["-c", "features.shell_tool=false", "-c", "features.apps=false",
-                "-c", "features.plugins=false", "-c", "features.multi_agent=false",
-                "-c", "web_search=\"disabled\"", "-c", "mcp_servers={}",
-                "-c", "project_doc_max_bytes=0"])
+            .args([
+                "-c",
+                "features.shell_tool=false",
+                "-c",
+                "features.apps=false",
+                "-c",
+                "features.plugins=false",
+                "-c",
+                "features.multi_agent=false",
+                "-c",
+                "web_search=\"disabled\"",
+                "-c",
+                "tools.view_image=false",
+                "-c",
+                "mcp_servers={}",
+                "-c",
+                "project_doc_max_bytes=0",
+            ])
             .arg("mcp-server")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -153,7 +167,10 @@ impl Server {
                 && message["params"]["_meta"]["requestId"].as_u64() == Some(id)
                 && message["params"]["msg"]["type"] == "token_count"
             {
-                accumulate(&mut usage, &message["params"]["msg"]["info"]["last_token_usage"]);
+                accumulate(
+                    &mut usage,
+                    &message["params"]["msg"]["info"]["last_token_usage"],
+                );
             }
 
             if message["id"].as_u64() == Some(id) {
@@ -167,8 +184,14 @@ impl Server {
         }
     }
 
-    fn request(&self, method: &str, params: Value, timeout: Duration) -> Result<Value, HarnessError> {
-        self.request_with_usage(method, params, timeout).map(|(result, _)| result)
+    fn request(
+        &self,
+        method: &str,
+        params: Value,
+        timeout: Duration,
+    ) -> Result<Value, HarnessError> {
+        self.request_with_usage(method, params, timeout)
+            .map(|(result, _)| result)
     }
 }
 
@@ -307,7 +330,10 @@ impl Provider for McpCodexProvider {
 
         let structured = &result["structuredContent"];
         let content = structured["content"].as_str().unwrap_or_default();
-        let thread = structured["threadId"].as_str().unwrap_or_default().to_string();
+        let thread = structured["threadId"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
         if thread.is_empty() {
             return Err(HarnessError::Decode(
                 "codex mcp-server answered without a thread id".into(),
@@ -449,8 +475,14 @@ mod tests {
     fn a_fenced_or_introduced_reply_still_yields_its_object() {
         let bare = r#"{"reply":"ok","tool_calls":[]}"#;
         assert_eq!(extract_object(bare), bare);
-        assert_eq!(extract_object("```json\n{\"reply\":\"ok\"}\n```"), r#"{"reply":"ok"}"#);
-        assert_eq!(extract_object("Here you go:\n{\"reply\":\"ok\"}\nhope that helps"), r#"{"reply":"ok"}"#);
+        assert_eq!(
+            extract_object("```json\n{\"reply\":\"ok\"}\n```"),
+            r#"{"reply":"ok"}"#
+        );
+        assert_eq!(
+            extract_object("Here you go:\n{\"reply\":\"ok\"}\nhope that helps"),
+            r#"{"reply":"ok"}"#
+        );
     }
 
     #[test]
@@ -482,14 +514,20 @@ mod tests {
     #[test]
     fn token_counts_accumulate_across_a_turns_model_calls() {
         let mut usage = Usage::default();
-        accumulate(&mut usage, &json!({
-            "input_tokens": 100, "cached_input_tokens": 40,
-            "output_tokens": 10, "reasoning_output_tokens": 900
-        }));
-        accumulate(&mut usage, &json!({
-            "input_tokens": 50, "cached_input_tokens": 5,
-            "output_tokens": 2, "reasoning_output_tokens": 8
-        }));
+        accumulate(
+            &mut usage,
+            &json!({
+                "input_tokens": 100, "cached_input_tokens": 40,
+                "output_tokens": 10, "reasoning_output_tokens": 900
+            }),
+        );
+        accumulate(
+            &mut usage,
+            &json!({
+                "input_tokens": 50, "cached_input_tokens": 5,
+                "output_tokens": 2, "reasoning_output_tokens": 8
+            }),
+        );
         assert_eq!(usage.input_tokens, 150);
         assert_eq!(usage.cache_read_input_tokens, 45);
         assert_eq!(usage.output_tokens, 920, "reasoning tokens are output too");
@@ -497,7 +535,11 @@ mod tests {
 
     #[test]
     fn the_base_instructions_carry_the_reply_contract_the_phase_and_the_tools() {
-        let tools = [crate::tool::ToolSpec::new("get_evidence", "Read the bundle.", json!({}))];
+        let tools = [crate::tool::ToolSpec::new(
+            "get_evidence",
+            "Read the bundle.",
+            json!({}),
+        )];
         let request = Request {
             system: "PHASE RULES",
             prompt: "the task",
@@ -509,7 +551,12 @@ mod tests {
         let instructions = McpCodexProvider::base_instructions(&request);
         // Codex's own preamble is replaced, so everything it used to carry has
         // to be here instead.
-        for expected in ["arguments_json", "PHASE RULES", "get_evidence", "Read the bundle."] {
+        for expected in [
+            "arguments_json",
+            "PHASE RULES",
+            "get_evidence",
+            "Read the bundle.",
+        ] {
             assert!(instructions.contains(expected), "missing {expected:?}");
         }
         assert!(instructions.contains("Do not use your own shell"));
@@ -522,8 +569,12 @@ mod tests {
             ..CodexConfig::default()
         });
         let request = Request {
-            system: "s", prompt: "p", prompt_pending: true,
-            exchanges: &[], tools: &[], session: 1,
+            system: "s",
+            prompt: "p",
+            prompt_pending: true,
+            exchanges: &[],
+            tools: &[],
+            session: 1,
         };
         match provider.turn(&request) {
             Err(HarnessError::Config(detail)) => {
@@ -542,7 +593,6 @@ mod tests {
         );
     }
 
-
     /// The real failure this fixes: a doorbell register's evidence is a tab
     /// separated table, the model quoted it faithfully into a JSON string, and
     /// strict JSON rejected the tabs. The quotation was right; the escaping was
@@ -551,7 +601,10 @@ mod tests {
     #[test]
     fn raw_tabs_and_newlines_from_specification_text_are_escaped_not_rejected() {
         let typed = "{\"reply\":\"Bits\tType\tReset\nDescription\",\"tool_calls\":[]}";
-        assert!(serde_json::from_str::<serde_json::Value>(typed).is_err(), "precondition");
+        assert!(
+            serde_json::from_str::<serde_json::Value>(typed).is_err(),
+            "precondition"
+        );
 
         let value: serde_json::Value = serde_json::from_str(&repair(typed)).expect("repaired");
         assert_eq!(value["reply"], "Bits\tType\tReset\nDescription");

@@ -35,7 +35,7 @@ validator response, outcome and token usage. Existing `opencode` metadata remain
 valid. The historical `opencodeVersion` field remains readable; on Rust sessions
 it records the harness executable version.
 
-The Codex transport disables shell, web search, apps, plugins and multi-agent
+The Codex transport disables shell, local-image reads, web search, apps, plugins and multi-agent
 features and clears its configured MCP server map. Only the harness dispatches
 phase tools. Configuration references:
 [Codex configuration](https://learn.chatgpt.com/docs/config-file/config-reference).
