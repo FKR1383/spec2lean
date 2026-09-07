@@ -12,6 +12,7 @@ from time import perf_counter
 from typing import Any, Callable
 
 from ..checking.runner import run_group_checks
+from ..embeddings import ensure as ensure_embeddings, index_mode, retrieval_selection
 from ..checking.store import load_check
 from ..constants import INDEX_SCHEMA_VERSION, PARSER_VERSION
 from ..database import build_database, connect
@@ -95,8 +96,11 @@ class PipelineOptions:
     until_phase: str = "troubleshoot"
     dry_run: bool = False
     resume: str | None = None
+    index_mode: str = "lexical"
 
     def __post_init__(self) -> None:
+        if self.index_mode not in {"lexical", "semantic"}:
+            raise ValueError("index_mode must be lexical or semantic")
         if self.from_phase not in PHASES or self.until_phase not in PHASES:
             raise ValueError(f"pipeline phases must be one of: {', '.join(PHASES)}")
         if PHASES.index(self.from_phase) > PHASES.index(self.until_phase):
@@ -267,6 +271,7 @@ def _matching_plan(plans_root: Path, request: PlanningRequest, digest: str) -> t
             and plan.get("schemaVersion") == PLAN_SCHEMA_VERSION
             and plan.get("sourceDatabaseDigest") == digest
             and metadata.get("outcome") == "VALID"
+            and metadata.get("indexMode", "lexical") == index_mode()
         ):
             matches.append((str(metadata.get("finishedAt", "")), directory, plan))
     if not matches:
@@ -391,6 +396,7 @@ def _new_manifest(request: PlanningRequest, options: PipelineOptions) -> tuple[P
         "untilPhase": options.until_phase,
         "dryRun": options.dry_run,
         "maxQuestionRounds": options.max_question_rounds,
+        "indexMode": options.index_mode,
         "timing": {
             "startedAt": created,
             "finishedAt": None,
@@ -432,6 +438,17 @@ def run_pipeline(
     services: PipelineServices | None = None,
     progress: Callable[[str], None] | None = None,
 ) -> tuple[Path | None, dict[str, Any]]:
+    with retrieval_selection(options.index_mode):
+        return _run_pipeline(request, options, services=services, progress=progress)
+
+
+def _run_pipeline(
+    request: PlanningRequest,
+    options: PipelineOptions,
+    *,
+    services: PipelineServices | None = None,
+    progress: Callable[[str], None] | None = None,
+) -> tuple[Path | None, dict[str, Any]]:
     services = services or PipelineServices()
     progress = progress or (lambda _message: None)
     if options.resume == "latest":
@@ -440,6 +457,8 @@ def run_pipeline(
         resume_id = options.resume
     if resume_id:
         directory, manifest = load_pipeline_run(options.runs_root, resume_id)
+        if manifest.get("indexMode", "lexical") != options.index_mode:
+            raise ValueError("--resume index mode does not match the stored run; start a new run")
         if manifest.get("request") != request.to_dict():
             raise ValueError("--resume request does not match the stored pipeline request")
         manifest["status"] = "RUNNING"
@@ -529,6 +548,14 @@ def run_pipeline(
         start_phase("index")
         report("phase 1/7 index: validating freshness")
         phase1 = _ensure_phase1(options, request)
+        if options.index_mode == "semantic" and phase1.get("ok"):
+            embedding_state = ensure_embeddings(
+                _database_for(options, request),
+                dry_run=options.dry_run or not _phase_selected(options, "index"),
+            )
+            phase1["semanticIndex"] = embedding_state
+            if embedding_state["disposition"] == "WOULD_BUILD" and not options.dry_run:
+                raise FileNotFoundError("semantic index needs building but Phase 1 is before --from")
         report(f"phase 1/7 index: {phase1['disposition'].lower()} ({phase1['reason']})")
         manifest["phase1"] = phase1
         finish_phase()

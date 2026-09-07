@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..database import connect
+from ..embeddings import index_mode
 from ..planning.runner import installed_openai_models
 from .models import EvidenceScope
 from .prompt import build_retriever_prompt
@@ -200,6 +201,7 @@ def _run_unit(
             "planRunId": scope.plan_run_id,
             "unitId": scope.unit_id,
             "retriever": runtime_name(),
+            "indexMode": index_mode(),
             "model": RETRIEVER_MODEL,
             "reasoning": RETRIEVER_REASONING,
             "singleSession": True,

@@ -6,6 +6,10 @@ existing `./spec2lean run ...` workflow with an authenticated Codex CLI. All pha
 prompts and artifacts retain the current Python pipeline contracts. The previous
 runtime remains available with `--runtime opencode` on model-running commands.
 
+Lexical retrieval remains the default. Add `--index-mode semantic` to use the
+optional [semantic index](docs/semantic-index.md); source/evidence/claim IDs and
+GUI traceability retain their existing contracts.
+
 
 Current release: **1.0.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes.
 

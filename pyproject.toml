@@ -15,6 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10"]
+semantic = ["sentence-transformers>=3,<6"]
 
 [project.scripts]
 spec2lean = "spec2lean.cli:main"

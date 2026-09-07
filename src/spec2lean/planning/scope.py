@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..embeddings import index_mode, search as semantic_search
+
 import json
 import re
 import sqlite3
@@ -299,6 +301,12 @@ class Phase1Query:
 
     def search(self, query: str, *, limit: int = 20) -> list[dict[str, Any]]:
         self._bounded_limit(limit)
+        if index_mode() == "semantic":
+            rows = semantic_search(self.connection, query, limit=limit)
+            result = [_node_summary(row) for row in rows]
+            for item, row in zip(result, rows, strict=True):
+                item.update(snippet=row["snippet"], similarity=row["similarity"])
+            return result
         tokens = [token.replace('"', '""') for token in query.split() if token]
         if not tokens:
             raise ValueError("search query must be non-empty")

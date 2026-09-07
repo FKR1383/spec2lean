@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .runtime import runtime_selection
+from .embeddings import DEFAULT_MODEL, build as build_embeddings, index_mode, retrieval_selection, search as semantic_search
 
 import argparse
 import json
@@ -224,6 +225,8 @@ def _command_build(args: argparse.Namespace) -> int:
         manifest["sources"].append(source_entry)
     manifest_path = database.with_name("index-manifest.json")
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if index_mode() == "semantic":
+        result["semanticIndex"] = build_embeddings(database)
     result["manifest"] = str(manifest_path)
     _json(result)
     return 0 if report["ok"] else 1
@@ -307,8 +310,21 @@ def _fts_query(query: str) -> str:
     return " AND ".join(f'"{token}"' for token in tokens)
 
 
+def _command_embed(args: argparse.Namespace) -> int:
+    _json(build_embeddings(_resolve_database(args), args.model, revision=args.revision))
+    return 0
+
+
 def _command_search(args: argparse.Namespace) -> int:
     database = _resolve_database(args)
+    if index_mode() == "semantic":
+        with connect(database, read_only=True) as connection:
+            rows = semantic_search(connection, args.query, limit=args.limit,
+                                   source_type=args.source_type, node_type=args.node_type)
+        fields = ("node_id", "node_type", "title", "section_number", "page_start", "html_anchor",
+                  "source_type", "snippet", "rank", "similarity")
+        _json([{key: row[key] for key in fields} for row in rows])
+        return 0
     with connect(database, read_only=True) as connection:
         sql = """SELECT n.node_id, n.node_type, n.title, n.section_number,
                         n.page_start, n.html_anchor, d.source_type,
@@ -966,6 +982,7 @@ def _pipeline_options(args: argparse.Namespace) -> PipelineOptions:
         until_phase=args.until_phase,
         dry_run=args.dry_run,
         resume=args.resume,
+        index_mode=index_mode(),
     )
 
 
@@ -1059,6 +1076,12 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--database")
     build.add_argument("--no-pdf-tables", action="store_true", help="disable PDF table inference")
     build.set_defaults(func=_command_build)
+
+    embed = sub.add_parser("embed", help="add or rebuild semantic vectors on an existing hierarchical index")
+    _add_database_arguments(embed)
+    embed.add_argument("--model", default=DEFAULT_MODEL)
+    embed.add_argument("--revision", help="immutable embedding model revision")
+    embed.set_defaults(func=_command_embed)
 
     stats = sub.add_parser("stats", help="show extraction and completeness statistics")
     _add_database_arguments(stats)
@@ -1397,6 +1420,10 @@ def build_parser() -> argparse.ArgumentParser:
                     translate_build, translate_revise, troubleshoot_run, troubleshoot_resolve):
         command.add_argument("--runtime", choices=("rust-harness", "opencode"),
                              help="model session runtime (default: rust-harness)")
+    for command in (pipeline, build, search, plan_build, evidence_build, semantics_build,
+                    troubleshoot_resolve):
+        command.add_argument("--index-mode", choices=("lexical", "semantic"),
+                             help="retrieval mode (default: lexical)")
     return parser
 
 
@@ -1426,7 +1453,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     ):
         parser.error("troubleshoot resolve --timeout and --max-dispatches must be positive")
     try:
-        with runtime_selection(getattr(args, "runtime", None)):
+        with runtime_selection(getattr(args, "runtime", None)), retrieval_selection(getattr(args, "index_mode", None)):
             return int(args.func(args))
     except KeyboardInterrupt:
         print("spec2lean: interrupted", file=sys.stderr)

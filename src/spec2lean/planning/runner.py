@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..database import connect
+from ..embeddings import index_mode
 from ..util import stable_id
 from .models import PlanningRequest
 from .prompt import build_planner_prompt
@@ -248,6 +249,7 @@ def build_plan(
             "schemaVersion": 1,
             "planRunId": plan_run_id,
             "planner": runtime_name(),
+            "indexMode": index_mode(),
             "model": PLANNER_MODEL,
             "reasoning": PLANNER_REASONING,
             "singleSession": True,
