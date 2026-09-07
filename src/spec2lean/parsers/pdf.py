@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -16,20 +17,41 @@ DEFINITION_RE = re.compile(r"^(?:Definition|Term)\s+([^:—–-]{1,100})\s*[:—
 NOTE_RE = re.compile(r"^(?:NOTE|Note|Warning|Important)\s*[:.—–-]?")
 EXAMPLE_RE = re.compile(r"^Example(?:\s+\d+(?:\.\d+)*)?\s*[:.—–-]?")
 CAPTION_RE = re.compile(r"^(?:Table|Figure)\s+[A-Z]?(?:\d+(?:\.\d+)*)", re.I)
+EMPHASIS_FONT_RE = re.compile(
+    r"bold|demi|black|heavy|medium|semi[ -]?bold|bookbold", re.I
+)
+# Formal reference manuals commonly introduce one entry with a short label and
+# a descriptive title separated by a typographic dash.  A spaced ASCII hyphen
+# is accepted too, but an ordinary in-word hyphen is deliberately not.
+ENTRY_TITLE_RE = re.compile(
+    r"^(?P<label>\S(?:.{0,78}?\S)?)"
+    r"(?:\s*[—–]\s*|\s+-\s+)"
+    r"(?P<description>\S(?:.{0,158}?\S)?)$"
+)
 
 
 @dataclass(slots=True)
 class PdfBlock:
     page: int
     index: int
-    bbox: tuple[float, float, float, float]
+    bbox: tuple[float, float, float, float] | None
     raw_text: str
     max_size: float
     bold_ratio: float
     mono_ratio: float
     spans: list[SourceSpan] = field(default_factory=list)
+    font_size_weights: tuple[tuple[float, int], ...] = ()
+    emphasis_ratio: float = 0.0
     block_type: int = 0
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class HeadingMatch:
+    level: int
+    section_number: str | None
+    title: str
+    basis: str
 
 
 def _overlap_ratio(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> float:
@@ -38,6 +60,102 @@ def _overlap_ratio(a: tuple[float, float, float, float], b: tuple[float, float, 
     area = max(0.0, x1 - x0) * max(0.0, y1 - y0)
     own = max(1.0, (a[2] - a[0]) * (a[3] - a[1]))
     return area / own
+
+
+def _bbox_on_page(
+    bbox: tuple[float, float, float, float],
+    page_width: float,
+    page_height: float,
+) -> bool:
+    """Return whether a PDF bbox is finite, ordered, and within the page."""
+    x0, y0, x1, y1 = bbox
+    return (
+        all(math.isfinite(value) for value in bbox)
+        and 0 <= x0 <= x1 <= page_width + 1
+        and 0 <= y0 <= y1 <= page_height + 1
+    )
+
+
+def _bbox_from_transform(transform: Any) -> tuple[float, float, float, float] | None:
+    """Map the unit image rectangle through a six-value PDF transform."""
+    try:
+        a, b, c, d, e, f = (float(value) for value in transform)
+    except (TypeError, ValueError):
+        return None
+    points = ((e, f), (a + e, b + f), (c + e, d + f), (a + c + e, b + d + f))
+    return (
+        min(point[0] for point in points),
+        min(point[1] for point in points),
+        max(point[0] for point in points),
+        max(point[1] for point in points),
+    )
+
+
+def _extract_image_block(
+    page_number: int,
+    image_index: int,
+    image: dict[str, Any],
+    page_width: float,
+    page_height: float,
+) -> PdfBlock:
+    """Create a non-text block from PyMuPDF's displayed-image inventory.
+
+    ``get_text('dict')`` can return corrupt image-mask bboxes when media-box
+    clipping is enabled. ``get_image_info()`` avoids loading image binaries and
+    normally supplies the correct displayed bbox. The transform provides a
+    deterministic fallback, and an untrustworthy bbox is never persisted.
+    """
+    try:
+        reported_bbox = tuple(float(value) for value in image.get("bbox", ()))
+    except (TypeError, ValueError):
+        reported_bbox = ()
+    bbox: tuple[float, float, float, float] | None = None
+    bbox_source = "unavailable"
+    if len(reported_bbox) == 4 and _bbox_on_page(reported_bbox, page_width, page_height):
+        bbox = reported_bbox
+        bbox_source = "get_image_info"
+    else:
+        transformed_bbox = _bbox_from_transform(image.get("transform"))
+        if transformed_bbox is not None and _bbox_on_page(
+            transformed_bbox, page_width, page_height
+        ):
+            bbox = transformed_bbox
+            bbox_source = "transform_fallback"
+
+    transform = image.get("transform")
+    metadata: dict[str, Any] = {
+        "pdf_block_type": 1,
+        "pdf_image_index": image_index,
+        "pdf_image_number": image.get("number"),
+        "width": image.get("width"),
+        "height": image.get("height"),
+        "colorspace": image.get("colorspace"),
+        "colorspace_name": image.get("cs-name"),
+        "bits_per_component": image.get("bpc"),
+        "x_resolution": image.get("xres"),
+        "y_resolution": image.get("yres"),
+        "encoded_size": image.get("size"),
+        "has_mask": image.get("has-mask"),
+        "bbox_source": bbox_source,
+    }
+    if transform is not None:
+        try:
+            metadata["transform"] = tuple(float(value) for value in transform)
+        except (TypeError, ValueError):
+            metadata["transform_invalid"] = True
+    if len(reported_bbox) == 4 and bbox_source != "get_image_info":
+        metadata["invalid_reported_bbox"] = reported_bbox
+    return PdfBlock(
+        page=page_number,
+        index=image_index,
+        bbox=bbox,
+        raw_text="",
+        max_size=0,
+        bold_ratio=0,
+        mono_ratio=0,
+        block_type=1,
+        metadata=metadata,
+    )
 
 
 def _extract_block(page_number: int, index: int, block: dict[str, Any]) -> PdfBlock:
@@ -50,12 +168,23 @@ def _extract_block(page_number: int, index: int, block: dict[str, Any]) -> PdfBl
             "height": block.get("height"),
             "extension": block.get("ext"),
         }
-        return PdfBlock(page_number, index, bbox, "", 0, 0, 0, block_type=block_type, metadata=metadata)
+        return PdfBlock(
+            page=page_number,
+            index=index,
+            bbox=bbox,
+            raw_text="",
+            max_size=0,
+            bold_ratio=0,
+            mono_ratio=0,
+            block_type=block_type,
+            metadata=metadata,
+        )
 
     line_texts: list[str] = []
     source_spans: list[SourceSpan] = []
     sizes: list[tuple[float, int]] = []
     bold_chars = 0
+    emphasis_chars = 0
     mono_chars = 0
     total_chars = 0
     for line_index, line in enumerate(block.get("lines", [])):
@@ -70,6 +199,8 @@ def _extract_block(page_number: int, index: int, block: dict[str, Any]) -> PdfBl
             flags = int(span.get("flags", 0))
             if re.search(r"bold|demi|black|heavy", font, re.I) or flags & 16:
                 bold_chars += len(text)
+            if EMPHASIS_FONT_RE.search(font) or flags & 16:
+                emphasis_chars += len(text)
             if re.search(r"mono|courier|consolas|code", font, re.I):
                 mono_chars += len(text)
             total_chars += len(text)
@@ -86,15 +217,21 @@ def _extract_block(page_number: int, index: int, block: dict[str, Any]) -> PdfBl
         line_texts.append("".join(pieces))
     raw = "\n".join(line_texts)
     max_size = max((size for size, _ in sizes), default=0.0)
+    size_weights: Counter[float] = Counter()
+    for size, count in sizes:
+        if size > 0:
+            size_weights[round(size, 2)] += count
     return PdfBlock(
-        page_number,
-        index,
-        bbox,
-        raw,
-        max_size,
-        bold_chars / max(total_chars, 1),
-        mono_chars / max(total_chars, 1),
-        source_spans,
+        page=page_number,
+        index=index,
+        bbox=bbox,
+        raw_text=raw,
+        max_size=max_size,
+        bold_ratio=bold_chars / max(total_chars, 1),
+        mono_ratio=mono_chars / max(total_chars, 1),
+        spans=source_spans,
+        font_size_weights=tuple(sorted(size_weights.items())),
+        emphasis_ratio=emphasis_chars / max(total_chars, 1),
         block_type=block_type,
     )
 
@@ -197,12 +334,9 @@ def _body_font_size(blocks: list[PdfBlock]) -> float:
     for block in blocks:
         if block.block_type != 0:
             continue
-        for span in block.spans:
-            if span.raw_text.strip() and span.bbox:
-                # Span height is a stable proxy if font details are absent here.
-                height = round(span.bbox[3] - span.bbox[1], 1)
-                if 5 <= height <= 30:
-                    weighted[height] += len(span.raw_text)
+        for size, characters in block.font_size_weights:
+            if 5 <= size <= 30:
+                weighted[size] += characters
     return weighted.most_common(1)[0][0] if weighted else 10.0
 
 
@@ -229,8 +363,12 @@ def _heading_level(number: str) -> int:
 
 
 def _heading(
-    block: PdfBlock, body_size: float, page_height: float
-) -> tuple[int, str | None, str] | None:
+    block: PdfBlock,
+    body_size: float,
+    page_height: float,
+    *,
+    entry_level: int = 1,
+) -> HeadingMatch | None:
     clean = normalize_text(block.raw_text)
     if not clean or len(clean) > 240 or block.mono_ratio > 0.6:
         return None
@@ -244,18 +382,49 @@ def _heading(
         return None
     chapter = re.match(r"^Chapter\s+(\d+)\.?\s+(.+)$", clean, re.I)
     if chapter and block.max_size >= body_size * 1.4:
-        return 1, chapter.group(1), chapter.group(2).strip()
+        return HeadingMatch(1, chapter.group(1), chapter.group(2).strip(), "chapter_label")
     number, title = split_section_title(clean)
-    if number and title:
+    if number and title and any(character.isalpha() for character in title):
         level = _heading_level(number)
-        heading_style = block.max_size >= body_size * 1.15 or block.bold_ratio >= 0.45
+        heading_style = (
+            block.max_size >= body_size * 1.15 or block.emphasis_ratio >= 0.45
+        )
         if level <= 7 and len(clean) <= 160 and heading_style:
-            return level, number, title
+            return HeadingMatch(level, number, title, "section_number")
     appendix = re.match(r"^(Appendix\s+[A-Z])(?:\s*[:.—–-]?\s*)(.*)$", clean, re.I)
-    if appendix and (block.bold_ratio >= 0.4 or block.max_size >= body_size * 1.05):
-        return 1, appendix.group(1), appendix.group(2) or appendix.group(1)
-    if block.max_size >= body_size * 1.45 and block.bold_ratio >= 0.45 and len(clean) <= 100:
-        return 1, None, clean
+    if appendix and (block.emphasis_ratio >= 0.4 or block.max_size >= body_size * 1.05):
+        return HeadingMatch(
+            1,
+            appendix.group(1),
+            appendix.group(2) or appendix.group(1),
+            "appendix_label",
+        )
+
+    # Entry titles in formal specifications are often not numbered sections.
+    # Require both their label-description grammar and document-relative
+    # typographic prominence so prose containing a dash is not promoted.
+    entry_title = ENTRY_TITLE_RE.fullmatch(clean)
+    line_count = sum(bool(line.strip()) for line in block.raw_text.splitlines())
+    entry_prominence = block.max_size >= body_size * 1.2 and (
+        block.emphasis_ratio >= 0.45 or block.max_size >= body_size * 1.3
+    )
+    entry_description = entry_title.group("description") if entry_title else ""
+    if (
+        entry_title
+        and any(character.isalpha() for character in entry_description)
+        and line_count <= 2
+        and entry_prominence
+    ):
+        return HeadingMatch(entry_level, None, clean, "label_description_entry")
+
+    alphabetic_ratio = sum(character.isalpha() for character in clean) / max(len(clean), 1)
+    if (
+        block.max_size >= body_size * 1.45
+        and block.emphasis_ratio >= 0.45
+        and alphabetic_ratio >= 0.35
+        and len(clean) <= 100
+    ):
+        return HeadingMatch(1, None, clean, "prominent_unnumbered")
     return None
 
 
@@ -268,9 +437,17 @@ def _uses_numbered_headings(
         if not height:
             continue
         heading = _heading(block, body_size, height)
-        if heading and heading[1]:
+        if heading and heading.section_number:
             return True
     return False
+
+
+def _entry_heading_level(heading_stack: dict[int, Node]) -> int:
+    """Place repeated unnumbered entries below the active structural heading."""
+    for level in sorted(heading_stack, reverse=True):
+        if heading_stack[level].metadata.get("heading_basis") == "label_description_entry":
+            return level
+    return min(max(heading_stack, default=0) + 1, 7)
 
 
 def _classify_content(
@@ -283,6 +460,7 @@ def _classify_content(
     metadata: dict[str, Any] = {
         "font_size_max": round(block.max_size, 3),
         "bold_ratio": round(block.bold_ratio, 4),
+        "emphasis_ratio": round(block.emphasis_ratio, 4),
         "monospace_ratio": round(block.mono_ratio, 4),
         "pdf_block_index": block.index,
     }
@@ -352,9 +530,26 @@ def parse_pdf(path: str | Path, official_url: str | None = None, *, detect_table
                 "source_text_chars": len(normalize_text(page_text)),
             }
         )
-        page_dict = page.get_text("dict", sort=True)
+        # Text and displayed images intentionally use separate APIs. PyMuPDF's
+        # default dictionary flags preserve images and apply media-box clipping;
+        # that combination can produce malformed bboxes for image masks.
+        text_flags = fitz.TEXTFLAGS_DICT & ~fitz.TEXT_PRESERVE_IMAGES
+        page_dict = page.get_text("dict", flags=text_flags, sort=True)
         for block_index, block_data in enumerate(page_dict.get("blocks", [])):
             all_blocks.append(_extract_block(page_number, block_index, block_data))
+        for image_index, image_info in enumerate(page.get_image_info()):
+            image_block = _extract_image_block(
+                page_number,
+                image_index,
+                image_info,
+                float(page.rect.width),
+                float(page.rect.height),
+            )
+            all_blocks.append(image_block)
+            if image_block.bbox is None:
+                stats["pdf_image_bbox_unavailable"] += 1
+            elif image_block.metadata["bbox_source"] == "transform_fallback":
+                stats["pdf_image_bbox_transform_fallback"] += 1
 
         tables: list[dict[str, Any]] = []
         if detect_tables and hasattr(page, "find_tables"):
@@ -378,7 +573,11 @@ def parse_pdf(path: str | Path, official_url: str | None = None, *, detect_table
         table_by_page[page_number] = tables
         stats["pdf_tables_discovered"] += len(tables)
 
-    body_size = _body_font_size(all_blocks)
+    # A cover can contain more large-title characters than a tiny document has
+    # body text. Once a later page exists, let actual document pages establish
+    # the font baseline instead of allowing cover typography to become "body".
+    body_blocks = [block for block in all_blocks if block.page > 1] or all_blocks
+    body_size = _body_font_size(body_blocks)
     page_height_by_number = {page["page_number"]: page["height"] for page in pages}
     numbered_headings = _uses_numbered_headings(all_blocks, body_size, page_height_by_number)
     furniture = _page_furniture(
@@ -390,7 +589,13 @@ def parse_pdf(path: str | Path, official_url: str | None = None, *, detect_table
         source_key="root",
         node_type="document",
         title=title,
-        metadata={"pdf_metadata": metadata, "body_font_height": body_size},
+        metadata={
+            "pdf_metadata": metadata,
+            # Keep the original key for index compatibility; values are now
+            # measured in actual PDF font points rather than bbox height.
+            "body_font_height": body_size,
+            "body_font_size": body_size,
+        },
         page_start=1 if len(pdf) else None,
         page_end=len(pdf) or None,
     )
@@ -405,15 +610,26 @@ def parse_pdf(path: str | Path, official_url: str | None = None, *, detect_table
 
     for page_number in range(1, len(pdf) + 1):
         blocks = [block for block in all_blocks if block.page == page_number]
-        blocks.sort(key=lambda item: (round(item.bbox[1], 2), round(item.bbox[0], 2), item.index))
+        blocks.sort(
+            key=lambda item: (
+                round(item.bbox[1], 2) if item.bbox is not None else float("inf"),
+                round(item.bbox[0], 2) if item.bbox is not None else float("inf"),
+                item.block_type,
+                item.index,
+            )
+        )
         tables = table_by_page.get(page_number, [])
         events: list[tuple[float, float, str, Any]] = []
         for table in tables:
             events.append((table["bbox"][1], table["bbox"][0], "table", table))
         for block in blocks:
-            if any(_overlap_ratio(block.bbox, table["bbox"]) >= 0.5 for table in tables):
+            if block.bbox is not None and any(
+                _overlap_ratio(block.bbox, table["bbox"]) >= 0.5 for table in tables
+            ):
                 continue
-            events.append((block.bbox[1], block.bbox[0], "block", block))
+            event_y = block.bbox[1] if block.bbox is not None else float("inf")
+            event_x = block.bbox[0] if block.bbox is not None else float("inf")
+            events.append((event_y, event_x, "block", block))
         events.sort(key=lambda event: (round(event[0], 2), round(event[1], 2), event[2]))
 
         for _, _, kind, value in events:
@@ -443,7 +659,7 @@ def parse_pdf(path: str | Path, official_url: str | None = None, *, detect_table
             block: PdfBlock = value
             if block.block_type != 0:
                 node = Node(
-                    source_key=f"page:{page_number}:block:{block.index}",
+                    source_key=f"page:{page_number}:image:{block.index}",
                     node_type="generic",
                     raw_text="",
                     page_start=page_number,
@@ -458,9 +674,14 @@ def parse_pdf(path: str | Path, official_url: str | None = None, *, detect_table
 
             if not normalize_text(block.raw_text):
                 continue
-            heading = _heading(block, body_size, page_heights[page_number])
-            if heading and heading[1]:
-                canonical = _canonical_number(heading[1])
+            heading = _heading(
+                block,
+                body_size,
+                page_heights[page_number],
+                entry_level=_entry_heading_level(heading_stack),
+            )
+            if heading and heading.section_number:
+                canonical = _canonical_number(heading.section_number)
                 if canonical in claimed_numbers:
                     heading = None
                 else:
@@ -473,15 +694,15 @@ def parse_pdf(path: str | Path, official_url: str | None = None, *, detect_table
                 heading
                 and numbered_headings
                 and page_number == 1
-                and heading[0] == 1
-                and not heading[1]
+                and heading.level == 1
+                and not heading.section_number
             ):
                 heading = None
                 cover_text = True
             else:
                 cover_text = False
             if heading:
-                level, section_number, heading_title = heading
+                level = heading.level
                 for old_level in [item for item in heading_stack if item >= level]:
                     del heading_stack[old_level]
                 parent = heading_stack[max(heading_stack)] if heading_stack else root
@@ -490,14 +711,16 @@ def parse_pdf(path: str | Path, official_url: str | None = None, *, detect_table
                     source_key=f"page:{page_number}:block:{block.index}:heading",
                     node_type=node_type,
                     raw_text=block.raw_text,
-                    title=heading_title,
-                    section_number=section_number,
+                    title=heading.title,
+                    section_number=heading.section_number,
                     page_start=page_number,
                     page_end=page_number,
                     metadata={
                         "heading_level": level,
+                        "heading_basis": heading.basis,
                         "font_size_max": round(block.max_size, 3),
                         "bold_ratio": round(block.bold_ratio, 4),
+                        "emphasis_ratio": round(block.emphasis_ratio, 4),
                         "pdf_block_index": block.index,
                     },
                     spans=block.spans,
@@ -506,7 +729,7 @@ def parse_pdf(path: str | Path, official_url: str | None = None, *, detect_table
                 parent.add(node)
                 heading_stack[level] = node
                 stats[node_type] += 1
-                previous_label = heading_title
+                previous_label = heading.title
                 continue
 
             parent = heading_stack[max(heading_stack)] if heading_stack else root

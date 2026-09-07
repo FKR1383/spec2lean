@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "publisher": "Intel Corporation",
+  "document_title": "Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 2A: Instruction Set Reference, A-L",
+  "language": "x86",
+  "specification_version": "092",
+  "source_classification": "official",
+  "retrieved_at_utc": "2026-09-03T14:39:45Z",
+  "initial_formalization_unit": {
+    "construct": "ADD",
+    "instruction_family": "general-purpose integer arithmetic",
+    "section_heading": "ADD-Add"
+  },
+  "sample_instructions": [
+    "ADD",
+    "AND",
+    "CMP",
+    "DEC",
+    "INC"
+  ],
+  "artifacts": [
+    {
+      "kind": "pdf",
+      "url": "https://cdrdv2-public.intel.com/922480/253666-092-sdm-vol-2a.pdf",
+      "local_path": "raw/253666-092-sdm-vol-2a.pdf",
+      "sha256": "f0111abae38367855461e97a4c17246598d955bbe2fd48eff31d599d80aac5f8",
+      "size_bytes": 3386237
+    }
+  ],
+  "semantic_status": "not_started",
+  "notes": [
+    "Downloaded directly from Intel's official SDM download service.",
+    "Volume 2A is the A-L portion of the x86 instruction-set reference.",
+    "The selected sample instructions are all fully covered by this volume.",
+    "No semantic interpretation was produced during acquisition.",
+    "The local raw file is identified by its SHA-256 hash."
+  ]
+}

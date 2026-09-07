@@ -14,6 +14,19 @@ MAX_FAMILY_CANDIDATES = 200
 MAX_TOOL_ROWS = 100
 MAX_TOOL_TEXT_CHARS = 24_000
 
+_SUFFIX_NAME = r"[A-Za-z][A-Za-z0-9_]*(?:::[A-Za-z0-9_]+)*"
+_SUFFIX_TOKEN = re.compile(rf"\.(?P<name>{_SUFFIX_NAME})")
+_DEFINITION_HEAD = re.compile(
+    rf"(?P<aliases>(?:\.{_SUFFIX_NAME}\s*=\s*)+)\{{",
+    re.I,
+)
+_TITLE_IDENTIFIER = r"[@A-Za-z_{}][@A-Za-z0-9_.{}]*"
+_TITLE_ALIAS_LIST = re.compile(
+    rf"^{_TITLE_IDENTIFIER}(?:\s*(?:/|,|\bor\b)\s*{_TITLE_IDENTIFIER})*$",
+    re.I,
+)
+_TITLE_ENTRY_SEPARATOR = re.compile(r"\s*[—–]\s*|\s+-\s+")
+
 
 def _title_mnemonics(title: str | None) -> list[str]:
     if not title:
@@ -22,32 +35,141 @@ def _title_mnemonics(title: str | None) -> list[str]:
     return [item.casefold() for item in re.findall(r"[@A-Za-z_{}][@A-Za-z0-9_.{}]*", tail)]
 
 
-def _syntax_accepts(instruction: str, mnemonic: str, syntax_text: str) -> bool:
-    """Match an exact spelling against syntax forms and their finite alternatives."""
+def _title_identity_labels(title: str | None) -> tuple[str, ...]:
+    """Extract aliases only from a heading's explicit instruction-identity zone."""
+    if not title:
+        return ()
+    clean = normalize_text(title)
+    separator = _TITLE_ENTRY_SEPARATOR.search(clean)
+    if separator:
+        identity = clean[: separator.start()].strip()
+        # Support a category prefix such as ``Instructions: ADD—Add``.
+        identity = identity.rsplit(":", 1)[-1].strip()
+    elif ":" in clean:
+        identity = clean.rsplit(":", 1)[-1].strip()
+    elif re.fullmatch(_TITLE_IDENTIFIER, clean):
+        identity = clean
+    else:
+        # A prose section heading has no explicit instruction identity.  Its
+        # individual words must not be treated as mnemonic aliases.
+        return ()
+    if not _TITLE_ALIAS_LIST.fullmatch(identity):
+        return ()
+    return tuple(
+        match.group(0).casefold()
+        for match in re.finditer(_TITLE_IDENTIFIER, identity)
+        if match.group(0).casefold() != "or"
+    )
+
+
+def _matching_brace(text: str, opening: int) -> int | None:
+    depth = 0
+    for position in range(opening, len(text)):
+        if text[position] == "{":
+            depth += 1
+        elif text[position] == "}":
+            depth -= 1
+            if depth == 0:
+                return position
+    return None
+
+
+def _definition_choices(body: str) -> set[str]:
+    """Extract finite dotted alternatives, including nested namespace choices."""
+    choices: set[str] = set()
+    position = 0
+    nested_choice = re.compile(rf"(?:::|\.){_SUFFIX_NAME}")
+    while match := _SUFFIX_TOKEN.search(body, position):
+        base = match.group(0).casefold()
+        choices.add(base)
+        position = match.end()
+        if position >= len(body) or body[position] != "{":
+            continue
+        closing = _matching_brace(body, position)
+        if closing is None:
+            break
+        for nested in nested_choice.finditer(body, position + 1, closing):
+            choices.add(base + nested.group(0).casefold())
+        position = closing + 1
+    return choices
+
+
+def _syntax_definitions(syntax_text: str) -> dict[str, set[str]]:
+    """Parse finite suffix definitions and assign alias chains to every name."""
     definitions: dict[str, set[str]] = {}
-    for match in re.finditer(r"\.([A-Za-z][A-Za-z0-9_]*)\s*=\s*\{([^}]*)\}", syntax_text):
-        definitions[match.group(1).casefold()] = {
-            item.casefold() for item in re.findall(r"\.[A-Za-z0-9_]+", match.group(2))
+    position = 0
+    while match := _DEFINITION_HEAD.search(syntax_text, position):
+        opening = match.end() - 1
+        closing = _matching_brace(syntax_text, opening)
+        if closing is None:
+            break
+        choices = _definition_choices(syntax_text[opening + 1 : closing])
+        for alias in _SUFFIX_TOKEN.finditer(match.group("aliases")):
+            definitions.setdefault(alias.group("name").casefold(), set()).update(choices)
+        position = closing + 1
+    return definitions
+
+
+def _syntax_form_terms(syntax_text: str, position: int) -> list[tuple[bool, str]]:
+    """Read adjacent required or braced-optional dotted suffix terms."""
+    terms: list[tuple[bool, str]] = []
+    while position < len(syntax_text):
+        if syntax_text.startswith("{.", position):
+            closing = _matching_brace(syntax_text, position)
+            if closing is None:
+                break
+            token = _SUFFIX_TOKEN.fullmatch(syntax_text[position + 1 : closing].strip())
+            if token is None:
+                break
+            terms.append((True, token.group("name").casefold()))
+            position = closing + 1
+            continue
+        token = _SUFFIX_TOKEN.match(syntax_text, position)
+        if token is None:
+            break
+        terms.append((False, token.group("name").casefold()))
+        position = token.end()
+    return terms
+
+
+def _terms_accept(
+    wanted_suffix: str,
+    terms: list[tuple[bool, str]],
+    definitions: dict[str, set[str]],
+) -> bool:
+    """Match without materializing the Cartesian product of all alternatives."""
+    positions = {0}
+    for optional, name in terms:
+        choices = definitions.get(name, {f".{name}"})
+        candidates = choices | ({""} if optional else set())
+        positions = {
+            position + len(candidate)
+            for position in positions
+            for candidate in candidates
+            if wanted_suffix.startswith(candidate, position)
         }
-    form_pattern = re.compile(
-        rf"(?<![A-Za-z0-9_.]){re.escape(mnemonic)}"
-        r"((?:(?:\{\.[A-Za-z0-9_]+\})|(?:\.[A-Za-z0-9_]+))+)",
+        if not positions:
+            return False
+    return len(wanted_suffix) in positions
+
+
+def _syntax_accepts(instruction: str, mnemonic: str, syntax_text: str) -> bool:
+    """Match an exact spelling against source-defined finite syntax templates."""
+    wanted = instruction.casefold()
+    mnemonic = mnemonic.casefold()
+    if not wanted.startswith(mnemonic):
+        return False
+    definitions = _syntax_definitions(syntax_text)
+    form_start = re.compile(
+        rf"(?<![A-Za-z0-9_.]){re.escape(mnemonic)}(?=\.|\{{\.)",
         re.I,
     )
-    wanted = instruction.casefold()
-    for match in form_pattern.finditer(syntax_text):
-        suffix_terms = re.findall(r"\{\.[A-Za-z0-9_]+\}|\.[A-Za-z0-9_]+", match.group(1))
-        expansions = [mnemonic.casefold()]
-        for term in suffix_terms:
-            optional = term.startswith("{")
-            name = term.strip("{}")[1:].casefold()
-            choices = sorted(definitions.get(name, {f".{name}"}))
-            if optional:
-                choices = [""] + choices
-            expansions = [prefix + choice for prefix in expansions for choice in choices]
-        if wanted in expansions:
-            return True
-    return False
+    wanted_suffix = wanted[len(mnemonic) :]
+    return any(
+        terms and _terms_accept(wanted_suffix, terms, definitions)
+        for match in form_start.finditer(syntax_text)
+        if (terms := _syntax_form_terms(syntax_text, match.end()))
+    )
 
 
 def _node_summary(row: sqlite3.Row | dict[str, Any], *, include_text: bool = False) -> dict[str, Any]:
@@ -282,49 +404,42 @@ class ScopeResolver:
         ).fetchall()
         heading_matches: list[tuple[int, str, sqlite3.Row]] = []
         for row in rows:
-            for mnemonic in _title_mnemonics(row["title"]):
+            for mnemonic in _title_identity_labels(row["title"]):
                 if wanted == mnemonic or wanted.startswith(mnemonic + "."):
-                    heading_matches.append((len(mnemonic), mnemonic, row))
+                    match_quality = 2 if wanted == mnemonic else 1
+                    heading_matches.append((match_quality, mnemonic, row))
         if not heading_matches:
             return []
-        longest_mnemonic = max(length for length, _, _ in heading_matches)
-        headings = [
-            (mnemonic, row)
-            for length, mnemonic, row in heading_matches
-            if length == longest_mnemonic
-        ]
         exact_pattern = re.compile(rf"(?<![A-Za-z0-9_.]){re.escape(instruction)}(?![A-Za-z0-9_.])", re.I)
-        matches: list[sqlite3.Row] = []
-        for mnemonic, row in headings:
+        matches: list[tuple[tuple[int, int], sqlite3.Row]] = []
+        for match_quality, mnemonic, row in heading_matches:
             descendants = self.connection.execute(
                 """WITH RECURSIVE tree(node_id) AS (
                        SELECT node_id FROM nodes WHERE node_id = ?
                        UNION ALL SELECT n.node_id FROM nodes n JOIN tree t ON n.parent_id = t.node_id
-                   ) SELECT node_type, raw_text FROM nodes JOIN tree USING(node_id)""",
+                   ) SELECT node_id, node_type, raw_text FROM nodes JOIN tree USING(node_id)""",
                 (row["node_id"],),
             ).fetchall()
             literal = any(exact_pattern.search(item["raw_text"]) for item in descendants)
+            literal_content = any(
+                item["node_id"] != row["node_id"] and exact_pattern.search(item["raw_text"])
+                for item in descendants
+            )
             syntax = any(item["node_type"] == "syntax_block" for item in descendants) and _syntax_accepts(
                 instruction,
                 mnemonic,
                 "\n".join(item["raw_text"] for item in descendants),
             )
             if literal or syntax:
-                matches.append(row)
+                evidence_quality = 2 if syntax else 1 if literal_content else 0
+                matches.append(((match_quality, evidence_quality), row))
         if not matches:
             return []
-        # Keep corresponding source representations of the most specific logical section.
-        best_depth = max(row["depth"] for row in matches)
-        matches = [row for row in matches if row["depth"] == best_depth]
-        best_section = matches[0]["section_number"]
-        best_tail = tuple(_title_mnemonics(matches[0]["title"]))
-        selected = [
-            row["node_id"]
-            for row in matches
-            if row["section_number"] == best_section
-            and tuple(_title_mnemonics(row["title"])) == best_tail
-        ]
-        return sorted(set(selected))
+        # Semantic match and evidence quality determine precedence.  Document
+        # depth and opaque node IDs never decide which instruction a heading
+        # denotes; equally supported representations are intentionally kept.
+        best_score = max(score for score, _ in matches)
+        return sorted({row["node_id"] for score, row in matches if score == best_score})
 
     def _resolve_family(self, request: PlanningRequest) -> ResolvedScope:
         assert request.family is not None
