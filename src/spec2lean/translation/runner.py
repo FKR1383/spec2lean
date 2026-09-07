@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from ..runtime import is_rust, run_session, runtime_executable, runtime_name
+from ..runtime import (
+    is_rust, run_session, runtime_executable, runtime_name,
+    runtime_label, session_command, session_error,
+)
 
 import json
 import os
@@ -153,11 +156,11 @@ def build_group_translation(
             )
         except subprocess.TimeoutExpired as exc:
             completed = subprocess.CompletedProcess(command, 124, exc.stdout or "", exc.stderr or "")
-            error = f"OpenCode Lean Translator session timed out after {timeout_seconds} seconds"
+            error = f"{runtime_label(executable)} Lean Translator session timed out after {timeout_seconds} seconds"
         if error is None and completed.returncode != 0:
-            error = f"OpenCode Lean Translator exited with status {completed.returncode}"
+            error = session_error(executable, "Lean Translator", completed)
         if error is None and not submission_path.is_file():
-            error = "OpenCode Lean Translator session finished without a valid submit_translation call"
+            error = f"{runtime_label(executable)} Lean Translator session finished without a valid submit_translation call"
         candidate: dict[str, Any] | None = None
         if submission_path.is_file():
             try:
@@ -193,7 +196,7 @@ def build_group_translation(
             "inputBoundary": "PHASE_4_SEMANTIC_ARTIFACTS_ONLY",
             "targetLanguage": "Lean",
             "targetVersion": "4",
-            "command": command[:-1] + ["<lean-translator-prompt>"],
+            "command": session_command(command, "<lean-translator-prompt>"),
             "exitCode": completed.returncode,
             "sessionId": _session_id(completed.stdout),
             "outcome": "SUCCESS" if candidate is not None and error is None else "FAILED",

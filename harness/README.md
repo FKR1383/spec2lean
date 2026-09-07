@@ -13,6 +13,20 @@ model replies; OpenCode is not needed. `--runtime opencode` or
 `SPEC2LEAN_RUNTIME=opencode` selects the previous runtime explicitly.
 `SPEC2LEAN_CODEX` can name the Codex executable; it does not change the model.
 
+Check the provider from the same terminal where you run Spec2Lean:
+
+```sh
+codex --version
+codex login status
+```
+
+If Codex is installed outside that terminal's PATH (for example, bundled with an
+editor extension), set `export SPEC2LEAN_CODEX=/absolute/path/to/codex` before
+running Spec2Lean. Otherwise install and authenticate the
+[Codex CLI](https://learn.chatgpt.com/docs/codex/cli). Rust runtime failures report
+the provider error directly. A completed index can be reused by repeating the
+same pipeline command with `--resume RUN_ID` after correcting provider setup.
+
 The supervisor's generic `harness` crate supplies the bounded task/tool loop,
 provider adapters, persistent Codex conversation, diagnostic/resubmission loop,
 step limits, token accounting and transcripts. The `runtime` crate adapts that

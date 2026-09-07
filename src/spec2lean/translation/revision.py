@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from ..runtime import is_rust, run_session, runtime_executable, runtime_name
+from ..runtime import (
+    is_rust, run_session, runtime_executable, runtime_name,
+    runtime_label, session_command, session_error,
+)
 
 import hashlib
 import json
@@ -106,11 +109,11 @@ def run_translation_revision_session(
             completed = subprocess.CompletedProcess(command, 124, exc.stdout or "", exc.stderr or "")
         error = None
         if completed.returncode == 124:
-            error = f"OpenCode Translation Revision session timed out after {timeout_seconds} seconds"
+            error = f"{runtime_label(executable)} Translation Revision session timed out after {timeout_seconds} seconds"
         elif completed.returncode != 0:
-            error = f"OpenCode Translation Revision exited with status {completed.returncode}"
+            error = session_error(executable, "Translation Revision", completed)
         elif not submission_path.is_file():
-            error = "OpenCode Translation Revision finished without a valid submit_translation call"
+            error = f"{runtime_label(executable)} Translation Revision finished without a valid submit_translation call"
         candidate = None
         if submission_path.is_file():
             try:
@@ -123,7 +126,7 @@ def run_translation_revision_session(
             "session": {
                 "provider": runtime_name(), "model": TRANSLATOR_MODEL,
                 "reasoning": TRANSLATOR_REASONING, "singleSession": True,
-                "automaticRetries": 0, "command": command[:-1] + ["<translation-revision-prompt>"],
+                "automaticRetries": 0, "command": session_command(command, "<translation-revision-prompt>"),
                 "exitCode": completed.returncode, "sessionId": _session_id(completed.stdout),
                 "stdout": completed.stdout, "stderr": completed.stderr,
             },

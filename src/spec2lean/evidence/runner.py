@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from ..runtime import is_rust, run_session, runtime_executable, runtime_name
+from ..runtime import (
+    is_rust, run_session, runtime_executable, runtime_name,
+    runtime_label, session_command, session_error,
+)
 
 import json
 import os
@@ -159,11 +162,11 @@ def _run_unit(
             )
         except subprocess.TimeoutExpired as exc:
             completed = subprocess.CompletedProcess(command, 124, exc.stdout or "", exc.stderr or "")
-            error = f"OpenCode Evidence Retriever session timed out after {timeout_seconds} seconds"
+            error = f"{runtime_label(executable)} Evidence Retriever session timed out after {timeout_seconds} seconds"
         if error is None and completed.returncode != 0:
-            error = f"OpenCode Evidence Retriever exited with status {completed.returncode}"
+            error = session_error(executable, "Evidence Retriever", completed)
         if error is None and not submission_path.is_file():
-            error = "OpenCode Evidence Retriever session finished without a valid submit_evidence call"
+            error = f"{runtime_label(executable)} Evidence Retriever session finished without a valid submit_evidence call"
         trace: dict[str, Any] = {}
         if trace_path.is_file():
             try:
@@ -212,7 +215,7 @@ def _run_unit(
             "sourceDatabaseDigest": scope.source_database_digest,
             "retrievalScope": scope.to_dict(),
             "exploration": trace,
-            "command": command[:-1] + ["<evidence-retriever-prompt>"],
+            "command": session_command(command, "<evidence-retriever-prompt>"),
             "exitCode": completed.returncode,
             "sessionId": _session_id(completed.stdout),
             "outcome": outcome,

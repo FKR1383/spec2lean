@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from ..runtime import is_rust, run_session, runtime_executable, runtime_name
+from ..runtime import (
+    is_rust, run_session, runtime_executable, runtime_name,
+    runtime_label, session_command, session_error,
+)
 
 import json
 import os
@@ -198,11 +201,11 @@ def handle_open_questions(
             )
         except subprocess.TimeoutExpired as exc:
             completed = subprocess.CompletedProcess(command, 124, exc.stdout or "", exc.stderr or "")
-            error = f"OpenCode Open Question Handler timed out after {timeout_seconds} seconds"
+            error = f"{runtime_label(executable)} Open Question Handler timed out after {timeout_seconds} seconds"
         if error is None and completed.returncode != 0:
-            error = f"OpenCode Open Question Handler exited with status {completed.returncode}"
+            error = session_error(executable, "Open Question Handler", completed)
         if error is None and not submission_path.is_file():
-            error = "OpenCode Open Question Handler finished without a valid submit_questions call"
+            error = f"{runtime_label(executable)} Open Question Handler finished without a valid submit_questions call"
 
         payload: dict[str, Any] | None = None
         if submission_path.is_file():
@@ -245,7 +248,7 @@ def handle_open_questions(
             "inputEvidenceBundleHash": scope.evidence_bundle_hash,
             "inputSemanticRunId": scope.semantic_run_id,
             "runtimeProbeConfigured": bool(runtime_command),
-            "command": command[:-1] + ["<open-question-prompt>"],
+            "command": session_command(command, "<open-question-prompt>"),
             "exitCode": completed.returncode,
             "sessionId": _session_id(completed.stdout),
             "outcome": artifact.get("outcome") if isinstance(artifact, dict) and error is None else "FAILED",

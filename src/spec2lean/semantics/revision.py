@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from ..runtime import is_rust, run_session, runtime_executable, runtime_name
+from ..runtime import (
+    is_rust, run_session, runtime_executable, runtime_name,
+    runtime_label, session_command, session_error,
+)
 
 import json
 import os
@@ -91,11 +94,11 @@ def run_semantic_revision_session(
             completed = subprocess.CompletedProcess(command, 124, exc.stdout or "", exc.stderr or "")
         error = None
         if completed.returncode == 124:
-            error = f"OpenCode Semantic Revision session timed out after {timeout_seconds} seconds"
+            error = f"{runtime_label(executable)} Semantic Revision session timed out after {timeout_seconds} seconds"
         elif completed.returncode != 0:
-            error = f"OpenCode Semantic Revision exited with status {completed.returncode}"
+            error = session_error(executable, "Semantic Revision", completed)
         elif not submission_path.is_file():
-            error = "OpenCode Semantic Revision finished without a valid submit_semantics call"
+            error = f"{runtime_label(executable)} Semantic Revision finished without a valid submit_semantics call"
         artifact = None
         if submission_path.is_file():
             try:
@@ -108,7 +111,7 @@ def run_semantic_revision_session(
             "session": {
                 "provider": runtime_name(), "model": EXTRACTOR_MODEL,
                 "reasoning": EXTRACTOR_REASONING, "singleSession": True,
-                "automaticRetries": 0, "command": command[:-1] + ["<semantic-revision-prompt>"],
+                "automaticRetries": 0, "command": session_command(command, "<semantic-revision-prompt>"),
                 "exitCode": completed.returncode, "sessionId": _session_id(completed.stdout),
                 "stdout": completed.stdout, "stderr": completed.stderr,
             },

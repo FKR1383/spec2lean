@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from ..runtime import is_rust, run_session, runtime_executable, runtime_name
+from ..runtime import (
+    is_rust, run_session, runtime_executable, runtime_name,
+    runtime_label, session_command, session_error,
+)
 
 import json
 import os
@@ -151,17 +154,17 @@ def run_opencode_repair(
             completed = subprocess.CompletedProcess(command, 124, exc.stdout or "", exc.stderr or "")
         error: str | None = None
         if completed.returncode == 124:
-            error = f"OpenCode Troubleshooter session timed out after {timeout_seconds} seconds"
+            error = f"{runtime_label(executable)} Troubleshooter session timed out after {timeout_seconds} seconds"
         elif completed.returncode != 0:
-            error = f"OpenCode Troubleshooter exited with status {completed.returncode}"
+            error = session_error(executable, "Troubleshooter", completed)
         elif not submission_path.is_file():
-            error = "OpenCode Troubleshooter finished without a valid submit_repair call"
+            error = f"{runtime_label(executable)} Troubleshooter finished without a valid submit_repair call"
         submission: dict[str, Any] | None = None
         if submission_path.is_file():
             try:
                 submission = json.loads(submission_path.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
-                error = error or "OpenCode Troubleshooter submission is invalid JSON"
+                error = error or f"{runtime_label(executable)} Troubleshooter submission is invalid JSON"
         return {
             "submission": submission,
             "error": error,
@@ -172,7 +175,7 @@ def run_opencode_repair(
                 "opencodeVersion": version,
                 "singleSession": True,
                 "automaticRetries": 0,
-                "command": command[:-1] + ["<troubleshooter-prompt>"],
+                "command": session_command(command, "<troubleshooter-prompt>"),
                 "exitCode": completed.returncode,
                 "sessionId": _session_id(completed.stdout),
                 "stdout": completed.stdout,

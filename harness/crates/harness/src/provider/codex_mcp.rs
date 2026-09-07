@@ -65,8 +65,8 @@ impl Server {
             .spawn()
             .map_err(|e| {
                 HarnessError::Config(format!(
-                    "could not start `{executable} mcp-server`: {e}. Install the codex CLI, or \
-                     pass --provider codex to use the one-process-per-turn transport."
+                    "could not start `{executable} mcp-server`: {e}. Install/authenticate the Codex \
+                     CLI and put it on PATH, or set SPEC2LEAN_CODEX to its absolute executable path."
                 ))
             })?;
         let stdin = child
@@ -563,7 +563,7 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_executable_names_the_transport_that_still_works() {
+    fn a_missing_executable_explains_how_to_configure_the_provider() {
         let provider = McpCodexProvider::new(CodexConfig {
             executable: "codex-does-not-exist".into(),
             ..CodexConfig::default()
@@ -579,7 +579,7 @@ mod tests {
         match provider.turn(&request) {
             Err(HarnessError::Config(detail)) => {
                 assert!(detail.contains("codex-does-not-exist"));
-                assert!(detail.contains("--provider codex"));
+                assert!(detail.contains("SPEC2LEAN_CODEX"));
             }
             other => panic!("expected a config error, got {other:?}"),
         }

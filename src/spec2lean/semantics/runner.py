@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from ..runtime import is_rust, run_session, runtime_executable, runtime_name
+from ..runtime import (
+    is_rust, run_session, runtime_executable, runtime_name,
+    runtime_label, session_command, session_error,
+)
 
 import json
 import os
@@ -148,19 +151,19 @@ def _run_unit(
             )
         except subprocess.TimeoutExpired as exc:
             completed = subprocess.CompletedProcess(command, 124, exc.stdout or "", exc.stderr or "")
-            error = f"OpenCode Semantic Extractor session timed out after {timeout_seconds} seconds"
+            error = f"{runtime_label(executable)} Semantic Extractor session timed out after {timeout_seconds} seconds"
         except OSError as exc:
             completed = subprocess.CompletedProcess(command, 126, "", str(exc))
-            error = f"OpenCode Semantic Extractor could not start: {exc}"
+            error = f"{runtime_label(executable)} Semantic Extractor could not start: {exc}"
         if error is None and completed.returncode != 0:
-            error = f"OpenCode Semantic Extractor exited with status {completed.returncode}"
+            error = session_error(executable, "Semantic Extractor", completed)
         if error is None and _evidence_transport_truncated(completed.stdout):
             error = (
-                "EVIDENCE_TRANSPORT_FAILURE: OpenCode truncated the bounded semantic evidence "
+                f"EVIDENCE_TRANSPORT_FAILURE: {runtime_label(executable)} truncated the bounded semantic evidence "
                 "response; open-question recovery was not started"
             )
         if error is None and not submission_path.is_file():
-            error = "OpenCode Semantic Extractor session finished without a valid submit_semantics call"
+            error = f"{runtime_label(executable)} Semantic Extractor session finished without a valid submit_semantics call"
         artifact: dict[str, Any] | None = None
         if submission_path.is_file():
             try:
@@ -184,7 +187,7 @@ def _run_unit(
             "evidenceCount": len(bundle["evidence"]),
             "supplementalResolutionCount": len(bundle.get("resolutions", [])),
             "inputBoundary": "PHASE_3_UNIT_EVIDENCE_BUNDLE_ONLY",
-            "command": command[:-1] + ["<semantic-extractor-prompt>"], "exitCode": completed.returncode,
+            "command": session_command(command, "<semantic-extractor-prompt>"), "exitCode": completed.returncode,
             "sessionId": _session_id(completed.stdout), "outcome": outcome, "error": error,
             "stdout": completed.stdout, "stderr": completed.stderr,
         }

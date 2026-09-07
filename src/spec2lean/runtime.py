@@ -37,6 +37,22 @@ def is_rust(executable: str) -> bool:
     return Path(executable).name == "spec2lean-harness"
 
 
+def runtime_label(executable: str) -> str:
+    return "Rust harness" if is_rust(executable) else "OpenCode"
+
+
+def session_command(command: list[str], prompt_placeholder: str) -> list[str]:
+    """Record the command actually executed, without including the prompt."""
+    return command[:1] if is_rust(command[0]) else command[:-1] + [prompt_placeholder]
+
+
+def session_error(executable: str, phase: str, completed: subprocess.CompletedProcess[str]) -> str:
+    message = f"{runtime_label(executable)} {phase} exited with status {completed.returncode}"
+    if is_rust(executable) and completed.stderr.strip():
+        message += f": {completed.stderr.strip()[:2000]}"
+    return message
+
+
 def runtime_executable() -> str:
     if runtime_name() == "opencode":
         executable = shutil.which("opencode")
@@ -84,6 +100,16 @@ def run_session(command: list[str], *, run_command: Callable[..., Any], **kwargs
     environment["SPEC2LEAN_RUNTIME"] = "rust-harness"
     if run_command is not subprocess.run:
         return run_command([command[0]], input=json.dumps(request), **{**kwargs, "env": environment})
+    codex = environment.get("SPEC2LEAN_CODEX", "codex")
+    resolved_codex = shutil.which(codex, path=environment.get("PATH", os.defpath))
+    if resolved_codex is None:
+        return subprocess.CompletedProcess(
+            command[:1], 1, "",
+            f"Rust harness requires the Codex CLI for model access, but {codex!r} is not executable "
+            "or not on PATH. Install/authenticate Codex, or set SPEC2LEAN_CODEX to its absolute "
+            "executable path. OpenCode is not required.",
+        )
+    environment["SPEC2LEAN_CODEX"] = str(Path(resolved_codex).resolve())
     process = subprocess.Popen(
         [command[0]], cwd=kwargs.get("cwd"), env=environment,
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,

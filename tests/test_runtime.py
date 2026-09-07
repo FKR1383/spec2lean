@@ -69,6 +69,8 @@ for line in sys.stdin:
     output = build_plan(planner_database, tmp_path / "plans", request, timeout_seconds=30)
     metadata = json.loads((output / "planner-run.json").read_text())
     assert metadata["planner"] == "rust-harness"
+    assert len(metadata["command"]) == 1
+    assert Path(metadata["command"][0]).name == "spec2lean-harness"
     transcript = json.loads(metadata["stdout"])["transcript"]
     assert transcript["steps"] == 2
     assert len(transcript["exchanges"]) == 2
@@ -120,6 +122,47 @@ def test_custom_runner_receives_rust_protocol_without_starting_a_process():
     assert request['model'] == 'openai/gpt-5.6-sol'
     assert calls[0][1]['env']['SPEC2LEAN_RUNTIME'] == 'rust-harness'
     assert result.stdout == 'test'
+
+
+def test_missing_codex_reports_rust_dependency_and_preserves_failure_artifact(
+    planner_database, tmp_path, monkeypatch,
+):
+    monkeypatch.setenv("SPEC2LEAN_RUNTIME", "rust-harness")
+    monkeypatch.setenv("SPEC2LEAN_CODEX", str(tmp_path / "missing-codex"))
+    monkeypatch.setattr("spec2lean.planning.runner.runtime_executable",
+                        lambda: "/unused/spec2lean-harness")
+    request = PlanningRequest.exact("synthetic", "1.0", ["alpha.u32"])
+    with pytest.raises(RuntimeError, match="Rust harness Planner") as caught:
+        build_plan(planner_database, tmp_path / "plans", request, timeout_seconds=10)
+    assert "SPEC2LEAN_CODEX" in str(caught.value)
+    assert "OpenCode Planner" not in str(caught.value)
+    metadata_path = next((tmp_path / "plans").rglob("planner-run.json"))
+    metadata = json.loads(metadata_path.read_text())
+    assert metadata["planner"] == "rust-harness"
+    assert metadata["outcome"] == "FAILED"
+    assert metadata["command"] == ["/unused/spec2lean-harness"]
+    assert "Codex CLI" in metadata["error"]
+
+
+def test_explicit_codex_path_works_without_codex_on_path(
+    tmp_path, monkeypatch,
+):
+    executable = tmp_path / "spec2lean-harness"
+    executable.write_text(f'''#!{sys.executable}
+import os, sys
+sys.stdin.read()
+print(os.environ['SPEC2LEAN_CODEX'])
+''')
+    executable.chmod(0o755)
+    config = {'default_agent': 'test', 'agent': {'test': {
+        'model': 'openai/gpt-5.6-sol', 'variant': 'medium', 'steps': 1,
+    }}, 'mcp': {'bounded': {'command': ['unused']}}}
+    result = run_session([str(executable), 'prompt'], run_command=subprocess.run,
+                         env={'PATH': '', 'SPEC2LEAN_CODEX': sys.executable,
+                              'OPENCODE_CONFIG_CONTENT': json.dumps(config)},
+                         timeout=10)
+    assert result.returncode == 0
+    assert result.stdout.strip() == str(Path(sys.executable).resolve())
 
 
 def test_rust_repair_preserves_context_gate_and_current_manifests(tmp_path, monkeypatch, harness_binary):

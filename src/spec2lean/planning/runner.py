@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from ..runtime import is_rust, run_session, runtime_executable, runtime_name
+from ..runtime import (
+    is_rust, run_session, runtime_executable, runtime_name,
+    runtime_label, session_command, session_error,
+)
 
 import json
 import os
@@ -220,12 +223,12 @@ def build_plan(
             )
         except subprocess.TimeoutExpired as exc:
             completed = subprocess.CompletedProcess(command, 124, exc.stdout or "", exc.stderr or "")
-            error = f"OpenCode Planner session timed out after {timeout_seconds} seconds"
+            error = f"{runtime_label(executable)} Planner session timed out after {timeout_seconds} seconds"
 
         if error is None and completed.returncode != 0:
-            error = f"OpenCode Planner exited with status {completed.returncode}"
+            error = session_error(executable, "Planner", completed)
         if error is None and not submission_path.is_file():
-            error = "OpenCode Planner session finished without a valid submit_plan call"
+            error = f"{runtime_label(executable)} Planner session finished without a valid submit_plan call"
         if error is None:
             submission = json.loads(submission_path.read_text(encoding="utf-8"))
             with connect(database, read_only=True) as connection:
@@ -257,7 +260,7 @@ def build_plan(
             "finishedAt": utc_now(),
             "sourceDatabase": str(database),
             "sourceDatabaseDigest": digest,
-            "command": command[:-1] + ["<planner-prompt>"],
+            "command": session_command(command, "<planner-prompt>"),
             "exitCode": completed.returncode,
             "sessionId": _extract_session_id(completed.stdout),
             "outcome": outcome,
