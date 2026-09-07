@@ -156,7 +156,12 @@ def _print_tree(
     max_depth: int | None,
 ) -> None:
     def visit(node_id: str, shown_depth: int, structural_depth: int) -> None:
-        row = connection.execute("SELECT * FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
+        row = connection.execute(
+            "SELECT node_id, document_id, node_type, section_number, title, "
+            "page_start, html_anchor, substr(normalized_text, 1, 100) AS normalized_text "
+            "FROM nodes WHERE node_id = ?",
+            (node_id,),
+        ).fetchone()
         if row is None:
             return
         show = not headings_only or row["node_type"] in {"document", "chapter", "section", "subsection"}
@@ -168,7 +173,9 @@ def _print_tree(
         if max_depth is not None and structural_depth >= max_depth:
             return
         for child in connection.execute(
-            "SELECT node_id FROM nodes WHERE parent_id = ? ORDER BY ordinal", (node_id,)
+            "SELECT node_id FROM nodes WHERE document_id = ? AND parent_id = ? "
+            "ORDER BY ordinal",
+            (row["document_id"], node_id),
         ):
             visit(child["node_id"], next_shown, structural_depth + 1)
 
@@ -268,7 +275,10 @@ def _command_children(args: argparse.Namespace) -> int:
     database = _resolve_database(args, args.node)
     with connect(database, read_only=True) as connection:
         rows = connection.execute(
-            "SELECT * FROM nodes WHERE parent_id = ? ORDER BY ordinal", (args.node,)
+            "SELECT * FROM nodes "
+            "WHERE document_id = (SELECT document_id FROM nodes WHERE node_id = ?) "
+            "AND parent_id = ? ORDER BY ordinal",
+            (args.node, args.node),
         ).fetchall()
         for row in rows:
             print(_summary(row))

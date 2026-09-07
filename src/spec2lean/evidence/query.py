@@ -93,8 +93,9 @@ class EvidenceQuery:
         Phase1Query._bounded_limit(limit)
         return [_node_summary(row) for row in self.connection.execute(
             """SELECT n.*, d.source_type FROM nodes n JOIN documents d USING(document_id)
-               WHERE n.parent_id = ? ORDER BY n.ordinal, n.node_id LIMIT ?""",
-            (node_id, limit),
+               WHERE n.document_id = (SELECT document_id FROM nodes WHERE node_id = ?)
+                 AND n.parent_id = ? ORDER BY n.ordinal, n.node_id LIMIT ?""",
+            (node_id, node_id, limit),
         )]
 
     def ancestors(self, node_id: str, *, limit: int = 30) -> list[dict[str, Any]]:
