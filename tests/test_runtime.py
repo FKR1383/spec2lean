@@ -97,7 +97,10 @@ time.sleep(60)
     assert isinstance(caught.value.stdout, str) and isinstance(caught.value.stderr, str)
     pid = int(pid_file.read_text())
     stat = Path(f"/proc/{pid}/stat")
-    assert not stat.exists() or stat.read_text().split()[2] == "Z"
+    try:
+        assert stat.read_text().split()[2] == "Z"
+    except FileNotFoundError:
+        pass  # The child may be reaped between communicate() and this read.
 
 
 def test_custom_runner_receives_rust_protocol_without_starting_a_process():

@@ -15,7 +15,9 @@ from spec2lean.gui.server import GuiServer
 
 
 def verify(root: Path, indexes: Path | None, browser: bool, screenshot: Path | None) -> dict:
-    roots = ArtifactRoots.at(root)
+    # Artifact output may be isolated under tmp/, while official source files
+    # remain under the actual repository. Keep the GUI's source-root guard.
+    roots = replace(ArtifactRoots.at(root), repository=Path(__file__).resolve().parents[1])
     if indexes:
         roots = replace(roots, indexes=indexes.resolve())
     repository = ArtifactRepository(roots)
@@ -49,6 +51,8 @@ def verify(root: Path, indexes: Path | None, browser: bool, screenshot: Path | N
                         assert source['sourceNodes'] and all(not n.get('broken') for n in source['sourceNodes'])
                         assert any(n['sourceSpans'] for n in source['sourceNodes'])
                         assert source['preview']['type'] in ('pdf', 'html')
+                        if source['preview']['type'] == 'pdf':
+                            assert repository.render_pdf_preview(run_id, unit_id, evidence['evidenceId']).startswith(b'\x89PNG')
             summary['runs'].append({
                 'runId': run_id, 'unitId': unit_id,
                 'checks': {part: check[part]['status'] for part in ('build', 'coverage', 'traceability')},
@@ -73,6 +77,8 @@ def verify(root: Path, indexes: Path | None, browser: bool, screenshot: Path | N
                 page = engine.new_page(viewport={'width': 1600, 'height': 1000})
                 errors = []
                 page.on('pageerror', lambda error: errors.append(str(error)))
+                page.on('response', lambda response: errors.append(f'{response.status}: {response.url}')
+                        if response.status >= 400 else None)
                 page.goto(base)
                 page.locator('[data-unit]').first.click()
                 page.locator('.code-line.mapped').first.wait_for()
@@ -80,6 +86,7 @@ def verify(root: Path, indexes: Path | None, browser: bool, screenshot: Path | N
                 page.locator('[data-claim]').first.click()
                 page.locator('[data-evidence]').first.click()
                 page.locator('.source-block').wait_for()
+                page.wait_for_load_state('networkidle')
                 assert page.locator('.claim-card').count() > 0
                 assert page.locator('.evidence-card').count() > 0
                 if screenshot:
