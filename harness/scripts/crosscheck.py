@@ -175,7 +175,7 @@ def main() -> int:
             [
                 str(BINARY), "plan", "replay",
                 "--database", str(database),
-                "--language", "synthetic", "--version", "1.0", "--full", "true",
+                "--language", "synthetic", "--version", "1.0", "--full",
                 "--plan-run-id", "plan:crosscheck",
                 "--calls", str(work / "planner-calls.json"),
                 "--out", str(work / "rust-plan"),

@@ -3,7 +3,9 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 use serde_json::{Value, json};
-use spec2lean_specdb::{NodeId, NodeRow, SourceType, SpecDb, SpecDbError, normalize_text, stable_id};
+use spec2lean_specdb::{
+    NodeId, NodeRow, SourceType, SpecDb, SpecDbError, normalize_text, stable_id,
+};
 
 use crate::request::{PlanningRequest, Selector};
 
@@ -42,14 +44,23 @@ impl From<SpecDbError> for ScopeError {
 
 static MNEMONIC: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"[@A-Za-z_{}][@A-Za-z0-9_.{}]*").expect("valid"));
-static SUFFIX_TERM: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\{\.[A-Za-z0-9_]+\}|\.[A-Za-z0-9_]+").expect("valid"));
-static ALTERNATIVES: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\.([A-Za-z][A-Za-z0-9_]*)\s*=\s*\{([^}]*)\}").expect("valid")
+static TITLE_ALIAS_LIST: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?i)^[@A-Za-z_{}][@A-Za-z0-9_.{}]*(?:\s*(?:/|,|\bor\b)\s*[@A-Za-z_{}][@A-Za-z0-9_.{}]*)*$",
+    )
+    .expect("valid")
+});
+static TITLE_ENTRY_SEPARATOR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\s*[—–]\s*|\s+-\s+").expect("valid"));
+static SUFFIX_TOKEN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\.([A-Za-z][A-Za-z0-9_]*(?:::[A-Za-z0-9_]+)*)").expect("valid"));
+static DEFINITION_HEAD: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)((?:\.[A-Za-z][A-Za-z0-9_]*(?:::[A-Za-z0-9_]+)*\s*=\s*)+)\{").expect("valid")
+});
+static NESTED_CHOICE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?:::|\.)[A-Za-z][A-Za-z0-9_]*(?:::[A-Za-z0-9_]+)*").expect("valid")
 });
 static WORD: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[a-z0-9]+").expect("valid"));
-static ALTERNATIVE_ITEM: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\.[A-Za-z0-9_]+").expect("valid"));
 
 /// Mnemonics named by a heading title, lower-cased.
 ///
@@ -69,6 +80,155 @@ pub fn title_mnemonics(title: Option<&str>) -> Vec<String> {
         .collect()
 }
 
+/// Aliases from the explicit instruction-identity part of a heading.
+fn title_identity_labels(title: Option<&str>) -> Vec<String> {
+    let Some(title) = title else {
+        return Vec::new();
+    };
+    let clean = normalize_text(title);
+    let identity = if let Some(separator) = TITLE_ENTRY_SEPARATOR.find(&clean) {
+        clean[..separator.start()]
+            .rsplit_once(':')
+            .map_or(clean[..separator.start()].trim(), |(_, tail)| tail.trim())
+    } else if let Some((_, tail)) = clean.rsplit_once(':') {
+        tail.trim()
+    } else if MNEMONIC
+        .find(&clean)
+        .is_some_and(|found| found.start() == 0 && found.end() == clean.len())
+    {
+        clean.as_str()
+    } else {
+        return Vec::new();
+    };
+    if !TITLE_ALIAS_LIST.is_match(identity) {
+        return Vec::new();
+    }
+    MNEMONIC
+        .find_iter(identity)
+        .map(|found| found.as_str().to_lowercase())
+        .filter(|label| label != "or")
+        .collect()
+}
+
+fn matching_brace(text: &str, opening: usize) -> Option<usize> {
+    let mut depth = 0_u32;
+    for (offset, byte) in text.as_bytes()[opening..].iter().enumerate() {
+        match byte {
+            b'{' => depth += 1,
+            b'}' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    return Some(opening + offset);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn definition_choices(body: &str) -> BTreeSet<String> {
+    let mut choices = BTreeSet::new();
+    let mut position = 0;
+    while let Some(found) = SUFFIX_TOKEN.find_at(body, position) {
+        let base = found.as_str().to_lowercase();
+        choices.insert(base.clone());
+        position = found.end();
+        if body.as_bytes().get(position) != Some(&b'{') {
+            continue;
+        }
+        let Some(closing) = matching_brace(body, position) else {
+            break;
+        };
+        for nested in NESTED_CHOICE.find_iter(&body[position + 1..closing]) {
+            choices.insert(format!("{base}{}", nested.as_str().to_lowercase()));
+        }
+        position = closing + 1;
+    }
+    choices
+}
+
+fn syntax_definitions(syntax_text: &str) -> BTreeMap<String, BTreeSet<String>> {
+    let mut definitions: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut position = 0;
+    while let Some(captures) = DEFINITION_HEAD.captures_at(syntax_text, position) {
+        let whole = captures.get(0).expect("definition match");
+        let opening = whole.end() - 1;
+        let Some(closing) = matching_brace(syntax_text, opening) else {
+            break;
+        };
+        let choices = definition_choices(&syntax_text[opening + 1..closing]);
+        for alias in SUFFIX_TOKEN.captures_iter(&captures[1]) {
+            definitions
+                .entry(alias[1].to_lowercase())
+                .or_default()
+                .extend(choices.iter().cloned());
+        }
+        position = closing + 1;
+    }
+    definitions
+}
+
+fn syntax_form_terms(syntax_text: &str, mut position: usize) -> Vec<(bool, String)> {
+    let mut terms = Vec::new();
+    while position < syntax_text.len() {
+        if syntax_text[position..].starts_with("{.") {
+            let Some(closing) = matching_brace(syntax_text, position) else {
+                break;
+            };
+            let token_text = syntax_text[position + 1..closing].trim();
+            let Some(token) = SUFFIX_TOKEN.captures(token_text) else {
+                break;
+            };
+            let whole = token.get(0).expect("suffix match");
+            if whole.start() != 0 || whole.end() != token_text.len() {
+                break;
+            }
+            terms.push((true, token[1].to_lowercase()));
+            position = closing + 1;
+            continue;
+        }
+        let Some(token) = SUFFIX_TOKEN.captures_at(syntax_text, position) else {
+            break;
+        };
+        let whole = token.get(0).expect("suffix match");
+        if whole.start() != position {
+            break;
+        }
+        terms.push((false, token[1].to_lowercase()));
+        position = whole.end();
+    }
+    terms
+}
+
+fn terms_accept(
+    wanted_suffix: &str,
+    terms: &[(bool, String)],
+    definitions: &BTreeMap<String, BTreeSet<String>>,
+) -> bool {
+    let mut positions = BTreeSet::from([0]);
+    for (optional, name) in terms {
+        let literal = BTreeSet::from([format!(".{name}")]);
+        let choices = definitions.get(name).unwrap_or(&literal);
+        let mut next = BTreeSet::new();
+        for position in positions {
+            if *optional {
+                next.insert(position);
+            }
+            for choice in choices {
+                if wanted_suffix[position..].starts_with(choice) {
+                    next.insert(position + choice.len());
+                }
+            }
+        }
+        if next.is_empty() {
+            return false;
+        }
+        positions = next;
+    }
+    positions.contains(&wanted_suffix.len())
+}
+
 /// Whether a syntax block accepts an exact spelling such as `add.sat.s32`.
 ///
 /// Specifications write syntax as a form plus finite alternatives, e.g.
@@ -76,61 +236,42 @@ pub fn title_mnemonics(title: Option<&str>) -> Vec<String> {
 /// expanding the form; a substring test would match spellings the
 /// specification never defines.
 pub fn syntax_accepts(instruction: &str, mnemonic: &str, syntax_text: &str) -> bool {
-    let mut definitions: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for capture in ALTERNATIVES.captures_iter(syntax_text) {
-        let name = capture[1].to_lowercase();
-        let choices: Vec<String> = ALTERNATIVE_ITEM
-            .find_iter(&capture[2])
-            .map(|found| found.as_str().to_lowercase())
-            .collect();
-        definitions.insert(name, choices);
-    }
+    let wanted = instruction.to_lowercase();
+    let mnemonic = mnemonic.to_lowercase();
+    let Some(wanted_suffix) = wanted.strip_prefix(&mnemonic) else {
+        return false;
+    };
+    let definitions = syntax_definitions(syntax_text);
     let pattern = match Regex::new(&format!(
-        r"(?i)(?:^|[^A-Za-z0-9_.]){}((?:(?:\{{\.[A-Za-z0-9_]+\}})|(?:\.[A-Za-z0-9_]+))+)",
-        regex::escape(mnemonic)
+        r"(?i)(?:^|[^A-Za-z0-9_.]){}",
+        regex::escape(&mnemonic)
     )) {
         Ok(pattern) => pattern,
         Err(_) => return false,
     };
-    let wanted = instruction.to_lowercase();
-    for capture in pattern.captures_iter(syntax_text) {
-        let mut expansions = vec![mnemonic.to_lowercase()];
-        for term in SUFFIX_TERM.find_iter(&capture[1]) {
-            let term = term.as_str();
-            let optional = term.starts_with('{');
-            let name = term.trim_matches(['{', '}'])[1..].to_lowercase();
-            let mut choices = definitions
-                .get(&name)
-                .cloned()
-                .unwrap_or_else(|| vec![format!(".{name}")]);
-            choices.sort();
-            if optional {
-                choices.insert(0, String::new());
-            }
-            expansions = expansions
-                .iter()
-                .flat_map(|prefix| {
-                    choices
-                        .iter()
-                        .map(move |choice| format!("{prefix}{choice}"))
-                })
-                .collect();
-        }
-        if expansions.contains(&wanted) {
-            return true;
-        }
-    }
-    false
+    pattern.find_iter(syntax_text).any(|found| {
+        let terms = syntax_form_terms(syntax_text, found.end());
+        !terms.is_empty() && terms_accept(wanted_suffix, &terms, &definitions)
+    })
 }
 
 /// Sort key that orders `1.10` after `1.9` rather than lexically.
 fn section_order(section: Option<&str>) -> (u8, Vec<i64>, String) {
     match section {
-        Some(section) if section.split('.').all(|part| part.chars().all(|c| c.is_ascii_digit()) && !part.is_empty()) => (
-            0,
-            section.split('.').filter_map(|part| part.parse().ok()).collect(),
-            String::new(),
-        ),
+        Some(section)
+            if section
+                .split('.')
+                .all(|part| part.chars().all(|c| c.is_ascii_digit()) && !part.is_empty()) =>
+        {
+            (
+                0,
+                section
+                    .split('.')
+                    .filter_map(|part| part.parse().ok())
+                    .collect(),
+                String::new(),
+            )
+        }
         other => (1, Vec::new(), other.unwrap_or_default().to_string()),
     }
 }
@@ -250,24 +391,18 @@ impl<'a> ScopeResolver<'a> {
     /// Headings whose subtree actually defines the requested spelling.
     fn exact_instruction_nodes(&self, instruction: &str) -> Result<Vec<NodeId>, ScopeError> {
         let wanted = instruction.to_lowercase();
-        let mut matches: Vec<(usize, String, NodeRow)> = Vec::new();
+        let mut heading_matches: Vec<(u8, String, NodeRow)> = Vec::new();
         for row in self.db.headings()? {
-            for mnemonic in title_mnemonics(row.title.as_deref()) {
+            for mnemonic in title_identity_labels(row.title.as_deref()) {
                 if wanted == mnemonic || wanted.starts_with(&format!("{mnemonic}.")) {
-                    matches.push((mnemonic.len(), mnemonic, row.clone()));
+                    let match_quality = if wanted == mnemonic { 2 } else { 1 };
+                    heading_matches.push((match_quality, mnemonic, row.clone()));
                 }
             }
         }
-        if matches.is_empty() {
+        if heading_matches.is_empty() {
             return Ok(Vec::new());
         }
-        // Prefer the longest mnemonic: `add.cc` beats `add` for `add.cc.u32`.
-        let longest = matches.iter().map(|(length, _, _)| *length).max().unwrap_or(0);
-        let headings: Vec<(String, NodeRow)> = matches
-            .into_iter()
-            .filter(|(length, _, _)| *length == longest)
-            .map(|(_, mnemonic, row)| (mnemonic, row))
-            .collect();
 
         let literal = Regex::new(&format!(
             r"(?i)(?:^|[^A-Za-z0-9_.]){}(?:[^A-Za-z0-9_.]|$)",
@@ -275,43 +410,53 @@ impl<'a> ScopeResolver<'a> {
         ))
         .map_err(|error| ScopeError::Unresolvable(error.to_string()))?;
 
-        // Two ways a section can be said to define a spelling, and they are not
-        // equally good. A syntax form *defines* it; prose merely *mentions* it,
-        // and "add.f64 is not supported" mentions it too. Prefer syntax where
-        // any section offers it, and fall back to mention only when none does.
-        let mut by_syntax: Vec<NodeRow> = Vec::new();
-        let mut by_mention: Vec<NodeRow> = Vec::new();
-        for (mnemonic, row) in headings {
-            let descendants = self.db.descendant_texts(&row.node_id)?;
+        let mut confirmed: Vec<((u8, u8), NodeRow)> = Vec::new();
+        for (match_quality, mnemonic, row) in heading_matches {
+            let descendants = self.db.descendant_texts_with_ids(&row.node_id)?;
             let syntax_defines = descendants
                 .iter()
-                .any(|(node_type, _)| node_type == "syntax_block")
+                .any(|(_, node_type, _)| node_type == "syntax_block")
                 && syntax_accepts(
                     instruction,
                     &mnemonic,
                     &descendants
                         .iter()
-                        .map(|(_, text)| text.as_str())
+                        .map(|(_, _, text)| text.as_str())
                         .collect::<Vec<_>>()
                         .join("\n"),
                 );
-            if syntax_defines {
-                by_syntax.push(row);
-            } else if descendants.iter().any(|(_, text)| literal.is_match(text)) {
-                by_mention.push(row);
+            let mentioned = descendants
+                .iter()
+                .any(|(_, _, text)| literal.is_match(text));
+            if syntax_defines || mentioned {
+                let literal_content = descendants.iter().any(|(node_id, _, text)| {
+                    node_id != &row.node_id && literal.is_match(text)
+                });
+                let evidence_quality = if syntax_defines {
+                    2
+                } else if literal_content {
+                    1
+                } else {
+                    0
+                };
+                confirmed.push(((match_quality, evidence_quality), row));
             }
         }
-        let mut confirmed = if by_syntax.is_empty() { by_mention } else { by_syntax };
         if confirmed.is_empty() {
             return Ok(Vec::new());
         }
-        // Keep the most specific logical section, and every rendition of it.
-        let deepest = confirmed
+        // Semantic and evidence quality determine precedence. Database depth
+        // and opaque node IDs cannot decide which instruction a heading names.
+        let best_score = confirmed
             .iter()
-            .map(|row| row.depth)
+            .map(|(score, _)| *score)
             .max()
             .unwrap_or_default();
-        confirmed.retain(|row| row.depth == deepest);
+        let confirmed: Vec<NodeRow> = confirmed
+            .into_iter()
+            .filter(|(score, _)| *score == best_score)
+            .map(|(_, row)| row)
+            .collect();
 
         // Renditions of one logical section share a number and a title tail.
         // Anything left over is a different section that also matched, and
@@ -321,7 +466,7 @@ impl<'a> ScopeResolver<'a> {
             .map(|row| {
                 (
                     row.section_number.clone(),
-                    title_mnemonics(row.title.as_deref()),
+                    title_identity_labels(row.title.as_deref()),
                 )
             })
             .collect();
@@ -344,12 +489,12 @@ impl<'a> ScopeResolver<'a> {
             )));
         }
         let best_section = confirmed[0].section_number.clone();
-        let best_tail = title_mnemonics(confirmed[0].title.as_deref());
+        let best_tail = title_identity_labels(confirmed[0].title.as_deref());
         let mut selected: Vec<NodeId> = confirmed
             .iter()
             .filter(|row| {
                 row.section_number == best_section
-                    && title_mnemonics(row.title.as_deref()) == best_tail
+                    && title_identity_labels(row.title.as_deref()) == best_tail
             })
             .map(|row| row.node_id.clone())
             .collect();
@@ -513,11 +658,11 @@ impl<'a> ScopeResolver<'a> {
         }
         let mut grouped: BTreeMap<(Option<String>, String), Vec<NodeRow>> = BTreeMap::new();
         for row in rows {
-            let label = row
-                .title
-                .clone()
-                .unwrap_or_else(|| row.node_id.to_string());
-            let key = (row.section_number.clone(), normalize_text(&label).to_lowercase());
+            let label = row.title.clone().unwrap_or_else(|| row.node_id.to_string());
+            let key = (
+                row.section_number.clone(),
+                normalize_text(&label).to_lowercase(),
+            );
             grouped.entry(key).or_default().push(row);
         }
         let mut keys: Vec<&(Option<String>, String)> = grouped.keys().collect();
@@ -612,6 +757,28 @@ mod tests {
     }
 
     #[test]
+    fn identity_labels_exclude_heading_descriptions_and_prose() {
+        assert_eq!(
+            title_identity_labels(Some("ADD—Add")),
+            vec!["add".to_string()]
+        );
+        assert_eq!(
+            title_identity_labels(Some("FADD/FADDP/FIADD—Add")),
+            vec!["fadd".to_string(), "faddp".to_string(), "fiadd".to_string()]
+        );
+        assert_eq!(
+            title_identity_labels(Some("Instructions: ADD, ADC or SUB")),
+            vec!["add".to_string(), "adc".to_string(), "sub".to_string()]
+        );
+        assert!(
+            title_identity_labels(Some(
+                "Vector Length Transition and Programming Considerations"
+            ))
+            .is_empty()
+        );
+    }
+
+    #[test]
     fn syntax_forms_expand_their_finite_alternatives() {
         let syntax = "add{.sat}.type d, a, b;\n.type = { .u32, .s32 }\n";
         // Spelled out by expansion, not by substring.
@@ -626,10 +793,46 @@ mod tests {
     }
 
     #[test]
+    fn syntax_forms_support_alias_chains_and_nested_namespaces() {
+        let aliases = "convert{.round}.destination.source d, a;\n\
+            .round = { .nearest, .zero };\n\
+            .destination = .source = { .word, .real };";
+        assert!(syntax_accepts(
+            "convert.nearest.real.word",
+            "convert",
+            aliases
+        ));
+        assert!(syntax_accepts("convert.word.real", "convert", aliases));
+        assert!(!syntax_accepts(
+            "convert.nearest.unknown.word",
+            "convert",
+            aliases
+        ));
+
+        let nested = "fetch{.space}{.level::policy}{.vector}.type d, [a];\n\
+            .space = { .global, .parameter{::entry, ::function}, .shared{::group, ::cluster} };\n\
+            .level::policy = { .L1::keep, .L2::stream };\n\
+            .vector = { .pair, .quad };\n\
+            .type = { .word, .long };";
+        assert!(syntax_accepts("fetch.global.word", "fetch", nested));
+        assert!(syntax_accepts(
+            "fetch.parameter::function.L2::stream.quad.long",
+            "fetch",
+            nested
+        ));
+        assert!(syntax_accepts("fetch.parameter.word", "fetch", nested));
+        assert!(!syntax_accepts("fetch.word.global", "fetch", nested));
+        assert!(!syntax_accepts("fetch.global.unknown", "fetch", nested));
+    }
+
+    #[test]
     fn section_numbers_sort_numerically_not_lexically() {
         let mut sections = vec![Some("1.10"), Some("1.9"), Some("2"), None, Some("A.1")];
         sections.sort_by_key(|value| section_order(*value));
-        assert_eq!(sections, vec![Some("1.9"), Some("1.10"), Some("2"), None, Some("A.1")]);
+        assert_eq!(
+            sections,
+            vec![Some("1.9"), Some("1.10"), Some("2"), None, Some("A.1")]
+        );
     }
 
     #[test]

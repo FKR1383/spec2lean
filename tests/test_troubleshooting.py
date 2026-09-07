@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -18,8 +19,8 @@ from spec2lean.troubleshooting.models import (
     TROUBLESHOOTER_REASONING,
     action_for,
 )
-from spec2lean.troubleshooting.mcp import TroubleshootingMcpServer
-from spec2lean.troubleshooting.opencode import opencode_config
+from spec2lean.troubleshooting.mcp import TroubleshootingMcpServer, tool_definitions
+from spec2lean.troubleshooting.opencode import opencode_config, run_opencode_repair
 from spec2lean.troubleshooting.prompt import build_troubleshooter_prompt
 from spec2lean.troubleshooting.resolver import resolve_check_failure
 from spec2lean.troubleshooting.runner import run_troubleshooter
@@ -253,7 +254,7 @@ def test_build_repair_context_includes_toolchain_and_prior_attempts(tmp_path):
 
     assert captured["leanVersion"] == "Lean (version 4.test)"
     assert captured["priorRepairAttempts"] == attempts
-    prompt = build_troubleshooter_prompt(captured)
+    prompt = build_troubleshooter_prompt()
     assert "diagnostics and Lean version as authoritative" in prompt
     assert "Do not repeat" in prompt
     assert "correct the submission and call it again" in prompt
@@ -339,7 +340,11 @@ def test_repair_mcp_does_not_return_derived_ranges_as_model_arguments(tmp_path):
         "semanticsByUnit": {UNIT["unitId"]: semantics},
         "leanSource": SOURCE,
         "translationManifest": current_manifest,
+        "traceability": {},
     }, submission_path)
+    for component in ("overview", "leanSource", "translationManifest", "traceability"):
+        server.call_tool("get_context", {"component": component})
+    server.call_tool("get_context", {"component": "semantics", "unitId": UNIT["unitId"]})
     result = server.call_tool("submit_repair", {
         "leanSource": REPAIRED_SOURCE,
         "declarations": manifest["declarations"],
@@ -476,13 +481,79 @@ def test_build_repair_cannot_change_semantic_mapping_responsibility(tmp_path):
     assert artifact["outcome"] == "FAILED" and artifact["changedFiles"] == []
 
 
-def test_opencode_configuration_uses_exact_model_medium_reasoning_and_one_submit_tool(tmp_path):
+def test_opencode_configuration_uses_exact_model_and_restricted_troubleshooting_tools(tmp_path):
     config = opencode_config(tmp_path / "context.json", tmp_path / "submission.json")
     agent = config["agent"]["spec2lean-troubleshooter"]
     assert agent["model"] == TROUBLESHOOTER_MODEL == "openai/gpt-5.6-sol"
     assert agent["variant"] == TROUBLESHOOTER_REASONING == "medium"
     assert agent["permission"] == {"*": "deny", "troubleshooting_*": "allow"}
     assert agent["tools"]["bash"] is False and agent["tools"]["edit"] is False
+
+
+def test_repair_context_must_be_fetched_through_read_only_mcp_tool(tmp_path):
+    marker = "complete-repair-context"
+    context = {
+        "marker": marker,
+        "leanSource": "def repaired := true",
+        "translationManifest": {"schemaVersion": 2},
+        "traceability": {"status": "PASS"},
+        "semanticsByUnit": {"unit:one": {"claims": []}},
+    }
+    server = TroubleshootingMcpServer(context, tmp_path / "submission.json")
+
+    assert [item["name"] for item in tool_definitions()] == ["get_context", "submit_repair"]
+    rejected = json.loads(server.call_tool("submit_repair", {})["content"][0]["text"])
+    assert rejected["diagnostics"][0]["code"] == "CONTEXT_NOT_READ"
+    overview = json.loads(
+        server.call_tool("get_context", {"component": "overview"})["content"][0]["text"]
+    )
+    assert overview["value"]["marker"] == marker
+    assert overview["value"]["semanticUnitIds"] == ["unit:one"]
+    assert "leanSource" not in overview["value"]
+    for component in ("leanSource", "translationManifest", "traceability"):
+        fetched = json.loads(
+            server.call_tool("get_context", {"component": component})["content"][0]["text"]
+        )
+        assert fetched["transport"] == {"complete": True}
+    semantic = json.loads(server.call_tool(
+        "get_context", {"component": "semantics", "unitId": "unit:one"}
+    )["content"][0]["text"])
+    assert semantic["value"] == {"claims": []}
+    assert server.context_reads == server._required_context_reads()
+
+
+def test_large_repair_context_is_not_embedded_in_opencode_argument(
+    tmp_path, monkeypatch
+):
+    marker = "large-repair-context-" + ("x" * 160_000)
+    context = {
+        "plan": {"planRunId": "plan:large-context"},
+        "unit": {"unitId": "unit:large-context"},
+        "translationDirectory": str(tmp_path),
+        "marker": marker,
+    }
+    calls = []
+    monkeypatch.setattr("spec2lean.troubleshooting.opencode.shutil.which", lambda _: "/usr/bin/opencode")
+    monkeypatch.setattr(
+        "spec2lean.troubleshooting.opencode.installed_openai_models",
+        lambda _: {TROUBLESHOOTER_MODEL},
+    )
+
+    def fake_run(command, **kwargs):
+        if command[1:] == ["--version"]:
+            return subprocess.CompletedProcess(command, 0, "opencode test\n", "")
+        calls.append((command, kwargs))
+        config = json.loads(kwargs["env"]["OPENCODE_CONFIG_CONTENT"])
+        mcp_command = config["mcp"]["troubleshooting"]["command"]
+        context_path = Path(mcp_command[mcp_command.index("--context") + 1])
+        assert json.loads(context_path.read_text())["marker"] == marker
+        assert marker not in command[-1]
+        assert len(command[-1].encode("utf-8")) < 32_000
+        return subprocess.CompletedProcess(command, 0, '{"sessionID":"repair-session"}\n', "")
+
+    result = run_opencode_repair(context, run_command=fake_run)
+    assert len(calls) == 1
+    assert result["error"] == "OpenCode Troubleshooter finished without a valid submit_repair call"
 
 
 def test_inspection_cli_shows_artifact_and_changes_without_rerunning(tmp_path, capsys):

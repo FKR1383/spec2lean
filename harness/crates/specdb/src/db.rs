@@ -471,6 +471,26 @@ impl SpecDb {
         collect(rows)
     }
 
+    /// Node identity, type, and text for a node and its whole subtree.
+    ///
+    /// Scope resolution uses the identity to distinguish evidence in a
+    /// section's content from the instruction spelling repeated by its heading.
+    pub fn descendant_texts_with_ids(
+        &self,
+        node_id: &NodeId,
+    ) -> Result<Vec<(NodeId, String, String)>> {
+        let mut statement = self.connection.prepare(
+            "WITH RECURSIVE tree(node_id) AS (
+                 SELECT node_id FROM nodes WHERE node_id = ?1
+                 UNION ALL SELECT n.node_id FROM nodes n JOIN tree t ON n.parent_id = t.node_id
+             ) SELECT node_id, node_type, raw_text FROM nodes JOIN tree USING(node_id)",
+        )?;
+        let rows = statement.query_map([node_id], |row| {
+            Ok((NodeId::trusted(row.get(0)?), row.get(1)?, row.get(2)?))
+        })?;
+        collect(rows)
+    }
+
     /// Heading children of a node, in document order.
     pub fn heading_children(&self, node_id: &NodeId) -> Result<Vec<NodeRow>> {
         let sql = format!(

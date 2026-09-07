@@ -33,8 +33,21 @@ unit ID, Phase-1 node ID, or a language-specific category table.
 Use only candidate units and source nodes returned by the read-only specdb tools.
 
 Rules:
-- For an exact, source-subtree, or full-spec request, submit every required exact unit ID and no others.
-- For a conceptual family request, select only genuine members from candidateUnits.
+- Before planning, compare every extracted candidate unit with the instructions or instruction
+  scope supplied by the user. Inspect its indexed heading, syntax, description, ancestors, and
+  explicit cross-references as needed; do not infer relevance from a shared word alone.
+- Treat a candidate as relevant only when the indexed specification establishes a concrete logical
+  relationship to the user's input: direct instruction identity, an explicitly documented alias or
+  encoding/form variant, membership in the requested specification-defined instruction family, or
+  an explicit semantic dependency or cross-reference required by a requested instruction.
+- Similar spelling, a shared generic operation word, or an incidental occurrence of the user's
+  mnemonic in a heading description or body prose is not a logical relationship.
+- Completely ignore every unrelated candidate. Do not include its unit ID in `requestedUnitIds`,
+  place it in a translation group, use its nodes as supporting evidence, create a prerequisite or
+  dependency for it, or allow it to affect ordering or group names. Never invent or rationalize a
+  relationship merely to preserve an extracted candidate.
+- For every request mode, submit only candidates that pass this relevance check. Preserve all
+  required units that pass it and add no unrelated units.
 - External prerequisites stay external and are not scheduled requested units.
 - Identify shared prerequisites needed by the bounded requested subset. A shared prerequisite is a
   source-level semantic concept reused by multiple requested units, or clearly specification-wide
@@ -61,7 +74,8 @@ Rules:
   mnemonic list, and never use a catch-all merely because the source language is unfamiliar.
 - Do not attempt filesystem, shell, internet, subagent, semantic extraction, or Lean work.
 - You must finish by calling specdb_submit_plan. If it returns validation diagnostics, correct the
-  semantic submission and call it again within this same session. Do not merely print JSON.
+  semantic submission and call it again within this same session, but never reintroduce an
+  unrelated candidate just to make validation pass. Do not merely print JSON.
 
 For external prerequisites, choose a short unique `key`; dependency endpoints may use that key or
 a requested unit ID. The deterministic submit tool assigns prerequisite IDs, verifies group

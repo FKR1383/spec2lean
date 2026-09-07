@@ -42,52 +42,140 @@ def submission_schema() -> dict[str, Any]:
 
 
 def tool_definitions() -> list[dict[str, Any]]:
-    return [{
-        "name": "submit_repair",
-        "description": (
-            "Submit a minimal compiler-directed Lean repair for deterministic validation. "
-            "If rejected, correct the diagnostics and resubmit within the same session."
-        ),
-        "inputSchema": submission_schema(),
-    }]
+    return [
+        {
+            "name": "get_context",
+            "description": (
+                "Read one complete, immutable component of the Phase-7 repair context. Read the "
+                "overview first, then every component and semantic unit it lists."
+            ),
+            "inputSchema": _object({
+                "component": {
+                    "type": "string",
+                    "enum": [
+                        "overview", "leanSource", "translationManifest", "traceability",
+                        "semantics",
+                    ],
+                },
+                "unitId": {"type": "string"},
+            }, ["component"]),
+        },
+        {
+            "name": "submit_repair",
+            "description": (
+                "Submit a minimal compiler-directed Lean repair for deterministic validation. "
+                "If rejected, correct the diagnostics and resubmit within the same session."
+            ),
+            "inputSchema": submission_schema(),
+        },
+    ]
 
 
 class TroubleshootingMcpServer:
     def __init__(self, context: dict[str, Any], submission_path: Path):
         self.context = context
         self.submission_path = submission_path
+        self.context_reads: set[str] = set()
+
+    def _required_context_reads(self) -> set[str]:
+        semantics = self.context.get("semanticsByUnit", {})
+        unit_ids = semantics if isinstance(semantics, dict) else {}
+        return {
+            "overview", "leanSource", "translationManifest", "traceability",
+            *(f"semantics:{unit_id}" for unit_id in unit_ids),
+        }
+
+    def _context_component(self, component: str, unit_id: str | None) -> Any:
+        if component == "overview":
+            if unit_id is not None:
+                raise ValueError("overview does not accept unitId")
+            excluded = {"leanSource", "translationManifest", "traceability", "semanticsByUnit"}
+            return {
+                **{key: value for key, value in self.context.items() if key not in excluded},
+                "availableComponents": [
+                    "leanSource", "translationManifest", "traceability", "semantics",
+                ],
+                "semanticUnitIds": sorted(self.context.get("semanticsByUnit", {})),
+            }
+        if component == "semantics":
+            if not unit_id:
+                raise ValueError("semantics requires unitId")
+            semantics = self.context.get("semanticsByUnit", {})
+            if unit_id not in semantics:
+                raise KeyError(f"unknown semantic unit: {unit_id}")
+            return semantics[unit_id]
+        if unit_id is not None:
+            raise ValueError(f"{component} does not accept unitId")
+        return self.context[component]
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        if name != "submit_repair":
+        if name == "get_context":
+            unexpected = set(arguments) - {"component", "unitId"}
+            if unexpected:
+                raise ValueError(f"get_context received unexpected arguments: {sorted(unexpected)}")
+            component = str(arguments.get("component", ""))
+            if component not in {
+                "overview", "leanSource", "translationManifest", "traceability", "semantics",
+            }:
+                raise ValueError(f"unknown context component: {component}")
+            unit_id = arguments.get("unitId")
+            if unit_id is not None and not isinstance(unit_id, str):
+                raise ValueError("unitId must be a string")
+            component_key = f"semantics:{unit_id}" if component == "semantics" else component
+            component_value = self._context_component(component, unit_id)
+            self.context_reads.add(component_key)
+            value = {
+                "component": component,
+                "value": component_value,
+                "transport": {"complete": True},
+            }
+            if unit_id is not None:
+                value["unitId"] = unit_id
+        elif name != "submit_repair":
             raise KeyError(f"unknown tool: {name}")
-        scope = TranslationGroupScope.from_dict(self.context["translationScope"])
-        candidate, diagnostics = validate_repair_submission(
-            scope,
-            self.context["semanticsByUnit"],
-            self.context["leanSource"],
-            self.context["translationManifest"],
-            arguments,
-        )
-        if diagnostics:
-            value = {"accepted": False, "diagnostics": diagnostics}
         else:
-            assert candidate is not None
-            temporary = self.submission_path.with_suffix(".tmp")
-            temporary.write_text(canonical_json({
-                "leanSource": candidate["leanSource"],
-                # Source ranges are deterministic manifest metadata, not repair-tool
-                # arguments.  The runner derives them again from the returned source.
-                "declarations": [
-                    {
-                        key: value for key, value in item.items()
-                        if key != "sourceRange"
-                    }
-                    for item in candidate["manifest"]["declarations"]
-                ],
-                "changes": candidate["changes"],
-            }) + "\n", encoding="utf-8")
-            os.replace(temporary, self.submission_path)
-            value = {"accepted": True, "message": "Compiler-directed repair accepted."}
+            missing = sorted(self._required_context_reads() - self.context_reads)
+            if missing:
+                value = {
+                    "accepted": False,
+                    "diagnostics": [{
+                        "code": "CONTEXT_NOT_READ",
+                        "message": (
+                            "read every repair context component with troubleshooting_get_context "
+                            f"before submitting; missing: {', '.join(missing)}"
+                        ),
+                        "path": "$",
+                    }],
+                }
+            else:
+                scope = TranslationGroupScope.from_dict(self.context["translationScope"])
+                candidate, diagnostics = validate_repair_submission(
+                    scope,
+                    self.context["semanticsByUnit"],
+                    self.context["leanSource"],
+                    self.context["translationManifest"],
+                    arguments,
+                )
+                if diagnostics:
+                    value = {"accepted": False, "diagnostics": diagnostics}
+                else:
+                    assert candidate is not None
+                    temporary = self.submission_path.with_suffix(".tmp")
+                    temporary.write_text(canonical_json({
+                        "leanSource": candidate["leanSource"],
+                        # Source ranges are deterministic manifest metadata, not repair-tool
+                        # arguments. The runner derives them again from the returned source.
+                        "declarations": [
+                            {
+                                key: value for key, value in item.items()
+                                if key != "sourceRange"
+                            }
+                            for item in candidate["manifest"]["declarations"]
+                        ],
+                        "changes": candidate["changes"],
+                    }) + "\n", encoding="utf-8")
+                    os.replace(temporary, self.submission_path)
+                    value = {"accepted": True, "message": "Compiler-directed repair accepted."}
         return {"content": [{"type": "text", "text": json.dumps(value, ensure_ascii=False, sort_keys=True)}], "isError": False}
 
     def handle(self, message: dict[str, Any]) -> dict[str, Any] | None:
