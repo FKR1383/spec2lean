@@ -1,5 +1,12 @@
 # Spec2Lean
 
+The default model runtime is now the [Rust harness](harness/README.md). Build it
+once with `cargo build --release --manifest-path harness/Cargo.toml` and use the
+existing `./spec2lean run ...` workflow with an authenticated Codex CLI. All phase
+prompts and artifacts retain the current Python pipeline contracts. The previous
+runtime remains available with `--runtime opencode` on model-running commands.
+
+
 Current release: **1.0.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 Spec2Lean implements **Phase 1: Parse + Index**, **Phase 2: Request-scoped
@@ -9,7 +16,7 @@ Open Question Handler**,
 Phase 1 turns an official
 PDF and/or HTML language specification into a deterministic, searchable,
 hierarchical SQLite database. Phase 2
-resolves an explicitly bounded request, invokes one restricted OpenCode Planner
+resolves an explicitly bounded request, invokes one restricted Planner
 session, validates its dependency graph, and writes an inspectable plan. Phase 3
 runs one bounded Evidence Retriever session per planned unit and deterministically
 resolves its selections to exact Phase-1 text and provenance. Phase 4 runs one
@@ -21,7 +28,7 @@ one semantic-artifact-bounded session per instruction group to generate exactly
 one complete Lean 4 file and cross-unit
 declaration traceability. Phase 6 compiles each group once and deterministically
 checks per-unit forward coverage and group-wide reverse traceability.
-Phase 7 routes semantic failures upstream and uses one compiler-guided OpenCode
+Phase 7 routes semantic failures upstream and uses one compiler-guided model runtime
 session to repair build-only failures.
 
 The top-level Pipeline Runner composes those phase APIs without duplicating
@@ -273,7 +280,7 @@ official sources. A resumed plan whose source digest no longer matches is
 rejected as stale.
 
 Use `--dry-run` to inspect projected reuse and work without creating a run or
-starting OpenCode. `--from PHASE` forbids creation in earlier phases and
+starting a model session. `--from PHASE` forbids creation in earlier phases and
 therefore requires their fresh artifacts; `--until PHASE` stops after the named
 phase. The phase names are `index`, `plan`, `evidence`, `semantics`, `translate`,
 `check`, and `troubleshoot`.
@@ -292,14 +299,14 @@ A deliberately small real PTX experiment is:
 ```
 
 This is intentionally not part of the deterministic test suite because it
-starts bounded OpenCode sessions.
+starts bounded model sessions.
 
 ## Build a request-scoped plan
 
-Phase 2 requires the exact installed OpenCode model
+Phase 2 requires the exact model
 `openai/gpt-5.6-sol` and uses reasoning variant `medium`. Choose exactly one
-scope selector. A quota-free catalog preflight fails before creating a run if
-that exact model is unavailable; no fallback model is selected.
+scope selector. The runtime never substitutes a model. The legacy OpenCode runtime also checks its
+model catalog before starting; Rust reports provider availability errors in its transcript.
 
 ```bash
 # Exact instruction spellings.
@@ -325,7 +332,7 @@ that exact model is unavailable; no fallback model is selected.
 ```
 
 The build prints its run directory and plan run ID. Inspect an accepted run
-without invoking OpenCode again:
+without invoking a model again:
 
 ```bash
 ./spec2lean plan show --run PLAN_RUN_ID
@@ -342,7 +349,7 @@ isolation, submission validation, cycles, and artifact ownership.
 
 ## Retrieve exact evidence for a planned unit
 
-Phase 3 requires the exact installed OpenCode model
+Phase 3 requires the exact model
 `openai/gpt-5.6-sol` with reasoning variant `medium`. The model selects
 only node/span IDs and relevance labels; deterministic code supplies quotations,
 hashes, anchors, pages, bounding boxes, and all other source provenance.
@@ -361,7 +368,7 @@ Start with one manually selected unit rather than the complete plan:
 retrieving every requested unit. Independent unit sessions default to serial
 execution; set a small `--jobs N` to run them concurrently.
 
-Inspect accepted artifacts without calling OpenCode:
+Inspect accepted artifacts without calling a model:
 
 ```bash
 ./spec2lean evidence units --plan-run PLAN_RUN_ID
@@ -373,12 +380,12 @@ Inspect accepted artifacts without calling OpenCode:
 ```
 
 See [the Phase 3 design](docs/phase-3-design.md) for the exposure boundary,
-OpenCode isolation, schema, content-addressed IDs, provenance reconstruction,
+runtime isolation, schema, content-addressed IDs, provenance reconstruction,
 validation, and artifacts.
 
 ## Extract structured semantics from one evidence bundle
 
-Phase 4 requires the exact installed OpenCode model
+Phase 4 requires the exact model
 `openai/gpt-5.6-sol` with reasoning variant `medium`. The extractor receives
 only the selected unit's Phase-3 evidence bundle and exposes only the structured
 `submit_semantics` tool. On `INSUFFICIENT_EVIDENCE`, a separate handler searches
@@ -396,7 +403,7 @@ Run the first experiment on one unit that already has a valid evidence bundle:
 ```
 
 Omitting `--unit` intentionally processes every evidence-backed unit in the
-plan serially. Inspect artifacts without invoking OpenCode:
+plan serially. Inspect artifacts without invoking a model:
 
 ```bash
 ./spec2lean semantics show --plan-run PLAN_RUN_ID --unit UNIT_ID
@@ -414,11 +421,11 @@ is available. Unresolved questions stop the pipeline.
 
 See [the Phase 4 design](docs/phase-4-design.md) for the evidence boundary,
 semantic schema, claim classifications, operation/state separation,
-deterministic validation, OpenCode isolation, and artifact layout.
+deterministic validation, runtime isolation, and artifact layout.
 
 ## Translate one instruction group to one Lean 4 file
 
-Phase 5 requires the exact installed OpenCode model
+Phase 5 requires the exact model
 `openai/gpt-5.6-sol` with reasoning variant `medium`. It supplies every accepted
 `semantics.json` in one specification-derived Phase-2 translation group and
 exposes only the structured `submit_translation` tool. One session writes one
@@ -437,7 +444,7 @@ table.
 that unit.
 
 Inspect the generated source/metadata or resolve a declaration all the way to
-Phase-3 source provenance without starting OpenCode:
+Phase-3 source provenance without starting a model session:
 
 ```bash
 ./spec2lean translate show --plan-run PLAN_RUN_ID --unit UNIT_ID
@@ -494,7 +501,7 @@ Inspect the stored decision, changes, hashes, and Phase-6 recheck requirement:
 ```
 
 See [the Phase 7 design](docs/phase-7-design.md) for routing precedence, repair
-authority, the single-session OpenCode boundary, and recheck behavior.
+authority, the single-session runtime boundary, and recheck behavior.
 
 To handle the routed revision/repair chain and rerun Phase 6 after every action:
 

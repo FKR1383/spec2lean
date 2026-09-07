@@ -314,7 +314,7 @@ def validate_artifact(plan: dict[str, Any], bundle: dict[str, Any], artifact: An
     extractor = artifact.get("extractor")
     supported_extractor = (
         isinstance(extractor, dict)
-        and extractor.get("provider") == "opencode"
+        and extractor.get("provider") in {"opencode", "rust-harness"}
         and (extractor.get("model"), extractor.get("reasoning"))
         in SUPPORTED_EXTRACTOR_CONFIGURATIONS
     )

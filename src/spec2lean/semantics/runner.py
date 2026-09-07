@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..runtime import is_rust, run_session, runtime_executable, runtime_name
+
 import json
 import os
 import shutil
@@ -32,6 +34,8 @@ def utc_now() -> str:
 
 
 def require_extractor_model(executable: str) -> None:
+    if is_rust(executable):
+        return
     models = installed_openai_models(executable)
     if EXTRACTOR_MODEL in models:
         return
@@ -138,8 +142,8 @@ def _run_unit(
         environment["OPENCODE_DISABLE_CLAUDE_CODE_SKILLS"] = "1"
         error: str | None = None
         try:
-            completed = run_command(
-                command, cwd=str(output), env=environment, text=True, capture_output=True,
+            completed = run_session(
+                command, run_command=run_command, cwd=str(output), env=environment, text=True, capture_output=True,
                 timeout=timeout_seconds, check=False,
             )
         except subprocess.TimeoutExpired as exc:
@@ -173,7 +177,7 @@ def _run_unit(
             (output / "semantics.md").write_text(render_markdown(artifact), encoding="utf-8")
         metadata = {
             "schemaVersion": 1, "phase": "SEMANTIC_EXTRACTOR", "planRunId": scope.plan_run_id,
-            "unitId": scope.unit_id, "runId": scope.run_id, "extractor": "opencode",
+            "unitId": scope.unit_id, "runId": scope.run_id, "extractor": runtime_name(),
             "model": EXTRACTOR_MODEL, "reasoning": EXTRACTOR_REASONING,
             "singleSession": True, "automaticRetries": 0, "startedAt": started_at,
             "finishedAt": utc_now(), "evidenceBundleHash": scope.evidence_bundle_hash,
@@ -258,7 +262,7 @@ def build_semantics(
         SemanticScope.from_inputs(plan, bundle, unit_id, created_at="preflight")
         bundles.append(bundle)
         outputs.append(output)
-    executable = shutil.which("opencode")
+    executable = runtime_executable()
     if executable is None:
         raise RuntimeError("OpenCode executable is not installed or not on PATH")
     require_extractor_model(executable)

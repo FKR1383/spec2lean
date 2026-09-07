@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..runtime import is_rust, run_session, runtime_executable, runtime_name
+
 import json
 import os
 import re
@@ -31,6 +33,8 @@ def utc_now() -> str:
 
 
 def require_retriever_model(executable: str) -> None:
+    if is_rust(executable):
+        return
     models = installed_openai_models(executable)
     if RETRIEVER_MODEL in models:
         return
@@ -148,8 +152,8 @@ def _run_unit(
         environment["OPENCODE_DISABLE_CLAUDE_CODE_SKILLS"] = "1"
         error: str | None = None
         try:
-            completed = run_command(
-                command, cwd=str(unit_directory), env=environment, text=True,
+            completed = run_session(
+                command, run_command=run_command, cwd=str(unit_directory), env=environment, text=True,
                 capture_output=True, timeout=timeout_seconds, check=False,
             )
         except subprocess.TimeoutExpired as exc:
@@ -195,7 +199,7 @@ def _run_unit(
             "phase": "RETRIEVE_EVIDENCE",
             "planRunId": scope.plan_run_id,
             "unitId": scope.unit_id,
-            "retriever": "opencode",
+            "retriever": runtime_name(),
             "model": RETRIEVER_MODEL,
             "reasoning": RETRIEVER_REASONING,
             "singleSession": True,
@@ -249,7 +253,7 @@ def build_evidence(
     if unknown:
         raise KeyError(f"units are not in Phase-2 plan: {unknown}")
 
-    executable = shutil.which("opencode")
+    executable = runtime_executable()
     if executable is None:
         raise RuntimeError("OpenCode executable is not installed or not on PATH")
     require_retriever_model(executable)

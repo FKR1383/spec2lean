@@ -97,7 +97,7 @@ def test_valid_semantics_covers_operation_branches_edges_state_claims_metadata_a
     assert diagnostics == [] and artifact is not None
     assert artifact["evidenceBundleHash"] == evidence_bundle_hash(bundle)
     assert artifact["extractor"] == {
-        "provider": "opencode", "model": EXTRACTOR_MODEL, "reasoning": EXTRACTOR_REASONING,
+        "provider": "rust-harness", "model": EXTRACTOR_MODEL, "reasoning": EXTRACTOR_REASONING,
     }
     assert validate_artifact(plan, bundle, artifact) == []
     rendered = render_markdown(artifact)

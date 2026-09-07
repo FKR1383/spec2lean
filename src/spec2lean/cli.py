@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .runtime import runtime_selection
+
 import argparse
 import json
 import os
@@ -1018,10 +1020,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--resume", nargs="?", const="latest", metavar="RUN_ID",
         help="resume the named compatible run, or the latest compatible run if no ID is supplied",
     )
-    pipeline.add_argument("--dry-run", action="store_true", help="report reuse and work without writing or invoking OpenCode")
+    pipeline.add_argument("--dry-run", action="store_true", help="report reuse and work without writing or invoking a model")
     pipeline.add_argument("--from", dest="from_phase", choices=PHASES, default="index", help="first phase allowed to create artifacts")
     pipeline.add_argument("--until", dest="until_phase", choices=PHASES, default="troubleshoot", help="last phase to execute")
-    pipeline.add_argument("--timeout", type=int, default=1800, help="timeout for each bounded OpenCode session")
+    pipeline.add_argument("--timeout", type=int, default=1800, help="timeout for each bounded model session")
     pipeline.add_argument("--max-dispatches", type=int, default=8, help="maximum Phase-7 routing actions per unit")
     pipeline.add_argument("--max-question-rounds", type=int, default=2, help="maximum database-first Phase-4 open-question recovery rounds")
     pipeline.add_argument("--index-root", default=str(DEFAULT_INDEX_ROOT), help=argparse.SUPPRESS)
@@ -1391,6 +1393,10 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
         command.add_argument("--troubleshooting-root", default=str(DEFAULT_TROUBLESHOOTING_ROOT), help=argparse.SUPPRESS)
         command.set_defaults(func=function)
+    for command in (pipeline, plan_build, evidence_build, semantics_build, semantics_revise,
+                    translate_build, translate_revise, troubleshoot_run, troubleshoot_resolve):
+        command.add_argument("--runtime", choices=("rust-harness", "opencode"),
+                             help="model session runtime (default: rust-harness)")
     return parser
 
 
@@ -1420,7 +1426,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     ):
         parser.error("troubleshoot resolve --timeout and --max-dispatches must be positive")
     try:
-        return int(args.func(args))
+        with runtime_selection(getattr(args, "runtime", None)):
+            return int(args.func(args))
     except KeyboardInterrupt:
         print("spec2lean: interrupted", file=sys.stderr)
         return 130

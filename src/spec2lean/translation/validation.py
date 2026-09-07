@@ -278,7 +278,7 @@ def validate_manifest(
     translator = manifest.get("translator")
     supported_translator = (
         isinstance(translator, dict)
-        and translator.get("provider") == "opencode"
+        and translator.get("provider") in {"opencode", "rust-harness"}
         and (translator.get("model"), translator.get("reasoning"))
         in SUPPORTED_TRANSLATOR_CONFIGURATIONS
     )
@@ -305,7 +305,6 @@ def validate_run_metadata(scope: TranslationGroupScope, metadata: Any) -> list[d
         "planRunId": scope.plan_run_id,
         "group": {"name": scope.group, "unitIds": list(scope.unit_ids)},
         "translationRunId": scope.translation_run_id,
-        "translator": "opencode",
         "singleSession": True,
         "automaticRetries": 0,
         "semanticsArtifacts": [
@@ -320,6 +319,10 @@ def validate_run_metadata(scope: TranslationGroupScope, metadata: Any) -> list[d
         "error": None,
     }
     diagnostics = []
+    if metadata.get("translator") not in {"opencode", "rust-harness"}:
+        diagnostics.append(_diagnostic(
+            "INCOMPLETE_TRANSLATOR_METADATA", "unsupported translator runtime", "$.translator"
+        ))
     configuration = (metadata.get("model"), metadata.get("reasoning"))
     if configuration not in SUPPORTED_TRANSLATOR_CONFIGURATIONS:
         diagnostics.append(_diagnostic(

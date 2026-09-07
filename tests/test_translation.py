@@ -143,7 +143,7 @@ def test_valid_translation_artifact_and_deterministic_metadata():
         "artifactHash": semantics_artifact_hash(semantics),
     }]
     assert manifest["translator"] == {
-        "provider": "opencode", "model": TRANSLATOR_MODEL, "reasoning": TRANSLATOR_REASONING,
+        "provider": "rust-harness", "model": TRANSLATOR_MODEL, "reasoning": TRANSLATOR_REASONING,
     }
     assert manifest["target"] == {"language": "Lean", "version": "4"}
     assert validate_manifest(plan, semantics_by_unit, candidate["leanSource"], manifest) == []

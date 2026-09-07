@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..runtime import runtime_name
+
 import argparse
 import json
 import os
@@ -422,7 +424,7 @@ class OpenQuestionMcpServer:
             "sourceDatabaseDigest": self.scope.source_database_digest,
             "inputEvidenceBundleHash": self.scope.evidence_bundle_hash,
             "inputSemanticRunId": self.scope.semantic_run_id,
-            "handler": {"provider": "opencode", "model": QUESTION_MODEL, "reasoning": QUESTION_REASONING},
+            "handler": {"provider": runtime_name(), "model": QUESTION_MODEL, "reasoning": QUESTION_REASONING},
             "runId": self.scope.run_id,
             "createdAt": self.scope.created_at,
             "outcome": outcome,

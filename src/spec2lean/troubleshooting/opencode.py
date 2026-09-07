@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..runtime import is_rust, run_session, runtime_executable, runtime_name
+
 import json
 import os
 import shutil
@@ -16,6 +18,8 @@ from .prompt import build_troubleshooter_prompt
 
 
 def require_troubleshooter_model(executable: str) -> None:
+    if is_rust(executable):
+        return
     models = installed_openai_models(executable)
     if TROUBLESHOOTER_MODEL in models:
         return
@@ -89,7 +93,7 @@ def run_opencode_repair(
     timeout_seconds: int = 1800,
     run_command: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> dict[str, Any]:
-    executable = shutil.which("opencode")
+    executable = runtime_executable()
     if executable is None:
         raise RuntimeError("OpenCode executable is not installed or not on PATH")
     require_troubleshooter_model(executable)
@@ -134,8 +138,8 @@ def run_opencode_repair(
         environment["OPENCODE_DISABLE_EXTERNAL_SKILLS"] = "1"
         environment["OPENCODE_DISABLE_CLAUDE_CODE_SKILLS"] = "1"
         try:
-            completed = run_command(
-                command,
+            completed = run_session(
+                command, run_command=run_command,
                 cwd=context["translationDirectory"],
                 env=environment,
                 text=True,
@@ -162,7 +166,7 @@ def run_opencode_repair(
             "submission": submission,
             "error": error,
             "session": {
-                "provider": "opencode",
+                "provider": runtime_name(),
                 "model": TROUBLESHOOTER_MODEL,
                 "reasoning": TROUBLESHOOTER_REASONING,
                 "opencodeVersion": version,

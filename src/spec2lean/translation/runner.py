@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..runtime import is_rust, run_session, runtime_executable, runtime_name
+
 import json
 import os
 import shutil
@@ -24,6 +26,8 @@ def utc_now() -> str:
 
 
 def require_translator_model(executable: str) -> None:
+    if is_rust(executable):
+        return
     models = installed_openai_models(executable)
     if TRANSLATOR_MODEL in models:
         return
@@ -107,7 +111,7 @@ def build_group_translation(
     output = group_directory(translations_root, plan, group)
     if output.exists():
         raise FileExistsError(f"translation group artifact already exists: {output}")
-    executable = shutil.which("opencode")
+    executable = runtime_executable()
     if executable is None:
         raise RuntimeError("OpenCode executable is not installed or not on PATH")
     require_translator_model(executable)
@@ -138,8 +142,8 @@ def build_group_translation(
         environment["OPENCODE_DISABLE_CLAUDE_CODE_SKILLS"] = "1"
         error: str | None = None
         try:
-            completed = run_command(
-                command,
+            completed = run_session(
+                command, run_command=run_command,
                 cwd=str(output),
                 env=environment,
                 text=True,
@@ -172,7 +176,7 @@ def build_group_translation(
             "planRunId": scope.plan_run_id,
             "group": {"name": scope.group, "unitIds": list(scope.unit_ids)},
             "translationRunId": scope.translation_run_id,
-            "translator": "opencode",
+            "translator": runtime_name(),
             "model": TRANSLATOR_MODEL,
             "reasoning": TRANSLATOR_REASONING,
             "singleSession": True,

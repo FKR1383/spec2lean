@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..runtime import is_rust, run_session, runtime_executable, runtime_name
+
 import hashlib
 import json
 import os
@@ -57,7 +59,7 @@ def run_translation_revision_session(
     context: dict[str, Any], *, timeout_seconds: int = 1800,
     run_command: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> dict[str, Any]:
-    executable = shutil.which("opencode")
+    executable = runtime_executable()
     if executable is None:
         raise RuntimeError("OpenCode executable is not installed or not on PATH")
     require_translator_model(executable)
@@ -96,8 +98,8 @@ def run_translation_revision_session(
         environment["OPENCODE_DISABLE_EXTERNAL_SKILLS"] = "1"
         environment["OPENCODE_DISABLE_CLAUDE_CODE_SKILLS"] = "1"
         try:
-            completed = run_command(
-                command, cwd=context["translationDirectory"], env=environment, text=True,
+            completed = run_session(
+                command, run_command=run_command, cwd=context["translationDirectory"], env=environment, text=True,
                 capture_output=True, timeout=timeout_seconds, check=False,
             )
         except subprocess.TimeoutExpired as exc:
@@ -119,7 +121,7 @@ def run_translation_revision_session(
             "candidate": candidate,
             "error": error,
             "session": {
-                "provider": "opencode", "model": TRANSLATOR_MODEL,
+                "provider": runtime_name(), "model": TRANSLATOR_MODEL,
                 "reasoning": TRANSLATOR_REASONING, "singleSession": True,
                 "automaticRetries": 0, "command": command[:-1] + ["<translation-revision-prompt>"],
                 "exitCode": completed.returncode, "sessionId": _session_id(completed.stdout),
@@ -214,7 +216,7 @@ def revise_translation(
         "planRunId": scope.plan_run_id,
         "group": {"name": group, "unitIds": list(scope.unit_ids)},
         "translationRunId": scope.translation_run_id,
-        "translator": "opencode",
+        "translator": runtime_name(),
         "model": TRANSLATOR_MODEL,
         "reasoning": TRANSLATOR_REASONING,
         "singleSession": True,
@@ -279,7 +281,7 @@ def revise_translation(
         "hashes": {"before": before, "after": after},
         "sourceCheckHash": source_check_hash,
         "changedFiles": changed,
-        "model": {"provider": "opencode", "model": TRANSLATOR_MODEL, "reasoning": TRANSLATOR_REASONING},
+        "model": {"provider": runtime_name(), "model": TRANSLATOR_MODEL, "reasoning": TRANSLATOR_REASONING},
         "singleSession": True,
         "automaticRetries": 0,
         "startedAt": started_at,

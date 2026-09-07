@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..runtime import is_rust, run_session, runtime_executable, runtime_name
+
 import json
 import os
 import re
@@ -61,6 +63,8 @@ def installed_openai_models(executable: str) -> set[str]:
 
 
 def require_planner_model(executable: str) -> None:
+    if is_rust(executable):
+        return
     models = installed_openai_models(executable)
     if PLANNER_MODEL in models:
         return
@@ -149,7 +153,7 @@ def build_plan(
         digest = source_database_digest(connection)
         prompt = build_planner_prompt(query, scope)
 
-    executable = shutil.which("opencode")
+    executable = runtime_executable()
     if executable is None:
         raise RuntimeError("OpenCode executable is not installed or not on PATH")
     require_planner_model(executable)
@@ -204,8 +208,8 @@ def build_plan(
         outcome = "FAILED"
         error: str | None = None
         try:
-            completed = run_command(
-                command,
+            completed = run_session(
+                command, run_command=run_command,
                 cwd=str(run_directory),
                 env=environment,
                 text=True,
@@ -243,7 +247,7 @@ def build_plan(
         metadata = {
             "schemaVersion": 1,
             "planRunId": plan_run_id,
-            "planner": "opencode",
+            "planner": runtime_name(),
             "model": PLANNER_MODEL,
             "reasoning": PLANNER_REASONING,
             "singleSession": True,

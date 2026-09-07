@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..runtime import is_rust, run_session, runtime_executable, runtime_name
+
 import json
 import os
 import shutil
@@ -44,6 +46,8 @@ def _session_id(stdout: str) -> str | None:
 
 
 def require_question_model(executable: str) -> None:
+    if is_rust(executable):
+        return
     models = installed_openai_models(executable)
     if QUESTION_MODEL in models:
         return
@@ -133,7 +137,7 @@ def handle_open_questions(
     with connect(database, read_only=True) as connection:
         if EvidenceQuery(connection).source_database_digest() != scope.source_database_digest:
             raise ValueError("open-question handler database does not match the Phase-2 plan")
-    executable = shutil.which("opencode")
+    executable = runtime_executable()
     if executable is None:
         raise RuntimeError("OpenCode executable is not installed or not on PATH")
     require_question_model(executable)
@@ -183,8 +187,8 @@ def handle_open_questions(
         environment["OPENCODE_DISABLE_CLAUDE_CODE_SKILLS"] = "1"
         error: str | None = None
         try:
-            completed = run_command(
-                command,
+            completed = run_session(
+                command, run_command=run_command,
                 cwd=str(output),
                 env=environment,
                 text=True,

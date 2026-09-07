@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..runtime import runtime_name
+
 import hashlib
 from dataclasses import dataclass
 from typing import Any
@@ -127,7 +129,7 @@ class SemanticScope:
             "unit": dict(self.unit),
             "evidenceBundleHash": self.evidence_bundle_hash,
             "extractor": {
-                "provider": "opencode", "model": EXTRACTOR_MODEL, "reasoning": EXTRACTOR_REASONING,
+                "provider": runtime_name(), "model": EXTRACTOR_MODEL, "reasoning": EXTRACTOR_REASONING,
             },
             "runId": self.run_id,
             "createdAt": self.created_at,

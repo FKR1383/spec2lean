@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..runtime import is_rust, run_session, runtime_executable, runtime_name
+
 import json
 import os
 import shutil
@@ -48,7 +50,7 @@ def run_semantic_revision_session(
     context: dict[str, Any], *, timeout_seconds: int = 1800,
     run_command: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> dict[str, Any]:
-    executable = shutil.which("opencode")
+    executable = runtime_executable()
     if executable is None:
         raise RuntimeError("OpenCode executable is not installed or not on PATH")
     require_extractor_model(executable)
@@ -81,8 +83,8 @@ def run_semantic_revision_session(
         environment["OPENCODE_DISABLE_EXTERNAL_SKILLS"] = "1"
         environment["OPENCODE_DISABLE_CLAUDE_CODE_SKILLS"] = "1"
         try:
-            completed = run_command(
-                command, cwd=context["semanticDirectory"], env=environment, text=True,
+            completed = run_session(
+                command, run_command=run_command, cwd=context["semanticDirectory"], env=environment, text=True,
                 capture_output=True, timeout=timeout_seconds, check=False,
             )
         except subprocess.TimeoutExpired as exc:
@@ -104,7 +106,7 @@ def run_semantic_revision_session(
             "artifact": artifact,
             "error": error,
             "session": {
-                "provider": "opencode", "model": EXTRACTOR_MODEL,
+                "provider": runtime_name(), "model": EXTRACTOR_MODEL,
                 "reasoning": EXTRACTOR_REASONING, "singleSession": True,
                 "automaticRetries": 0, "command": command[:-1] + ["<semantic-revision-prompt>"],
                 "exitCode": completed.returncode, "sessionId": _session_id(completed.stdout),
@@ -162,7 +164,7 @@ def revise_semantics(
         "reason": "TRACEABILITY_FAILURE", "diagnostics": diagnostics,
         "sourceCheckHash": source_check_hash,
         "beforeHash": before_hash, "afterHash": after_hash,
-        "model": {"provider": "opencode", "model": EXTRACTOR_MODEL, "reasoning": EXTRACTOR_REASONING},
+        "model": {"provider": runtime_name(), "model": EXTRACTOR_MODEL, "reasoning": EXTRACTOR_REASONING},
         "singleSession": True, "automaticRetries": 0,
         "startedAt": started_at, "finishedAt": now(), "session": result.get("session"),
         "changedFiles": ["semantics.json", "semantics.md"], "recheckRequired": True,

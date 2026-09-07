@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..runtime import runtime_name
+
 import hashlib
 import re
 from dataclasses import dataclass
@@ -172,7 +174,7 @@ class TranslationGroupScope:
                 for unit_id, artifact_hash in self.semantics_artifact_hashes
             ],
             "translator": {
-                "provider": "opencode",
+                "provider": runtime_name(),
                 "model": TRANSLATOR_MODEL,
                 "reasoning": TRANSLATOR_REASONING,
             },

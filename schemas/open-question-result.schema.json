@@ -25,7 +25,7 @@
       "additionalProperties": false,
       "required": ["provider", "model", "reasoning"],
       "properties": {
-        "provider": {"const": "opencode"},
+        "provider": {"enum": ["opencode", "rust-harness"]},
         "model": {"const": "openai/gpt-5.6-sol"},
         "reasoning": {"const": "medium"}
       }

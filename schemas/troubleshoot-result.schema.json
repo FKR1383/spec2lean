@@ -97,7 +97,7 @@
           "type": "object", "additionalProperties": false,
           "required": ["provider", "model", "reasoning"],
           "properties": {
-            "provider": {"const": "opencode"},
+            "provider": {"enum": ["opencode", "rust-harness"]},
             "model": {"enum": ["openai/gpt-5.6-sol", "openai/gpt-5.4-mini", "openai/gpt-5.3-codex-spark"]},
             "reasoning": {"enum": ["medium", "low"]}
           },

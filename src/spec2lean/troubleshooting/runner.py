@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..runtime import runtime_name
+
 import json
 import os
 import subprocess
@@ -197,7 +199,7 @@ def run_troubleshooter(
     artifact["runId"] = run_id(check, before[lean_name], before["translation-manifest.json"])
     artifact["repairRunId"] = artifact["runId"].replace("troubleshoot-run:", "repair-run:", 1)
     artifact["model"] = {
-        "provider": "opencode", "model": TROUBLESHOOTER_MODEL, "reasoning": TROUBLESHOOTER_REASONING
+        "provider": runtime_name(), "model": TROUBLESHOOTER_MODEL, "reasoning": TROUBLESHOOTER_REASONING
     }
     artifact["singleSession"] = True
     artifact["hashes"] = {"before": before, "after": dict(before)}
