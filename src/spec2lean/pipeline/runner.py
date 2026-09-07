@@ -8,6 +8,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Callable
 
 from ..checking.runner import run_group_checks
@@ -47,6 +48,16 @@ PHASES = ("index", "plan", "evidence", "semantics", "translate", "check", "troub
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+def _format_duration(seconds: float) -> str:
+    if seconds < 60:
+        return f"{seconds:.3f}s"
+    minutes, remainder = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{int(minutes)}m {remainder:.3f}s"
+    hours, minutes = divmod(int(minutes), 60)
+    return f"{hours}h {minutes}m {remainder:.3f}s"
 
 
 def _hash_text(value: str) -> str:
@@ -380,6 +391,13 @@ def _new_manifest(request: PlanningRequest, options: PipelineOptions) -> tuple[P
         "untilPhase": options.until_phase,
         "dryRun": options.dry_run,
         "maxQuestionRounds": options.max_question_rounds,
+        "timing": {
+            "startedAt": created,
+            "finishedAt": None,
+            "elapsedSeconds": 0.0,
+            "phases": {},
+            "attempts": [],
+        },
         "phase1": None,
         "planRunId": None,
         "planDirectory": None,
@@ -436,22 +454,98 @@ def run_pipeline(
     def report(message: str) -> None:
         progress(f"{manifest['pipelineRunId']} {message}")
 
+    timing = manifest.get("timing")
+    if not isinstance(timing, dict):
+        timing = {
+            "startedAt": manifest.get("createdAt", utc_now()),
+            "finishedAt": None,
+            "elapsedSeconds": 0.0,
+            "phases": {},
+            "attempts": [],
+        }
+        manifest["timing"] = timing
+    timing["finishedAt"] = None
+    attempt = {
+        "startedAt": utc_now(),
+        "finishedAt": None,
+        "elapsedSeconds": None,
+        "status": "RUNNING",
+        "phases": {},
+    }
+    timing.setdefault("attempts", []).append(attempt)
+    attempt_started = perf_counter()
+    active_phase: str | None = None
+    active_phase_started = 0.0
+
+    def start_phase(phase: str) -> None:
+        nonlocal active_phase, active_phase_started
+        if active_phase is not None:
+            raise RuntimeError(f"cannot start pipeline phase {phase} while {active_phase} is active")
+        active_phase = phase
+        active_phase_started = perf_counter()
+        attempt["phases"][phase] = {
+            "startedAt": utc_now(),
+            "finishedAt": None,
+            "elapsedSeconds": None,
+            "status": "RUNNING",
+        }
+
+    def finish_phase(status: str = "COMPLETE") -> None:
+        nonlocal active_phase, active_phase_started
+        if active_phase is None:
+            return
+        phase = active_phase
+        elapsed = round(max(0.0, perf_counter() - active_phase_started), 6)
+        phase_timing = attempt["phases"][phase]
+        phase_timing.update({
+            "finishedAt": utc_now(),
+            "elapsedSeconds": elapsed,
+            "status": status,
+        })
+        aggregate = timing.setdefault("phases", {}).setdefault(
+            phase, {"elapsedSeconds": 0.0, "executions": 0}
+        )
+        aggregate["elapsedSeconds"] = round(float(aggregate["elapsedSeconds"]) + elapsed, 6)
+        aggregate["executions"] = int(aggregate["executions"]) + 1
+        verb = "finished" if status == "COMPLETE" else status.casefold()
+        report(f"phase {PHASES.index(phase) + 1}/7 {phase}: {verb} after {_format_duration(elapsed)}")
+        active_phase = None
+        active_phase_started = 0.0
+
+    def finish_timing(status: str) -> None:
+        phase_status = "COMPLETE" if status in {"COMPLETE", "DRY_RUN", "NEEDS_ROUTING"} else status
+        finish_phase(phase_status)
+        elapsed = round(max(0.0, perf_counter() - attempt_started), 6)
+        attempt.update({
+            "finishedAt": utc_now(),
+            "elapsedSeconds": elapsed,
+            "status": status,
+        })
+        timing["elapsedSeconds"] = round(float(timing.get("elapsedSeconds", 0.0)) + elapsed, 6)
+        timing["finishedAt"] = attempt["finishedAt"]
+        report(f"total active pipeline time: {_format_duration(elapsed)}")
+
     try:
+        start_phase("index")
         report("phase 1/7 index: validating freshness")
         phase1 = _ensure_phase1(options, request)
         report(f"phase 1/7 index: {phase1['disposition'].lower()} ({phase1['reason']})")
         manifest["phase1"] = phase1
+        finish_phase()
         _persist(directory, manifest, options)
         if PHASES.index(options.until_phase) == 0:
             manifest["status"] = "DRY_RUN" if options.dry_run else "COMPLETE"
+            finish_timing(manifest["status"])
             _persist(directory, manifest, options)
             report(f"finished with status {manifest['status']}")
             return None if options.dry_run else directory, manifest
         if not phase1.get("ok") and options.dry_run:
             manifest["status"] = "DRY_RUN"
+            finish_timing(manifest["status"])
             report("dry run stopped because Phase 1 would need rebuilding")
             return None, manifest
 
+        start_phase("plan")
         database = _database_for(options, request)
         digest = phase1["sourceDatabaseDigest"]
         plan_pair: tuple[Path, dict[str, Any]] | None = None
@@ -476,6 +570,7 @@ def run_pipeline(
                 manifest["plan"] = {"disposition": "WOULD_BUILD"}
                 manifest["status"] = "DRY_RUN"
                 report("phase 2/7 plan: would build; dry run cannot derive a unit schedule")
+                finish_timing(manifest["status"])
                 return None, manifest
             report("phase 2/7 plan: starting bounded Planner session")
             plan_directory = services.plan_builder(
@@ -493,9 +588,11 @@ def run_pipeline(
         units = _ordered_units(plan)
         for unit in units:
             _unit_stage(manifest, unit)
+        finish_phase()
         _persist(directory, manifest, options)
         if PHASES.index(options.until_phase) == 1:
             manifest["status"] = "DRY_RUN" if options.dry_run else "COMPLETE"
+            finish_timing(manifest["status"])
             _persist(directory, manifest, options)
             report(f"finished with status {manifest['status']}")
             return None if options.dry_run else directory, manifest
@@ -507,6 +604,7 @@ def run_pipeline(
 
         # Phases 3 and 4 remain instruction-scoped, but every semantic artifact must be
         # ready before the first group-scoped Translator session starts.
+        start_phase("evidence")
         for unit in units:
             unit_id = str(unit["unitId"])
             unit_label = unit_positions[unit_id]
@@ -532,8 +630,10 @@ def run_pipeline(
                 state["status"] = "PASS" if reusable else "PLANNED"
             report(f"{unit_label} phase 3/7 evidence: {disposition.lower().replace('_', ' ')}")
             _persist(directory, manifest, options)
+        finish_phase()
 
         if options.until_phase != "evidence":
+            start_phase("semantics")
             for unit in units:
                 unit_id = str(unit["unitId"])
                 unit_label = unit_positions[unit_id]
@@ -562,10 +662,12 @@ def run_pipeline(
                     state["status"] = "PASS" if reusable else "PLANNED"
                 report(f"{unit_label} phase 4/7 semantics: {disposition.lower().replace('_', ' ')}")
                 _persist(directory, manifest, options)
+            finish_phase()
 
         groups = grouped_units(plan)
         translation_fresh_by_group: dict[str, bool] = {}
         if PHASES.index(options.until_phase) >= PHASES.index("translate"):
+            start_phase("translate")
             for group, group_units in groups.items():
                 group_label = f"group {group} ({len(group_units)} instruction(s))"
                 reusable = _translation_reusable(options, plan, group)
@@ -605,9 +707,11 @@ def run_pipeline(
                 translation_fresh_by_group[group] = reusable
                 report(f"{group_label} phase 5/7 translate: {disposition.lower().replace('_', ' ')}")
                 _persist(directory, manifest, options)
+            finish_phase()
 
         checks: dict[str, dict[str, Any] | None] = {}
         if PHASES.index(options.until_phase) >= PHASES.index("check"):
+            start_phase("check")
             for group, group_units in groups.items():
                 freshness = {
                     str(unit["unitId"]): (
@@ -654,8 +758,10 @@ def run_pipeline(
                         f"{(' ' + check['status']) if check is not None else ''}"
                     )
                 _persist(directory, manifest, options)
+            finish_phase()
 
         if options.until_phase == "troubleshoot":
+            start_phase("troubleshoot")
             for unit in units:
                 unit_id = str(unit["unitId"])
                 unit_label = unit_positions[unit_id]
@@ -712,6 +818,7 @@ def run_pipeline(
                     )
                 _persist(directory, manifest, options)
                 report(f"{unit_label}: {state['status'].lower()}")
+            finish_phase()
 
         if options.dry_run:
             manifest["status"] = "DRY_RUN"
@@ -719,18 +826,21 @@ def run_pipeline(
             manifest["status"] = "NEEDS_ROUTING"
         else:
             manifest["status"] = "COMPLETE"
+        finish_timing(manifest["status"])
         _persist(directory, manifest, options)
         report(f"finished with status {manifest['status']}")
         return None if options.dry_run else directory, manifest
     except KeyboardInterrupt:
         manifest["status"] = "INTERRUPTED"
         manifest["error"] = "interrupted by user"
+        finish_timing(manifest["status"])
         _persist(directory, manifest, options)
         report(f"interrupted; resume with --resume {manifest['pipelineRunId']}")
         raise
     except Exception as exc:
         manifest["status"] = "FAILED"
         manifest["error"] = str(exc)
+        finish_timing(manifest["status"])
         _persist(directory, manifest, options)
         report(f"failed: {exc}")
         raise

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "publisher": "SiFive, Inc.",
+  "document_title": "SiFive TileLink Specification",
+  "language": "TileLink",
+  "specification_version": "1.9.3",
+  "source_classification": "official",
+  "retrieved_at_utc": "2026-09-06T21:36:43Z",
+  "initial_formalization_unit": {
+    "construct": "TL-UL messages",
+    "instruction_family": "TileLink Uncached Lightweight messages",
+    "section_number": "7.2",
+    "section_heading": "TL-UL Messages"
+  },
+  "sample_instructions": [
+    "Get",
+    "PutFullData",
+    "PutPartialData",
+    "AccessAck",
+    "AccessAckData"
+  ],
+  "artifacts": [
+    {
+      "kind": "pdf",
+      "url": "https://sifive.cdn.prismic.io/sifive/928d6a82-77a9-4291-8b60-5e815429b1ab_tilelink_spec_1.9.3.pdf",
+      "landing_url": "https://www.sifive.com/document-file/tilelink-spec-1.9.3",
+      "local_path": "raw/tilelink_spec_1.9.3.pdf",
+      "sha256": "0d28c6f735bb806e3ba823af18aaad08d3dfa6c51f16a320e05570dfa321e37a",
+      "size_bytes": 7369907
+    }
+  ],
+  "semantic_status": "not_started",
+  "notes": [
+    "Downloaded from the PDF linked by SiFive's official documentation page.",
+    "TileLink was designed for RISC-V but is not itself a RISC-V ISA specification.",
+    "The initial bounded scope is the five TL-UL request/response messages in section 7.2.",
+    "No semantic interpretation was produced during acquisition.",
+    "The local raw file is identified by its SHA-256 hash."
+  ]
+}

@@ -65,3 +65,4 @@ pipeline-time*.txt
 # Locally cached official specifications
 documents/sources/nvidia/ptx/9.3/raw/
 documents/sources/ieee/systemverilog/1800-2023/raw/
+documents/sources/sifive/tilelink/1.9.3/raw/

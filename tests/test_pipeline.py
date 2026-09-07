@@ -204,6 +204,16 @@ def test_pipeline_composes_all_phases_and_resume_reuses_fresh_artifacts(
     assert unit["stages"]["troubleshoot"] == "NOT_REQUIRED"
     assert any("phase 1/7 index: validating freshness" in item for item in progress)
     assert any(f"group {GROUP} (1 instruction(s)) phase 5/7 translate" in item for item in progress)
+    assert set(manifest["timing"]["phases"]) == {
+        "index", "plan", "evidence", "semantics", "translate", "check", "troubleshoot"
+    }
+    assert manifest["timing"]["elapsedSeconds"] >= 0
+    assert manifest["timing"]["attempts"][0]["status"] == "COMPLETE"
+    assert all(
+        phase["elapsedSeconds"] >= 0
+        for phase in manifest["timing"]["attempts"][0]["phases"].values()
+    )
+    assert any("total active pipeline time:" in item for item in progress)
     assert progress[-1].endswith("finished with status COMPLETE")
 
     calls.clear()
@@ -215,6 +225,8 @@ def test_pipeline_composes_all_phases_and_resume_reuses_fresh_artifacts(
     assert calls == []
     assert resumed["plan"]["disposition"] == "REUSED"
     assert {resumed["units"][key]["stages"]["evidence"] for key in resumed["units"]} == {"REUSED"}
+    assert len(resumed["timing"]["attempts"]) == 2
+    assert all(item["status"] == "COMPLETE" for item in resumed["timing"]["attempts"])
 
 
 def test_resume_rebuilds_evidence_rejected_by_current_validation(
@@ -368,6 +380,8 @@ def test_keyboard_interrupt_is_persisted_with_resume_progress(planner_database, 
     manifest = json.loads(manifests[0].read_text())
     assert manifest["status"] == "INTERRUPTED"
     assert manifest["error"] == "interrupted by user"
+    assert manifest["timing"]["attempts"][0]["status"] == "INTERRUPTED"
+    assert manifest["timing"]["attempts"][0]["phases"]["translate"]["status"] == "INTERRUPTED"
     assert progress[-1].endswith(f"resume with --resume {manifest['pipelineRunId']}")
 
 

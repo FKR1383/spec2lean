@@ -243,9 +243,11 @@ routing outcome, and terminal status.
 
 Progress is printed immediately to stderr with the pipeline run ID, current
 unit, phase, reuse decision, check result, and Phase-7 route. The final complete
-manifest remains JSON on stdout. Ctrl-C records an `INTERRUPTED` manifest and
-prints the exact run ID to pass back to `--resume` instead of emitting a Python
-traceback.
+manifest remains JSON on stdout. Each phase prints its elapsed wall-clock time,
+and `run.json` records cumulative per-phase timing plus per-attempt timing so
+resumed runs do not lose their earlier measurements. Ctrl-C records an
+`INTERRUPTED` manifest and prints the exact run ID to pass back to `--resume`
+instead of emitting a Python traceback.
 
 Resume the latest compatible run by repeating its scope and adding `--resume`,
 or name a run explicitly with `--resume PIPELINE_RUN_ID`:
