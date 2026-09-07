@@ -257,8 +257,9 @@ class Phase1Query:
             _node_summary(row)
             for row in self.connection.execute(
                 """SELECT n.*, d.source_type FROM nodes n JOIN documents d USING(document_id)
-                   WHERE n.parent_id = ? ORDER BY n.ordinal, n.node_id LIMIT ?""",
-                (node_id, limit),
+                   WHERE n.document_id = (SELECT document_id FROM nodes WHERE node_id = ?)
+                     AND n.parent_id = ? ORDER BY n.ordinal, n.node_id LIMIT ?""",
+                (node_id, node_id, limit),
             )
         ]
 
@@ -527,9 +528,11 @@ class ScopeResolver:
             rows.extend(
                 self.connection.execute(
                     """SELECT n.*, d.source_type FROM nodes n JOIN documents d USING(document_id)
-                       WHERE n.parent_id = ? AND n.node_type IN ('chapter', 'section', 'subsection')
+                       WHERE n.document_id = (SELECT document_id FROM nodes WHERE node_id = ?)
+                         AND n.parent_id = ?
+                         AND n.node_type IN ('chapter', 'section', 'subsection')
                        ORDER BY n.ordinal, n.node_id""",
-                    (root,),
+                    (root, root),
                 ).fetchall()
             )
         grouped: dict[tuple[str | None, str], list[sqlite3.Row]] = {}

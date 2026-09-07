@@ -227,13 +227,22 @@ def validate_database(connection: sqlite3.Connection) -> dict[str, Any]:
                     )
         elif document["source_type"] == "html":
             tree = html.parse(str(path))
+            # Every value that `//*[@id=$a or @name=$a]` could match, collected in
+            # one pass; membership in this set is exactly "the XPath found a node".
+            anchor_targets: set[str] = set()
+            for element in tree.iter():
+                if not isinstance(element.tag, str):
+                    continue
+                for attribute in ("id", "name"):
+                    value = element.get(attribute)
+                    if value is not None:
+                        anchor_targets.add(value)
             for node in connection.execute(
                 "SELECT node_id, html_anchor FROM nodes WHERE document_id = ? AND html_anchor IS NOT NULL",
                 (document["document_id"],),
             ):
                 checks["html_anchors"] += 1
-                matches = tree.xpath("//*[@id=$anchor or @name=$anchor]", anchor=node["html_anchor"])
-                if not matches:
+                if node["html_anchor"] not in anchor_targets:
                     _issue(issues, "HTML_ANCHOR", "stored anchor does not resolve", node_id=node["node_id"], anchor=node["html_anchor"])
             for span in connection.execute(
                 "SELECT * FROM source_spans WHERE document_id = ? AND dom_path IS NOT NULL",

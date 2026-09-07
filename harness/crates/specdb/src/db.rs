@@ -273,9 +273,17 @@ impl SpecDb {
 
     pub fn children(&self, node_id: &NodeId, limit: i64) -> Result<Vec<NodeRow>> {
         bounded_limit(limit)?;
+            // `nodes_parent_order` is (document_id, parent_id, ordinal), so a
+            // query that omits the leading column can only scan it, and then
+            // has to sort. Naming `document_id` turns the scan into a seek and
+            // makes the ordering free. A node's document is fetched by primary
+            // key, which is one point lookup; `parent_id` is a self-reference
+            // and `UNIQUE(document_id, parent_id, ordinal)` scopes the pair to
+            // one document, so this narrows nothing.
         let sql = format!(
             "SELECT {NODE_COLUMNS} FROM nodes n JOIN documents d USING(document_id) \
-             WHERE n.parent_id = ?1 ORDER BY n.ordinal, n.node_id LIMIT ?2"
+             WHERE n.document_id = (SELECT document_id FROM nodes WHERE node_id = ?1) \
+               AND n.parent_id = ?1 ORDER BY n.ordinal, n.node_id LIMIT ?2"
         );
         let mut statement = self.connection.prepare(&sql)?;
         let rows = statement.query_map(
@@ -493,9 +501,11 @@ impl SpecDb {
 
     /// Heading children of a node, in document order.
     pub fn heading_children(&self, node_id: &NodeId) -> Result<Vec<NodeRow>> {
+        // The same unusable index as `children`; the same fix.
         let sql = format!(
             "SELECT {NODE_COLUMNS} FROM nodes n JOIN documents d USING(document_id)
-             WHERE n.parent_id = ?1 AND n.node_type IN ('chapter', 'section', 'subsection')
+             WHERE n.document_id = (SELECT document_id FROM nodes WHERE node_id = ?1)
+               AND n.parent_id = ?1 AND n.node_type IN ('chapter', 'section', 'subsection')
              ORDER BY n.ordinal, n.node_id"
         );
         let mut statement = self.connection.prepare(&sql)?;
