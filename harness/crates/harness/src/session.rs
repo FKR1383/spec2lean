@@ -126,6 +126,16 @@ impl<'a> Session<'a> {
             };
             totals.accumulate(&response.usage);
 
+            if response.stop_reason == StopReason::InvalidResponse {
+                self.exchanges.push(Exchange {
+                    prompt: self.pending_prompt.take(),
+                    assistant: response.assistant,
+                    tool_results: Vec::new(),
+                    usage: response.usage,
+                });
+                continue;
+            }
+
             if response.tool_calls.is_empty() {
                 // The model ended its turn. Record it before deciding: a turn
                 // that explains why it stopped is exactly the one worth reading.

@@ -1,4 +1,5 @@
 //! Transport for current-main's Python MCP tools. No artifact schema lives here.
+use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{Receiver, channel};
@@ -21,6 +22,8 @@ struct Input {
     timeout_seconds: u64,
     tool_timeout_ms: u64,
     mcp_command: Vec<String>,
+    #[serde(default)]
+    mcp_namespace: String,
 }
 
 struct McpTools {
@@ -29,12 +32,13 @@ struct McpTools {
     incoming: Receiver<Result<Value, String>>,
     next_id: u64,
     specs: Vec<ToolSpec>,
+    tool_names: BTreeMap<String, String>,
     done: bool,
     timeout: Duration,
 }
 
 impl McpTools {
-    fn start(command: &[String], timeout: Duration) -> Result<Self, Error> {
+    fn start(command: &[String], namespace: &str, timeout: Duration) -> Result<Self, Error> {
         let executable = command.first().ok_or("empty MCP command")?;
         let mut child = Command::new(executable)
             .args(&command[1..])
@@ -61,6 +65,7 @@ impl McpTools {
             incoming,
             next_id: 0,
             specs: Vec::new(),
+            tool_names: BTreeMap::new(),
             done: false,
             timeout,
         };
@@ -82,8 +87,21 @@ impl McpTools {
             .as_array()
             .ok_or("MCP tools/list has no tools")?
         {
+            let raw_name = tool["name"].as_str().ok_or("tool has no name")?;
+            let name = if namespace.is_empty() {
+                raw_name.to_owned()
+            } else {
+                format!("{namespace}_{raw_name}")
+            };
+            // Preserve the names used by current-main prompts. The wire still
+            // uses the server's original name; bare names remain exact aliases
+            // for compatibility with earlier Rust sessions, never suffix matches.
+            tools.tool_names.insert(name.clone(), raw_name.to_owned());
+            tools
+                .tool_names
+                .insert(raw_name.to_owned(), raw_name.to_owned());
             tools.specs.push(ToolSpec::new(
-                tool["name"].as_str().ok_or("tool has no name")?,
+                name,
                 tool["description"].as_str().unwrap_or_default(),
                 tool["inputSchema"].clone(),
             ));
@@ -134,10 +152,10 @@ impl ToolSet for McpTools {
         self.done
     }
     fn call(&mut self, name: &str, input: &Value) -> ToolOutcome {
-        if !self.specs.iter().any(|spec| spec.name == name) {
+        let Some(raw_name) = self.tool_names.get(name).cloned() else {
             return ToolOutcome::Err(format!("unknown tool: {name}"));
-        }
-        let result = match self.request("tools/call", json!({"name":name, "arguments":input})) {
+        };
+        let result = match self.request("tools/call", json!({"name":raw_name, "arguments":input})) {
             Ok(value) => value,
             Err(error) => return ToolOutcome::Err(error.to_string()),
         };
@@ -158,7 +176,7 @@ impl ToolSet for McpTools {
         }
         let value = serde_json::from_str::<Value>(&text).unwrap_or(Value::String(text));
         // Only current-main's validated submit tools may terminate a session.
-        if name.starts_with("submit_") && value["accepted"] == true {
+        if raw_name.starts_with("submit_") && value["accepted"] == true {
             self.done = true;
         }
         ToolOutcome::Ok(value)
@@ -196,6 +214,7 @@ fn run() -> Result<(), Error> {
     });
     let mut tools = McpTools::start(
         &input.mcp_command,
+        &input.mcp_namespace,
         Duration::from_millis(input.tool_timeout_ms),
     )?;
     let mut session = Session::new(&provider, &input.prompt).with_max_steps(input.max_steps);

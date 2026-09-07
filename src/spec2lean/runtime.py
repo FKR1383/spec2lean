@@ -85,7 +85,7 @@ def run_session(command: list[str], *, run_command: Callable[..., Any], **kwargs
     environment = kwargs["env"].copy()
     config = json.loads(environment.pop("OPENCODE_CONFIG_CONTENT"))
     agent = config["agent"][config["default_agent"]]
-    servers = [s for s in config["mcp"].values() if s.get("enabled", True)]
+    servers = [(name, server) for name, server in config["mcp"].items() if server.get("enabled", True)]
     if len(servers) != 1:
         raise ValueError("a phase session must have exactly one bounded MCP server")
     request = {
@@ -94,8 +94,9 @@ def run_session(command: list[str], *, run_command: Callable[..., Any], **kwargs
         "reasoning": agent["variant"],
         "max_steps": agent["steps"],
         "timeout_seconds": kwargs["timeout"],
-        "tool_timeout_ms": servers[0].get("timeout", 15000),
-        "mcp_command": servers[0]["command"],
+        "tool_timeout_ms": servers[0][1].get("timeout", 15000),
+        "mcp_command": servers[0][1]["command"],
+        "mcp_namespace": servers[0][0],
     }
     environment["SPEC2LEAN_RUNTIME"] = "rust-harness"
     if run_command is not subprocess.run:

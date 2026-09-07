@@ -23,6 +23,9 @@ pub enum StopReason {
     StopSequence,
     PauseTurn,
     Refusal,
+    /// Malformed provider output: record it without dispatching any tools and
+    /// request a corrected response within the existing session step budget.
+    InvalidResponse,
     Other(String),
 }
 
@@ -47,6 +50,7 @@ impl StopReason {
             Self::StopSequence => "stop_sequence",
             Self::PauseTurn => "pause_turn",
             Self::Refusal => "refusal",
+            Self::InvalidResponse => "invalid_response",
             Self::Other(value) => value,
         }
     }

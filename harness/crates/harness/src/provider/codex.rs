@@ -224,6 +224,12 @@ impl CodexProvider {
                     result.output
                 ));
             }
+            if let Some(raw) = exchange.assistant["rawResponse"].as_str() {
+                prompt.push_str("\nYour unaccepted raw response:\n");
+                prompt.push_str(raw);
+                prompt.push('\n');
+            }
+            Self::render_response_error(&mut prompt, exchange);
             prompt.push('\n');
         }
 
@@ -270,6 +276,7 @@ impl CodexProvider {
                     result.output
                 ));
             }
+            Self::render_response_error(&mut prompt, exchange);
         }
         if prompt.is_empty() {
             prompt.push_str("No tools ran.\n\n");
@@ -282,6 +289,19 @@ impl CodexProvider {
              continue, and then say why in `reply`.\n",
         );
         prompt
+    }
+
+    fn render_response_error(prompt: &mut String, exchange: &crate::transcript::Exchange) {
+        if let Some(error) = exchange.assistant["responseError"].as_str() {
+            prompt.push_str(
+                "\nThe harness could not decode your previous response. No tools were executed.\n",
+            );
+            prompt.push_str(error);
+            prompt.push_str("\nResend the complete JSON reply with all required tool arguments, using the advertised \
+                tool names and schema. Do not omit fields or use Markdown fences. Tool arguments may be \
+                native JSON objects in `arguments`; do not encode those objects in strings. \
+                The phase instructions and source inputs are unchanged.\n\n");
+        }
     }
 
     fn scratch(&self) -> Result<PathBuf, HarnessError> {

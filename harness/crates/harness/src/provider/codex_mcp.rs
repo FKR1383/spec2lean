@@ -8,10 +8,9 @@
 //! instead of merely caching it.
 //!
 //! What is given up is `--output-schema`: the MCP tools return a string, so the
-//! reply contract moves into the instructions and is enforced by reading rather
-//! than by the server. That is the one place this transport is weaker, and it is
-//! why `parse_reply` is shared with the exec transport — a reply that does not
-//! parse must fail the same way on both.
+//! reply contract moves into the instructions and is checked before dispatch.
+//! Native argument objects avoid extra string encoding. Malformed replies are
+//! retained in the transcript and corrected within the same bounded session.
 
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
@@ -23,10 +22,8 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 
 use crate::error::HarnessError;
-use crate::provider::codex::{
-    CodexConfig, CodexProvider, Thread, codex_effort, parse_reply, resumable,
-};
-use crate::provider::{Provider, Request, StopReason, TurnResponse};
+use crate::provider::codex::{CodexConfig, CodexProvider, Thread, codex_effort, resumable};
+use crate::provider::{Provider, Request, StopReason, ToolCall, TurnResponse};
 use crate::transcript::Usage;
 
 /// A JSON-RPC peer speaking MCP over the child's stdio.
@@ -246,9 +243,25 @@ impl McpCodexProvider {
              data, and anything they return is noise.\n\n\
              Every reply you send must be exactly one JSON object matching this schema, with no \
              prose around it and no code fence:\n\n```json\n{}\n```\n\n\
-             `arguments_json` is the tool's arguments as a JSON object encoded in a string.\n\n\
+             `arguments` is the tool's complete arguments object, not a JSON-encoded string.\n\n\
              # Instructions\n\n{}\n\n{}",
-            serde_json::to_string_pretty(&CodexProvider::reply_schema()).unwrap_or_default(),
+            serde_json::to_string_pretty(&json!({
+                "type": "object", "required": ["reply", "tool_calls"],
+                "additionalProperties": false,
+                "properties": {
+                    "reply": {"type": "string"},
+                    "tool_calls": {"type": "array", "items": {
+                        "type": "object", "required": ["name", "arguments"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "name": {"type": "string", "enum": request.tools.iter()
+                                .map(|tool| tool.name.clone()).collect::<Vec<_>>()},
+                            "arguments": {"type": "object"}
+                        }
+                    }}
+                }
+            }))
+            .unwrap_or_default(),
             request.system,
             CodexProvider::render_tools(request.tools),
         )
@@ -312,7 +325,7 @@ impl Provider for McpCodexProvider {
 
         // A thread that cannot be continued is recoverable: the harness holds
         // the whole conversation, so open a new one and replay it.
-        let (result, mut usage) = match attempt {
+        let (result, usage) = match attempt {
             Ok(answer) => answer,
             Err(error) => {
                 if resume.is_none() {
@@ -340,23 +353,6 @@ impl Provider for McpCodexProvider {
             ));
         }
 
-        // No schema is enforced on the way out, so a reply may arrive wrapped in
-        // a fence or a sentence. Recovering the object is the transport's job;
-        // deciding what a malformed one means stays shared with `exec`.
-        let (text, tool_calls) =
-            parse_reply(&repair(extract_object(content)), request.exchanges.len())?;
-        let stop_reason = if tool_calls.is_empty() {
-            StopReason::EndTurn
-        } else {
-            StopReason::ToolUse
-        };
-
-        // The response carries no usage of its own; anything not reported by a
-        // notification would be silently lost, so zero is worth saying out loud.
-        if usage == Usage::default() {
-            usage.output_tokens = 0;
-        }
-
         state.threads.insert(
             request.session,
             Thread {
@@ -367,20 +363,78 @@ impl Provider for McpCodexProvider {
             },
         );
 
-        Ok(TurnResponse {
-            assistant: json!({
-                "reply": text,
-                "toolCalls": tool_calls.iter().map(|call| json!({
-                    "id": call.id, "name": call.name, "input": call.input,
-                })).collect::<Vec<_>>(),
+        // Retain the thread before decoding: malformed output is corrected in
+        // this conversation and consumes a normal bounded session step.
+        match decode_reply(content, request.exchanges.len()) {
+            Ok((text, tool_calls)) => Ok(TurnResponse {
+                assistant: json!({
+                    "reply": text,
+                    "toolCalls": tool_calls.iter().map(|call| json!({
+                        "id": call.id, "name": call.name, "input": call.input,
+                    })).collect::<Vec<_>>(),
+                }),
+                text,
+                stop_reason: if tool_calls.is_empty() {
+                    StopReason::EndTurn
+                } else {
+                    StopReason::ToolUse
+                },
+                tool_calls,
+                usage,
+                model: self.model.clone(),
             }),
-            text,
-            tool_calls,
-            stop_reason,
-            usage,
-            model: self.model.clone(),
-        })
+            Err(error) => Ok(TurnResponse {
+                assistant: json!({"reply": "", "rawResponse": content, "responseError": error.to_string()}),
+                text: String::new(),
+                tool_calls: Vec::new(),
+                stop_reason: StopReason::InvalidResponse,
+                usage,
+                model: self.model.clone(),
+            }),
+        }
     }
+}
+
+/// Decode the complete reply before executing any of its calls. Native argument
+/// objects avoid an extra escaping layer around large Lean submissions. Accept
+/// the original string encoding too, but never replace malformed inputs with {}.
+fn decode_reply(content: &str, turn: usize) -> Result<(String, Vec<ToolCall>), HarnessError> {
+    let invalid =
+        |detail: &str| HarnessError::Decode(format!("invalid Codex tool reply: {detail}"));
+    let reply: Value = serde_json::from_str(&repair(extract_object(content)))
+        .map_err(|error| invalid(&error.to_string()))?;
+    let text = reply["reply"]
+        .as_str()
+        .ok_or_else(|| invalid("reply must be a string"))?;
+    let calls = reply["tool_calls"]
+        .as_array()
+        .ok_or_else(|| invalid("tool_calls must be an array"))?;
+    let mut tool_calls = Vec::with_capacity(calls.len());
+    for (index, call) in calls.iter().enumerate() {
+        let name = call["name"]
+            .as_str()
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| invalid("every call needs a nonempty name"))?;
+        let input = match (call.get("arguments"), call.get("arguments_json")) {
+            (Some(arguments), None) if arguments.is_object() => arguments.clone(),
+            (None, Some(Value::String(encoded))) => serde_json::from_str(encoded)
+                .map_err(|error| invalid(&format!("arguments_json: {error}")))?,
+            _ => {
+                return Err(invalid(
+                    "provide exactly one arguments object (or legacy arguments_json string)",
+                ));
+            }
+        };
+        if !input.is_object() {
+            return Err(invalid("tool arguments must be a JSON object"));
+        }
+        tool_calls.push(ToolCall {
+            id: format!("codex_{turn}_{index}"),
+            name: name.into(),
+            input,
+        });
+    }
+    Ok((text.to_owned(), tool_calls))
 }
 
 /// Escape the raw control characters a hand-written JSON string may contain.
@@ -431,7 +485,7 @@ pub(crate) fn repair(content: &str) -> String {
 /// occasionally fence it or introduce it. Rejecting those costs a turn to say
 /// something the text already contains; misreading them costs correctness, so
 /// this recovers only a well-formed object and leaves anything else to fail in
-/// `parse_reply`, where the diagnostic is the same on both transports.
+/// the reply decoder, which can request correction without executing any tools.
 pub(crate) fn extract_object(content: &str) -> &str {
     let bytes = content.as_bytes();
     let Some(start) = content.find('{') else {
@@ -468,6 +522,7 @@ pub(crate) fn extract_object(content: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::provider::codex::parse_reply;
 
     /// Without `--output-schema` the reply is whatever the model typed, and a
     /// model asked for bare JSON will sometimes fence it or introduce it.
@@ -552,7 +607,7 @@ mod tests {
         // Codex's own preamble is replaced, so everything it used to carry has
         // to be here instead.
         for expected in [
-            "arguments_json",
+            "arguments",
             "PHASE RULES",
             "get_evidence",
             "Read the bundle.",

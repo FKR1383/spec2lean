@@ -49,6 +49,19 @@ validator response, outcome and token usage. Existing `opencode` metadata remain
 valid. The historical `opencodeVersion` field remains readable; on Rust sessions
 it records the harness executable version.
 
+The adapter preserves each configured MCP namespace, so the model sees the tool
+names already used by the phase prompts, such as `translation_submit_translation`
+and `semantics_get_evidence`. Calls are mapped to the underlying server's exact
+tool name before dispatch; arbitrary prefixes are not accepted.
+
+Codex replies use native JSON argument objects to avoid a second escaping layer
+around complete Lean files. Legacy `arguments_json` replies remain readable.
+Malformed replies execute no tools and receive formatting diagnostics in the same
+Codex conversation. Their raw output and usage are recorded, and every correction
+consumes a step within the existing session/time limits. Only the phase validator
+can accept an artifact; response recovery never invents missing arguments or
+weakens a validation rule.
+
 The Codex transport disables shell, local-image reads, web search, apps, plugins and multi-agent
 features and clears its configured MCP server map. Only the harness dispatches
 phase tools. Configuration references:
