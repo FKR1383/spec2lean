@@ -469,8 +469,9 @@ def test_large_repair_context_is_not_embedded_in_opencode_argument(
         mcp_command = config["mcp"]["troubleshooting"]["command"]
         context_path = Path(mcp_command[mcp_command.index("--context") + 1])
         assert json.loads(context_path.read_text())["marker"] == marker
-        assert marker not in command[-1]
-        assert len(command[-1].encode("utf-8")) < 32_000
+        assert marker not in kwargs["input"]
+        assert len(kwargs["input"].encode("utf-8")) < 32_000
+        assert kwargs["input"] not in command
         return subprocess.CompletedProcess(command, 0, '{"sessionID":"repair-session"}\n', "")
 
     result = run_opencode_repair(context, run_command=fake_run)

@@ -431,7 +431,9 @@ def test_runner_pins_exact_model_and_writes_one_session_artifacts(planner_databa
     assert metadata["singleSession"] is True
     assert metadata["automaticRetries"] == 0
     assert metadata["sessionId"] == "evidence-session"
-    assert metadata["command"][-1] == "<evidence-retriever-prompt>"
+    assert metadata["command"] == calls[0][0]
+    assert calls[0][1]["input"]
+    assert calls[0][1]["input"] not in metadata["command"]
     assert calls[0][1]["env"]["OPENCODE_DISABLE_PROJECT_CONFIG"] == "1"
 
 

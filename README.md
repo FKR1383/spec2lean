@@ -148,6 +148,8 @@ opencode models openai
 ```
 
 Select it explicitly with `--runtime opencode` on a model-running command.
+Phase prompts are piped to OpenCode through standard input, so large translation
+groups do not exceed the operating system's command-line argument limit.
 
 ### Enable semantic search
 

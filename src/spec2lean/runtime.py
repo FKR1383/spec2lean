@@ -43,7 +43,7 @@ def runtime_label(executable: str) -> str:
 
 def session_command(command: list[str], prompt_placeholder: str) -> list[str]:
     """Record the command actually executed, without including the prompt."""
-    return command[:1] if is_rust(command[0]) else command[:-1] + [prompt_placeholder]
+    return command[:1] if is_rust(command[0]) else command[:-1]
 
 
 def session_error(executable: str, phase: str, completed: subprocess.CompletedProcess[str]) -> str:
@@ -74,14 +74,16 @@ def runtime_executable() -> str:
 
 
 def run_session(command: list[str], *, run_command: Callable[..., Any], **kwargs: Any):
-    """Translate main's existing session configuration into the Rust protocol.
+    """Deliver phase prompts over stdin using the selected runtime's protocol.
 
     Custom command runners receive the selected runtime's protocol. A real Rust
     session gets its own process group so timeout/interrupt also stops its MCP
     workers and provider, before temporary artifact inputs are removed.
     """
     if not is_rust(command[0]):
-        return run_command(command, **kwargs)
+        # OpenCode reads piped text as its prompt. Keeping it out of argv avoids
+        # OS argument-size limits for large groups, without truncating inputs.
+        return run_command(command[:-1], input=command[-1], **kwargs)
     environment = kwargs["env"].copy()
     config = json.loads(environment.pop("OPENCODE_CONFIG_CONTENT"))
     agent = config["agent"][config["default_agent"]]

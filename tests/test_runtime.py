@@ -12,7 +12,22 @@ from spec2lean.planning.models import PlanningRequest
 from spec2lean.planning.runner import build_plan
 from spec2lean.planning.scope import Phase1Query, ScopeResolver
 from spec2lean.database import connect
-from spec2lean.runtime import runtime_executable, runtime_name, run_session
+from spec2lean.runtime import runtime_executable, runtime_name, run_session, session_command
+
+
+@pytest.mark.parametrize("repetitions", [1, 20_000])
+def test_opencode_prompt_uses_stdin_without_size_limits_or_quoting_changes(repetitions):
+    prompt = '\nSpecification: λ "quoted" `literal` $value\n' * repetitions
+    command = [sys.executable, "-c",
+        "import json, sys; print(json.dumps({'args': sys.argv[1:], 'prompt': sys.stdin.read()}))",
+        "run", "--pure", "--title", "test session", prompt]
+    completed = run_session(command, run_command=subprocess.run,
+        capture_output=True, text=True, timeout=10)
+    assert completed.returncode == 0, completed.stderr
+    received = json.loads(completed.stdout)
+    assert received["args"] == ["run", "--pure", "--title", "test session"]
+    assert received["prompt"] == prompt
+    assert session_command(command, "<prompt>") == completed.args
 
 
 @pytest.fixture
@@ -33,7 +48,8 @@ def test_runtime_selection_does_not_silently_fall_back(monkeypatch):
         runtime_executable()
 
 
-def test_rust_loop_drives_current_planner_validation(planner_database, tmp_path, monkeypatch, harness_binary):
+@pytest.mark.parametrize("premature_completion", [False, True])
+def test_rust_loop_drives_current_planner_validation(planner_database, tmp_path, monkeypatch, harness_binary, premature_completion):
     monkeypatch.setattr('spec2lean.planning.runner.runtime_executable', lambda: str(harness_binary))
     request = PlanningRequest.exact("synthetic", "1.0", ["alpha.u32"])
     with connect(planner_database, read_only=True) as connection:
@@ -60,7 +76,15 @@ for line in sys.stdin:
     if message['method'] == 'tools/call':
         turn += 1
         calls = [{{'name':'specdb_submit_plan', 'arguments_json':json.dumps({{}} if turn == 1 else {submission!r})}}]
-        result = {{'structuredContent':{{'threadId':'test-thread','content':json.dumps({{'reply':'','tool_calls':calls}})}}}}
+        content = json.dumps({{'reply':'','tool_calls':calls}})
+        if {premature_completion!r}:
+            if turn == 2: content = '{{"reply":'
+            if turn == 3: content = json.dumps({{'reply':'Submitted successfully and accepted.', 'tool_calls':[]}})
+            if turn == 4:
+                prompt = message['params']['arguments']['prompt']
+                assert 'tools have not accepted a final submission' in prompt
+                assert 'The previous task is finished' not in prompt
+        result = {{'structuredContent':{{'threadId':'test-thread','content':content}}}}
     else: result = {{'protocolVersion':'2025-06-18','capabilities':{{}},'serverInfo':{{'name':'test','version':'1'}}}}
     print(json.dumps({{'jsonrpc':'2.0','id':message['id'],'result':result}}), flush=True)
 ''')
@@ -73,10 +97,15 @@ for line in sys.stdin:
     assert len(metadata["command"]) == 1
     assert Path(metadata["command"][0]).name == "spec2lean-harness"
     transcript = json.loads(metadata["stdout"])["transcript"]
-    assert transcript["steps"] == 2
+    assert transcript["steps"] == (4 if premature_completion else 2)
     assert 'specdb_submit_plan' in transcript['tools']
-    assert len(transcript["exchanges"]) == 2
+    assert len(transcript["exchanges"]) == transcript["steps"]
     assert '"accepted":false' in transcript["exchanges"][0]["toolResults"][0]["output"]
+    if premature_completion:
+        assert transcript["exchanges"][1]["assistant"]["responseError"]
+        assert not transcript["exchanges"][2]["toolResults"]
+        assert "not complete" in transcript["exchanges"][2]["feedback"]
+        assert '"accepted":true' in transcript["exchanges"][3]["toolResults"][0]["output"]
     assert [unit["unitId"] for unit in json.loads((output / "plan.json").read_text())["requestedUnits"]] == scope["exactUnitIds"]
 
 

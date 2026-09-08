@@ -131,23 +131,39 @@ impl<'a> Session<'a> {
                     prompt: self.pending_prompt.take(),
                     assistant: response.assistant,
                     tool_results: Vec::new(),
+                    feedback: None,
                     usage: response.usage,
                 });
                 continue;
             }
 
             if response.tool_calls.is_empty() {
+                let finished = tools.finished();
+                let retry = !finished && response.stop_reason == StopReason::EndTurn;
                 // The model ended its turn. Record it before deciding: a turn
                 // that explains why it stopped is exactly the one worth reading.
                 self.exchanges.push(Exchange {
                     prompt: self.pending_prompt.take(),
                     assistant: response.assistant,
                     tool_results: Vec::new(),
+                    feedback: retry.then(|| {
+                        "The task is not complete: the tools have not accepted a final submission. \
+                         Continue the same task using the available tools. Review any validation \
+                         diagnostics, correct the submission, and submit again. A prose claim of \
+                         success does not complete the task. The original instructions and inputs \
+                         still apply."
+                            .to_string()
+                    }),
                     usage: response.usage,
                 });
                 // Completion is decided by the tool set, never by parsing what
                 // the model said.
-                break if tools.finished() {
+                // A premature final answer is recoverable, just like malformed
+                // output. It consumes the same bounded step budget.
+                if retry {
+                    continue;
+                }
+                break if finished {
                     Ok(())
                 } else {
                     Err(HarnessError::Incomplete {
@@ -191,6 +207,7 @@ impl<'a> Session<'a> {
                 prompt: self.pending_prompt.take(),
                 assistant: response.assistant,
                 tool_results: records,
+                feedback: None,
                 usage: response.usage,
             });
 
@@ -455,7 +472,7 @@ mod tests {
     }
 
     #[test]
-    fn a_model_that_stops_without_submitting_is_a_failure() {
+    fn repeated_end_turns_without_submission_exhaust_the_existing_step_budget() {
         let stop = TurnResponse {
             assistant: json!([{"type": "text", "text": "I think that's everything."}]),
             text: "I think that's everything.".into(),
@@ -464,29 +481,67 @@ mod tests {
             usage: Usage::default(),
             model: "test".into(),
         };
-        let provider = RecordedProvider::new("test", vec![stop]);
+        let provider = RecordedProvider::new("test", vec![stop.clone(), stop.clone(), stop]);
         let mut tools = Fussy {
             attempts: 0,
             done: false,
             checked: 0,
         };
-        let (outcome, transcript) = Session::new(&provider, "system").stage("prompt", &mut tools);
+        let (outcome, transcript) = Session::new(&provider, "system")
+            .with_max_steps(3)
+            .stage("prompt", &mut tools);
 
-        assert!(matches!(outcome, Err(HarnessError::Incomplete { .. })));
-        assert_eq!(
-            transcript.outcome,
-            SessionOutcome::Stopped {
-                stop_reason: "end_turn".into()
-            }
-        );
-        // The turn that explains the refusal must survive in the transcript:
-        // it is the only record of why the session ended.
-        assert_eq!(transcript.exchanges.len(), 1);
+        assert!(matches!(outcome, Err(HarnessError::StepLimit { steps: 3 })));
+        assert_eq!(transcript.outcome, SessionOutcome::StepLimit);
+        assert_eq!(transcript.steps, 3);
+        assert_eq!(transcript.exchanges.len(), 3);
+        assert_eq!(tools.attempts, 0);
+        assert!(!tools.done);
+        assert!(transcript.exchanges.iter().all(|exchange| {
+            exchange
+                .feedback
+                .as_deref()
+                .unwrap()
+                .contains("not complete")
+        }));
         assert!(transcript.exchanges[0].tool_results.is_empty());
         assert_eq!(
             transcript.exchanges[0].assistant[0]["text"],
             json!("I think that's everything.")
         );
+    }
+
+    #[test]
+    fn explicit_terminal_reasons_are_not_retried() {
+        for reason in [StopReason::Refusal, StopReason::MaxTokens] {
+            let provider = RecordedProvider::new(
+                "test",
+                vec![TurnResponse {
+                    assistant: json!({"reply": "Cannot continue."}),
+                    text: "Cannot continue.".into(),
+                    tool_calls: vec![],
+                    stop_reason: reason.clone(),
+                    usage: Usage::default(),
+                    model: "test".into(),
+                }],
+            );
+            let mut tools = Fussy {
+                attempts: 0,
+                done: false,
+                checked: 0,
+            };
+            let (outcome, transcript) =
+                Session::new(&provider, "system").stage("prompt", &mut tools);
+            assert!(matches!(outcome, Err(HarnessError::Incomplete { .. })));
+            assert_eq!(transcript.steps, 1);
+            assert_eq!(
+                transcript.outcome,
+                SessionOutcome::Stopped {
+                    stop_reason: reason.as_str().to_string(),
+                }
+            );
+            assert!(transcript.exchanges[0].feedback.is_none());
+        }
     }
 
     /// The reason `Session` outlives one unit: a phase that formalizes many

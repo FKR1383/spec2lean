@@ -51,6 +51,10 @@ pub struct Exchange {
     pub prompt: Option<String>,
     pub assistant: Value,
     pub tool_results: Vec<ToolResultRecord>,
+    /// Harness feedback delivered after this turn, separate from the provider's
+    /// verbatim response and from actual tool results.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub feedback: Option<String>,
     pub usage: Usage,
 }
 

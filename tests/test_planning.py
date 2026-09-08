@@ -362,7 +362,9 @@ def test_one_session_runner_owns_metadata_and_does_not_call_real_opencode(planne
     assert metadata["reasoning"] == PLANNER_REASONING
     assert metadata["singleSession"] is True
     assert metadata["sessionId"] == "session-test"
-    assert metadata["command"][-1] == "<planner-prompt>"
+    assert metadata["command"] == calls[0][0]
+    assert calls[0][1]["input"]
+    assert calls[0][1]["input"] not in metadata["command"]
     assert "--print-logs" in metadata["command"]
     assert metadata["command"][metadata["command"].index("--log-level") + 1] == "ERROR"
     assert plan["language"] == "synthetic"

@@ -229,7 +229,7 @@ impl CodexProvider {
                 prompt.push_str(raw);
                 prompt.push('\n');
             }
-            Self::render_response_error(&mut prompt, exchange);
+            Self::render_feedback(&mut prompt, exchange);
             prompt.push('\n');
         }
 
@@ -276,7 +276,7 @@ impl CodexProvider {
                     result.output
                 ));
             }
-            Self::render_response_error(&mut prompt, exchange);
+            Self::render_feedback(&mut prompt, exchange);
         }
         if prompt.is_empty() {
             prompt.push_str("No tools ran.\n\n");
@@ -291,7 +291,7 @@ impl CodexProvider {
         prompt
     }
 
-    fn render_response_error(prompt: &mut String, exchange: &crate::transcript::Exchange) {
+    fn render_feedback(prompt: &mut String, exchange: &crate::transcript::Exchange) {
         if let Some(error) = exchange.assistant["responseError"].as_str() {
             prompt.push_str(
                 "\nThe harness could not decode your previous response. No tools were executed.\n",
@@ -301,6 +301,11 @@ impl CodexProvider {
                 tool names and schema. Do not omit fields or use Markdown fences. Tool arguments may be \
                 native JSON objects in `arguments`; do not encode those objects in strings. \
                 The phase instructions and source inputs are unchanged.\n\n");
+        }
+        if let Some(feedback) = &exchange.feedback {
+            prompt.push_str("\nHarness feedback:\n");
+            prompt.push_str(feedback);
+            prompt.push_str("\n\n");
         }
     }
 
@@ -775,6 +780,7 @@ mod tests {
             json!({"type": "object"}),
         )];
         let exchanges = vec![Exchange {
+            feedback: None,
             prompt: None,
             assistant: json!({"reply": "first look"}),
             tool_results: vec![ToolResultRecord {
@@ -873,6 +879,7 @@ mod tests {
     fn a_delta_carries_only_the_tool_results_the_thread_has_not_seen() {
         let exchanges = vec![
             Exchange {
+                feedback: None,
                 prompt: None,
                 assistant: json!({"reply": "first reply"}),
                 tool_results: vec![ToolResultRecord {
@@ -885,6 +892,7 @@ mod tests {
                 usage: Usage::default(),
             },
             Exchange {
+                feedback: None,
                 prompt: None,
                 assistant: json!({"reply": "second reply"}),
                 tool_results: vec![ToolResultRecord {
@@ -921,6 +929,7 @@ mod tests {
     #[test]
     fn a_delta_still_asks_for_a_decision_when_no_tools_ran() {
         let exchanges = vec![Exchange {
+            feedback: None,
             prompt: None,
             assistant: json!({"reply": "thinking"}),
             tool_results: Vec::new(),
@@ -940,8 +949,38 @@ mod tests {
     }
 
     #[test]
+    fn completion_feedback_survives_resume_and_full_replay_without_replacing_the_task() {
+        let feedback = "The tools have not accepted a final submission.";
+        let exchanges = vec![Exchange {
+            prompt: Some("Original task".into()),
+            assistant: json!({"reply": "Successfully submitted."}),
+            tool_results: vec![],
+            feedback: Some(feedback.into()),
+            usage: Usage::default(),
+        }];
+        let request = Request {
+            prompt_pending: false,
+            session: 1,
+            system: "Instructions",
+            prompt: "Original task",
+            exchanges: &exchanges,
+            tools: &[],
+        };
+        let full = CodexProvider::render_full(&request);
+        let delta = CodexProvider::render_delta(&request, 0, false);
+        assert!(full.contains("Original task"));
+        assert!(full.contains("Successfully submitted."));
+        for rendered in [full, delta] {
+            assert!(rendered.contains(feedback));
+            assert!(!rendered.contains("The previous task is finished"));
+        }
+        assert!(!CodexProvider::render_delta(&request, 1, false).contains(feedback));
+    }
+
+    #[test]
     fn the_full_render_is_what_reopens_a_thread_and_keeps_the_whole_history() {
         let exchanges = vec![Exchange {
+            feedback: None,
             prompt: None,
             assistant: json!({"reply": "first reply"}),
             tool_results: vec![ToolResultRecord {
@@ -1019,6 +1058,7 @@ mod tests {
     #[test]
     fn a_thread_resumes_only_while_the_transcript_grows_under_the_same_instructions() {
         let exchange = Exchange {
+            feedback: None,
             prompt: None,
             assistant: json!({"reply": "r"}),
             tool_results: Vec::new(),
@@ -1112,6 +1152,7 @@ mod tests {
             tools: &[],
         };
         let exchanges = vec![Exchange {
+            feedback: None,
             prompt: Some("p".into()),
             assistant: json!({"reply": "r"}),
             tool_results: Vec::new(),

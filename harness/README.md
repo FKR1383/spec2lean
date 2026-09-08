@@ -35,6 +35,11 @@ group keeps main's existing session boundary. A rejected submission returns
 main's validation diagnostics to the same session. Only an accepted submit tool
 ends the loop. Calls after acceptance cannot overwrite its artifact.
 
+If the model ends a turn without an accepted submission, the loop sends a
+corrective reminder and continues the same task within its existing step/time
+limits. The reminder is recorded as `feedback` in the transcript. Explicit
+terminal reasons, such as refusal or token limits, remain failures.
+
 The Python pipeline still owns all seven phases, prompts, evidence exposure,
 claims, shared-core behavior, Lean checks, manifests and GUI mappings. The old
 Rust phase implementations and standalone `s2l` task/artifact architecture are

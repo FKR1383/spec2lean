@@ -151,11 +151,16 @@ impl AnthropicProvider {
                     })
                 })
                 .collect();
+            if let Some(feedback) = &exchange.feedback {
+                results.push(json!({"type": "text", "text": feedback}));
+            }
             let breakpoint = index == 0 || Some(index) == rolling;
             if breakpoint && let Some(last) = results.last_mut() {
                 last["cache_control"] = Self::cache_control();
             }
-            messages.push(json!({"role": "user", "content": results}));
+            if !results.is_empty() {
+                messages.push(json!({"role": "user", "content": results}));
+            }
         }
 
         // A stage whose first exchange does not exist yet still has to state
@@ -338,6 +343,7 @@ mod tests {
 
     fn exchange_for(prompt: Option<String>) -> Exchange {
         Exchange {
+            feedback: None,
             prompt,
             assistant: json!([
                 {"type": "thinking", "thinking": "", "signature": "sig"},
@@ -359,6 +365,30 @@ mod tests {
             .unwrap()
             .matches("cache_control")
             .count()
+    }
+
+    #[test]
+    fn completion_feedback_is_text_after_the_unmodified_assistant() {
+        let mut exchange = opening_exchange();
+        exchange.assistant = json!([{"type": "text", "text": "Submitted."}]);
+        exchange.tool_results.clear();
+        exchange.feedback = Some("No accepted submission; continue the task.".into());
+        let exchanges = [exchange];
+        let body = provider().body(&Request {
+            prompt_pending: false,
+            session: 1,
+            system: "SYSTEM",
+            prompt: "PROMPT",
+            exchanges: &exchanges,
+            tools: &[],
+        });
+        assert_eq!(body["messages"][1]["content"], exchanges[0].assistant);
+        assert_eq!(body["messages"][2]["role"], "user");
+        assert_eq!(body["messages"][2]["content"][0]["type"], "text");
+        assert_eq!(
+            body["messages"][2]["content"][0]["text"],
+            exchanges[0].feedback.as_deref().unwrap()
+        );
     }
 
     #[test]

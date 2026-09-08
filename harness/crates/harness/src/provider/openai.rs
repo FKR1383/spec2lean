@@ -68,6 +68,9 @@ impl OpenAiProvider {
                     "content": record.output,
                 }));
             }
+            if let Some(feedback) = &exchange.feedback {
+                messages.push(json!({"role": "user", "content": feedback}));
+            }
         }
         if request.prompt_pending {
             messages.push(json!({"role": "user", "content": request.prompt}));
@@ -244,6 +247,7 @@ mod tests {
     #[test]
     fn tool_results_become_their_own_messages() {
         let exchanges = [Exchange {
+            feedback: None,
             // The stage's first exchange carries the task it was given under.
             prompt: Some("P".to_string()),
             assistant: json!({
@@ -274,6 +278,32 @@ mod tests {
         assert_eq!(body["messages"][2], exchanges[0].assistant);
         assert_eq!(body["messages"][3]["role"], json!("tool"));
         assert_eq!(body["messages"][3]["tool_call_id"], json!("call_1"));
+    }
+
+    #[test]
+    fn completion_feedback_is_a_user_message_after_the_unmodified_assistant() {
+        let exchanges = [Exchange {
+            prompt: Some("P".into()),
+            assistant: json!({"role": "assistant", "content": "Submitted."}),
+            tool_results: vec![],
+            feedback: Some("No accepted submission; continue the task.".into()),
+            usage: Usage::default(),
+        }];
+        let body = provider().body(&Request {
+            prompt_pending: false,
+            session: 1,
+            system: "S",
+            prompt: "P",
+            exchanges: &exchanges,
+            tools: &[],
+        });
+        assert_eq!(body["messages"][2], exchanges[0].assistant);
+        assert_eq!(
+            body["messages"][3],
+            json!({
+                "role": "user", "content": exchanges[0].feedback,
+            })
+        );
     }
 
     #[test]
