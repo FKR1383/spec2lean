@@ -11,6 +11,7 @@ from .models import (
     SemanticScope,
     evidence_bundle_hash,
 )
+from .questions import question_id
 
 
 SUCCESS_FIELDS = {
@@ -145,6 +146,18 @@ def validate_submission(
                 "missingAspects must contain unique normalized questions",
                 "$.missingAspects",
             ))
+        resolved_questions = {
+            item.get("questionId") for item in bundle.get("resolutions", [])
+            if isinstance(item, dict)
+        }
+        for index, aspect in enumerate(normalized_missing):
+            if question_id(scope.unit["unitId"], aspect) in resolved_questions:
+                diagnostics.append(_diagnostic(
+                    "QUESTION_ALREADY_RESOLVED",
+                    "This question already has a recorded resolution. Use its decision in the "
+                    "semantics and cite it in an ASSUMPTION claim instead of reopening it for lack of evidence.",
+                    f"$.missingAspects[{index}]",
+                ))
         _text(value.get("explanation"), "$.explanation", diagnostics)
         _evidence_ids(value.get("evidenceIds", []), allowed_evidence, "$.evidenceIds", diagnostics, required=False)
         return (scope.artifact(value), []) if not diagnostics else (None, diagnostics)

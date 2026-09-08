@@ -379,44 +379,152 @@ def derive_processing_order(
         if edge["from"] in requested and edge["to"] in requested
     ]
     components = _strongly_connected_components(requested_unit_ids, edges)
-    cyclic = {item for component in components if len(component) > 1 for item in component}
     cycles = [
         {"unitIds": component}
         for component in components
         if len(component) > 1
     ]
-    requested_outgoing: dict[str, set[str]] = defaultdict(set)
+    layers = [
+        {"layer": index, "unitIds": sorted(unit for component in layer for unit in component)}
+        for index, layer in enumerate(_component_layers(components, edges))
+    ]
+    return layers, cycles, []
+
+
+def _component_layers(
+    components: list[list[str]], edges: list[tuple[str, str]],
+) -> list[list[list[str]]]:
+    """Topologically order the condensation graph, retaining every member."""
+    owner = {vertex: index for index, component in enumerate(components) for vertex in component}
+    remaining = set(range(len(components)))
+    incoming: dict[int, set[int]] = {index: set() for index in remaining}
     for source, target in edges:
-        requested_outgoing[source].add(target)
-    blocked = set(cyclic)
-    frontier = list(cyclic)
-    while frontier:
-        source = frontier.pop()
-        for target in requested_outgoing[source]:
-            if target not in blocked:
-                blocked.add(target)
-                frontier.append(target)
-    # Self edges are rejected earlier, so every remaining singleton is acyclic.
-    remaining = requested - blocked
-    incoming = {unit_id: set() for unit_id in remaining}
-    outgoing: dict[str, set[str]] = defaultdict(set)
-    for source, target in edges:
-        if source in remaining and target in remaining:
-            incoming[target].add(source)
-            outgoing[source].add(target)
-    layers: list[dict[str, Any]] = []
-    layer_index = 0
+        if owner[source] != owner[target]:
+            incoming[owner[target]].add(owner[source])
+    layers: list[list[list[str]]] = []
     while remaining:
-        ready = sorted(unit_id for unit_id in remaining if not incoming[unit_id])
-        if not ready:  # Defensive: SCC detection should have removed every cycle.
-            break
-        layers.append({"layer": layer_index, "unitIds": ready})
-        layer_index += 1
-        for source in ready:
-            remaining.remove(source)
-            for target in outgoing[source]:
-                incoming[target].discard(source)
-    return layers, cycles, sorted(blocked - cyclic)
+        ready = sorted(index for index in remaining if not (incoming[index] & remaining))
+        if not ready:
+            raise ValueError("component graph is still cyclic")
+        layers.append([components[index] for index in ready])
+        remaining.difference_update(ready)
+    return layers
+
+
+def derive_execution_schedule(
+    requested_unit_ids: list[str], dependencies: list[dict[str, Any]],
+    planned_groups: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Reconcile the model's group partition with real dependency cycles.
+
+    Condensing the *group* graph also handles cycles introduced by grouping
+    otherwise acyclic units. Original groups and edges remain in the plan.
+    """
+    requested = set(requested_unit_ids)
+    if len(requested) != len(requested_unit_ids):
+        raise ValueError("execution schedule has duplicate requested units")
+    by_name: dict[str, dict[str, Any]] = {}
+    folded_names: set[str] = set()
+    owner: dict[str, str] = {}
+    for group in planned_groups:
+        name = group.get("name")
+        if not isinstance(name, str) or not GROUP_NAME.fullmatch(name) or name.casefold() in folded_names:
+            raise ValueError("execution schedule has an invalid or duplicate group name")
+        folded_names.add(name.casefold())
+        members = group.get("unitIds")
+        if not isinstance(members, list) or not members:
+            raise ValueError("execution schedule has an empty group")
+        by_name[name] = group
+        for unit in members:
+            if unit not in requested or unit in owner:
+                raise ValueError("execution groups must partition the requested units exactly")
+            owner[unit] = name
+    if set(owner) != requested:
+        raise ValueError("execution groups omit requested units")
+    edges = [
+        (owner[edge["from"]], owner[edge["to"]])
+        for edge in dependencies if edge["from"] in requested and edge["to"] in requested
+    ]
+    components = _strongly_connected_components(sorted(by_name), edges)
+    effective: list[dict[str, Any]] = []
+    component_names: dict[tuple[str, ...], str] = {}
+    reserved_names = set(folded_names)
+    for component in components:
+        if len(component) == 1:
+            group = dict(by_name[component[0]])
+        else:
+            name = "And".join(component)
+            suffix = stable_id("group", *component).split(":", 1)[1][:12]
+            if len(name) > 64 or name.casefold() in reserved_names:
+                name = name[:51] + "G" + suffix
+            if name.casefold() in reserved_names:
+                raise ValueError("derived joint translation group name collides with another group")
+            reserved_names.add(name.casefold())
+            group = {
+                "name": name,
+                "unitIds": sorted(unit for original in component for unit in by_name[original]["unitIds"]),
+                "reason": "Joint translation required by dependency cycles between planned groups: " + ", ".join(component) + ".",
+                "origin": "INFERRED",
+                "supportingNodeIds": sorted({node for original in component for node in by_name[original]["supportingNodeIds"]}),
+            }
+        effective.append(group)
+        component_names[tuple(component)] = group["name"]
+    effective.sort(key=lambda group: group["name"])
+    effective_owner = {unit: group["name"] for group in effective for unit in group["unitIds"]}
+    external_edges: dict[tuple[str, str], list[int]] = defaultdict(list)
+    internal_edges: dict[str, list[int]] = {group["name"]: [] for group in effective}
+    prerequisites: list[int] = []
+    for index, edge in enumerate(dependencies):
+        if edge["from"] not in requested:
+            prerequisites.append(index)
+            continue
+        source, target = effective_owner[edge["from"]], effective_owner[edge["to"]]
+        if source == target:
+            internal_edges[source].append(index)
+        else:
+            external_edges[(source, target)].append(index)
+    schedule = {
+        "schemaVersion": 1,
+        "graphStatus": "ACYCLIC",
+        "groupComponents": [
+            {"groupName": component_names[tuple(component)], "plannedGroupNames": component}
+            for component in components
+        ],
+        "groupLayers": [
+            {"layer": index, "groupNames": sorted(component_names[tuple(component)] for component in layer)}
+            for index, layer in enumerate(_component_layers(components, edges))
+        ],
+        "dependencies": [
+            {"from": source, "to": target, "dependencyIndices": indices}
+            for (source, target), indices in sorted(external_edges.items())
+        ],
+        "internalDependencyIndices": internal_edges,
+        "externalPrerequisiteDependencyIndices": prerequisites,
+    }
+    return effective, schedule
+
+
+def validate_execution_schedule(plan: dict[str, Any]) -> None:
+    """Recompute a saved schedule before trusting it to order model work."""
+    unit_ids = [unit["unitId"] for unit in plan["requestedUnits"]]
+    requested = set(unit_ids)
+    prerequisites = {item["prerequisiteId"] for item in plan.get("externalPrerequisites", [])}
+    dependencies = plan["dependencies"]
+    if any(edge["from"] not in requested | prerequisites or edge["to"] not in requested
+           or edge["from"] == edge["to"] for edge in dependencies):
+        raise ValueError("execution schedule contains an invalid dependency endpoint")
+    original = plan.get("plannedTranslationGroups")
+    if not isinstance(original, list):
+        raise ValueError("execution schedule is missing the original translation groups")
+    groups, schedule = derive_execution_schedule(unit_ids, dependencies, original)
+    layers, cycles, blocked = derive_processing_order(unit_ids, dependencies)
+    expected = {
+        "translationGroups": groups, "executionSchedule": schedule,
+        "processingLayers": layers, "cycles": cycles, "blockedUnitIds": blocked,
+        "graphStatus": "CYCLIC" if cycles else "ACYCLIC",
+    }
+    if any(plan.get(key) != value for key, value in expected.items()):
+        raise ValueError("execution schedule does not match the recorded dependencies and groups")
 
 
 def build_validated_plan(
@@ -434,6 +542,9 @@ def build_validated_plan(
         raise PlanValidationError(diagnostics)
     unit_ids = [item["unitId"] for item in normalized["requestedUnits"]]
     layers, cycles, blocked = derive_processing_order(unit_ids, normalized["dependencies"])
+    groups, schedule = derive_execution_schedule(
+        unit_ids, normalized["dependencies"], normalized["translationGroups"],
+    )
     return {
         "schemaVersion": PLAN_SCHEMA_VERSION,
         "language": language,
@@ -442,6 +553,9 @@ def build_validated_plan(
         "sourceDatabaseDigest": source_database_digest,
         "request": scope.request.to_dict(),
         **normalized,
+        "plannedTranslationGroups": normalized["translationGroups"],
+        "translationGroups": groups,
+        "executionSchedule": schedule,
         "processingLayers": layers,
         "cycles": cycles,
         "blockedUnitIds": blocked,

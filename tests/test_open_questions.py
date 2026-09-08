@@ -23,7 +23,7 @@ from spec2lean.semantics.question_runner import opencode_config
 from spec2lean.semantics.runner import build_semantics
 
 
-def _inputs(database: Path) -> tuple[dict, dict, dict]:
+def _inputs(database: Path, *, role="OPERATION") -> tuple[dict, dict, dict]:
     with connect(database, read_only=True) as connection:
         resolved = ScopeResolver(connection).resolve(
             PlanningRequest.exact("synthetic", "1.0", ["alpha.u32"])
@@ -56,7 +56,7 @@ def _inputs(database: Path) -> tuple[dict, dict, dict]:
             evidence_scope,
             node_ids=[node_id],
             span_ids=[],
-            role="OPERATION",
+            role=role,
             tier="CORE",
             rationale="Initial instruction evidence.",
             selection_basis={node_id: sorted(session.ledger.nodes[node_id])},
@@ -229,6 +229,39 @@ def test_runtime_tool_is_exposed_only_with_a_configured_adapter():
     assert "execute_probe" in with_runtime
 
 
+def test_missing_evidence_requires_a_decision_in_the_same_session(planner_database, tmp_path):
+    plan, bundle, failure = _inputs(planner_database)
+    scope = OpenQuestionScope.from_inputs(plan, bundle, failure, created_at="now")
+    server = OpenQuestionMcpServer(planner_database, scope, bundle,
+                                  tmp_path / "submission.json", tmp_path / "trace.json")
+    try:
+        question_id = scope.questions[0]["questionId"]
+        assert _text(server.call_tool("spec_search", {
+            "questionId": question_id, "query": "unavailable_specific_rule_xyz",
+            "justification": "Search for the missing rule before making a modeling decision.",
+        })) == []
+        resolution = {"questionId": question_id, "source": "UNRESOLVED", "role": "OPERATION",
+                      "answer": "No rule was found.", "rationale": "No supporting evidence is available."}
+        rejected = _text(server.call_tool("submit_questions", {"resolutions": [resolution]}))
+        assert not rejected["accepted"]
+        assert {d["code"] for d in rejected["diagnostics"]} == {"MODELING_DECISION_REQUIRED"}
+        assert not (tmp_path / "submission.json").exists()
+        resolution.update(source="LLM_REASONING", answer="Model the unknown operand rule as an explicit input constraint.",
+                          rationale="This keeps the rule explicit while preserving all known operand behavior.")
+        accepted = _text(server.call_tool("submit_questions", {"resolutions": [resolution]}))
+        assert accepted == {"accepted": True, "outcome": "RESOLVED"}
+        payload = json.loads((tmp_path / "submission.json").read_text())
+        assert payload["augmentedBundle"]["evidence"] == bundle["evidence"]
+        assert payload["augmentedBundle"]["resolutions"][0]["nonNormative"] is True
+        assert payload["artifact"]["questions"][0]["resolutionSource"] == "LLM_REASONING"
+        schema = next(t for t in tool_definitions(runtime_available=False) if t["name"] == "submit_questions")
+        item_schema = schema["inputSchema"]["properties"]["resolutions"]["items"]
+        assert "UNRESOLVED" not in item_schema["properties"]["source"]["enum"]
+        assert "answer" in item_schema["required"]
+    finally:
+        server.close()
+
+
 def test_handler_config_pins_model_and_denies_general_execution(tmp_path):
     config = opencode_config(
         tmp_path / "spec.sqlite", tmp_path / "scope.json", tmp_path / "evidence.json",
@@ -271,10 +304,19 @@ def test_runtime_probe_is_database_first_and_records_execution(planner_database,
         server.close()
 
 
+@pytest.mark.parametrize("runtime", ["opencode", "rust-harness"])
+@pytest.mark.parametrize("scenario,missing_aspect,decision", [
+    ("database", "The canonical definition of an integer operand.", ""),
+    ("missing_operation", "A specification of what an implementation does when it acts on an encoded hint",
+     "For this model, select the permitted behavior that ignores the hint and preserves the stated architectural effects."),
+    ("missing_layout", "A supported rule for selecting a format from an encoded instruction",
+     "Make the format an explicit input to the layout operation; this unit models field layouts and does not choose an opcode decoder."),
+])
 def test_semantic_runner_resolves_questions_then_reextracts(
-    planner_database, tmp_path, monkeypatch
+    planner_database, tmp_path, monkeypatch, runtime, scenario, missing_aspect, decision,
 ):
-    plan, bundle, _ = _inputs(planner_database)
+    fallback = scenario != "database"
+    plan, bundle, _ = _inputs(planner_database, role="STATE_EFFECT" if fallback else "OPERATION")
     evidence_root = tmp_path / "evidence"
     evidence_dir = (
         evidence_root / plan["language"] / plan["version"] / plan["planRunId"]
@@ -287,8 +329,10 @@ def test_semantic_runner_resolves_questions_then_reextracts(
         "unitId": bundle["unit"]["unitId"], "outcome": "VALID",
     }), encoding="utf-8")
 
-    monkeypatch.setattr("spec2lean.semantics.runner.shutil.which", lambda _: "/usr/bin/opencode")
-    monkeypatch.setattr("spec2lean.semantics.question_runner.shutil.which", lambda _: "/usr/bin/opencode")
+    executable = "/usr/bin/spec2lean-harness" if runtime == "rust-harness" else "/usr/bin/opencode"
+    monkeypatch.setenv("SPEC2LEAN_RUNTIME", runtime)
+    monkeypatch.setattr("spec2lean.semantics.runner.runtime_executable", lambda: executable)
+    monkeypatch.setattr("spec2lean.semantics.question_runner.runtime_executable", lambda: executable)
     monkeypatch.setattr(
         "spec2lean.semantics.runner.installed_openai_models",
         lambda _: {"openai/gpt-5.6-sol"},
@@ -302,9 +346,15 @@ def test_semantic_runner_resolves_questions_then_reextracts(
 
     def fake_run(command, **kwargs):
         nonlocal extractor_attempt
-        agent = command[command.index("--agent") + 1]
+        if runtime == "rust-harness":
+            request = json.loads(kwargs["input"])
+            namespace = request["mcp_namespace"]
+            agent = "spec2lean-semantic-extractor" if namespace == "semantics" else "spec2lean-open-question-handler"
+            config = {"mcp": {namespace: {"command": request["mcp_command"]}}}
+        else:
+            agent = command[command.index("--agent") + 1]
+            config = json.loads(kwargs["env"]["OPENCODE_CONFIG_CONTENT"])
         calls.append(agent)
-        config = json.loads(kwargs["env"]["OPENCODE_CONFIG_CONTENT"])
         if agent == "spec2lean-semantic-extractor":
             extractor_attempt += 1
             if extractor_attempt == 2:
@@ -323,7 +373,7 @@ def test_semantic_runner_resolves_questions_then_reextracts(
             if extractor_attempt == 1:
                 submission = {
                     "outcome": "INSUFFICIENT_EVIDENCE",
-                    "missingAspects": ["The canonical definition of an integer operand."],
+                    "missingAspects": [missing_aspect],
                     "explanation": "The current bundle does not contain the shared definition.",
                     "evidenceIds": [current_bundle["evidence"][0]["evidenceId"]],
                 }
@@ -341,6 +391,13 @@ def test_semantic_runner_resolves_questions_then_reextracts(
                     "restrictions": [], "dependencies": [],
                     "claims": [{"claimId": "claim:alpha", "kind": "SOURCE_FACT", "statement": "The instruction produces the stated output.", "evidenceIds": [evidence_id]}],
                 }
+                if fallback:
+                    resolution_id = current_bundle["resolutions"][0]["resolutionId"]
+                    assert current_bundle["resolutions"][0]["statement"] == decision
+                    submission["operation"]["description"] = decision
+                    submission["operation"]["evidenceIds"] = [resolution_id]
+                    submission["claims"].append({"claimId": "claim:decision", "kind": "ASSUMPTION",
+                                                 "statement": decision, "evidenceIds": [resolution_id]})
             accepted = _text(server.call_tool("submit_semantics", submission))
             assert accepted["accepted"] is True
         else:
@@ -359,18 +416,26 @@ def test_semantic_runner_resolves_questions_then_reextracts(
             )
             try:
                 question_id = question_scope.questions[0]["questionId"]
-                definitions = _text(server.call_tool("spec_definitions", {
-                    "questionId": question_id, "query": "integer operand", "limit": 20,
-                }))
-                node_id = definitions[0]["node_id"]
-                server.call_tool("spec_show", {"nodeId": node_id})
-                accepted = _text(server.call_tool("submit_questions", {"resolutions": [{
-                    "questionId": question_id, "source": "DATABASE",
-                    "role": "SUPPORTING_DEFINITION",
-                    "answer": "The canonical definition supplies the missing term.",
-                    "rationale": "Recovered from the canonical Phase-1 database.",
-                    "sourceNodeIds": [node_id], "sourceSpanIds": [],
-                }]}))
+                if fallback:
+                    assert _text(server.call_tool("spec_search", {
+                        "questionId": question_id, "query": "unavailable_specific_rule_xyz",
+                        "justification": "Check for the missing semantic rule before deciding.",
+                    })) == []
+                    resolution = {"questionId": question_id, "source": "LLM_REASONING", "role": "OPERATION",
+                                  "answer": decision, "rationale": "A bounded modeling decision consistent with the available constraints."}
+                else:
+                    definitions = _text(server.call_tool("spec_definitions", {
+                        "questionId": question_id, "query": "integer operand", "limit": 20,
+                    }))
+                    node_id = definitions[0]["node_id"]
+                    server.call_tool("spec_show", {"nodeId": node_id})
+                    resolution = {
+                        "questionId": question_id, "source": "DATABASE", "role": "SUPPORTING_DEFINITION",
+                        "answer": "The canonical definition supplies the missing term.",
+                        "rationale": "Recovered from the canonical Phase-1 database.",
+                        "sourceNodeIds": [node_id], "sourceSpanIds": [],
+                    }
+                accepted = _text(server.call_tool("submit_questions", {"resolutions": [resolution]}))
                 assert accepted == {"accepted": True, "outcome": "RESOLVED"}
             finally:
                 server.close()
@@ -390,6 +455,13 @@ def test_semantic_runner_resolves_questions_then_reextracts(
     assert (output / "open-question-attempts/attempt-1/handler/open-questions.json").is_file()
     assert (output / "open-question-attempts/attempt-1/extractor/semantics.json").is_file()
     augmented = json.loads((evidence_dir / "evidence.json").read_text())
-    assert len(augmented["evidence"]) == 2
+    assert len(augmented["evidence"]) == (1 if fallback else 2)
+    if fallback:
+        assert augmented["evidence"] == bundle["evidence"]
+        semantics = json.loads((output / "semantics.json").read_text())
+        assert semantics["semantics"]["claims"][-1]["kind"] == "ASSUMPTION"
+        assert decision in (output / "semantics.md").read_text()
+        with connect(planner_database, read_only=True) as connection:
+            assert validate_bundle(EvidenceQuery(connection), plan, augmented) == []
     metadata = json.loads((evidence_dir / "retriever-run.json").read_text())
     assert metadata["openQuestionAugmentations"][0]["outcome"] == "RESOLVED"

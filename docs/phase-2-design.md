@@ -83,11 +83,28 @@ Validation rejects out-of-scope units, missing exact units, incomplete or
 overlapping group partitions, invalid group/file identifiers, group support
 outside a member's indexed source ancestry, invented nodes,
 unknown endpoints, self edges, duplicate edges, missing reasons/support, and
-invalid origins. Layers are derived from requested-unit edges, so independent
-units share a layer. Strongly connected components are emitted in `cycles` and
-the graph is marked `CYCLIC`; their edges are not removed and cyclic units are
-not assigned a false processing layer. Requested units downstream of a cycle
-are listed in `blockedUnitIds` rather than assigned a misleading layer.
+invalid origins. A dependency must identify an input actually needed by the
+dependent unit; a comparison or cross-reference alone does not impose order.
+Genuine mutual dependencies are retained in `dependencies` and `cycles`, and
+the original graph remains marked `CYCLIC`.
+
+Execution uses strongly connected components. Units inside one component share
+a processing layer for their independent evidence and semantic extraction;
+downstream units follow in later layers. No units are dropped or blocked merely
+because of a cycle. The model's original partition is preserved in
+`plannedTranslationGroups`. The group dependency graph is also condensed,
+merging mutually dependent groups into a joint `translationGroups` entry. This
+handles cycles introduced by grouping otherwise acyclic units as well.
+`executionSchedule` records the resulting acyclic group order and maps every
+original dependency to an inter-group edge, an internal edge, or an external
+prerequisite. The pipeline recomputes and validates this schedule before use.
+
+Translation follows that group order, with one module per effective group.
+Evidence, semantic claims, coverage, and traceability remain per unit. Lean
+compilation and the existing checks still apply; scheduling a cycle does not
+establish semantic correctness or waive Lean termination requirements. Existing
+acyclic plans remain readable. Legacy cyclic plans require replanning with
+`--from plan` so they receive a validated execution schedule.
 
 Successful runs contain:
 

@@ -31,6 +31,12 @@ def render_markdown(plan: dict[str, Any]) -> str:
             f"- **{group['name']}** ({group['origin']}): {members}. "
             f"{group['reason']} ({support})"
         )
+    if "executionSchedule" in plan:
+        lines.extend(["", "## Translation schedule", "",
+                      "The execution graph is acyclic. Original dependencies and cycles remain recorded below; "
+                      "mutually dependent groups are translated together. Evidence, semantics, and checks remain per unit.", ""])
+        for layer in plan["executionSchedule"]["groupLayers"]:
+            lines.append(f"- Layer {layer['layer']}: " + ", ".join(layer["groupNames"]))
     lines.extend(["", "## External prerequisites", ""])
     if plan["externalPrerequisites"]:
         for item in plan["externalPrerequisites"]:

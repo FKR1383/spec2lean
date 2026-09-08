@@ -13,12 +13,69 @@ from spec2lean.evidence.runner import unit_directory_name
 from spec2lean.pipeline.runner import PipelineOptions, PipelineServices, run_pipeline
 from spec2lean.planning.models import PlanningRequest
 from spec2lean.planning.runner import source_database_digest
+from spec2lean.planning.validation import derive_execution_schedule, derive_processing_order
+from spec2lean.translation.groups import grouped_units
 from spec2lean.semantics.models import evidence_bundle_hash
 from spec2lean.translation.models import TranslationGroupScope
 from spec2lean.util import canonical_json
 
 
 GROUP = "InstructionSemantics"
+
+
+def test_cyclic_pipeline_keeps_per_unit_stages_and_translates_joint_groups_once(
+    planner_database, tmp_path,
+):
+    options = _options(tmp_path, planner_database)
+    calls = []
+    services = _services(options, planner_database, calls)
+    original_builder = services.plan_builder
+
+    def plan_builder(*args, **kwargs):
+        directory = original_builder(*args, **kwargs)
+        plan = json.loads((directory / "plan.json").read_text())
+        base = plan["requestedUnits"][0]
+        plan["requestedUnits"] = [{**base, "unitId": name, "name": name} for name in ("a", "b", "c")]
+        planned = [{**plan["translationGroups"][0], "name": name, "unitIds": [unit]}
+                   for name, unit in (("Syntax", "a"), ("Framing", "b"), ("Downstream", "c"))]
+        edges = [{"from": a, "to": b} for a, b in (("a", "b"), ("b", "a"), ("b", "c"))]
+        groups, schedule = derive_execution_schedule(["a", "b", "c"], edges, planned)
+        layers, cycles, blocked = derive_processing_order(["a", "b", "c"], edges)
+        plan.update(dependencies=edges, externalPrerequisites=[], plannedTranslationGroups=planned,
+                    translationGroups=groups, executionSchedule=schedule, processingLayers=layers,
+                    cycles=cycles, blockedUnitIds=blocked, graphStatus="CYCLIC")
+        _json(directory / "plan.json", plan)
+        return directory
+
+    def evidence_builder(*args, unit_ids, **kwargs):
+        calls.append(("evidence", tuple(unit_ids)))
+
+    def semantics_builder(*args, unit_ids, **kwargs):
+        calls.append(("semantics", tuple(unit_ids)))
+
+    def translation_builder(plan, *args, group, **kwargs):
+        members = tuple(unit["unitId"] for unit in grouped_units(plan)[group])
+        calls.append(("translate", members))
+
+    def checker(plan, *, group, **kwargs):
+        members = tuple(unit["unitId"] for unit in grouped_units(plan)[group])
+        calls.append(("check", members))
+        return {unit: (tmp_path, {"phase": "CHECK", "status": "PASS", "build": {"status": "PASS"},
+                                 "coverage": {"status": "PASS"}, "traceability": {"status": "PASS"}})
+                for unit in members}
+
+    services = PipelineServices(plan_builder, evidence_builder, semantics_builder,
+                                translation_builder, checker, services.resolver)
+    _, manifest = run_pipeline(PlanningRequest.exact("synthetic", "1.0", ["alpha.u32"]),
+                               options, services=services)
+    assert manifest["status"] == "COMPLETE"
+    assert calls == ["plan", ("evidence", ("a",)), ("evidence", ("b",)), ("evidence", ("c",)),
+                     ("semantics", ("a",)), ("semantics", ("b",)), ("semantics", ("c",)),
+                     ("translate", ("a", "b")), ("translate", ("c",)),
+                     ("check", ("a", "b")), ("check", ("c",))]
+    assert set(manifest["units"]) == {"a", "b", "c"}
+    assert all(unit["status"] == "PASS" and unit["stages"]["troubleshoot"] == "NOT_REQUIRED"
+               for unit in manifest["units"].values())
 
 
 def _json(path: Path, value: dict) -> None:
@@ -297,6 +354,30 @@ def test_resume_rejects_legacy_grouping_plan_after_plan_phase(
     with pytest.raises(RuntimeError, match="rerun with --from plan"):
         run_pipeline(request, resumed_options, services=services)
     assert calls == []
+
+
+@pytest.mark.parametrize("from_phase", ["plan", "semantics"])
+def test_resume_legacy_cycle_requires_and_runs_planning(planner_database, tmp_path, from_phase):
+    options = _options(tmp_path, planner_database, until_phase="plan")
+    calls = []
+    services = _services(options, planner_database, calls)
+    request = PlanningRequest.exact("synthetic", "1.0", ["alpha.u32"])
+    _, manifest = run_pipeline(request, options, services=services)
+    path = options.plans_root / "synthetic" / "1.0" / manifest["planRunId"] / "plan.json"
+    legacy = json.loads(path.read_text())
+    legacy.update(graphStatus="CYCLIC", processingLayers=[])
+    _json(path, legacy)
+    calls.clear()
+    resumed = _options(tmp_path, planner_database, resume=manifest["pipelineRunId"],
+                       from_phase=from_phase, until_phase="semantics" if from_phase == "semantics" else "plan")
+    if from_phase == "semantics":
+        with pytest.raises(RuntimeError, match="rerun with --from plan"):
+            run_pipeline(request, resumed, services=services)
+        assert calls == []
+    else:
+        _, result = run_pipeline(request, resumed, services=services)
+        assert result["status"] == "COMPLETE"
+        assert calls == ["plan"]
 
 
 def test_pipeline_routes_a_failed_check_through_phase_7(planner_database, tmp_path, monkeypatch):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sqlite3
 import urllib.parse
 from pathlib import Path
@@ -145,6 +146,20 @@ def test_code_claim_evidence_and_reverse_traceability(gui_repository: ArtifactRe
     assert next(item for item in unit["lean"]["declarations"] if item["declaration"].endswith("notInSource"))["broken"]
 
 
+def test_failed_subtree_run_shows_planned_scope_before_unit_execution(gui_repository: ArtifactRepository) -> None:
+    root = gui_repository.roots.repository
+    put(root / "runs/ptx/9.3/pipeline-run:blocked/run.json", {
+        "pipelineRunId": "pipeline-run:blocked", "planRunId": "plan:complete", "status": "FAILED",
+        "request": {"language": "ptx", "version": "9.3", "scope": {"mode": "SOURCE_SUBTREE", "sourceNodeId": "node:html"}},
+        "units": {}, "error": "Dependency cycle",
+    })
+    run = gui_repository.get_run("pipeline-run:blocked")
+    assert run["requested"] == 1
+    assert run["requestedNames"] == ["shl.b32"]
+    assert run["completed"] == 0
+    assert run["units"][0]["stages"]["evidence"] == "NOT_STARTED"
+
+
 def test_html_and_pdf_phase1_provenance_and_preview(gui_repository: ArtifactRepository) -> None:
     html = gui_repository.get_evidence_source("pipeline-run:complete", "unit:shl", "evidence:html")
     assert html["preview"] == {"type": "html", "anchor": "logic-shl", "domPath": "/html/body/section", "sourceLineStart": 12, "sourceLineEnd": 12, "exactText": "Shift a left by b."}
@@ -163,6 +178,10 @@ def test_checks_repairs_search_and_read_only_http_api(gui_repository: ArtifactRe
     assert unit["checks"]["coverage"]["uncovered"] == []
     assert unit["checks"]["traceability"]["brokenMappings"] == []
     assert unit["repairs"][0]["hashes"]["after"]["Unit.lean"] == "new"
+    durations = {item["phase"]: item["durationMs"] for item in unit["timeline"]}
+    assert durations["Evidence"] == 2000
+    assert durations["Check"] == 42
+    assert durations["Semantics"] is None
     assert {item["type"] for item in gui_repository.search("pipeline-run:complete", "shift")} >= {"claim", "evidence"}
 
     handler = object.__new__(GuiHandler)
@@ -174,6 +193,57 @@ def test_checks_repairs_search_and_read_only_http_api(gui_repository: ArtifactRe
     captured.clear()
     handler._api(urllib.parse.urlsplit("/api/runs/pipeline-run%3Acomplete/units/unit%3Ashl"))
     assert captured[0][1]["unit"]["name"] == "shl.b32"
+
+
+def test_experiment_runs_keep_their_own_artifacts_and_indexes(gui_repository: ArtifactRepository) -> None:
+    root = gui_repository.roots.repository
+    original = root / "runs/ptx/9.3/pipeline-run:complete/run.json"
+    original_bytes = original.read_bytes()
+    # Deliberately reuse plan and unit IDs with different contents in two jobs.
+    # Only their run IDs differ; resolving by language/version would mix them.
+    for runtime in ("opencode", "rust-harness"):
+        job = root / "runs/experiments/paired/jobs" / runtime
+        run_id = f"pipeline-run:{runtime}"
+        run = json.loads(original_bytes)
+        run["pipelineRunId"] = run_id
+        put(job / "runs/ptx/9.3" / run_id / "run.json", run)
+        put(job / "state.json", {"runtime": runtime, "indexMode": "semantic"})
+        for category in ("plans", "evidence", "semantics", "translations", "checks", "troubleshooting", "indexes"):
+            shutil.copytree(root / category / "ptx", job / ("index" if category == "indexes" else category) / "ptx")
+        lean = job / "translations/ptx/9.3/plan:complete/shl-b32-shl/Unit.lean"
+        lean.write_text(lean.read_text() + f"\n-- {runtime}\n")
+        with sqlite3.connect(job / "index/ptx/9.3/specification.sqlite") as db:
+            db.execute("UPDATE nodes SET raw_text=? WHERE node_id='node:html'", (runtime,))
+
+        # The explorer existed before this job was created; discovery stays live.
+        item = next(item for item in gui_repository.list_runs() if item["runId"] == run_id)
+        assert (item["experiment"], item["runtime"], item["indexMode"]) == ("paired", runtime, "semantic")
+        overview = gui_repository.get_run(run_id)
+        assert overview["runtime"] == runtime
+        assert overview["layers"][0]["units"][0]["unitId"] == "unit:shl"
+        assert gui_repository.get_lean(run_id, "unit:shl")["source"].endswith(f"-- {runtime}\n")
+        assert gui_repository.get_check(run_id, "unit:shl")["status"] == "PASS"
+        assert gui_repository.get_semantics(run_id, "unit:shl")["operation"]["description"] == "Shift left"
+        assert gui_repository.get_repairs(run_id, "unit:shl")
+        assert gui_repository.search(run_id, "shift")
+        trace = gui_repository.get_trace(run_id, "unit:shl", "Spec2Lean.Ptx.ShlB32.shlResult")
+        assert trace["claims"][0]["evidence"]
+        source = gui_repository.get_evidence_source(run_id, "unit:shl", "evidence:html")
+        assert source["sourceNodes"][0]["raw_text"] == runtime
+        assert source["preview"]["domPath"] == "/html/body/section"
+        assert gui_repository.render_pdf_preview(run_id, "unit:shl", "evidence:pdf").startswith(b"\x89PNG")
+
+    assert len(gui_repository.list_runs()) == 4
+    assert original.read_bytes() == original_bytes
+    assert "-- opencode" not in gui_repository.get_lean("pipeline-run:complete", "unit:shl")["source"]
+    with pytest.raises(KeyError, match="unknown or ambiguous"):
+        gui_repository.get_run("pipeline-run:unknown")
+    # A duplicate run ID must not silently select a different job's artifacts.
+    duplicate = json.loads(original_bytes)
+    duplicate["pipelineRunId"] = "pipeline-run:opencode"
+    put(root / "runs/ptx/9.3/pipeline-run:opencode/run.json", duplicate)
+    with pytest.raises(KeyError, match="unknown or ambiguous"):
+        gui_repository.get_unit("pipeline-run:opencode", "unit:shl")
 
 
 def test_frontend_contains_primary_traceability_interactions() -> None:

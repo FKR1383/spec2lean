@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "publisher": "w3c",
+  "language": "webassembly",
+  "specification_version": "2.0-20250616",
+  "document_title": "WebAssembly Core 2.0 candidate recommendation snapshot",
+  "source_classification": "layout-normalized view of archived official source",
+  "retrieved_at_utc": "2026-09-07T23:31:25.225013+00:00",
+  "artifacts": [
+    {
+      "kind": "html",
+      "url": "https://www.w3.org/TR/2025/CRD-wasm-core-2-20250616/",
+      "resolved_url": "https://www.w3.org/TR/2025/CRD-wasm-core-2-20250616/",
+      "local_path": "raw/index-view.html",
+      "sha256": "78daa5aadb8c149c6bb6375b6fb88abe1bd79b6fd2983772fd67acdd5845d066",
+      "size_bytes": 10735148
+    }
+  ],
+  "original_artifacts": [
+    {
+      "kind": "html",
+      "url": "https://www.w3.org/TR/2025/CRD-wasm-core-2-20250616/",
+      "resolved_url": "https://www.w3.org/TR/2025/CRD-wasm-core-2-20250616/",
+      "local_path": "raw/specification.html",
+      "sha256": "e15693addb533d01add85bb4fb80a80796eb6107bb1e5530032f28209031869e",
+      "size_bytes": 10731493
+    }
+  ],
+  "normalization": {
+    "textContentUnchanged": true,
+    "layoutTagChanges": 652,
+    "sameDocumentAnchorChanges": 2921,
+    "description": "Asciidoc section divs become section elements; display-math divs become pre elements; same-document index.html fragment links become fragment links. No prose or mathematical text is edited."
+  }
+}

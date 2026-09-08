@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "publisher": "riscv",
+  "language": "riscv",
+  "specification_version": "rv32i-2.1-20260120",
+  "document_title": "RV32I Base Integer ISA 2.1",
+  "source_classification": "layout-normalized view of archived official source",
+  "retrieved_at_utc": "2026-09-07T23:31:25.467066+00:00",
+  "artifacts": [
+    {
+      "kind": "html",
+      "url": "https://docs.riscv.org/reference/isa/v20260120/unpriv/rv32.html",
+      "resolved_url": "https://docs.riscv.org/reference/isa/v20260120/unpriv/rv32.html",
+      "local_path": "raw/index-view.html",
+      "sha256": "7a48cf8ee46f712026176e0faf28f6d88f13e60fc780f126108e4c958cb838d7",
+      "size_bytes": 106982
+    }
+  ],
+  "original_artifacts": [
+    {
+      "kind": "html",
+      "url": "https://docs.riscv.org/reference/isa/v20260120/unpriv/rv32.html",
+      "resolved_url": "https://docs.riscv.org/reference/isa/v20260120/unpriv/rv32.html",
+      "local_path": "raw/specification.html",
+      "sha256": "3b20e92f067509535f95883832e84b32dbea43a29e1347b7925c374213ad75ec",
+      "size_bytes": 107630
+    }
+  ],
+  "normalization": {
+    "textContentUnchanged": true,
+    "layoutTagChanges": 15,
+    "sameDocumentAnchorChanges": 0,
+    "description": "Asciidoc section divs become section elements; display-math divs become pre elements; same-document index.html fragment links become fragment links. No prose or mathematical text is edited.",
+    "standaloneHeadingWrappers": 1
+  }
+}

@@ -209,6 +209,18 @@ def test_non_normative_resolution_can_only_support_assumption_claims():
     )
     bundle["resolutions"] = [resolution]
     scope = _scope(plan, bundle)
+    repeated = {
+        "outcome": "INSUFFICIENT_EVIDENCE",
+        "missingAspects": ["Unspecified maximal-input behavior"],
+        "explanation": "The decision is an assumption rather than a source fact.",
+        "evidenceIds": ["evidence:operation"],
+    }
+    artifact, diagnostics = validate_submission(scope, bundle, repeated)
+    assert artifact is None
+    assert "QUESTION_ALREADY_RESOLVED" in _codes(diagnostics)
+    new_question = {**repeated, "missingAspects": ["A different previously unexamined case"]}
+    artifact, diagnostics = validate_submission(scope, bundle, new_question)
+    assert diagnostics == [] and artifact["outcome"] == "INSUFFICIENT_EVIDENCE"
     invalid = _submission()
     invalid["claims"][0]["evidenceIds"].append(resolution["resolutionId"])
     _, diagnostics = validate_submission(scope, bundle, invalid)

@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "publisher": "ietf",
+  "language": "http",
+  "specification_version": "1.1-rfc9112",
+  "document_title": "HTTP/1.1 RFC 9112",
+  "source_classification": "layout-normalized view of archived official source",
+  "retrieved_at_utc": "2026-09-07T23:31:25.668697+00:00",
+  "artifacts": [
+    {
+      "kind": "html",
+      "url": "https://www.rfc-editor.org/rfc/rfc9112.html",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc9112.html",
+      "local_path": "raw/index-view.html",
+      "sha256": "2e60bc1acb0d41a21dd8c36bd2e3953ab45c6f269375a399d74a95135b273abe",
+      "size_bytes": 280525
+    },
+    {
+      "kind": "html",
+      "url": "https://www.rfc-editor.org/rfc/rfc9110.html",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc9110.html",
+      "local_path": "raw/rfc9110-index-view.html",
+      "sha256": "13308ea07155e9538969e8cc538bb14509f786278a2d5503c33fcaec136f16b1",
+      "size_bytes": 1187591,
+      "role": "referenced context",
+      "normalization": {
+        "textContentUnchanged": true,
+        "standaloneHeadingWrappers": 2
+      }
+    },
+    {
+      "kind": "html",
+      "url": "https://www.rfc-editor.org/rfc/rfc5234.html",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc5234.html",
+      "local_path": "raw/rfc5234-index-view.html",
+      "sha256": "0f246ae90bb5f7efe3d991f632c9db98c60ea5a8ab5b27ba5e891f896be27bfd",
+      "size_bytes": 33287,
+      "role": "referenced context",
+      "normalization": {
+        "textContentUnchanged": true,
+        "standaloneHeadingWrappers": 0
+      }
+    },
+    {
+      "kind": "html",
+      "url": "https://www.rfc-editor.org/rfc/rfc7405.html",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc7405.html",
+      "local_path": "raw/rfc7405-index-view.html",
+      "sha256": "4ddab898d2080f9b7b914369b576ba706f3669faacd7734d24318859d538b4bc",
+      "size_bytes": 8631,
+      "role": "referenced context",
+      "normalization": {
+        "textContentUnchanged": true,
+        "standaloneHeadingWrappers": 0
+      }
+    }
+  ],
+  "original_artifacts": [
+    {
+      "kind": "html",
+      "url": "https://www.rfc-editor.org/rfc/rfc9112.html",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc9112.html",
+      "local_path": "raw/specification.html",
+      "sha256": "587ec383523df5a9713f2f4192199876af1d6d4a260ce996e0a1f9e4f19dde42",
+      "size_bytes": 280426
+    },
+    {
+      "kind": "html",
+      "url": "https://www.rfc-editor.org/rfc/rfc9110.html",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc9110.html",
+      "local_path": "raw/rfc9110.html",
+      "sha256": "d431760660ea44e130f6e919dab216df2d0b3a490567a98089267523368fe1e5",
+      "size_bytes": 1187554,
+      "role": "referenced context"
+    },
+    {
+      "kind": "html",
+      "url": "https://www.rfc-editor.org/rfc/rfc5234.html",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc5234.html",
+      "local_path": "raw/rfc5234.html",
+      "sha256": "efad508f02e0b59974b64426885e6e277bb81e3f6a58b41cac686b435c005e9c",
+      "size_bytes": 33305,
+      "role": "referenced context"
+    },
+    {
+      "kind": "html",
+      "url": "https://www.rfc-editor.org/rfc/rfc7405.html",
+      "resolved_url": "https://www.rfc-editor.org/rfc/rfc7405.html",
+      "local_path": "raw/rfc7405.html",
+      "sha256": "b3d04ffaa0d278582364aa363b60d27ce12a21d4ff2f3bd0a08eb327721bcef3",
+      "size_bytes": 8627,
+      "role": "referenced context"
+    }
+  ],
+  "normalization": {
+    "textContentUnchanged": true,
+    "layoutTagChanges": 0,
+    "sameDocumentAnchorChanges": 0,
+    "description": "Standalone headings are wrapped in section elements; sections 2 through 11 are grouped inside one headingless section for CLI subtree selection. All text and text order are preserved.",
+    "standaloneHeadingWrappers": 2,
+    "headinglessWorkloadWrappers": 1
+  }
+}

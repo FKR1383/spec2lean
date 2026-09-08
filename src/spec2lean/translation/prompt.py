@@ -35,6 +35,9 @@ Translation rules:
 - Represent operands, branches, edge cases, destination update, predication, restrictions, and state
   effects to the extent required by the semantic artifact. Do not weaken or omit semantics merely to
   simplify Lean.
+- Preserve ASSUMPTION claims as explicit modeling choices in the Lean source comments and claim
+  mappings. Carry any abstract inputs and constraints into the definitions; do not silently turn
+  assumptions into specification facts or introduce axiom declarations for them.
 - Use Lean 4 and ASCII declaration names. The file may use Lean's standard library.
 - The source must contain no sorry, admit, axiom declarations, unsafe code, or verification bypass.
 - Phase 5 is translation, not authoritative checking: do not claim source faithfulness and do not

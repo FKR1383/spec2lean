@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..planning.validation import validate_execution_schedule
+
 
 def grouped_units(plan: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     """Return Phase-2's validated, specification-derived unit partition."""
@@ -34,7 +36,12 @@ def grouped_units(plan: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     if seen != set(units):
         missing = sorted(set(units) - seen)
         raise ValueError(f"Phase-2 translation groups do not cover every requested unit: {missing}")
-    return {name: groups[name] for name in sorted(groups)}
+    if "executionSchedule" in plan:
+        validate_execution_schedule(plan)
+        order = [name for layer in plan["executionSchedule"]["groupLayers"] for name in layer["groupNames"]]
+    else:
+        order = sorted(groups)
+    return {name: groups[name] for name in order}
 
 
 def group_for_unit(plan: dict[str, Any], unit_id: str) -> str:

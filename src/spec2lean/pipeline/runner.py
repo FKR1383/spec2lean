@@ -23,7 +23,7 @@ from ..evidence.validation import validate_bundle
 from ..parsers import parse_html, parse_pdf
 from ..planning.models import PlanningRequest
 from ..planning.runner import build_plan, source_database_digest
-from ..planning.validation import PLAN_SCHEMA_VERSION
+from ..planning.validation import PLAN_SCHEMA_VERSION, validate_execution_schedule
 from ..semantics.models import SemanticScope
 from ..semantics.runner import build_semantics
 from ..semantics.store import load_semantics, unit_directory as semantics_unit_directory
@@ -272,6 +272,7 @@ def _matching_plan(plans_root: Path, request: PlanningRequest, digest: str) -> t
             and plan.get("sourceDatabaseDigest") == digest
             and metadata.get("outcome") == "VALID"
             and metadata.get("indexMode", "lexical") == index_mode()
+            and (plan.get("graphStatus") == "ACYCLIC" or "executionSchedule" in plan)
         ):
             matches.append((str(metadata.get("finishedAt", "")), directory, plan))
     if not matches:
@@ -291,8 +292,10 @@ def _plan_for_manifest(options: PipelineOptions, manifest: dict[str, Any]) -> tu
 
 
 def _ordered_units(plan: dict[str, Any]) -> list[dict[str, Any]]:
-    if plan.get("graphStatus") != "ACYCLIC":
-        raise RuntimeError("Phase-2 dependency graph is cyclic; pipeline execution is not safe")
+    if "executionSchedule" in plan:
+        validate_execution_schedule(plan)
+    elif plan.get("graphStatus") != "ACYCLIC":
+        raise RuntimeError("Phase-2 dependency graph is cyclic and has no validated execution schedule; rerun with --from plan")
     by_id = {item["unitId"]: item for item in plan.get("requestedUnits", [])}
     ordered: list[dict[str, Any]] = []
     for layer in sorted(plan.get("processingLayers", []), key=lambda item: item["layer"]):
@@ -300,8 +303,8 @@ def _ordered_units(plan: dict[str, Any]) -> list[dict[str, Any]]:
             if unit_id not in by_id:
                 raise RuntimeError(f"processing layer references unknown unit: {unit_id}")
             ordered.append(by_id[unit_id])
-    if {item["unitId"] for item in ordered} != set(by_id):
-        raise RuntimeError("Phase-2 processing layers do not schedule every requested unit")
+    if len(ordered) != len(by_id) or {item["unitId"] for item in ordered} != set(by_id):
+        raise RuntimeError("Phase-2 processing layers must schedule every requested unit exactly once")
     return ordered
 
 
@@ -590,6 +593,11 @@ def _run_pipeline(
                     )
                 report("phase 2/7 plan: legacy grouping plan cannot be reused; replanning")
                 plan_pair = None
+            elif plan_pair[1].get("graphStatus") == "CYCLIC" and "executionSchedule" not in plan_pair[1]:
+                if not _phase_selected(options, "plan"):
+                    raise RuntimeError("resumed cyclic plan has no execution schedule; rerun with --from plan")
+                report("phase 2/7 plan: legacy cyclic plan needs an execution schedule; replanning")
+                plan_pair = None
         if plan_pair is None:
             plan_pair = _matching_plan(options.plans_root, request, digest)
         if plan_pair is None:
@@ -615,6 +623,11 @@ def _run_pipeline(
         manifest["planDirectory"] = str(plan_directory)
         manifest["plan"] = {"disposition": plan_disposition, "sourceDatabaseDigest": digest}
         units = _ordered_units(plan)
+        if "executionSchedule" in plan:
+            joint = sum(len(item["plannedGroupNames"]) > 1 for item in plan["executionSchedule"]["groupComponents"])
+            report(f"phase 2/7 plan: validated execution schedule; {len(units)} units, "
+                   f"{len(plan['translationGroups'])} translation groups, {joint} joint groups; "
+                   f"{len(plan['cycles'])} source dependency cycles preserved")
         for unit in units:
             _unit_stage(manifest, unit)
         finish_phase()

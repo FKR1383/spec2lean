@@ -49,10 +49,16 @@ Rules:
 - For every request mode, submit only candidates that pass this relevance check. Preserve all
   required units that pass it and add no unrelated units.
 - External prerequisites stay external and are not scheduled requested units.
-- Add an edge only for a real planning dependency. Independent units belong in the same layer.
+- Add an edge only for a real planning dependency. Name the definition, constraint, or semantic
+  input the dependent unit needs from its prerequisite. A citation, comparison, or "see also"
+  reference alone does not impose an order; it remains available through spec_xrefs for retrieval.
+  Independent units belong in the same layer.
 - Edge direction is prerequisite -> dependent.
 - Every edge needs a non-empty reason, source-node support, and origin EXPLICIT or INFERRED.
-- Genuine cycles must remain in the submitted edges; deterministic code will represent them.
+- Genuine cycles must remain in the submitted edges. Deterministic code schedules mutually
+  dependent units together and merges translation groups where their dependencies require joint
+  translation. Preserve all real edges and their source support; do not remove an edge to obtain
+  an acyclic unit graph. Derive the semantic grouping below from the specification as usual.
 - Partition every requested unit into exactly one `translationGroups` entry. Derive concise
   UpperCamelCase group names from indexed specification headings, ancestors, terminology, and
   semantic cohesion. Prefer an explicit specification family/section when one exists; otherwise

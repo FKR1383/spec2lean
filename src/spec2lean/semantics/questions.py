@@ -11,7 +11,11 @@ QUESTION_SCHEMA_VERSION = 1
 QUESTION_MODEL = "openai/gpt-5.6-sol"
 QUESTION_REASONING = "medium"
 QUESTION_AGENT = "spec2lean-open-question-handler"
-QUESTION_SOURCES = ("DATABASE", "INTERNET", "RUNTIME", "LLM_REASONING", "UNRESOLVED")
+QUESTION_SOURCES = ("DATABASE", "INTERNET", "RUNTIME", "LLM_REASONING")
+
+
+def question_id(unit_id: str, aspect: str) -> str:
+    return stable_id("question", unit_id, normalize_text(aspect), length=32)
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,7 +60,7 @@ class OpenQuestionScope:
         unit = dict(bundle["unit"])
         questions = tuple(
             {
-                "questionId": stable_id("question", unit["unitId"], aspect, length=32),
+                "questionId": question_id(unit["unitId"], aspect),
                 "aspect": aspect,
             }
             for aspect in normalized

@@ -51,15 +51,24 @@ ID, timestamps, and captured output are recorded in `extractor-run.json`.
 ## Open-question recovery
 
 An insufficient-evidence artifact is converted deterministically into stable
-`question:*` IDs. A separate OpenCode session uses the same pinned model and
-reasoning level and must give every question one disposition. It follows this
+`question:*` IDs. A separate session through the selected runtime uses the same
+pinned model and reasoning level and must give every question an answer. It follows this
 order:
 
 1. Search the read-only Phase-1 database and read exact source nodes.
 2. If the specification truly does not answer the question, use an attributed
    internet source, a configured runtime probe, or explicit LLM reasoning.
-3. If no responsible answer is available, mark the question `UNRESOLVED` and
-   stop the pipeline.
+3. If evidence does not determine an answer, choose a reasonable modeling
+   assumption consistent with the known constraints and the unit's scope. Record
+   the concrete decision and rationale as `LLM_REASONING`. A permitted behavior
+   can be selected for this model; details outside the unit's scope can be exposed
+   as explicit abstract inputs or dependencies with their known constraints.
+
+Missing evidence alone is not a terminal handler outcome. New submissions must
+resolve every question through evidence or an explicit modeling decision. An
+attempt to submit `UNRESOLVED` receives a tool diagnostic directing the handler
+to decide and resubmit within the same bounded session. Historical unresolved
+artifacts remain readable under the existing result schema.
 
 The handler cannot submit a fallback until its tool ledger proves that the
 canonical database was searched for that specific question. Database material
@@ -80,10 +89,22 @@ inside the handler session. A semantic claim that cites any supplemental
 resolution must be classified as `ASSUMPTION`; deterministic validation rejects
 it as a source fact or derived interpretation.
 
+The Extractor uses the recorded decisions to finish the affected semantics,
+including core operation where necessary, and cites each used resolution in an
+`ASSUMPTION` claim. It must not reopen a question merely because its answer is
+non-normative; an attempt to reopen the same normalized question is rejected by
+the submission tool. Previously unexamined gaps can still enter recovery. The
+Translator preserves these choices in source comments and claim mappings, and
+carries abstract inputs and constraints into its definitions. Compilation and
+traceability remain required; successful generation with assumptions is not a
+claim that those assumptions are established by the specification.
+
 The default recovery bound is two rounds. Set it with
 `--max-question-rounds N`; `0` restores immediate failure on insufficient
-evidence. A partially resolved or unresolved handler submission blocks the
-pipeline rather than silently generating semantics.
+evidence. Session, round, and artifact-validation bounds remain in force. The
+fallback policy changes how missing evidence is answered within Phase 4; it adds
+no pipeline phase and does not waive validation or manufacture a semantic artifact
+when the model or transport fails to produce one.
 
 ## Submission and artifact schema
 

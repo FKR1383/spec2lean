@@ -8,6 +8,7 @@ const id = value => encodeURIComponent(value);
 const badge = (value, extra='') => `<span class="badge ${esc(String(value||'').toLowerCase())} ${extra}">${esc(String(value||'UNKNOWN').replaceAll('_',' '))}</span>`;
 const status = value => `<span class="status ${esc(value||'PENDING')}">${esc(value||'PENDING')}</span>`;
 const safeUrl = value => { try { const url=new URL(value); return ['http:','https:'].includes(url.protocol)?url.href:null; } catch { return null; } };
+const runLabels = run => [run.runtime === 'opencode' ? 'OpenCode' : run.runtime === 'rust-harness' ? 'Rust harness' : run.runtime, run.indexMode ? `${run.indexMode} search` : null, run.experiment].filter(Boolean).join(' · ');
 
 async function api(path) {
   const response = await fetch(path);
@@ -38,6 +39,7 @@ async function showHome() {
     const cards = state.runs.map(run => {
       const pct = run.requested ? Math.round(100*run.completed/run.requested) : 0;
       return `<article class="run-card" data-run="${esc(run.runId)}"><div class="run-head"><div><div class="run-title">${esc(run.language)} ${esc(run.version)}</div><div class="run-subtitle">${esc(run.planRunId||run.runId)}</div></div>${status(run.status)}</div>
+        ${runLabels(run) ? `<div class="run-subtitle">${esc(runLabels(run))}</div>` : ''}
         <div class="scope">${esc((run.requestedNames||[]).join(', ') || run.scope?.mode || 'No resolved units')}</div>
         <div class="run-foot"><span><b>${run.completed} / ${run.requested}</b> complete${run.failed?` · ${run.failed} failed`:''}</span><time>${esc(fmtDate(run.updatedAt||run.createdAt))}</time></div><progress class="progress" value="${pct}" max="100" aria-label="${pct}% complete"></progress></article>`;
     }).join('');
@@ -59,6 +61,7 @@ async function openRun(runId) {
     const layers = state.run.layers.map(layer=>`<section class="layer"><div class="layer-label">Layer ${esc(layer.layer)}${layer.unplanned?' · recovered from run manifest':''}</div>${layer.units.map(unit=>`<div class="unit-row" data-unit="${esc(unit.unitId)}"><div class="unit-name"><span class="unit-state ${['FAIL','FAILED'].includes(unit.status)?'bad':''}">${['FAIL','FAILED'].includes(unit.status)?'×':unit.status==='PASS'?'✓':'○'}</span>${esc(unit.name)}</div>
       ${phaseCell('Evidence',unit.stages.evidence)}${phaseCell('Semantics',unit.stages.semantics)}${phaseCell('Translate',unit.stages.translate)}${phaseCell('Check',unit.stages.check)}${phaseCell('Repair',unit.stages.troubleshoot)}<span class="arrow">›</span></div>`).join('')}</section>`).join('');
     const sidebar = `<aside class="run-sidebar"><button class="back" data-back>← All runs</button><div class="eyebrow">${esc(state.run.status)}</div><h2 class="sidebar-title">${esc(state.run.language)} ${esc(state.run.version)}</h2><div class="sidebar-id">${esc(state.run.runId)}</div>
+      ${runLabels(state.run) ? `<div class="sidebar-id">${esc(runLabels(state.run))}</div>` : ''}
       <div class="summary-box"><div class="summary-number">${state.run.completed} / ${state.run.requested}</div><div class="summary-label">requested units complete</div></div>
       <div class="stage-key"><div><i class="dot good"></i> Artifacts available / passed</div><div><i class="dot bad"></i> Failed or broken</div><div><i class="dot"></i> Not reached / optional</div></div></aside>`;
     shell(`<div class="overview">${sidebar}<main class="overview-main"><header class="section-head"><div><div class="eyebrow">Processing order</div><h1>Run overview</h1></div>${status(state.run.status)}</header>${state.run.error?`<div class="warning">${esc(state.run.error)}</div>`:''}${layers||'<div class="empty">No planned units are available for this run.</div>'}</main></div>`,`${state.run.language.toUpperCase()} ${state.run.version}`,true);

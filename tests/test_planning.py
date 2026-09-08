@@ -305,8 +305,12 @@ def test_genuine_cycle_is_preserved_and_reported(planner_database):
         )
         assert plan["graphStatus"] == "CYCLIC"
         assert plan["cycles"] == [{"unitIds": sorted([alpha, beta])}]
-        assert plan["processingLayers"] == []
-        assert plan["blockedUnitIds"] == [gamma]
+        assert plan["processingLayers"] == [
+            {"layer": 0, "unitIds": sorted([alpha, beta])},
+            {"layer": 1, "unitIds": [gamma]},
+        ]
+        assert plan["blockedUnitIds"] == []
+        assert plan["executionSchedule"]["graphStatus"] == "ACYCLIC"
         assert len(plan["dependencies"]) == 3
     finally:
         connection.close()

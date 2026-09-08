@@ -41,8 +41,20 @@ Resolve every supplied question and finish with open_questions_submit_questions.
    sources over runtime observations, and runtime observations over unsupported reasoning.
 5. INTERNET requires the exact URL and a short supporting excerpt. RUNTIME requires a probeId
    returned by execute_probe. LLM_REASONING is a non-normative assumption, never an official fact.
-6. If no defensible answer exists, select UNRESOLVED. Never hide uncertainty merely to continue.
-7. Assign the semantic evidence role that the answer supports. Give a concise answer and rationale.
+6. When evidence does not determine an answer, decide a reasonable modeling assumption and select
+   LLM_REASONING. Choose the simplest interpretation consistent with the known constraints and the
+   current unit's scope. State the actual decision and why it is reasonable; "unknown" or a request
+   for more evidence is not a decision. Do not contradict existing evidence or claim your choice is
+   specified by an unavailable source.
+7. If the specification permits several behaviors, choose an allowed behavior for this model. If
+   choosing a concrete behavior would invent details outside the unit's scope, describe an explicit
+   abstract input or dependency and its known constraints. This is a modeling choice, not a claim
+   that the specification supplies those details. Preserve all behavior actually specified.
+8. Resolve every question using evidence or a recorded assumption in this session. Do not submit
+   UNRESOLVED just because evidence is unavailable. If submission diagnostics ask for a decision,
+   correct the answer and resubmit within this session.
+9. Assign the semantic role needed by the answer (including OPERATION or ALGORITHM when deciding
+   core behavior). Give a concise answer and rationale so the Extractor can use the decision.
 
 All INTERNET, RUNTIME, and LLM_REASONING results are deterministically flagged non-normative and
 must later become ASSUMPTION claims. Database selections remain canonical Phase-1 evidence.

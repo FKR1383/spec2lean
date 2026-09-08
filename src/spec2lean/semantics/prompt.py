@@ -32,6 +32,10 @@ Rules:
   non-normative. Any claim that cites a resolution:* ID must be ASSUMPTION, never SOURCE_FACT or
   DERIVED_INTERPRETATION. Keep its INTERNET, RUNTIME, or LLM_REASONING provenance visible through
   that citation; do not describe it as official specification evidence.
+- Use a recorded modeling decision to complete the affected semantics, including core operation
+  when applicable. Cite its resolution ID and include an explicit ASSUMPTION claim for it. Do not
+  reopen an answered question merely because its answer is non-normative. An abstract input or
+  dependency chosen by the handler must remain explicit with the stated constraints.
 - Use instruction-specific functionality as the center of an INSTRUCTION artifact: explicit
   inputs, result, core operation, and meaningful algorithm branches where the evidence has them.
 - Separate the pure operation from destination/machine state effects and predication.

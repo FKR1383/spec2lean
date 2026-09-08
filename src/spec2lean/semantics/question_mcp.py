@@ -127,13 +127,13 @@ def tool_definitions(*, runtime_available: bool) -> list[dict[str, Any]]:
             "excerpt": TEXT,
             "probeId": {"type": "string", "pattern": "^probe:"},
         },
-        ["questionId", "source", "role", "rationale"],
+        ["questionId", "source", "role", "answer", "rationale"],
     )
     tools.append({
         "name": "submit_questions",
         "description": (
-            "Submit exactly one disposition for every open question. Database evidence is rebuilt "
-            "from Phase 1; all other answers are retained as explicitly non-normative resolutions."
+            "Resolve every question with evidence or a reasonable LLM_REASONING modeling assumption. "
+            "Database evidence is rebuilt from Phase 1; other answers remain explicitly non-normative."
         ),
         "inputSchema": _object(
             {"resolutions": {"type": "array", "items": resolution, "minItems": 1}},
@@ -283,6 +283,15 @@ class OpenQuestionMcpServer:
             source, role = raw.get("source"), raw.get("role")
             rationale = normalize_text(raw.get("rationale", "")) if isinstance(raw.get("rationale"), str) else ""
             answer = normalize_text(raw.get("answer", "")) if isinstance(raw.get("answer"), str) else ""
+            if source == "UNRESOLVED":
+                diagnostics.append({
+                    "code": "MODELING_DECISION_REQUIRED",
+                    "message": "When evidence is unavailable, choose a reasonable modeling assumption "
+                    "consistent with the current evidence and unit scope. Resubmit as LLM_REASONING "
+                    "with a concrete answer and rationale; the decision will remain non-normative.",
+                    "path": f"{path}.source",
+                })
+                continue
             if source not in QUESTION_SOURCES:
                 diagnostics.append({"code": "INVALID_SOURCE", "message": f"invalid resolution source: {source}", "path": f"{path}.source"})
                 continue
@@ -290,7 +299,7 @@ class OpenQuestionMcpServer:
                 diagnostics.append({"code": "INVALID_ROLE", "message": f"invalid semantic role: {role}", "path": f"{path}.role"})
             if not rationale:
                 diagnostics.append({"code": "EMPTY_RATIONALE", "message": "rationale must be non-empty", "path": f"{path}.rationale"})
-            if source != "UNRESOLVED" and not answer:
+            if not answer:
                 diagnostics.append({"code": "EMPTY_ANSWER", "message": "resolved questions require an answer", "path": f"{path}.answer"})
             if source != "DATABASE" and not self._database_checked(question_id):
                 diagnostics.append({"code": "DATABASE_NOT_CHECKED", "message": "the canonical database must be searched before using a fallback", "path": path})
@@ -399,7 +408,7 @@ class OpenQuestionMcpServer:
                 references.append(record["resolutionId"])
             question_results.append({
                 **expected[question_id],
-                "status": "OPEN" if source == "UNRESOLVED" else "RESOLVED",
+                "status": "RESOLVED",
                 "resolutionSource": source,
                 "answer": answer or None,
                 "rationale": rationale,
@@ -412,8 +421,6 @@ class OpenQuestionMcpServer:
         if diagnostics:
             return None, None, diagnostics
         question_results.sort(key=lambda item: item["questionId"])
-        open_count = sum(item["status"] == "OPEN" for item in question_results)
-        outcome = "UNRESOLVED" if open_count == len(question_results) else ("PARTIALLY_RESOLVED" if open_count else "RESOLVED")
         artifact = {
             "schemaVersion": 1,
             "phase": "OPEN_QUESTION_HANDLER",
@@ -427,7 +434,7 @@ class OpenQuestionMcpServer:
             "handler": {"provider": runtime_name(), "model": QUESTION_MODEL, "reasoning": QUESTION_REASONING},
             "runId": self.scope.run_id,
             "createdAt": self.scope.created_at,
-            "outcome": outcome,
+            "outcome": "RESOLVED",
             "questions": question_results,
             "databaseEvidenceAdded": [item["evidenceId"] for item in official_additions],
             "supplementalResolutionsAdded": [item["resolutionId"] for item in supplemental],

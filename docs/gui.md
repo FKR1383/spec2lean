@@ -7,6 +7,13 @@ artifacts. It deliberately adds no workflow or semantic representation.
 ./spec2lean gui
 ```
 
+The run list also discovers isolated experiment jobs under
+`runs/experiments/<experiment>/jobs/<job>/runs/`. Experiment cards show the
+runtime and search mode recorded in each job's `state.json`. All artifact and
+source reads stay within that job's own roots, including its `index/`
+directory; no files are copied into the ordinary run directories. Completed
+and failed runs are both visible. Refresh the page to discover new runs.
+
 The backend is a small Python standard-library HTTP server. It normalizes
 on-demand reads from the run manifest, Phase-2 plan, Phase-3 evidence, Phase-4
 semantics, Phase-5 translation manifest and Lean source, Phase-6 checks,

@@ -4,6 +4,7 @@ import json
 import re
 import sqlite3
 from dataclasses import dataclass
+from functools import wraps
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -26,13 +27,6 @@ def _read_json(path: Path) -> dict[str, Any] | None:
 def _duration_ms(value: dict[str, Any] | None) -> int | None:
     if not value:
         return None
-
-
-def _unit_failed(value: Any) -> bool:
-    if not isinstance(value, dict):
-        return False
-    check = (value.get("stages") or {}).get("check") if isinstance(value.get("stages"), dict) else None
-    return value.get("status") in {"FAIL", "FAILED"} or (isinstance(check, dict) and check.get("status") == "FAIL")
     direct = value.get("durationMs")
     if isinstance(direct, (int, float)):
         return int(direct)
@@ -44,6 +38,22 @@ def _unit_failed(value: Any) -> bool:
         return max(0, int((finish - start).total_seconds() * 1000))
     except (KeyError, TypeError, ValueError):
         return None
+
+
+def _unit_failed(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    check = (value.get("stages") or {}).get("check") if isinstance(value.get("stages"), dict) else None
+    return value.get("status") in {"FAIL", "FAILED"} or (isinstance(check, dict) and check.get("status") == "FAIL")
+
+
+def _in_run_repository(method):
+    """Keep every read for a run in the artifact roots that own it."""
+    @wraps(method)
+    def wrapped(self, run_id: str, *args, **kwargs):
+        owner = self._run_owner(run_id)
+        return method(owner, run_id, *args, **kwargs)
+    return wrapped
 
 
 @dataclass(frozen=True)
@@ -77,8 +87,11 @@ class ArtifactRoots:
 class ArtifactRepository:
     """A tolerant, on-demand projection over existing V1 artifacts."""
 
-    def __init__(self, roots: ArtifactRoots):
+    def __init__(self, roots: ArtifactRoots, *, discover_experiments: bool = True,
+                 labels: dict[str, Any] | None = None):
         self.roots = roots
+        self._discover_experiments = discover_experiments
+        self._labels = labels or {}
 
     @classmethod
     def at(cls, repository: Path, *, runs: Path | None = None) -> "ArtifactRepository":
@@ -86,6 +99,36 @@ class ArtifactRepository:
 
     def _run_paths(self) -> Iterable[Path]:
         return self.roots.runs.glob("*/*/*/run.json")
+
+    def _experiment_repositories(self) -> Iterable["ArtifactRepository"]:
+        if not self._discover_experiments:
+            return
+        for job in sorted((self.roots.runs / "experiments").glob("*/jobs/*")):
+            if not (job / "runs").is_dir():
+                continue
+            state = _read_json(job / "state.json") or {}
+            roots = ArtifactRoots(
+                repository=self.roots.repository, runs=job / "runs", plans=job / "plans",
+                evidence=job / "evidence", semantics=job / "semantics",
+                translations=job / "translations", checks=job / "checks",
+                troubleshooting=job / "troubleshooting", indexes=job / "index",
+            )
+            yield ArtifactRepository(roots, discover_experiments=False, labels={
+                "experiment": job.parent.parent.name, "jobName": job.name,
+                "runtime": state.get("runtime"), "indexMode": state.get("indexMode"),
+            })
+
+    def _run_owner(self, run_id: str) -> "ArtifactRepository":
+        if not self._discover_experiments:
+            return self
+        matches = [
+            repo for repo in (self, *self._experiment_repositories())
+            for path in repo._run_paths()
+            if (_read_json(path) or {}).get("pipelineRunId") == run_id
+        ]
+        if len(matches) != 1:
+            raise KeyError(f"unknown or ambiguous run: {run_id}")
+        return matches[0]
 
     def _find_run(self, run_id: str) -> tuple[Path, dict[str, Any]]:
         if "/" in run_id or "\\" in run_id or run_id in {".", ".."}:
@@ -116,25 +159,34 @@ class ArtifactRepository:
                 continue
             units = run.get("units") if isinstance(run.get("units"), dict) else {}
             requested = list(((run.get("request") or {}).get("scope") or {}).get("instructions") or [])
+            if not requested:
+                _, plan = self._plan(run)
+                requested = [item.get("name") for item in (plan or {}).get("requestedUnits", [])]
+            requested = requested or [item.get("name") for item in units.values() if isinstance(item, dict)]
             complete = sum((item or {}).get("status") == "PASS" for item in units.values())
             failed = sum(_unit_failed(item) for item in units.values())
             result.append({
+                **self._labels,
                 "runId": run.get("pipelineRunId"),
                 "language": (run.get("request") or {}).get("language"),
                 "version": (run.get("request") or {}).get("version"),
                 "scope": (run.get("request") or {}).get("scope") or {},
-                "requestedNames": requested or [item.get("name") for item in units.values() if isinstance(item, dict)],
+                "requestedNames": requested,
                 "planRunId": run.get("planRunId"),
                 "createdAt": run.get("createdAt"),
                 "updatedAt": run.get("updatedAt"),
                 "status": run.get("status", "UNKNOWN"),
-                "requested": len(requested) or len(units),
+                "requested": len(requested),
                 "completed": complete,
                 "failed": failed,
                 "error": run.get("error"),
+                "indexMode": run.get("indexMode") or self._labels.get("indexMode"),
             })
+        for repository in self._experiment_repositories():
+            result.extend(repository.list_runs())
         return sorted(result, key=lambda item: item.get("createdAt") or "", reverse=True)
 
+    @_in_run_repository
     def get_run(self, run_id: str) -> dict[str, Any]:
         _, run = self._find_run(run_id)
         _, plan = self._plan(run)
@@ -165,6 +217,7 @@ class ArtifactRepository:
             result.append({"layer": len(result), "units": extras, "unplanned": True})
         return result
 
+    @_in_run_repository
     def list_units(self, run_id: str) -> list[dict[str, Any]]:
         _, run = self._find_run(run_id)
         _, plan = self._plan(run)
@@ -280,6 +333,7 @@ class ArtifactRepository:
             result.append({**mapping, **(location or {"startLine": None, "endLine": None, "kind": None, "localName": name.rsplit(".", 1)[-1]}), "broken": location is None})
         return result
 
+    @_in_run_repository
     def get_unit(self, run_id: str, unit_id: str) -> dict[str, Any]:
         run, plan, unit = self._context(run_id, unit_id)
         evidence_path, evidence_artifact = self._artifact_for_unit(self.roots.evidence, plan, unit_id, "evidence.json")
@@ -394,6 +448,7 @@ class ArtifactRepository:
             phases.append(("Troubleshooter", str(repairs[-1].get("reason") or "USED"), repairs[-1]))
         return [{"phase": name, "status": status, "durationMs": _duration_ms(metadata)} for name, status, metadata in phases]
 
+    @_in_run_repository
     def get_evidence_source(self, run_id: str, unit_id: str, evidence_id: str) -> dict[str, Any]:
         data = self.get_unit(run_id, unit_id)
         items = [item for item in data["evidence"] if item.get("evidenceId") == evidence_id]
