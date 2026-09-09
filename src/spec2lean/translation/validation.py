@@ -131,6 +131,24 @@ def forbidden_constructs(source: str) -> list[dict[str, str]]:
     ]
 
 
+def _resolve_declaration(
+    name: str, declared: dict[str, str], path: str, diagnostics: list[dict[str, str]]
+) -> str:
+    """Canonicalize an exact or unambiguous namespace-relative source name."""
+    if name in declared:
+        return name
+    matches = sorted(full for full in declared if full.endswith("." + name))
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        diagnostics.append(_diagnostic(
+            "AMBIGUOUS_DECLARATION_NAME",
+            f"declaration name {name} is ambiguous; use one of: {', '.join(matches)}",
+            path,
+        ))
+    return name
+
+
 def validate_submission(
     scope: TranslationGroupScope,
     semantics_by_unit: dict[str, dict[str, Any]],
@@ -170,6 +188,7 @@ def validate_submission(
         if not isinstance(name, str) or not LEAN_NAME.fullmatch(name):
             diagnostics.append(_diagnostic("INVALID_DECLARATION_NAME", "declaration must be a qualified ASCII Lean identifier", f"{path}.declaration"))
             continue
+        name = _resolve_declaration(name, declared, f"{path}.declaration", diagnostics)
         if name in mapped_names:
             diagnostics.append(_diagnostic("DUPLICATE_DECLARATION_MAPPING", f"duplicate declaration mapping: {name}", f"{path}.declaration"))
         mapped_names.add(name)
@@ -206,8 +225,13 @@ def validate_submission(
         if not isinstance(supports, list) or not all(isinstance(item, str) and LEAN_NAME.fullmatch(item) for item in supports):
             diagnostics.append(_diagnostic("INVALID_SUPPORT_MAPPING", "supportsDeclarations must be an array of qualified ASCII Lean identifiers", f"{path}.supportsDeclarations"))
             supports = []
-        elif len(supports) != len(set(supports)):
-            diagnostics.append(_diagnostic("DUPLICATE_SUPPORT_MAPPING", "supportsDeclarations contains a duplicate", f"{path}.supportsDeclarations"))
+        else:
+            supports = [
+                _resolve_declaration(item, declared, f"{path}.supportsDeclarations[{i}]", diagnostics)
+                for i, item in enumerate(supports)
+            ]
+            if len(supports) != len(set(supports)):
+                diagnostics.append(_diagnostic("DUPLICATE_SUPPORT_MAPPING", "supportsDeclarations contains a duplicate", f"{path}.supportsDeclarations"))
         if supports and role != "IMPLEMENTATION_HELPER":
             diagnostics.append(_diagnostic("INVALID_SUPPORT_ROLE", "only IMPLEMENTATION_HELPER may use supportsDeclarations", f"{path}.supportsDeclarations"))
         if role != "IMPLEMENTATION_HELPER" and not claim_refs:

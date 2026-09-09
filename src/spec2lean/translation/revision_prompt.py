@@ -31,8 +31,13 @@ Rules:
 - Preserve valid existing declarations and behavior where compatible; prefer a focused patch.
 - Do not weaken semantics to compile, retrieve evidence, browse, critique Phase 4, or add proof padding.
 - Map every named declaration using only these roles: {', '.join(DECLARATION_ROLES)}.
+- Use fully qualified names, including the namespace, in declaration and supportsDeclarations.
+  Unambiguous namespace-relative names are resolved automatically; ambiguous names are rejected.
 - Every semantic mapping uses claimRefs containing an exact unitId and claimId. Do not manufacture
   deterministic metadata.
+- For mapping-only rejection diagnostics, preserve the Lean source and repair the mappings using
+  the exact declarationNames and semanticClaimRefs returned in repairContext. Do not guess claim
+  associations or remove declarations to avoid mapping them.
 - Use only translation_submit_translation. This is one session with no automatic retry session.
 
 Revision reason: {reason}

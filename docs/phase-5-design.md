@@ -47,6 +47,19 @@ declaration. Semantic mappings use `claimRefs` entries containing both
 own semantic artifact. A declaration shared by several instructions can cite
 several unit/claim pairs.
 
+The submission validator stores fully qualified declaration names. An exact
+source name takes precedence; otherwise a namespace-relative name is expanded
+only when it matches exactly one declaration in the submitted source. The same
+rule applies to `supportsDeclarations`. Ambiguous names, duplicate aliases,
+unknown claims, and missing mappings remain errors. This normalization changes
+neither the Lean source nor the model's roles or claim associations.
+
+Rejected submissions include a `repairContext` with the source's exact declaration
+names and the allowed `(unitId, claimId)` pairs. Mapping-only corrections should
+preserve the source and fix the mappings within the same bounded session.
+Timeouts retain readable partial output in the session artifact and report the
+original timeout error. The configured time limit still applies.
+
 ## Deterministic acceptance
 
 The submission is rejected unless all of the following hold:

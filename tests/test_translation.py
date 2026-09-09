@@ -22,6 +22,7 @@ from spec2lean.translation.revision import revise_translation
 from spec2lean.translation.store import unit_directory
 from spec2lean.translation.validation import (
     forbidden_constructs,
+    lean_declarations,
     validate_manifest,
     validate_run_metadata,
     validate_submission,
@@ -187,6 +188,73 @@ def test_stale_semantic_hash_is_rejected():
     )
 
 
+@pytest.mark.parametrize("namespace", ["Example.Arithmetic", "Wire.Protocol", "Nested.Types.Block"])
+@pytest.mark.parametrize("relative", [False, True])
+def test_namespace_relative_mappings_publish_canonical_names_without_changing_semantics(namespace, relative):
+    plan, semantics = _inputs()
+    submission = _submission()
+    submission["leanSource"] = submission["leanSource"].replace("Spec2Lean.Synthetic.AlphaU32", namespace)
+    for mapping in submission["declarations"]:
+        leaf = mapping["declaration"].rsplit(".", 1)[1]
+        mapping["declaration"] = namespace.rsplit(".", 1)[1] + "." + leaf if relative else leaf
+    original = copy.deepcopy(submission)
+    candidate, diagnostics = validate_submission(_scope(plan, semantics), {UNIT["unitId"]: semantics}, submission)
+    assert diagnostics == [] and candidate is not None
+    assert submission == original
+    assert candidate["leanSource"] == original["leanSource"]
+    for raw, canonical in zip(original["declarations"], candidate["manifest"]["declarations"]):
+        assert canonical["declaration"] == namespace + "." + raw["declaration"].rsplit(".", 1)[-1]
+        assert canonical["role"] == raw["role"]
+        assert canonical["claimRefs"] == raw["claimRefs"]
+    assert validate_manifest(plan, {UNIT["unitId"]: semantics}, candidate["leanSource"], candidate["manifest"]) == []
+    noncanonical = copy.deepcopy(candidate["manifest"])
+    noncanonical["declarations"] = original["declarations"]
+    assert "DETERMINISTIC_MISMATCH" in _codes(validate_manifest(
+        plan, {UNIT["unitId"]: semantics}, candidate["leanSource"], noncanonical
+    ))
+
+
+def test_ambiguous_short_names_require_an_explicit_namespace():
+    plan, semantics = _inputs()
+    submission = _submission()
+    submission["leanSource"] += "\nnamespace Other\ndef result : Nat := 0\nend Other\n"
+    submission["declarations"][1]["declaration"] = "result"
+    submission["declarations"].append({"declaration": "Other.result", "role": "OPERATION", "claimRefs": _refs("claim:op")})
+    candidate, diagnostics = validate_submission(_scope(plan, semantics), {UNIT["unitId"]: semantics}, submission)
+    assert candidate is None
+    ambiguous = next(d for d in diagnostics if d["code"] == "AMBIGUOUS_DECLARATION_NAME")
+    assert "Other.result" in ambiguous["message"]
+    assert "Spec2Lean.Synthetic.AlphaU32.result" in ambiguous["message"]
+    submission["declarations"][1]["declaration"] = "Spec2Lean.Synthetic.AlphaU32.result"
+    assert validate_submission(_scope(plan, semantics), {UNIT["unitId"]: semantics}, submission)[1] == []
+
+
+def test_exact_top_level_name_is_not_redirected_into_a_namespace():
+    plan, semantics = _inputs()
+    submission = _submission()
+    submission["leanSource"] += "\ndef result : Nat := 0\n"
+    submission["declarations"].append({"declaration": "result", "role": "OPERATION", "claimRefs": _refs("claim:op")})
+    candidate, diagnostics = validate_submission(_scope(plan, semantics), {UNIT["unitId"]: semantics}, submission)
+    assert diagnostics == [] and candidate is not None
+    assert candidate["manifest"]["declarations"][-1]["declaration"] == "result"
+
+
+def test_aliases_cannot_create_duplicate_mappings_or_guess_claim_ids():
+    plan, semantics = _inputs()
+    submission = _submission()
+    alias = copy.deepcopy(submission["declarations"][1])
+    alias["declaration"] = "result"
+    submission["declarations"].append(alias)
+    assert "DUPLICATE_DECLARATION_MAPPING" in _codes(validate_submission(
+        _scope(plan, semantics), {UNIT["unitId"]: semantics}, submission
+    )[1])
+    submission["declarations"].pop()
+    submission["declarations"][1] = alias
+    alias["claimRefs"] = [{"unitId": "unit:typo", "claimId": "claim:op"}]
+    candidate, diagnostics = validate_submission(_scope(plan, semantics), {UNIT["unitId"]: semantics}, submission)
+    assert candidate is None and "UNKNOWN_SEMANTIC_CLAIM" in _codes(diagnostics)
+
+
 def test_unknown_claim_and_operation_without_mapping_are_rejected():
     plan, semantics = _inputs()
     unknown = _submission()
@@ -306,7 +374,27 @@ def test_structured_translator_submission_tool(tmp_path):
     assert tool_definitions()[0]["inputSchema"]["required"] == ["leanSource", "declarations"]
 
 
-def test_implementation_helper_may_trace_through_supported_semantic_declaration():
+def test_rejected_mappings_get_exact_repair_references_and_still_require_a_valid_submission(tmp_path):
+    plan, semantics = _inputs()
+    scope = _scope(plan, semantics)
+    path = tmp_path / "submission.json"
+    server = TranslationMcpServer(scope, {UNIT["unitId"]: semantics}, path)
+    submission = _submission()
+    submission["declarations"][1]["claimRefs"] = [{"unitId": "unit:typo", "claimId": "claim:op"}]
+    rejected = json.loads(server.call_tool("submit_translation", submission)["content"][0]["text"])
+    assert rejected["accepted"] is False and not path.exists()
+    context = rejected["repairContext"]
+    assert context["declarationNames"] == sorted(lean_declarations(submission["leanSource"]))
+    assert context["semanticClaimRefs"] == [
+        {"unitId": unit, "claimId": claim} for unit, claim in scope.semantic_claim_ids
+    ]
+    submission["declarations"][1]["claimRefs"] = _refs("claim:op")
+    accepted = json.loads(server.call_tool("submit_translation", submission)["content"][0]["text"])
+    assert accepted["accepted"] is True and path.is_file()
+
+
+@pytest.mark.parametrize("relative", [False, True])
+def test_implementation_helper_may_trace_through_supported_semantic_declaration(relative):
     plan, semantics = _inputs()
     submission = _submission()
     submission["leanSource"] = submission["leanSource"].replace(
@@ -314,16 +402,36 @@ def test_implementation_helper_may_trace_through_supported_semantic_declaration(
     )
     operation = "Spec2Lean.Synthetic.AlphaU32.result"
     submission["declarations"].insert(1, {
-        "declaration": "Spec2Lean.Synthetic.AlphaU32.addImpl",
+        "declaration": "addImpl" if relative else "Spec2Lean.Synthetic.AlphaU32.addImpl",
         "role": "IMPLEMENTATION_HELPER",
         "claimRefs": [],
-        "supportsDeclarations": [operation],
+        "supportsDeclarations": ["result" if relative else operation],
     })
     candidate, diagnostics = validate_submission(
         _scope(plan, semantics), {UNIT["unitId"]: semantics}, submission
     )
     assert diagnostics == [] and candidate is not None
     assert candidate["manifest"]["declarations"][1]["supportsDeclarations"] == [operation]
+
+
+@pytest.mark.parametrize(("supports", "expected"), [
+    (["result", "Spec2Lean.Synthetic.AlphaU32.result"], "DUPLICATE_SUPPORT_MAPPING"),
+    (["helper"], "SELF_SUPPORT_MAPPING"),
+    (["missing"], "UNKNOWN_SUPPORT_DECLARATION"),
+    (["result"], "AMBIGUOUS_DECLARATION_NAME"),
+])
+def test_support_resolution_preserves_duplicate_self_missing_and_ambiguity_checks(supports, expected):
+    plan, semantics = _inputs()
+    submission = _submission()
+    submission["leanSource"] += "\nnamespace Helpers\ndef helper : Nat := 0\nend Helpers\n"
+    submission["declarations"].append({
+        "declaration": "helper", "role": "IMPLEMENTATION_HELPER", "claimRefs": [], "supportsDeclarations": supports,
+    })
+    if expected == "AMBIGUOUS_DECLARATION_NAME":
+        submission["leanSource"] += "\nnamespace Other\ndef result : Nat := 0\nend Other\n"
+        submission["declarations"].append({"declaration": "Other.result", "role": "OPERATION", "claimRefs": _refs("claim:op")})
+    candidate, diagnostics = validate_submission(_scope(plan, semantics), {UNIT["unitId"]: semantics}, submission)
+    assert candidate is None and expected in _codes(diagnostics)
 
 
 def _write_inputs(tmp_path: Path) -> tuple[dict, dict, Path, Path, Path]:
@@ -359,7 +467,10 @@ def test_runner_uses_one_session_exact_model_and_phase4_only_input(tmp_path, mon
         scope = TranslationGroupScope.from_dict(json.loads(argument("--scope").read_text()))
         semantics = json.loads(argument("--semantics").read_text())
         server = TranslationMcpServer(scope, semantics, argument("--submission"))
-        result = server.call_tool("submit_translation", _submission())
+        submission = _submission()
+        for mapping in submission["declarations"]:
+            mapping["declaration"] = mapping["declaration"].rsplit(".", 1)[-1]
+        result = server.call_tool("submit_translation", submission)
         assert json.loads(result["content"][0]["text"])["accepted"] is True
         return subprocess.CompletedProcess(command, 0, '{"sessionID":"translator-session"}\n', "")
 
@@ -371,6 +482,8 @@ def test_runner_uses_one_session_exact_model_and_phase4_only_input(tmp_path, mon
         f"{GROUP}.lean", "translation-manifest.json", "translator-run.json",
     }
     metadata = json.loads((output / "translator-run.json").read_text())
+    manifest = json.loads((output / "translation-manifest.json").read_text())
+    assert manifest["declarations"] == _submission()["declarations"]
     assert metadata["model"] == TRANSLATOR_MODEL == "openai/gpt-5.6-sol"
     assert metadata["reasoning"] == TRANSLATOR_REASONING == "medium"
     assert metadata["singleSession"] is True and metadata["automaticRetries"] == 0
@@ -399,6 +512,30 @@ def test_missing_exact_model_starts_no_session_and_creates_no_artifact(tmp_path,
             plan, semantics_root, output, unit_id=UNIT["unitId"], run_command=must_not_run
         )
     assert invoked is False and not output.exists()
+
+
+@pytest.mark.parametrize("runtime", ["opencode", "rust-harness"])
+def test_translator_timeout_preserves_partial_logs_and_original_error(tmp_path, monkeypatch, runtime):
+    plan, _, _, semantics_root, _ = _write_inputs(tmp_path)
+    monkeypatch.setenv("SPEC2LEAN_RUNTIME", runtime)
+    executable = "/unused/spec2lean-harness" if runtime == "rust-harness" else "/unused/opencode"
+    monkeypatch.setattr("spec2lean.translation.runner.runtime_executable", lambda: executable)
+    monkeypatch.setattr("spec2lean.translation.runner.installed_openai_models", lambda _: {TRANSLATOR_MODEL})
+
+    def timeout(command, **kwargs):
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"], output=b'partial output\xe2', stderr=b'partial error')
+
+    with pytest.raises(RuntimeError, match="session timed out after 7 seconds"):
+        build_translation(plan, semantics_root, tmp_path / "translations", unit_id=UNIT["unitId"],
+                          timeout_seconds=7, run_command=timeout)
+    path = next((tmp_path / "translations").rglob("translator-run.json"))
+    metadata = json.loads(path.read_text())
+    assert metadata["exitCode"] == 124
+    assert metadata["outcome"] == "FAILED"
+    assert "timed out" in metadata["error"]
+    assert metadata["stdout"] == "partial output\ufffd"
+    assert metadata["stderr"] == "partial error"
+    assert not list(path.parent.glob("*.lean"))
 
 
 def test_traceability_chain_resolves_declaration_claim_evidence_and_source(tmp_path, capsys):

@@ -30,6 +30,31 @@ def test_opencode_prompt_uses_stdin_without_size_limits_or_quoting_changes(repet
     assert session_command(command, "<prompt>") == completed.args
 
 
+def test_opencode_timeout_decodes_partial_output_from_a_real_process():
+    command = [sys.executable, "-c", (
+        "import sys,time; sys.stdin.read(); "
+        "sys.stdout.buffer.write(b'partial \\xe2'); sys.stdout.flush(); "
+        "sys.stderr.buffer.write(b'error \\xff'); sys.stderr.flush(); time.sleep(60)"
+    ), "prompt"]
+    with pytest.raises(subprocess.TimeoutExpired) as caught:
+        run_session(command, run_command=subprocess.run, capture_output=True, text=True, timeout=1)
+    assert caught.value.stdout == "partial \ufffd"
+    assert caught.value.stderr == "error \ufffd"
+    assert caught.value.cmd == command[:-1]
+    assert caught.value.timeout == 1
+    json.dumps({"stdout": caught.value.stdout, "stderr": caught.value.stderr})
+
+
+@pytest.mark.parametrize(("stdout", "stderr"), [(None, None), ("text", "error"), (b"text", b"error")])
+def test_timeout_normalization_keeps_missing_and_text_output_usable(stdout, stderr):
+    def timeout(command, **kwargs):
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"], output=stdout, stderr=stderr)
+    with pytest.raises(subprocess.TimeoutExpired) as caught:
+        run_session(["opencode", "prompt"], run_command=timeout, timeout=3)
+    assert caught.value.stdout == ("" if stdout is None else "text")
+    assert caught.value.stderr == ("" if stderr is None else "error")
+
+
 @pytest.fixture
 def harness_binary():
     path = Path(__file__).resolve().parents[1] / "harness/target/debug/spec2lean-harness"
@@ -318,6 +343,27 @@ def test_rust_translation_recovers_without_partial_tool_execution(
     assert requests[1]['arguments']['threadId'] == 'recorded-thread'
     if failure != 'wrong_namespace':
         assert 'No tools were executed' in requests[1]['arguments']['prompt']
+
+
+def test_rust_translation_publishes_canonical_mappings_after_one_submission(tmp_path, monkeypatch, harness_binary):
+    from test_translation import _write_inputs, _submission, GROUP
+    from spec2lean.translation.runner import build_group_translation
+    plan, _, _, semantics_root, _ = _write_inputs(tmp_path)
+    submission = _submission()
+    for mapping in submission['declarations']:
+        mapping['declaration'] = mapping['declaration'].rsplit('.', 1)[-1]
+    provider, _ = _recorded_codex(tmp_path, [json.dumps({'reply': '', 'tool_calls': [{
+        'name': 'translation_submit_translation', 'arguments': submission,
+    }]})])
+    monkeypatch.setenv('SPEC2LEAN_RUNTIME', 'rust-harness')
+    monkeypatch.setenv('SPEC2LEAN_CODEX', str(provider))
+    monkeypatch.setattr('spec2lean.translation.runner.runtime_executable', lambda: str(harness_binary))
+    output = build_group_translation(plan, semantics_root, tmp_path / 'translations', group=GROUP, timeout_seconds=30)
+    assert (output / f'{GROUP}.lean').read_text() == submission['leanSource']
+    manifest = json.loads((output / 'translation-manifest.json').read_text())
+    assert manifest['declarations'] == _submission()['declarations']
+    transcript = json.loads(json.loads((output / 'translator-run.json').read_text())['stdout'])['transcript']
+    assert transcript['steps'] == 1 and transcript['outcome'] == 'SUBMITTED'
 
 
 def test_rust_malformed_replies_stop_at_existing_step_limit(tmp_path, monkeypatch, harness_binary):

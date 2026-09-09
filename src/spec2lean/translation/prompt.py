@@ -44,6 +44,8 @@ Translation rules:
   generate large theorem families. Small definitions needed by the semantics are appropriate.
 - Map every named top-level declaration in the submitted source. Use one of these roles:
   {', '.join(DECLARATION_ROLES)}.
+- Use fully qualified names, including the namespace, in declaration and supportsDeclarations.
+  Unambiguous namespace-relative names are resolved automatically; ambiguous names are rejected.
 - Every semantic declaration mapping must cite one or more existing claimRefs, each containing the
   exact unitId and claimId. A shared declaration may cite claims from several units. A pure
   IMPLEMENTATION_HELPER may instead use supportsDeclarations. Never invent IDs or reproduce evidence
@@ -51,7 +53,9 @@ Translation rules:
 - Every INSTRUCTION needs its own OPERATION mapping. If its semantics has state effects or predication,
   it also needs its own EXECUTION mapping. Introduced structures/inductives/classes use PRIMARY_TYPE.
 - If deterministic diagnostics reject the tool call, correct the candidate and resubmit within this
-  same session. There is no second Translator session.
+  same session. For mapping-only diagnostics, preserve the Lean source and fix the mappings using
+  the exact declarationNames and semanticClaimRefs in repairContext. Do not invent IDs, remove
+  declarations, or rewrite valid semantics to repair bookkeeping. There is no second Translator session.
 
 Deterministic group/run context (do not reproduce this metadata in the tool call):
 {json.dumps(scope.to_dict(), ensure_ascii=False, indent=2, sort_keys=True)}

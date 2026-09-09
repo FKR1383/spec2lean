@@ -74,6 +74,23 @@ def runtime_executable() -> str:
 
 
 def run_session(command: list[str], *, run_command: Callable[..., Any], **kwargs: Any):
+    """Run a phase session, keeping timeout output safe for JSON artifacts."""
+    try:
+        return _run_session(command, run_command=run_command, **kwargs)
+    except subprocess.TimeoutExpired as exc:
+        # subprocess can attach bytes to timeouts even with text=True. A timeout
+        # can also cut a UTF-8 character in half; retain readable partial logs.
+        def text_output(value: str | bytes | None) -> str:
+            if isinstance(value, bytes):
+                return value.decode(kwargs.get("encoding") or "utf-8", errors="replace")
+            return value or ""
+
+        raise subprocess.TimeoutExpired(
+            exc.cmd, exc.timeout, output=text_output(exc.output), stderr=text_output(exc.stderr)
+        ) from exc
+
+
+def _run_session(command: list[str], *, run_command: Callable[..., Any], **kwargs: Any):
     """Deliver phase prompts over stdin using the selected runtime's protocol.
 
     Custom command runners receive the selected runtime's protocol. A real Rust

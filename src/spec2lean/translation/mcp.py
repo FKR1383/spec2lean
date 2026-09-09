@@ -9,7 +9,7 @@ from typing import Any
 
 from ..util import canonical_json
 from .models import DECLARATION_ROLES, TranslationGroupScope
-from .validation import validate_submission
+from .validation import lean_declarations, validate_submission
 
 
 def _object(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -25,6 +25,7 @@ def submission_schema() -> dict[str, Any]:
     mapping = _object({
         "declaration": {
             "type": "string",
+            "description": "Fully qualified name from leanSource; an unambiguous namespace-relative name is also accepted and stored in full.",
             "pattern": "^[A-Za-z_][A-Za-z0-9_']*(\\.[A-Za-z_][A-Za-z0-9_']*)*$",
         },
         "role": {"type": "string", "enum": list(DECLARATION_ROLES)},
@@ -39,6 +40,7 @@ def submission_schema() -> dict[str, Any]:
             "type": "array",
             "items": {
                 "type": "string",
+                "description": "Name of a supported declaration in leanSource, using the same resolution rules as declaration.",
                 "pattern": "^[A-Za-z_][A-Za-z0-9_']*(\\.[A-Za-z_][A-Za-z0-9_']*)*$",
             },
         },
@@ -71,6 +73,15 @@ class TranslationMcpServer:
         candidate, diagnostics = validate_submission(self.scope, self.semantics_by_unit, arguments)
         if diagnostics:
             value = {"accepted": False, "diagnostics": diagnostics}
+            source = arguments.get("leanSource") if isinstance(arguments, dict) else None
+            value["repairContext"] = {
+                "declarationNames": sorted(lean_declarations(source)) if isinstance(source, str) else [],
+                "semanticClaimRefs": [
+                    {"unitId": unit_id, "claimId": claim_id}
+                    for unit_id, claim_id in self.scope.semantic_claim_ids
+                ],
+                "instruction": "Correct the reported diagnostics and resubmit. For mapping-only errors, preserve the Lean source and repair the mappings using these exact names and claim references. Do not guess claim associations or remove declarations to avoid mapping them.",
+            }
         else:
             assert candidate is not None
             temporary = self.submission_path.with_suffix(".tmp")
