@@ -1,0 +1,280 @@
+{
+  "schema_version": 1,
+  "publisher": "Ecma International",
+  "document_title": "ECMAScript 2025 Language Specification",
+  "language": "ecmascript",
+  "specification_version": "2025",
+  "source_classification": "text-preserving index view of archived official source",
+  "retrieved_at_utc": "2026-08-11T14:00:35.505Z",
+  "acquisition": {
+    "method": "opencode_discovery_with_deterministic_fetch",
+    "proposal_path": "candidates/source-discovery/ecmascript/2025/source-proposal-v2.json",
+    "allowed_url_prefixes": [
+      "https://262.ecma-international.org/16.0/",
+      "https://ecma-international.org/wp-content/uploads/ECMA-262_16th_edition_june_2025.pdf"
+    ]
+  },
+  "initial_formalization_unit": {
+    "construct": "ToBoolean"
+  },
+  "artifacts": [
+    {
+      "kind": "html",
+      "url": "https://262.ecma-international.org/16.0/index.html",
+      "local_path": "/home/pouria/spec2lean/spec2lean/documents/sources/ecmascript/2025/experiments/ecmascript-paired-20260909-145040/index-view.html",
+      "sha256": "3bad0e7f02943b13f535703fd890108ce100a663c636cf48b057960c9d3d246c",
+      "size_bytes": 8065944
+    }
+  ],
+  "semantic_status": "not_started",
+  "notes": [
+    "OpenCode selected the source from the configured official publisher scope.",
+    "The orchestrator downloaded and hash-pinned the selected artifacts.",
+    "No semantic interpretation was produced during acquisition."
+  ],
+  "original_artifacts": [
+    {
+      "kind": "html",
+      "url": "https://262.ecma-international.org/16.0/index.html",
+      "local_path": "/home/pouria/spec2lean/spec2lean/documents/sources/ecmascript/2025/raw/specification.html",
+      "sha256": "6a28f9423133ed7b7c59a40baf620c2740f12f0bc9c251042f2a85b9cc5ed713",
+      "size_bytes": 8169822
+    }
+  ],
+  "normalization": {
+    "textContentUnchanged": true,
+    "textOrderUnchanged": true,
+    "textSha256": "afd873590557f2e81187757cab3302b654837e651a95ed5b11a6ff4f29ce9ad3",
+    "tagChanges": {
+      "emu-intro -> section": 1,
+      "emu-clause -> section": 2154,
+      "emu-note -> aside": 712,
+      "emu-grammar -> pre": 1496,
+      "emu-eqn -> pre": 86,
+      "emu-annex -> section": 82
+    },
+    "headingSignatureSplits": [
+      {
+        "name": "ToBoolean",
+        "anchor": "sec-toboolean",
+        "originalHeading": "7.1.2 ToBoolean ( argument )",
+        "indexHeading": "7.1.2 ToBoolean"
+      },
+      {
+        "name": "ToNumber",
+        "anchor": "sec-tonumber",
+        "originalHeading": "7.1.4 ToNumber ( argument )",
+        "indexHeading": "7.1.4 ToNumber"
+      },
+      {
+        "name": "ToIntegerOrInfinity",
+        "anchor": "sec-tointegerorinfinity",
+        "originalHeading": "7.1.5 ToIntegerOrInfinity ( argument )",
+        "indexHeading": "7.1.5 ToIntegerOrInfinity"
+      },
+      {
+        "name": "ToInt32",
+        "anchor": "sec-toint32",
+        "originalHeading": "7.1.6 ToInt32 ( argument )",
+        "indexHeading": "7.1.6 ToInt32"
+      },
+      {
+        "name": "ToUint32",
+        "anchor": "sec-touint32",
+        "originalHeading": "7.1.7 ToUint32 ( argument )",
+        "indexHeading": "7.1.7 ToUint32"
+      },
+      {
+        "name": "ToInt16",
+        "anchor": "sec-toint16",
+        "originalHeading": "7.1.8 ToInt16 ( argument )",
+        "indexHeading": "7.1.8 ToInt16"
+      },
+      {
+        "name": "ToUint16",
+        "anchor": "sec-touint16",
+        "originalHeading": "7.1.9 ToUint16 ( argument )",
+        "indexHeading": "7.1.9 ToUint16"
+      },
+      {
+        "name": "ToInt8",
+        "anchor": "sec-toint8",
+        "originalHeading": "7.1.10 ToInt8 ( argument )",
+        "indexHeading": "7.1.10 ToInt8"
+      },
+      {
+        "name": "ToUint8",
+        "anchor": "sec-touint8",
+        "originalHeading": "7.1.11 ToUint8 ( argument )",
+        "indexHeading": "7.1.11 ToUint8"
+      },
+      {
+        "name": "ToUint8Clamp",
+        "anchor": "sec-touint8clamp",
+        "originalHeading": "7.1.12 ToUint8Clamp ( argument )",
+        "indexHeading": "7.1.12 ToUint8Clamp"
+      },
+      {
+        "name": "ToBigInt",
+        "anchor": "sec-tobigint",
+        "originalHeading": "7.1.13 ToBigInt ( argument )",
+        "indexHeading": "7.1.13 ToBigInt"
+      },
+      {
+        "name": "ToBigInt64",
+        "anchor": "sec-tobigint64",
+        "originalHeading": "7.1.15 ToBigInt64 ( argument )",
+        "indexHeading": "7.1.15 ToBigInt64"
+      },
+      {
+        "name": "ToBigUint64",
+        "anchor": "sec-tobiguint64",
+        "originalHeading": "7.1.16 ToBigUint64 ( argument )",
+        "indexHeading": "7.1.16 ToBigUint64"
+      },
+      {
+        "name": "ToLength",
+        "anchor": "sec-tolength",
+        "originalHeading": "7.1.20 ToLength ( argument )",
+        "indexHeading": "7.1.20 ToLength"
+      },
+      {
+        "name": "SameValue",
+        "anchor": "sec-samevalue",
+        "originalHeading": "7.2.9 SameValue ( x, y )",
+        "indexHeading": "7.2.9 SameValue"
+      },
+      {
+        "name": "SameValueZero",
+        "anchor": "sec-samevaluezero",
+        "originalHeading": "7.2.10 SameValueZero ( x, y )",
+        "indexHeading": "7.2.10 SameValueZero"
+      },
+      {
+        "name": "IsLessThan",
+        "anchor": "sec-islessthan",
+        "originalHeading": "7.2.12 IsLessThan ( x, y, LeftFirst )",
+        "indexHeading": "7.2.12 IsLessThan"
+      },
+      {
+        "name": "IsLooselyEqual",
+        "anchor": "sec-islooselyequal",
+        "originalHeading": "7.2.13 IsLooselyEqual ( x, y )",
+        "indexHeading": "7.2.13 IsLooselyEqual"
+      },
+      {
+        "name": "IsStrictlyEqual",
+        "anchor": "sec-isstrictlyequal",
+        "originalHeading": "7.2.14 IsStrictlyEqual ( x, y )",
+        "indexHeading": "7.2.14 IsStrictlyEqual"
+      }
+    ],
+    "description": "Expose Ecmarkup sections, grammar, equations and notes through standard HTML tags. For the 19 selected operations, move the argument signature from the heading into an adjacent paragraph so the existing exact-name resolver can match. All DOM text and its order are unchanged. Index DOM paths refer to this derived view; anchors identify original official clauses. Standalone indexed headings receive section wrappers to satisfy structural coverage validation, without changing text or order.",
+    "standaloneHeadingWrappers": 103,
+    "originalStandaloneHeadingPaths": [
+      "/html/body/div[5]/h1",
+      "/html/body/div[5]/div/h1[1]",
+      "/html/body/div[5]/div/h1[2]",
+      "/html/body/div[5]/section[7]/section[1]/section[7]/section[3]/h2[1]",
+      "/html/body/div[5]/section[7]/section[1]/section[7]/section[3]/h2[2]",
+      "/html/body/div[5]/section[7]/section[1]/section[7]/section[3]/h2[3]",
+      "/html/body/div[5]/section[7]/section[1]/section[7]/section[3]/h2[4]",
+      "/html/body/div[5]/section[7]/section[1]/section[7]/section[3]/h2[5]",
+      "/html/body/div[5]/section[7]/section[1]/section[7]/section[3]/h2[6]",
+      "/html/body/div[5]/section[7]/section[1]/section[7]/section[3]/h2[7]",
+      "/html/body/div[5]/section[7]/section[1]/section[7]/section[3]/h2[8]",
+      "/html/body/div[5]/section[7]/section[1]/section[7]/section[3]/h2[9]",
+      "/html/body/div[5]/section[7]/section[1]/section[7]/section[3]/h2[10]",
+      "/html/body/div[5]/section[7]/section[1]/section[7]/section[3]/h2[11]",
+      "/html/body/div[5]/section[7]/section[1]/section[7]/section[3]/h2[12]",
+      "/html/body/div[5]/section[7]/section[1]/section[7]/section[3]/h2[13]",
+      "/html/body/div[5]/section[7]/section[1]/section[7]/section[3]/h2[14]",
+      "/html/body/div[5]/section[7]/section[1]/section[7]/section[3]/h2[15]",
+      "/html/body/div[5]/section[8]/section[1]/section[4]/section/h2",
+      "/html/body/div[5]/section[8]/section[1]/section[14]/section[1]/h2",
+      "/html/body/div[5]/section[12]/section[1]/h2",
+      "/html/body/div[5]/section[13]/h2",
+      "/html/body/div[5]/section[13]/section[2]/h2",
+      "/html/body/div[5]/section[13]/section[3]/h2",
+      "/html/body/div[5]/section[13]/section[4]/h2",
+      "/html/body/div[5]/section[13]/section[5]/h2",
+      "/html/body/div[5]/section[13]/section[6]/h2",
+      "/html/body/div[5]/section[13]/section[7]/h2",
+      "/html/body/div[5]/section[13]/section[7]/section[2]/h2",
+      "/html/body/div[5]/section[13]/section[8]/h2",
+      "/html/body/div[5]/section[13]/section[9]/section[1]/h2",
+      "/html/body/div[5]/section[13]/section[9]/section[2]/h2",
+      "/html/body/div[5]/section[13]/section[9]/section[3]/h2",
+      "/html/body/div[5]/section[13]/section[9]/section[4]/h2",
+      "/html/body/div[5]/section[13]/section[9]/section[5]/h2",
+      "/html/body/div[5]/section[13]/section[9]/section[6]/h2",
+      "/html/body/div[5]/section[14]/section[1]/h2",
+      "/html/body/div[5]/section[14]/section[2]/h2[1]",
+      "/html/body/div[5]/section[14]/section[2]/h2[2]",
+      "/html/body/div[5]/section[14]/section[2]/section[3]/h2",
+      "/html/body/div[5]/section[14]/section[2]/section[4]/h2",
+      "/html/body/div[5]/section[14]/section[2]/section[5]/h2",
+      "/html/body/div[5]/section[14]/section[2]/section[7]/h2",
+      "/html/body/div[5]/section[14]/section[2]/section[8]/h2",
+      "/html/body/div[5]/section[14]/section[3]/h2[1]",
+      "/html/body/div[5]/section[14]/section[3]/h2[2]",
+      "/html/body/div[5]/section[14]/section[4]/h2",
+      "/html/body/div[5]/section[14]/section[5]/h2",
+      "/html/body/div[5]/section[14]/section[6]/h2",
+      "/html/body/div[5]/section[14]/section[7]/h2",
+      "/html/body/div[5]/section[14]/section[8]/h2",
+      "/html/body/div[5]/section[14]/section[9]/h2",
+      "/html/body/div[5]/section[14]/section[10]/h2",
+      "/html/body/div[5]/section[14]/section[11]/h2",
+      "/html/body/div[5]/section[14]/section[12]/h2",
+      "/html/body/div[5]/section[14]/section[13]/h2",
+      "/html/body/div[5]/section[14]/section[14]/h2",
+      "/html/body/div[5]/section[14]/section[15]/h2",
+      "/html/body/div[5]/section[14]/section[15]/section[5]/h2",
+      "/html/body/div[5]/section[14]/section[16]/h2",
+      "/html/body/div[5]/section[15]/h2",
+      "/html/body/div[5]/section[15]/section[2]/h2",
+      "/html/body/div[5]/section[15]/section[3]/section[1]/h2",
+      "/html/body/div[5]/section[15]/section[3]/section[2]/h2",
+      "/html/body/div[5]/section[15]/section[3]/section[3]/h2",
+      "/html/body/div[5]/section[15]/section[4]/h2",
+      "/html/body/div[5]/section[15]/section[5]/h2",
+      "/html/body/div[5]/section[15]/section[6]/h2",
+      "/html/body/div[5]/section[15]/section[7]/h2",
+      "/html/body/div[5]/section[15]/section[7]/section[2]/h2",
+      "/html/body/div[5]/section[15]/section[7]/section[3]/h2",
+      "/html/body/div[5]/section[15]/section[7]/section[4]/h2",
+      "/html/body/div[5]/section[15]/section[7]/section[5]/h2",
+      "/html/body/div[5]/section[15]/section[8]/h2",
+      "/html/body/div[5]/section[15]/section[9]/h2",
+      "/html/body/div[5]/section[15]/section[10]/h2",
+      "/html/body/div[5]/section[15]/section[11]/h2",
+      "/html/body/div[5]/section[15]/section[12]/h2",
+      "/html/body/div[5]/section[15]/section[13]/h2",
+      "/html/body/div[5]/section[15]/section[14]/h2",
+      "/html/body/div[5]/section[15]/section[15]/h2",
+      "/html/body/div[5]/section[15]/section[16]/h2",
+      "/html/body/div[5]/section[16]/section[1]/h2",
+      "/html/body/div[5]/section[16]/section[2]/h2",
+      "/html/body/div[5]/section[16]/section[3]/h2[1]",
+      "/html/body/div[5]/section[16]/section[3]/h2[2]",
+      "/html/body/div[5]/section[16]/section[4]/h2",
+      "/html/body/div[5]/section[16]/section[5]/h2",
+      "/html/body/div[5]/section[16]/section[6]/h2",
+      "/html/body/div[5]/section[16]/section[7]/h2",
+      "/html/body/div[5]/section[16]/section[8]/h2",
+      "/html/body/div[5]/section[16]/section[9]/h2[1]",
+      "/html/body/div[5]/section[16]/section[9]/h2[2]",
+      "/html/body/div[5]/section[17]/section[1]/h2",
+      "/html/body/div[5]/section[17]/section[2]/h2",
+      "/html/body/div[5]/section[17]/section[2]/section[2]/h2",
+      "/html/body/div[5]/section[17]/section[2]/section[3]/h2",
+      "/html/body/div[5]/section[22]/section[4]/section[1]/section[33]/h2",
+      "/html/body/div[5]/section[23]/section[2]/section[1]/h2",
+      "/html/body/div[5]/section[32]/section[1]/section[1]/h2",
+      "/html/body/div[5]/section[32]/section[1]/section[2]/h2",
+      "/html/body/div[5]/section[39]/div/h2",
+      "/html/body/div[5]/section[39]/h2"
+    ]
+  }
+}
