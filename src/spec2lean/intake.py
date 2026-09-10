@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, BinaryIO, Callable
 from urllib.parse import urlsplit
 
+from .constants import PARSER_VERSION
 from .pipeline.runner import PipelineOptions, _write_json_atomic, load_pipeline_run, prepare_index, run_pipeline, utc_now
 from .planning.models import PlanningRequest
 from .runtime import runtime_name
@@ -231,7 +232,11 @@ def start_specification(
         options = pipeline_options(workspace, until=until, mode=mode)
         if until != "index" and record.get("pipelineRunId"):
             _, previous = load_pipeline_run(options.runs_root, record["pipelineRunId"])
-            if previous.get("indexMode", "lexical") == mode:
+            outdated_plan = (
+                previous.get("planRunId")
+                and (previous.get("phase1") or {}).get("parserVersion") != PARSER_VERSION
+            )
+            if previous.get("indexMode", "lexical") == mode and not outdated_plan:
                 options = replace(options, resume=record["pipelineRunId"])
         record.update(status="RUNNING", error=None, untilPhase=until, indexMode=mode, runtime=runtime_name(),
                       workerPid=os.getpid(), updatedAt=utc_now())

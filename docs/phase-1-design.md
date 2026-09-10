@@ -72,9 +72,23 @@ page lookup straightforward. SQLite remains authoritative.
 HTML headings and nested `section` elements are authoritative for HTML.
 Headingless sections are retained as generic structural containers. PDF uses a
 multi-signal heading classifier: numbering depth, font size, boldness,
-monospace exclusion, and title length. A heading stack assigns content to the
+title length, contents entries, and document-relative layout. Monospace fonts
+are allowed in headings. Plain numbered titles require a matching dotted-leader
+contents entry or a consistently aligned numbering sequence with separation
+from body text by indentation or extra vertical space. Contents entries,
+indented lists, and weak or ambiguous signals remain content. Original blocks
+and source spans are retained. A heading stack assigns content to the
 nearest preceding heading and makes chapter/section/subsection ancestry
 reconstructable. Unknown and non-text blocks remain generic nodes.
+
+Full-specification scope uses the reconstructed top-level sections as candidate
+units. Dependency layers are computed by the planner; several independent units
+can correctly share one layer. A document without identifiable sections retains
+the single full-specification fallback.
+
+Parser changes invalidate older indexes. Intake rebuilds them on the next start
+and creates a new pipeline run when the saved plan used an older parser, keeping
+the completed run as history instead of resuming its stale plan.
 
 Fixed token windows are never used as the primary representation.
 

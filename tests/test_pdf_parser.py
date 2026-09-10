@@ -5,6 +5,7 @@ from pathlib import Path
 import json
 
 import pymupdf as fitz
+import pytest
 
 from spec2lean.database import build_database, connect
 from spec2lean.cli import main
@@ -17,6 +18,8 @@ from spec2lean.parsers.pdf import (
 )
 from spec2lean.util import walk_nodes
 from spec2lean.validation import validate_database
+from spec2lean.planning.models import PlanningRequest
+from spec2lean.planning.scope import ScopeResolver
 
 
 def _make_pdf(path):
@@ -100,6 +103,91 @@ def test_pdf_hierarchy_page_bbox_tables_and_validation(tmp_path):
         stale_report = validate_database(db)
     assert not stale_report["ok"]
     assert any(issue["code"] == "PDF_PAGE_TEXT_MISMATCH" for issue in stale_report["issues"])
+
+
+@pytest.mark.parametrize("font,contents,indent", [
+    ("cour", True, True), ("cour", False, True),
+    ("helv", False, True), ("helv", False, False),
+])
+def test_plain_pdf_sections_become_separate_units_with_exact_provenance(tmp_path, font, contents, indent):
+    source = tmp_path / "plain.pdf"
+    with fitz.open() as pdf:
+        if contents:
+            page = pdf.new_page()
+            # Styled contents entries must not become headings either.
+            for y, text in [(90, "1. Frame Layout .......... 2"), (120, "1.1. Size .......... 2"),
+                            (150, "2. Frame Processing .......... 3"), (180, "99. Index .......... 4")]:
+                page.insert_text((72, y), text, fontsize=14, fontname="cobo")
+        prefix = "   " if indent else ""
+        paragraph = (prefix + "A frame carries a tag and payload for the receiving endpoint.\n"
+                     + prefix + "The endpoint validates the payload length before processing.")
+        page = pdf.new_page()
+        page.insert_text((72, 90), "1. Frame Layout", fontsize=10, fontname=font)
+        page.insert_text((72, 115), paragraph, fontsize=10, fontname=font)
+        page.insert_text((72, 205), "1.1. Size", fontsize=10, fontname=font)
+        page.insert_text((72, 230), paragraph, fontsize=10, fontname=font)
+        page.insert_text((108, 300), "1. Read the tag.\n2. Read the payload.", fontsize=10, fontname=font)
+        page.insert_text((108, 355), "1. return value;\n2. value = value + 1;", fontsize=10, fontname="cour")
+        page = pdf.new_page()
+        page.insert_text((72, 90), "2. Frame Processing", fontsize=10, fontname=font)
+        page.insert_text((72, 115), paragraph, fontsize=10, fontname=font)
+        pdf.save(source)
+
+    parsed = parse_pdf(source, detect_tables=False)
+    nodes = [node for node, *_ in walk_nodes(parsed.root)]
+    headings = [node for node in nodes if node.section_number]
+    assert [(node.section_number, node.title) for node in headings] == [
+        ("1", "Frame Layout"), ("1.1", "Size"), ("2", "Frame Processing")]
+    assert headings[1] in headings[0].children
+    assert all(node.metadata["heading_basis"] == (
+        "section_number_contents" if contents else "section_number_layout") for node in headings)
+    assert any(node.node_type == "list" and "Read the tag" in node.raw_text for node in nodes)
+    assert all(not node.section_number for node in nodes if "return value" in node.raw_text)
+    with fitz.open(source) as pdf:
+        for node in headings:
+            for span in node.spans:
+                original = pdf[span.page_number - 1].get_text("dict", sort=True)["blocks"][span.block_index]
+                original = original["lines"][span.line_index]["spans"][span.span_index]
+                assert span.raw_text == original["text"]
+                assert span.bbox == tuple(original["bbox"])
+    database = tmp_path / "plain.sqlite"
+    build_database(database, language="frames", version="1", documents=[parsed])
+    with connect(database, read_only=True) as db:
+        report = validate_database(db)
+        assert report["ok"], report["issues"]
+        scope = ScopeResolver(db).resolve(PlanningRequest.full("frames", "1"))
+        assert [unit["name"] for unit in scope.candidate_units] == ["Frame Layout", "Frame Processing"]
+
+
+def test_prominent_monospace_headings_are_not_rejected_as_code(tmp_path):
+    source = tmp_path / "styled-mono.pdf"
+    with fitz.open() as pdf:
+        page = pdf.new_page()
+        page.insert_text((72, 90), "1. Frame Layout", fontname="cour", fontsize=18)
+        page.insert_text((72, 125), "Each frame starts with a tag.", fontname="cour", fontsize=10)
+        pdf.save(source)
+    parsed = parse_pdf(source, detect_tables=False)
+    heading = next(node for node in parsed.root.children if node.section_number)
+    assert heading.title == "Frame Layout"
+    assert heading.metadata["heading_basis"] == "section_number"
+
+
+def test_numbered_steps_in_a_flat_pdf_do_not_create_units(tmp_path):
+    source = tmp_path / "steps.pdf"
+    with fitz.open() as pdf:
+        page = pdf.new_page()
+        page.insert_text((72, 90), "Process a frame using the following steps.\n"
+                         "These steps describe the behavior of a single operation, with no separate sections.", fontsize=10)
+        for y, text in [(150, "1. Read Tag"), (175, "2. Read Payload"), (200, "3. Verify Length")]:
+            page.insert_text((90, y), text, fontsize=10)
+        pdf.save(source)
+    parsed = parse_pdf(source, detect_tables=False)
+    assert not any(node.section_number for node, *_ in walk_nodes(parsed.root))
+    database = tmp_path / "flat.sqlite"
+    build_database(database, language="frames", version="1", documents=[parsed])
+    with connect(database, read_only=True) as db:
+        scope = ScopeResolver(db).resolve(PlanningRequest.full("frames", "1"))
+        assert [unit["name"] for unit in scope.candidate_units] == ["full specification"]
 
 
 def test_cli_build_records_page_text_in_manifest(tmp_path, capsys):

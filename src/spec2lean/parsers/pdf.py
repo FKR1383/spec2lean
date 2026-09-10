@@ -28,6 +28,9 @@ ENTRY_TITLE_RE = re.compile(
     r"(?:\s*[—–]\s*|\s+-\s+)"
     r"(?P<description>\S(?:.{0,158}?\S)?)$"
 )
+CONTENTS_ENTRY_RE = re.compile(
+    r"^\s*(\d+(?:\.\d+)*\.?)\s+(.+?)\s*\.{2,}\s*\d+\s*$"
+)
 
 
 @dataclass(slots=True)
@@ -247,6 +250,86 @@ def _body_font_size(blocks: list[PdfBlock]) -> float:
     return weighted.most_common(1)[0][0] if weighted else 10.0
 
 
+def _text_left(block: PdfBlock) -> float:
+    """Measure visible indentation, including spaces embedded in PDF spans."""
+    positions = []
+    for span in block.spans:
+        if span.bbox and span.raw_text.strip():
+            leading = len(span.raw_text) - len(span.raw_text.lstrip())
+            positions.append(span.bbox[0] + leading / len(span.raw_text) * (span.bbox[2] - span.bbox[0]))
+    return min(positions) if positions else block.bbox[0]
+
+
+def _layout_headings(
+    blocks: list[PdfBlock], body_size: float, page_heights: dict[int, float],
+) -> dict[tuple[int, int], HeadingMatch]:
+    """Recover plain numbered headings using document-wide structural evidence.
+
+    Fonts alone cannot distinguish headings in plain-text PDFs. A contents
+    entry can corroborate a title; otherwise require a consistently numbered,
+    aligned sequence separated from body text by indentation or extra space.
+    Keep the original blocks and spans so evidence locations remain exact.
+    """
+    contents = set()
+    text_blocks = []
+    for block in blocks:
+        if block.block_type != 0 or not block.bbox or not block.raw_text.strip():
+            continue
+        entries = [CONTENTS_ENTRY_RE.fullmatch(line) for line in block.raw_text.splitlines()]
+        contents.update(
+            (entry.group(1).rstrip("."), normalize_text(entry.group(2)).casefold())
+            for entry in entries if entry
+        )
+        if (not any(entries) and block.bbox[1] > page_heights[block.page] * 0.065
+                and block.bbox[3] < page_heights[block.page] * 0.93):
+            text_blocks.append(block)
+
+    # Long blocks provide a more reliable body margin than short labels,
+    # examples, or numbered list items. Bucket near-identical PDF coordinates.
+    tolerance = max(body_size * 0.3, 1.0)
+    margins: Counter[int] = Counter()
+    by_page: dict[int, list[PdfBlock]] = {}
+    for block in text_blocks:
+        by_page.setdefault(block.page, []).append(block)
+        if len(normalize_text(block.raw_text)) >= 100:
+            margins[round(_text_left(block) / tolerance)] += len(block.raw_text)
+    body_left = margins.most_common(1)[0][0] * tolerance if margins else None
+    result = {}
+    sequences: dict[tuple[int, float], list[tuple[PdfBlock, HeadingMatch]]] = {}
+    for page_blocks in by_page.values():
+        page_blocks.sort(key=lambda block: (block.bbox[1], block.bbox[0], block.index))
+        for index, block in enumerate(page_blocks):
+            clean = normalize_text(block.raw_text)
+            number, title = split_section_title(clean)
+            lines = [line for line in block.raw_text.splitlines() if line.strip()]
+            if (not number or not title or len(clean) > 160 or len(lines) > 2
+                    or number.count(".") >= 7 or not any(char.isalpha() for char in title)
+                    or title.endswith((".", "!", "?", ";", ":"))
+                    or re.search(r"[={}\[\]|;]|\.{2,}", title)
+                    or any(split_section_title(line)[0] for line in lines[1:])):
+                continue
+            match = HeadingMatch(number.count(".") + 1, number, title, "section_number_contents")
+            if (number, title.casefold()) in contents:
+                result[(block.page, block.index)] = match
+                continue
+            if body_left is None:
+                continue
+            before = block.bbox[1] - page_blocks[index - 1].bbox[3] if index else body_size * 2
+            after = page_blocks[index + 1].bbox[1] - block.bbox[3] if index + 1 < len(page_blocks) else body_size
+            left = _text_left(block)
+            outdented = left <= body_left - body_size * 0.75
+            spaced = abs(left - body_left) <= tolerance and before >= body_size * 1.5
+            if min(before, after) >= body_size * 0.5 and (outdented or spaced):
+                key = (round(left / tolerance), round(block.max_size, 1))
+                match = HeadingMatch(match.level, number, title, "section_number_layout")
+                sequences.setdefault(key, []).append((block, match))
+    for sequence in sequences.values():
+        numbers = [tuple(int(part) for part in match.section_number.split(".")) for _, match in sequence]
+        if len(numbers) >= 2 and numbers == sorted(set(numbers)):
+            result.update(((block.page, block.index), match) for block, match in sequence)
+    return result
+
+
 def _heading(
     block: PdfBlock,
     body_size: float,
@@ -255,7 +338,9 @@ def _heading(
     entry_level: int = 1,
 ) -> HeadingMatch | None:
     clean = normalize_text(block.raw_text)
-    if not clean or len(clean) > 240 or block.mono_ratio > 0.6:
+    if not clean or len(clean) > 240 or any(
+        CONTENTS_ENTRY_RE.fullmatch(line) for line in block.raw_text.splitlines()
+    ):
         return None
     # Running headers and footers often combine a page number with a bold
     # chapter title. They remain content/provenance, never hierarchy.
@@ -443,9 +528,10 @@ def parse_pdf(path: str | Path, official_url: str | None = None, *, detect_table
         page_start=1 if len(pdf) else None,
         page_end=len(pdf) or None,
     )
+    page_heights = {page["page_number"]: page["height"] for page in pages}
+    layout_headings = _layout_headings(all_blocks, body_size, page_heights)
     heading_stack: dict[int, Node] = {}
     previous_label = ""
-    page_heights = {page["page_number"]: page["height"] for page in pages}
 
     for page_number in range(1, len(pdf) + 1):
         blocks = [block for block in all_blocks if block.page == page_number]
@@ -514,7 +600,7 @@ def parse_pdf(path: str | Path, official_url: str | None = None, *, detect_table
                 body_size,
                 page_heights[page_number],
                 entry_level=_entry_heading_level(heading_stack),
-            )
+            ) or layout_headings.get((block.page, block.index))
             if heading:
                 level = heading.level
                 for old_level in [item for item in heading_stack if item >= level]:

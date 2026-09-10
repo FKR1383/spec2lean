@@ -173,7 +173,7 @@ def test_failed_index_can_be_retried_with_the_saved_request(tmp_path, intake_pdf
     assert [item["status"] for item in recovered["indexAttempts"]] == ["FAILED", "INDEXED"]
 
 
-def test_search_mode_change_after_setup_creates_one_pipeline_run(tmp_path, intake_pdf, monkeypatch):
+def test_intake_reuses_runs_only_for_matching_search_mode_and_parser(tmp_path, intake_pdf, monkeypatch):
     from spec2lean.pipeline.runner import PipelineServices, run_pipeline
     from spec2lean.planning.runner import source_database_digest
 
@@ -186,10 +186,11 @@ def test_search_mode_change_after_setup_creates_one_pipeline_run(tmp_path, intak
         calls.append("plan")
         with connect(database, read_only=True) as db:
             digest = source_database_digest(db)
-        directory = plans_root / "messages" / "1" / "plan:intake"
+        plan_id = f"plan:intake-{calls.count('plan')}"
+        directory = plans_root / "messages" / "1" / plan_id
         directory.mkdir(parents=True)
         (directory / "plan.json").write_text(json.dumps({
-            "schemaVersion": 2, "planRunId": "plan:intake", "language": "messages", "version": "1",
+            "schemaVersion": 2, "planRunId": plan_id, "language": "messages", "version": "1",
             "request": request.to_dict(), "sourceDatabaseDigest": digest, "graphStatus": "ACYCLIC",
             "requestedUnits": [{"unitId": "unit:messages", "name": "messages", "sourceNodeIds": []}],
             "processingLayers": [{"layer": 0, "unitIds": ["unit:messages"]}],
@@ -215,6 +216,28 @@ def test_search_mode_change_after_setup_creates_one_pipeline_run(tmp_path, intak
     assert continued["pipelineRunId"] == planned["pipelineRunId"]
     assert len(ArtifactRepository.at(workspace).list_runs()) == 1
     assert calls.count("plan") == 1
+
+    # Model an index and plan left by an older parser. Continuing must rebuild
+    # and replan without turning the old completed run into a stale-plan error.
+    old_run = json.loads(runs[0].read_text())
+    old_run["phase1"].update(parserVersion="phase1-previous", sourceDatabaseDigest="previous-digest")
+    runs[0].write_text(json.dumps(old_run))
+    old_plan_path = Path(old_run["planDirectory"]) / "plan.json"
+    old_plan = json.loads(old_plan_path.read_text())
+    old_plan["sourceDatabaseDigest"] = "previous-digest"
+    old_plan_path.write_text(json.dumps(old_plan))
+    with connect(Path(continued["phase1"]["database"])) as db:
+        db.execute("UPDATE builds SET parser_version = 'phase1-previous', semantic_digest = 'previous-digest'")
+        db.commit()
+    saved_run, saved_plan = runs[0].read_bytes(), old_plan_path.read_bytes()
+    rebuilt = start_specification(workspace, record["id"], until="plan", mode="semantic")
+    assert rebuilt["status"] == "COMPLETE"
+    assert rebuilt["phase1"]["disposition"] == "BUILT"
+    assert rebuilt["pipelineRunId"] != continued["pipelineRunId"]
+    assert calls.count("plan") == 2
+    assert runs[0].read_bytes() == saved_run
+    assert old_plan_path.read_bytes() == saved_plan
+    assert len(ArtifactRepository.at(workspace).list_runs()) == 2
 
 
 def test_upload_api_requires_token_and_validates_metadata(tmp_path, intake_pdf):
