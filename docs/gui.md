@@ -26,6 +26,11 @@ refresh the page or browse artifacts while a job runs. One job runs at a time in
 each GUI server. Keep the server running; stopping it stops its active job, and
 you can retry using the saved artifacts. Failures retain their logs and sources.
 
+Indexing is setup work recorded on the specification page, with its own history;
+it does not create an empty pipeline run. A pipeline run is created when you
+continue beyond Phase 1. Successful indexing-only runs created by older versions
+are omitted from the run list, while their saved records remain available.
+
 **Specifications** also lists imports made with `spec2lean init`. Each specification
 shows a CLI command to continue it with `spec2lean start`. Both interfaces share
 the same intake and pipeline code. Reimporting identical bytes under the same

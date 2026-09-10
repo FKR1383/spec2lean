@@ -161,6 +161,21 @@ def test_failed_subtree_run_shows_planned_scope_before_unit_execution(gui_reposi
     assert run["units"][0]["stages"]["evidence"] == "NOT_STARTED"
 
 
+def test_indexing_history_does_not_appear_as_an_empty_completed_run(gui_repository):
+    root = gui_repository.roots.runs / "ptx" / "9.3"
+    setup = {"pipelineRunId": "pipeline-run:setup", "status": "COMPLETE", "untilPhase": "index",
+             "request": {"language": "ptx", "version": "9.3", "scope": {"mode": "FULL_SPECIFICATION"}},
+             "phase1": {"ok": True}, "units": {}}
+    put(root / "pipeline-run:setup" / "run.json", setup)
+    put(root / "pipeline-run:failed-setup" / "run.json",
+        {**setup, "pipelineRunId": "pipeline-run:failed-setup", "status": "FAILED"})
+    listed = {item["runId"] for item in gui_repository.list_runs()}
+    assert "pipeline-run:setup" not in listed
+    assert {"pipeline-run:complete", "pipeline-run:partial", "pipeline-run:failed-setup"} <= listed
+    assert gui_repository.get_run("pipeline-run:setup")["phase1"]["ok"]
+    assert json.loads((root / "pipeline-run:setup/run.json").read_text()) == setup
+
+
 def test_html_and_pdf_phase1_provenance_and_preview(gui_repository: ArtifactRepository) -> None:
     html = gui_repository.get_evidence_source("pipeline-run:complete", "unit:shl", "evidence:html")
     assert html["preview"] == {"type": "html", "anchor": "logic-shl", "domPath": "/html/body/section", "sourceLineStart": 12, "sourceLineEnd": 12, "exactText": "Shift a left by b."}

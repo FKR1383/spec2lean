@@ -151,13 +151,16 @@ class ArtifactRepository:
         path = self.roots.plans / language / version / str(plan_id) / "plan.json"
         return path, _read_json(path)
 
-    def list_runs(self) -> list[dict[str, Any]]:
+    def list_runs(self, *, include_setup: bool = False) -> list[dict[str, Any]]:
         result = []
         for path in self._run_paths():
             run = _read_json(path)
             if not run:
                 continue
             units = run.get("units") if isinstance(run.get("units"), dict) else {}
+            if (not include_setup and run.get("untilPhase") == "index"
+                    and run.get("status") == "COMPLETE" and not run.get("planRunId") and not units):
+                continue
             requested = list(((run.get("request") or {}).get("scope") or {}).get("instructions") or [])
             if not requested:
                 _, plan = self._plan(run)
@@ -183,7 +186,7 @@ class ArtifactRepository:
                 "indexMode": run.get("indexMode") or self._labels.get("indexMode"),
             })
         for repository in self._experiment_repositories():
-            result.extend(repository.list_runs())
+            result.extend(repository.list_runs(include_setup=include_setup))
         return sorted(result, key=lambda item: item.get("createdAt") or "", reverse=True)
 
     @_in_run_repository
@@ -192,7 +195,7 @@ class ArtifactRepository:
         _, plan = self._plan(run)
         units = self.list_units(run_id)
         return {
-            **next(item for item in self.list_runs() if item["runId"] == run_id),
+            **next(item for item in self.list_runs(include_setup=True) if item["runId"] == run_id),
             "phase1": run.get("phase1"),
             "plan": {key: plan.get(key) for key in ("graphStatus", "dependencies", "externalPrerequisites", "blockedUnitIds")}
             if plan else None,

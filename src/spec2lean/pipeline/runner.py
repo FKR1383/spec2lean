@@ -256,6 +256,28 @@ def _ensure_phase1(options: PipelineOptions, request: PlanningRequest) -> dict[s
     return {**state, "disposition": "BUILT", "sourceManifest": str(manifest_path)}
 
 
+def prepare_index(
+    request: PlanningRequest, options: PipelineOptions, *,
+    progress: Callable[[str], None] | None = None,
+) -> dict[str, Any]:
+    """Prepare source/search indexes without creating a formalization run."""
+    report = progress or (lambda _message: None)
+    with retrieval_selection(options.index_mode):
+        report("phase 1/7 index: validating freshness")
+        state = _ensure_phase1(options, request)
+        if options.index_mode == "semantic" and state.get("ok"):
+            report("phase 1/7 index: ensuring semantic vectors")
+            embedding_state = ensure_embeddings(
+                _database_for(options, request),
+                dry_run=options.dry_run or not _phase_selected(options, "index"),
+            )
+            state["semanticIndex"] = embedding_state
+            if embedding_state["disposition"] == "WOULD_BUILD" and not options.dry_run:
+                raise FileNotFoundError("semantic index needs building but Phase 1 is before --from")
+        report(f"phase 1/7 index: {state['disposition'].lower()} ({state['reason']})")
+        return state
+
+
 def _matching_plan(plans_root: Path, request: PlanningRequest, digest: str) -> tuple[Path, dict[str, Any]] | None:
     matches: list[tuple[str, Path, dict[str, Any]]] = []
     expected = request.to_dict()
@@ -550,18 +572,7 @@ def _run_pipeline(
 
     try:
         start_phase("index")
-        report("phase 1/7 index: validating freshness")
-        phase1 = _ensure_phase1(options, request)
-        if options.index_mode == "semantic" and phase1.get("ok"):
-            report("phase 1/7 index: ensuring semantic vectors")
-            embedding_state = ensure_embeddings(
-                _database_for(options, request),
-                dry_run=options.dry_run or not _phase_selected(options, "index"),
-            )
-            phase1["semanticIndex"] = embedding_state
-            if embedding_state["disposition"] == "WOULD_BUILD" and not options.dry_run:
-                raise FileNotFoundError("semantic index needs building but Phase 1 is before --from")
-        report(f"phase 1/7 index: {phase1['disposition'].lower()} ({phase1['reason']})")
+        phase1 = prepare_index(request, options, progress=report)
         manifest["phase1"] = phase1
         finish_phase()
         _persist(directory, manifest, options)

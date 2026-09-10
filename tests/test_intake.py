@@ -55,8 +55,10 @@ def test_import_build_and_reuse_preserve_source_provenance(tmp_path, intake_pdf)
         assert document["official_url"] == "https://example.test/spec.pdf"
         assert document["sha256"] == record["sha256"]
     assert list((workspace / "indexes/messages/1.0/text").glob("*.pages.txt"))
-    run = ArtifactRepository.at(workspace).get_run(indexed["pipelineRunId"])
-    assert run["status"] == "COMPLETE"
+    assert indexed["pipelineRunId"] is None
+    assert ArtifactRepository.at(workspace).list_runs() == []
+    assert not list((workspace / "runs").glob("*/*/*/run.json"))
+    assert indexed["indexAttempts"][0]["status"] == "INDEXED"
     again = prepare_specification(workspace, PlanningRequest.full("messages", "1.0"), pdf=intake_pdf)
     assert again["sourceReused"] and again["id"] != record["id"]
     assert manifest_path.read_bytes() == original_manifest
@@ -149,7 +151,7 @@ def test_gui_background_job_finishes_and_survives_reload(tmp_path, intake_pdf):
         jobs.close()
     reloaded = IntakeJobs(workspace)
     assert reloaded.list()[0]["status"] == "INDEXED"
-    assert load_intake(workspace, record["id"])["pipelineRunId"]
+    assert load_intake(workspace, record["id"])["pipelineRunId"] is None
     reloaded.close()
 
 
@@ -163,11 +165,56 @@ def test_failed_index_can_be_retried_with_the_saved_request(tmp_path, intake_pdf
         start_specification(workspace, record["id"], until="index")
     failed = load_intake(workspace, record["id"])
     assert failed["status"] == "FAILED"
-    assert failed["pipelineRunId"]
+    assert failed["pipelineRunId"] is None
     source.write_bytes(original)
     recovered = start_specification(workspace, record["id"], until="index")
     assert recovered["status"] == "INDEXED"
     assert recovered["pipelineRunId"] == failed["pipelineRunId"]
+    assert [item["status"] for item in recovered["indexAttempts"]] == ["FAILED", "INDEXED"]
+
+
+def test_search_mode_change_after_setup_creates_one_pipeline_run(tmp_path, intake_pdf, monkeypatch):
+    from spec2lean.pipeline.runner import PipelineServices, run_pipeline
+    from spec2lean.planning.runner import source_database_digest
+
+    workspace = tmp_path / "workspace"
+    record = prepare_specification(workspace, PlanningRequest.full("messages", "1"), pdf=intake_pdf)
+    start_specification(workspace, record["id"], until="index")
+    calls = []
+
+    def plan_builder(database, plans_root, request, **kwargs):
+        calls.append("plan")
+        with connect(database, read_only=True) as db:
+            digest = source_database_digest(db)
+        directory = plans_root / "messages" / "1" / "plan:intake"
+        directory.mkdir(parents=True)
+        (directory / "plan.json").write_text(json.dumps({
+            "schemaVersion": 2, "planRunId": "plan:intake", "language": "messages", "version": "1",
+            "request": request.to_dict(), "sourceDatabaseDigest": digest, "graphStatus": "ACYCLIC",
+            "requestedUnits": [{"unitId": "unit:messages", "name": "messages", "sourceNodeIds": []}],
+            "processingLayers": [{"layer": 0, "unitIds": ["unit:messages"]}],
+        }))
+        return directory
+
+    def embeddings(*args, **kwargs):
+        calls.append("embeddings")
+        return {"disposition": "BUILT"}
+
+    monkeypatch.setattr("spec2lean.pipeline.runner.ensure_embeddings", embeddings)
+    monkeypatch.setattr("spec2lean.intake.run_pipeline", lambda request, options, **kwargs:
+                        run_pipeline(request, options, services=PipelineServices(plan_builder=plan_builder), **kwargs))
+    planned = start_specification(workspace, record["id"], until="plan", mode="semantic")
+    assert calls == ["embeddings", "plan"]
+    assert planned["pipelineRunId"]
+    runs = list((workspace / "runs").glob("*/*/*/run.json"))
+    assert len(runs) == 1
+    saved = runs[0].read_bytes()
+    start_specification(workspace, record["id"], until="index", mode="lexical")
+    assert runs[0].read_bytes() == saved
+    continued = start_specification(workspace, record["id"], until="plan", mode="semantic")
+    assert continued["pipelineRunId"] == planned["pipelineRunId"]
+    assert len(ArtifactRepository.at(workspace).list_runs()) == 1
+    assert calls.count("plan") == 1
 
 
 def test_upload_api_requires_token_and_validates_metadata(tmp_path, intake_pdf):

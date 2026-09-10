@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, BinaryIO, Callable
 from urllib.parse import urlsplit
 
-from .pipeline.runner import PipelineOptions, _write_json_atomic, run_pipeline, utc_now
+from .pipeline.runner import PipelineOptions, _write_json_atomic, load_pipeline_run, prepare_index, run_pipeline, utc_now
 from .planning.models import PlanningRequest
 from .runtime import runtime_name
 from .util import sha256_file
@@ -229,10 +229,16 @@ def start_specification(
     with _lock(workspace, key):
         record = load_intake(workspace, intake_id)
         options = pipeline_options(workspace, until=until, mode=mode)
-        if record.get("pipelineRunId") and record.get("indexMode", "lexical") == mode:
-            options = replace(options, resume=record["pipelineRunId"])
+        if until != "index" and record.get("pipelineRunId"):
+            _, previous = load_pipeline_run(options.runs_root, record["pipelineRunId"])
+            if previous.get("indexMode", "lexical") == mode:
+                options = replace(options, resume=record["pipelineRunId"])
         record.update(status="RUNNING", error=None, untilPhase=until, indexMode=mode, runtime=runtime_name(),
                       workerPid=os.getpid(), updatedAt=utc_now())
+        index_attempt = None
+        if until == "index":
+            index_attempt = {"startedAt": utc_now(), "status": "RUNNING", "indexMode": mode}
+            record.setdefault("indexAttempts", []).append(index_attempt)
         path = intake_path(workspace, intake_id)
         _write_json_atomic(path, record)
 
@@ -245,13 +251,18 @@ def start_specification(
                 progress(message)
 
         try:
-            _, run = run_pipeline(request, options, progress=report)
-            record.update(status="INDEXED" if until == "index" else run["status"], phase1=run["phase1"],
-                          pipelineRunId=run["pipelineRunId"])
+            if until == "index":
+                record["phase1"] = prepare_index(request, options, progress=report)
+                record["status"] = "INDEXED"
+            else:
+                _, run = run_pipeline(request, options, progress=report)
+                record.update(status=run["status"], phase1=run["phase1"], pipelineRunId=run["pipelineRunId"])
         except (Exception, KeyboardInterrupt) as exc:
             record.update(status="INTERRUPTED" if isinstance(exc, KeyboardInterrupt) else "FAILED", error=str(exc) or "Interrupted")
             raise
         finally:
             record["updatedAt"] = utc_now()
+            if index_attempt is not None:
+                index_attempt.update(status=record["status"], finishedAt=record["updatedAt"], error=record.get("error"))
             _write_json_atomic(path, record)
         return record
