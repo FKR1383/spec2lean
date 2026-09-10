@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import sqlite3
 import urllib.parse
@@ -253,3 +254,36 @@ def test_frontend_contains_primary_traceability_interactions() -> None:
     for interaction in ("selectDeclaration", "selectClaim", "selectEvidence", "implementedByDeclarations", "global-search"):
         assert interaction in script
     assert ".trace-grid" in stylesheet and ".pdf-preview" in stylesheet
+
+
+def test_frontend_serves_one_script_and_versions_updated_assets(tmp_path, monkeypatch) -> None:
+    from spec2lean.gui import server
+
+    static = tmp_path / "static"
+    shutil.copytree(server.STATIC_ROOT, static)
+    monkeypatch.setattr(server, "STATIC_ROOT", static)
+    handler = object.__new__(GuiHandler)
+    captured = []
+    handler._send = lambda status, body, content_type: captured.append(body.decode())
+
+    handler._static("/")
+    original = captured.pop()
+    script_urls = re.findall(r'<script src="([^"]+)"', original)
+    assert len(script_urls) == 1
+    assert script_urls[0].startswith("/app.js?v=")
+    assert '/styles.css?v=' in original
+
+    # A cached older shell only requests /app.js; it must get intake as well.
+    handler._static("/app.js")
+    script = captured.pop()
+    assert "function showNewSpecification()" in script
+    assert "function showHome()" in script
+    assert script.startswith("(() => {")  # Isolate it from a cached intake.js.
+
+    for name in ("intake.js", "app.js", "styles.css"):
+        with (static / name).open("a") as output:
+            output.write("\n/* updated */\n")
+        handler._static("/")
+        updated = captured.pop()
+        assert re.findall(r'<script src="([^"]+)"', updated) != script_urls
+        script_urls = re.findall(r'<script src="([^"]+)"', updated)

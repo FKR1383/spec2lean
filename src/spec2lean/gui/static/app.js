@@ -10,20 +10,23 @@ const status = value => `<span class="status ${esc(value||'PENDING')}">${esc(val
 const safeUrl = value => { try { const url=new URL(value); return ['http:','https:'].includes(url.protocol)?url.href:null; } catch { return null; } };
 const runLabels = run => [run.runtime === 'opencode' ? 'OpenCode' : run.runtime === 'rust-harness' ? 'Rust harness' : run.runtime, run.indexMode ? `${run.indexMode} search` : null, run.experiment].filter(Boolean).join(' · ');
 
-async function api(path) {
-  const response = await fetch(path);
+async function api(path, options) {
+  const response = await fetch(path, options);
   const value = await response.json().catch(()=>({error:`HTTP ${response.status}`}));
   if (!response.ok) throw new Error(value.error || `HTTP ${response.status}`);
   return value;
 }
 
 function shell(content, crumb='Runs', searchable=false) {
+  clearTimeout(specificationPoll);
   app.innerHTML = `<div class="shell"><header class="topbar">
     <div class="brand" data-action="home"><span class="brand-icon">S2L</span><span>Spec2Lean</span></div>
-    <div class="crumb">${esc(crumb)}</div><div class="top-spacer"></div>
+    <div class="crumb">${esc(crumb)}</div><div class="top-spacer"></div><button class="nav-button" data-specifications>Specifications</button><button class="nav-button" data-new-specification>+ New</button>
     ${searchable ? `<div class="search"><input id="global-search" autocomplete="off" placeholder="Search this run…" aria-label="Search active run"><div id="search-results" class="search-results hidden"></div></div>`:''}
   </header>${content}</div>`;
   app.querySelector('[data-action="home"]').onclick = showHome;
+  app.querySelector('[data-specifications]').onclick = showSpecifications;
+  app.querySelector('[data-new-specification]').onclick = showNewSpecification;
   if (searchable) setupSearch();
 }
 
@@ -33,6 +36,7 @@ function errorView(error) {
 }
 
 async function showHome() {
+  history.replaceState(null, '', location.pathname);
   state.run = state.unit = state.declaration = state.claim = state.evidence = state.source = null;
   try {
     state.runs = await api('/api/runs');
@@ -43,7 +47,7 @@ async function showHome() {
         <div class="scope">${esc((run.requestedNames||[]).join(', ') || run.scope?.mode || 'No resolved units')}</div>
         <div class="run-foot"><span><b>${run.completed} / ${run.requested}</b> complete${run.failed?` · ${run.failed} failed`:''}</span><time>${esc(fmtDate(run.updatedAt||run.createdAt))}</time></div><progress class="progress" value="${pct}" max="100" aria-label="${pct}% complete"></progress></article>`;
     }).join('');
-    shell(`<main class="page"><section class="hero"><div><div class="eyebrow">V1 Artifact Explorer</div><h1>Follow generated code back to its source.</h1><p class="lede">Inspect Lean declarations, semantic claims, exact evidence, and official specification provenance—without opening artifact files.</p></div><div class="count">${state.runs.length} pipeline run${state.runs.length===1?'':'s'}</div></section>
+    shell(`<main class="page"><section class="hero"><div><div class="eyebrow">Specification to Lean</div><h1>Follow generated code back to its source.</h1><p class="lede">Import your specification to get started, then inspect Lean declarations, semantic claims, and exact source evidence.</p></div><div class="count">${state.runs.length} pipeline run${state.runs.length===1?'':'s'}</div></section>
       ${cards?`<section class="run-grid">${cards}</section>`:`<div class="empty"><h2>No pipeline runs yet</h2><p>Completed and partial runs will appear here when their run manifests are available.</p></div>`}</main>`);
     app.querySelectorAll('[data-run]').forEach(node => node.onclick=()=>openRun(node.dataset.run));
   } catch(error) { errorView(error); }
@@ -56,6 +60,7 @@ function stageValue(value) {
 function phaseCell(label,value) { const actual=stageValue(value); return `<div class="phase-cell"><small>${label}</small><span>${esc(actual.replaceAll('_',' '))}</span></div>`; }
 
 async function openRun(runId) {
+  history.replaceState(null, '', location.pathname);
   try {
     state.run = await api(`/api/runs/${id(runId)}`); state.unit=null;
     const layers = state.run.layers.map(layer=>`<section class="layer"><div class="layer-label">Layer ${esc(layer.layer)}${layer.unplanned?' · recovered from run manifest':''}</div>${layer.units.map(unit=>`<div class="unit-row" data-unit="${esc(unit.unitId)}"><div class="unit-name"><span class="unit-state ${['FAIL','FAILED'].includes(unit.status)?'bad':''}">${['FAIL','FAILED'].includes(unit.status)?'×':unit.status==='PASS'?'✓':'○'}</span>${esc(unit.name)}</div>
@@ -222,4 +227,4 @@ function setupSearch(){
 
 document.addEventListener('keydown',event=>{if(event.key==='Escape')app.querySelector('#search-results')?.classList.add('hidden');if((event.ctrlKey||event.metaKey)&&event.key==='k'){event.preventDefault();app.querySelector('#global-search')?.focus();}});
 
-(async()=>{try{const config=await api('/api/config');await showHome();if(config.initialRun)await openRun(config.initialRun);}catch(error){errorView(error);}})();
+(async()=>{try{state.config=await api('/api/config');const route=location.hash.slice(1);if(route==='new')await showNewSpecification();else if(route==='specifications')await showSpecifications();else if(route.startsWith('specifications/'))await showSpecification(route.split('/')[1]);else if(state.config.initialRun)await openRun(state.config.initialRun);else await showHome();}catch(error){errorView(error);}})();

@@ -12,6 +12,9 @@ a specification-defined family, a source subtree, or the full specification.
 Units can describe protocol constructs as well as ISA instructions; TileLink,
 PTX, and x86 examples are included below.
 
+To bring your own document, use [PDF intake](#import-a-new-specification) from
+the CLI or choose **New specification** in `./spec2lean gui`.
+
 Current release: **1.0.0**. See [CHANGELOG.md](CHANGELOG.md).
 
 ## How the project works
@@ -489,8 +492,10 @@ support bounded repair workflows. Use `./spec2lean --help` or a subcommand's
 ```
 
 The default address is `http://127.0.0.1:8000`; use port 8080 for the second
-example. The explorer includes complete, partial, and failed runs. It is read-only
-and does not start pipeline phases.
+example. Choose **New specification** to upload a PDF, enter metadata and desired
+units, and build Phase 1. The **Specifications** page shows saved imports,
+background progress, and controls to continue the pipeline. The artifact explorer
+includes complete, partial, and failed runs.
 
 Its central navigation follows:
 
@@ -521,16 +526,50 @@ language, version, and plan ID; the top-level run manifest uses a pipeline run I
 | `checks/<language>/<version>/<plan-id>/<unit>/` | Build, coverage, and traceability reports |
 | `troubleshooting/<language>/<version>/<plan-id>/<unit>/` | Routing, repair, and bounded resolution artifacts |
 | `runs/<language>/<version>/<pipeline-run-id>/run.json` | Overall progress, artifact references, timing, and terminal status |
+| `runs/intake/<specification-id>/` | Saved intake status, planning request, and GUI progress logs |
+| `documents/sources/uploads/<language>/<version>/` | Imported source manifest, checksum, and locally cached PDF |
 
 Generated indexes and phase outputs are Git-ignored. Source manifests and checksums
 provide reproducible input identity. PDF text companions preserve page delimiters
 and can be searched directly, while SQLite remains authoritative for hierarchy
 and provenance.
 
-For a new specification, `index build` accepts explicit PDF/HTML paths. To let the
-full pipeline rebuild from official inputs, provide a matching source manifest
-under `documents/sources/`, following an existing example, with local paths,
-source URLs, and SHA-256 hashes.
+## Import a new specification
+
+Import a PDF and build its Phase 1 index with one command:
+
+```bash
+./spec2lean init --pdf /path/to/specification.pdf \
+  --language my-protocol --version 1.0 --units 'Get,Put' \
+  --title 'My Protocol Specification' --publisher 'Example Organization'
+```
+
+This copies the PDF into the workspace and creates its source manifest, checksum,
+metadata, and scope request automatically. The final JSON contains the specification
+`id`, index result, and `nextCommand`. Progress goes to stderr. Continue through
+the pipeline with that ID:
+
+```bash
+./spec2lean start SPECIFICATION_ID
+# Or stop after planning:
+./spec2lean start SPECIFICATION_ID --until plan
+```
+
+Use `--pdf-url https://example.org/spec.pdf` instead of `--pdf` to download the
+PDF. For local files, optional `--source-url` records provenance without fetching.
+Use `--family 'integer arithmetic'`, `--source-node node:ID`, or `--all` instead
+of `--units`; `--instructions` is also accepted. Unit names should match the
+specification. `--prepare-only` saves the inputs without indexing. No model
+credentials are needed for the default lexical Phase 1 index. Full pipeline
+execution needs the runtime and credentials described above; `start` accepts
+`--runtime` and `--index-mode`.
+
+`init`, `start`, and `gui` accept `--workspace /path/to/workspace`. Imports from
+either interface appear in that workspace's GUI. Identifiers and versions use
+letters, numbers, dots, underscores, and hyphens. Reimporting identical bytes
+reuses the source; different bytes require a new identifier or version. PDFs
+must have extractable text, no password protection, and be at most 256 MiB.
+`index build` remains available for explicit PDF/HTML indexing.
 
 ## Configuration and troubleshooting
 

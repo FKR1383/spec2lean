@@ -194,3 +194,35 @@ pre.raw { white-space: pre-wrap; overflow-wrap: anywhere; color: #aebdca; font: 
   .trace-grid { display:block; }.pane { min-height:520px; border-right:0; border-bottom:1px solid var(--line); }
   .check-grid { grid-template-columns:1fr; }
 }
+
+/* Specification intake */
+.nav-button { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 8px 12px; white-space: nowrap; }
+.nav-button:hover { color: var(--cyan); }
+.intake-page { max-width: 900px; }
+.intake-form { display: grid; gap: 22px; margin-top: 32px; }
+.intake-form label, .job-options label { display: grid; gap: 7px; color: var(--text); }
+.intake-form input:not([type=checkbox]), .intake-form textarea, .intake-form select, .job-options select { width: 100%; padding: 12px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+.intake-form textarea { resize: vertical; }
+.intake-form :focus-visible, .job-options :focus-visible, button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+.intake-form small, .optional, .form-hint { color: var(--muted); font-size: 12px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+.upload-box { border: 1px dashed var(--cyan-dark); background: var(--panel); border-radius: 12px; padding: 25px; }
+.upload-box > span { color: var(--muted); }
+.intake-form .checkbox-label { display: flex; align-items: flex-start; gap: 12px; }
+.checkbox-label input { margin-top: 5px; accent-color: var(--cyan); }
+.checkbox-label small { display: block; margin-top: 4px; }
+.primary, .secondary { border: 1px solid var(--line); border-radius: 8px; padding: 11px 18px; cursor: pointer; font-weight: 650; }
+.primary { color: var(--bg); background: var(--cyan); border-color: var(--cyan); }
+.secondary { background: var(--panel-2); color: var(--text); }
+button:disabled { opacity: .5; cursor: wait; }
+.form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.specification-card { text-align: left; width: 100%; color: inherit; font: inherit; }
+.job-options { margin-top: 24px; }
+.job-log { max-height: 360px; overflow: auto; padding: 16px; background: var(--panel); border-radius: 8px; }
+.intake-page .warning { margin-top: 18px; }
+.status.INDEXED, .status.PREPARED { color: var(--cyan); }
+@media (max-width: 760px) {
+  .form-grid { grid-template-columns: 1fr; }
+  .nav-button { padding: 8px 6px; font-size: 12px; }
+  .topbar .brand > span:last-child { display: none; }
+}

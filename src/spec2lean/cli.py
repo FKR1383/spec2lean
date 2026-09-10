@@ -4,6 +4,7 @@ from .runtime import runtime_selection
 from .embeddings import DEFAULT_MODEL, build as build_embeddings, index_mode, retrieval_selection, search as semantic_search
 
 import argparse
+from contextlib import redirect_stdout
 import json
 import os
 import sqlite3
@@ -1006,11 +1007,39 @@ def _command_gui(args: argparse.Namespace) -> int:
     from .gui.repository import ArtifactRepository
     from .gui.server import serve
 
-    repository = ArtifactRepository.at(REPOSITORY_ROOT, runs=Path(args.runs_root))
+    workspace = Path(args.workspace).resolve()
+    repository = ArtifactRepository.at(workspace, runs=Path(args.runs_root) if args.runs_root else None)
     if args.run:
         repository.get_run(args.run)
     serve(repository, host=args.host, port=args.port, initial_run=args.run)
     return 0
+
+
+def _command_init(args: argparse.Namespace) -> int:
+    from .intake import prepare_specification, start_specification
+
+    workspace = Path(args.workspace)
+    with redirect_stdout(sys.stderr):
+        record = prepare_specification(
+            workspace, _planning_request(args), pdf=Path(args.pdf) if args.pdf else None,
+            pdf_url=args.pdf_url, source_url=args.source_url, title=args.title, publisher=args.publisher,
+        )
+        print(f"[spec2lean] Prepared specification {record['id']}", file=sys.stderr, flush=True)
+        if not args.prepare_only:
+            record = start_specification(workspace, record["id"], until="index", mode=index_mode(),
+                                         progress=lambda message: print(f"[spec2lean] {message}", file=sys.stderr, flush=True))
+    _json(record)
+    return 0
+
+
+def _command_start(args: argparse.Namespace) -> int:
+    from .intake import start_specification
+
+    with redirect_stdout(sys.stderr):
+        record = start_specification(Path(args.workspace), args.intake_id, until=args.until_phase, mode=index_mode(),
+                                     progress=lambda message: print(f"[spec2lean] {message}", file=sys.stderr, flush=True))
+    _json(record)
+    return 0 if record["status"] in {"INDEXED", "COMPLETE"} else 1
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1018,18 +1047,43 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
 
-    gui = commands.add_parser("gui", help="open the local read-only artifact explorer")
+    initialize = commands.add_parser("init", help="import a PDF, create source metadata, and build Phase 1")
+    initialize.add_argument("--language", required=True, help="specification identifier, e.g. tilelink")
+    initialize.add_argument("--version", required=True, help="specification version, e.g. 1.9.3")
+    source = initialize.add_mutually_exclusive_group(required=True)
+    source.add_argument("--pdf", help="local specification PDF")
+    source.add_argument("--pdf-url", help="download a specification PDF from an HTTP(S) URL")
+    initialize.add_argument("--source-url", help="source URL recorded for provenance (optional for local PDFs)")
+    initialize.add_argument("--title", default="", help="document title (defaults to PDF metadata)")
+    initialize.add_argument("--publisher", default="", help="publisher recorded in source metadata")
+    scope = initialize.add_mutually_exclusive_group(required=True)
+    scope.add_argument("--units", "--instructions", dest="instructions", help="comma-separated exact unit names")
+    scope.add_argument("--family", help="specification-defined family of units")
+    scope.add_argument("--source-node", help="existing Phase-1 node:<id> subtree")
+    scope.add_argument("--all", action="store_true", help="process the full specification")
+    initialize.add_argument("--prepare-only", action="store_true", help="save the PDF, manifest and request without building the index")
+    initialize.add_argument("--workspace", default=str(REPOSITORY_ROOT), help="directory for source and pipeline artifacts")
+    initialize.set_defaults(func=_command_init)
+
+    start = commands.add_parser("start", help="run or continue an imported specification using its saved scope")
+    start.add_argument("intake_id", help="specification ID returned by init or shown in the GUI")
+    start.add_argument("--until", dest="until_phase", choices=PHASES, default="troubleshoot")
+    start.add_argument("--workspace", default=str(REPOSITORY_ROOT), help="workspace used during init")
+    start.set_defaults(func=_command_start)
+
+    gui = commands.add_parser("gui", help="import specifications, run the pipeline, and explore artifacts")
     gui.add_argument("--run", help="open a specific pipeline run on launch")
     gui.add_argument("--port", type=int, default=8000, help="local HTTP port (default: 8000)")
     gui.add_argument("--host", default="127.0.0.1", help=argparse.SUPPRESS)
-    gui.add_argument("--runs-root", default=str(DEFAULT_RUNS_ROOT), help=argparse.SUPPRESS)
+    gui.add_argument("--runs-root", help=argparse.SUPPRESS)
+    gui.add_argument("--workspace", default=str(REPOSITORY_ROOT), help="directory for source and pipeline artifacts")
     gui.set_defaults(func=_command_gui)
 
     pipeline = commands.add_parser("run", help="run or resume the complete Phase 1-7 pipeline")
     pipeline.add_argument("--language", required=True)
     pipeline.add_argument("--version", required=True)
     pipeline_selector = pipeline.add_mutually_exclusive_group(required=True)
-    pipeline_selector.add_argument("--instructions", help="comma-separated exact instruction names")
+    pipeline_selector.add_argument("--instructions", "--units", dest="instructions", help="comma-separated exact unit names")
     pipeline_selector.add_argument("--family", help="conceptual instruction family")
     pipeline_selector.add_argument("--source-node", help="exact Phase-1 node:<id> subtree")
     pipeline_selector.add_argument("--all", action="store_true", help="explicitly process the full specification")
@@ -1416,11 +1470,11 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--plans-root", default=str(DEFAULT_PLANS_ROOT), help=argparse.SUPPRESS)
         command.add_argument("--troubleshooting-root", default=str(DEFAULT_TROUBLESHOOTING_ROOT), help=argparse.SUPPRESS)
         command.set_defaults(func=function)
-    for command in (pipeline, plan_build, evidence_build, semantics_build, semantics_revise,
+    for command in (start, pipeline, plan_build, evidence_build, semantics_build, semantics_revise,
                     translate_build, translate_revise, troubleshoot_run, troubleshoot_resolve):
         command.add_argument("--runtime", choices=("rust-harness", "opencode"),
                              help="model session runtime (default: rust-harness)")
-    for command in (pipeline, build, search, plan_build, evidence_build, semantics_build,
+    for command in (initialize, start, pipeline, build, search, plan_build, evidence_build, semantics_build,
                     troubleshoot_resolve):
         command.add_argument("--index-mode", choices=("lexical", "semantic"),
                              help="retrieval mode (default: lexical)")
@@ -1458,6 +1512,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("spec2lean: interrupted", file=sys.stderr)
         return 130
-    except (FileNotFoundError, FileExistsError, KeyError, RuntimeError, ValueError, sqlite3.Error) as exc:
+    except (OSError, KeyError, RuntimeError, ValueError, sqlite3.Error) as exc:
         print(f"spec2lean: error: {exc}", file=sys.stderr)
         return 2
