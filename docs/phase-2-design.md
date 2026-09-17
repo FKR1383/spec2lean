@@ -23,6 +23,14 @@ subtrees remain rooted at the requested node. Family resolution finds bounded
 structural candidates; OpenCode may select membership only from those
 candidates. The full specification is never selected implicitly.
 
+In every mode, planning selects substantive language specification and excludes
+documentation-only material such as navigation, publication metadata, and purely
+introductory prose. Content and descendants determine relevance, not section titles.
+Source-subtree and full-specification units are candidates rather than mandatory
+units, allowing the Planner to omit documentation-only sections. Explicitly
+requested instructions remain mandatory; non-semantic passages are filtered
+during evidence retrieval and semantic extraction.
+
 Initial context contains resolved source sections, ancestors, explicit cross
 references, correlated source representations, and candidate IDs. Additional
 Phase 1 access is row-, depth-, and text-bounded.

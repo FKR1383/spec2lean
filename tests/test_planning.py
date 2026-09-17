@@ -184,12 +184,56 @@ def test_family_and_source_subtree_build_bounded_candidates(planner_database):
             PlanningRequest.subtree("synthetic", "1.0", root)
         )
         assert {unit["name"] for unit in subtree.candidate_units} == {"alpha", "beta", "gamma"}
-        assert set(subtree.exact_unit_ids) == {unit["unitId"] for unit in subtree.candidate_units}
+        assert subtree.exact_unit_ids == ()
         full = ScopeResolver(connection).resolve(PlanningRequest.full("synthetic", "1.0"))
         assert {unit["name"] for unit in full.candidate_units} == {
             "Integer Arithmetic Instructions", "Integer Operand Rules"
         }
-        assert set(full.exact_unit_ids) == {unit["unitId"] for unit in full.candidate_units}
+        assert full.exact_unit_ids == ()
+
+
+@pytest.mark.parametrize("mode", ["full", "subtree", "family"])
+def test_plans_can_exclude_documentation_without_losing_semantic_sections(tmp_path, mode):
+    sections = """
+      <section><h2>Table of contents</h2><p>Introduction ... 1; Rules ... 2.</p></section>
+      <section><h2>Overview</h2><p>This manual introduces our language.</p></section>
+      <section><h2>Introduction</h2><p>A word is an unsigned 8-bit integer.</p></section>
+      <section><h2>Rules</h2><p>Addition on words wraps modulo 256.</p></section>
+    """
+    if mode != "full":
+        sections = f'<section id="language"><h1>Synthetic Language</h1>{sections}</section>'
+    source = tmp_path / "mixed-specification.html"
+    source.write_text(f"<html><body><main>{sections}</main></body></html>", encoding="utf-8")
+    database = tmp_path / "mixed-specification.sqlite"
+    build_database(database, language="synthetic", version="1.0", documents=[parse_html(source)])
+
+    with connect(database, read_only=True) as connection:
+        if mode == "full":
+            request = PlanningRequest.full("synthetic", "1.0")
+        elif mode == "family":
+            request = PlanningRequest.family_request("synthetic", "1.0", "Synthetic Language")
+        else:
+            root = connection.execute(
+                "SELECT node_id FROM nodes WHERE html_anchor = 'language'"
+            ).fetchone()[0]
+            request = PlanningRequest.subtree("synthetic", "1.0", root)
+        scope = ScopeResolver(connection).resolve(request)
+        assert {unit["name"] for unit in scope.candidate_units} == {
+            "Table of contents", "Overview", "Introduction", "Rules",
+        }
+        selected = [
+            unit["unitId"] for unit in scope.candidate_units
+            if unit["name"] in {"Introduction", "Rules"}
+        ]
+        plan = build_validated_plan(
+            Phase1Query(connection), scope, _submission(scope, selected=selected),
+            language="synthetic", version="1.0", plan_run_id="plan:content-filter",
+            source_database_digest="a" * 64,
+        )
+
+    assert {unit["name"] for unit in plan["requestedUnits"]} == {"Introduction", "Rules"}
+    assert plan["translationGroups"][0]["unitIds"] == selected
+    assert plan["processingLayers"] == [{"layer": 0, "unitIds": sorted(selected)}]
 
 
 def test_two_independent_instructions_share_layer_zero(planner_database):

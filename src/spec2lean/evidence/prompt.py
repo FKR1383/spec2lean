@@ -35,6 +35,11 @@ claims, interpretations, assumptions, Lean, theorems, proofs, checking steps, or
 
 Rules:
 - Stay within the one unit below. Begin with its attached Phase-1 nodes.
+- Select evidence for language syntax, types, behavior, constraints, and necessary definitions.
+  Exclude document navigation, tables of contents, publication metadata, history, and purely
+  introductory or explanatory prose. Follow navigation to the actual defining passage; it is not
+  semantic evidence itself. Judge content, not titles: retain actual rules inside introductions
+  and overviews, and select the relevant nodes/spans when a section mixes rules with background.
 - Explore only their subtree/ancestors, explicit cross-references, definitions, correlations,
   relevant Phase-2 prerequisites, and nearby nodes needed for this unit.
 - Use spec_search only as a last resort and give a specific relevance justification.

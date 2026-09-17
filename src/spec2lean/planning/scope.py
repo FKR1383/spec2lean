@@ -508,7 +508,6 @@ class ScopeResolver:
             tuple(units),
             tuple(self._context_nodes([node for unit in units for node in unit["sourceNodeIds"]])),
             tuple(roots),
-            tuple(item["unitId"] for item in units),
         )
 
     def _resolve_full(self, request: PlanningRequest) -> ResolvedScope:
@@ -526,7 +525,6 @@ class ScopeResolver:
             tuple(units),
             tuple(self._context_nodes([node for unit in units for node in unit["sourceNodeIds"]])),
             tuple(roots),
-            tuple(item["unitId"] for item in units),
         )
 
     def _child_units(self, roots: Iterable[str]) -> list[dict[str, Any]]:

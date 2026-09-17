@@ -33,21 +33,29 @@ unit ID, Phase-1 node ID, or a language-specific category table.
 Use only candidate units and source nodes returned by the read-only specdb tools.
 
 Rules:
-- Before planning, compare every extracted candidate unit with the instructions or instruction
+- In every request mode, formalize only substantive language specification: syntax, types,
+  behavior, constraints, and necessary semantic definitions. Document navigation, tables of
+  contents, publication metadata, history, and purely introductory or explanatory prose are not
+  translation units or semantic prerequisites. Inspect content and descendants, not just titles;
+  preserve actual definitions and requirements even inside an introduction or overview.
+- Before planning, compare every extracted candidate unit with the instructions or specification
   scope supplied by the user. Inspect its indexed heading, syntax, description, ancestors, and
   explicit cross-references as needed; do not infer relevance from a shared word alone.
 - Treat a candidate as relevant only when the indexed specification establishes a concrete logical
   relationship to the user's input: direct instruction identity, an explicitly documented alias or
   encoding/form variant, membership in the requested specification-defined instruction family, or
-  an explicit semantic dependency or cross-reference required by a requested instruction.
+  an explicit semantic dependency or cross-reference required by a requested instruction. For
+  source-subtree and full-specification requests, include every candidate containing substantive
+  language specification within the requested scope; exclude documentation-only candidates.
 - Similar spelling, a shared generic operation word, or an incidental occurrence of the user's
   mnemonic in a heading description or body prose is not a logical relationship.
 - Completely ignore every unrelated candidate. Do not include its unit ID in `requestedUnitIds`,
   place it in a translation group, use its nodes as supporting evidence, create a prerequisite or
   dependency for it, or allow it to affect ordering or group names. Never invent or rationalize a
   relationship merely to preserve an extracted candidate.
-- For every request mode, submit only candidates that pass this relevance check. Preserve all
-  required units that pass it and add no unrelated units.
+- For every request mode, submit only candidates that pass these content and relevance checks.
+  Preserve explicitly requested instructions and their specified behavior; filter non-semantic
+  source passages rather than dropping requested instructions.
 - External prerequisites stay external and are not scheduled requested units.
 - Add an edge only for a real planning dependency. Name the definition, constraint, or semantic
   input the dependent unit needs from its prerequisite. A citation, comparison, or "see also"

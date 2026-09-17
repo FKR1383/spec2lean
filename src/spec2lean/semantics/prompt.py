@@ -28,6 +28,12 @@ other than semantics_get_evidence and semantics_submit_semantics.
 Rules:
 - Call semantics_get_evidence once before extracting. Its immutable result is the complete source
   boundary for this session. Do not attempt to read evidence from the filesystem.
+- Extract only language syntax, types, behavior, constraints, and necessary semantic definitions.
+  Do not turn document navigation, tables of contents, publication metadata, history, or purely
+  introductory/explanatory prose into claims, dependencies, or modeling assumptions. Source text
+  being present in the bundle does not make it a semantic requirement. Preserve actual rules and
+  definitions regardless of section title; use examples and background only to interpret those
+  rules, never as independent requirements.
 - The bundle may contain `resolutions` created by the Open Question Handler. These are explicitly
   non-normative. Any claim that cites a resolution:* ID must be ASSUMPTION, never SOURCE_FACT or
   DERIVED_INTERPRETATION. Keep its INTERNET, RUNTIME, or LLM_REASONING provenance visible through
